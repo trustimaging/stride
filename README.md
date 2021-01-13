@@ -11,7 +11,7 @@ A Python version above 3.7 is recommended to run Stride.
 To install Stride, follow these steps:
 
 ```sh
-git clone git@github.ic.ac.uk:TRUST/stride.git
+git clone git@github.com:trustimaging/stride.git
 cd stride
 conda env create -f environment.yml
 conda activate stride

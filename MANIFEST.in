@@ -1,6 +1,3 @@
-recursive-include stride *.key
-recursive-include mosaic *.key
-
 include setup.py
 include README.md
 include MANIFEST.in
