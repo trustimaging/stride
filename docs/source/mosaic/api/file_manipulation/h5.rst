@@ -1,0 +1,10 @@
+==================
+HDF5
+==================
+
+.. autoclass:: mosaic.file_manipulation.h5.HDF5
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+.. autofunction:: mosaic.file_manipulation.h5.file_exists
