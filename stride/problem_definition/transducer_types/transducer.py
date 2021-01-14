@@ -16,9 +16,15 @@ class Transducer(ABC, GriddedSaved):
     ----------
     id : int
         Identifier assigned to this transducer.
+    name : str
+        Optional name for the shot.
+    grid : Grid or any of Space or Time
+        Grid on which the Transducer is defined
+
     """
 
     type = ''
+    """Type of transducer, e.g. point_transducer"""
 
     def __init__(self, id, name=None, *args, **kwargs):
         name = name or 'transducer_%05d' % id
@@ -35,9 +41,37 @@ class Transducer(ABC, GriddedSaved):
 
     @property
     def coordinates(self):
+        """
+        Coordinates of points in the transducer, relative to its centre.
+
+        Returns
+        -------
+        ndarray
+            Coordinate array.
+
+        """
         return self._coordinates
 
     def sub_problem(self, shot, sub_problem):
+        """
+        Create a subset object for a certain shot.
+
+        A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+        This method has no effect for this particular case.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the SubProblem is being generated.
+        sub_problem : SubProblem
+            Container for the sub-problem being generated.
+
+        Returns
+        -------
+        Transducer
+            Transducer instance.
+
+        """
         return self
 
     def __get_desc__(self):

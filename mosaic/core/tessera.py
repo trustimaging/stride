@@ -11,7 +11,7 @@ from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, MonitoredBase
 
 
-__all__ = ['Tessera', 'TesseraProxy', 'MonitoredTessera', 'tessera']
+__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'MonitoredTessera', 'tessera']
 
 
 class Tessera(RemoteBase):

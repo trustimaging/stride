@@ -28,4 +28,4 @@ For information on the parallelisation library Mosaic, check the specific docume
    Download <download>
    Tutorials <tutorials>
    Stride API Reference <stride/api/api_index>
-   Mosaic <mosaic/api/api_index>
+   Mosaic API Reference <mosaic/api/api_index>

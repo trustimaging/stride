@@ -1,8 +1,6 @@
 ==================
-Runner
+Running mosaic
 ==================
 
-.. autoclass:: stride.runner.Runner
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. autofunction:: mosaic.run
+.. autofunction:: mosaic.init
