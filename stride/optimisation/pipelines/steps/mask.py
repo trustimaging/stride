@@ -5,6 +5,13 @@ from ..pipeline import PipelineStep
 
 
 class Step(PipelineStep):
+    """
+    Mask a StructuredData object to remove values outside inner domain.
+
+    Parameters
+    ----------
+
+    """
 
     def __init__(self, **kwargs):
         pass

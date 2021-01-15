@@ -8,6 +8,16 @@ __all__ = ['Runner']
 
 @tessera
 class Runner:
+    """
+    The Runner acts as a manager of the forward and inverse runs in Stride. The Runner takes care
+    of instantiating a problem type and, when needed, a functional; it takes care of setting
+    up the sub-problem to run and the optimisation block; and it acts as an interface to
+    execute forward, adjoint and gradient runs on these.
+
+    The Runner is also responsible for all necessary processing of wavelets, observed and modelled
+    data, as well as local-level actions on the gradients.
+
+    """
 
     def __init__(self):
         self.problem = None
@@ -17,6 +27,18 @@ class Runner:
         self.functional = None
 
     def set_problem(self, problem):
+        """
+        Set up the problem or sub-problem that needs to be run.
+
+        Parameters
+        ----------
+        problem : SubProblem or Problem
+            Problem on which the physics will be executed
+
+        Returns
+        -------
+
+        """
         self.logger.info('(ShotID %d) Preparing to run shot' % problem.shot_id)
 
         self.problem = problem
@@ -36,6 +58,18 @@ class Runner:
         self.problem_type.set_problem(problem)
 
     def set_block(self, block):
+        """
+        Set up the optimisation block for the inversion.
+
+        Parameters
+        ----------
+        block : Block
+            Relevant optimisation block.
+
+        Returns
+        -------
+
+        """
         self.logger.info('Preparing to run block %d' % block.id)
 
         self.block = block
@@ -44,6 +78,22 @@ class Runner:
             self.functional = block.functional()
 
     def run_state(self, save_wavefield=False):
+        """
+        Run all the necessary hooks on the problem type to execute the state or forward.
+
+        Parameters
+        ----------
+        save_wavefield : bool, optional
+            Whether or not the wavefield needs to be stored, defaults to False.
+
+        Returns
+        -------
+        Traces
+            Time traces produced by the state run.
+        Data or None
+            Wavefield produced by the state run, if any.
+
+        """
         self.problem_type.before_state(save_wavefield=save_wavefield)
 
         self.logger.info('(ShotID %d) Running state equation for shot' % self.problem.shot_id)
@@ -58,6 +108,24 @@ class Runner:
         return traces, wavefield
 
     def run_functional(self, modelled):
+        """
+        Use some ``modelled`` data to calculate a functional value for the
+        present SubProblem.
+
+        Parameters
+        ----------
+        modelled : Traces
+            Time traces to compare with the observed data in the shot.
+
+        Returns
+        -------
+        FunctionalValue
+            Object containing information about the shot, the value of the functional
+            and the residuals.
+        Traces
+            Generated adjoint source.
+
+        """
         if self.functional is None:
             raise ValueError('No functional was given to the runner instance')
 
@@ -75,6 +143,24 @@ class Runner:
         return fun, adjoint_source
 
     def run_adjoint(self, wrt, adjoint_source, wavefield):
+        """
+        Run all the necessary hooks on the problem type to execute the adjoint problem.
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variables for which the inverse problem is being solved.
+        adjoint_source : Traces
+            Adjoint source to use in the adjoint propagation.
+        wavefield : Data
+            Stored wavefield from the forward run, to use as needed.
+
+        Returns
+        -------
+        VariableList
+            Updated variable list with gradients added to them, if any.
+
+        """
         wrt.grad.fill(0.)
         wrt.prec.fill(0.)
 
@@ -86,7 +172,7 @@ class Runner:
         self.logger.info('(ShotID %d) Completed adjoint equation run shot' % self.problem.shot_id)
 
         wrt = self.problem_type.after_adjoint(wrt)
-        wrt = self.functional.gradient(wrt)
+        wrt = self.functional.get_grad(wrt)
 
         for variable in wrt:
             variable.grad, variable.prec = self.block.pipelines.\
@@ -95,6 +181,24 @@ class Runner:
         return wrt
 
     def run_gradient(self, wrt):
+        """
+        Execute the state, functional and adjoint in order to calculate
+        the gradients for a series of variables.
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variables for which the inverse problem is being solved.
+
+        Returns
+        -------
+        FunctionalValue
+            Object containing information about the shot, the value of the functional
+            and the residuals.
+        VariableList
+            Updated variable list with gradients added to them, if any.
+
+        """
         traces, wavefield = self.run_state(save_wavefield=True)
 
         fun, adjoint_source = self.run_functional(traces)
@@ -103,7 +207,8 @@ class Runner:
 
         return fun, wrt
 
-    def _sum_grad_prec(self, grad_problem, grad_fun):
+    @staticmethod
+    def _sum_grad_prec(grad_problem, grad_fun):
         grad = []
 
         for each_problem, each_fun in zip(grad_problem, grad_fun):

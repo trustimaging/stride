@@ -5,6 +5,17 @@ from ..pipeline import PipelineStep
 
 
 class Step(PipelineStep):
+    """
+    Filter a set of time traces.
+
+    Parameters
+    ----------
+    f_min : float, optional
+        Lower value for the frequency filter, defaults to None (no lower filtering).
+    f_max : float, optional
+        Upper value for the frequency filter, defaults to None (no upper filtering).
+
+    """
 
     def __init__(self, **kwargs):
         self.f_min = kwargs.pop('f_min', None)

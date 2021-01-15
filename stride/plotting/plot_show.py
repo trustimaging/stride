@@ -17,7 +17,7 @@ except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
 
-def show_2d(figure):
+def show_2d(figure=None):
     """
     Utility function to show a Bokeh figure.
 
@@ -63,13 +63,13 @@ def show_3d(figure):
             mlab.show()
 
 
-def show(figure):
+def show(figure=None):
     """
     Utility function to show a figure regardless of the library being used.
 
     Parameters
     ----------
-    figure : object
+    figure : object, optional
         matplotlib or MayaVi figure to show.
 
     Returns

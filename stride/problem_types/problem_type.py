@@ -6,6 +6,42 @@ __all__ = ['ProblemTypeBase']
 
 
 class ProblemTypeBase(ABC):
+    """
+    Problem types encode the physics of the forward and inverse problems that we want
+    to solve using Stride. In most cases, these physics will correspond to state and adjoint PDEs
+    describing problems of interest.
+
+    A problem type could have multiple implementations, depending on how the physics are solved
+    or the techniques that are used to solve them.
+
+    For example, the ``acoustic`` problem corresponds to the second-order isotropic acoustic
+    wave equation, which currently has one implementation using the Devito library. This implementation
+    is contained within the ``acoustic/devito`` folder.
+
+    Problem types inherit from this base class, and have to comply with a certain interface by
+    defining, at least, a series of methods.
+
+    To solve the state or forward problem:
+
+    - ``before_state``
+    - ``state``
+    - ``after_state``
+
+    and to solve the adjoint problem:
+
+    - ``before_adjoint``
+    - ``adjoint``
+    - ``after_adjoint``
+
+    If the problem type has to provide the gradient for a certain optimisation variable, the
+    class will also have to define a pair of methods per variable:
+
+    - ``set_grad_[variable_name]`` will be called before the adjoint run to prepare the calculation of the gradient.
+    - ``get_grad_[variable_name]`` will be called after the adjoint run to fill in the calculated gradients.
+
+    in order for the gradients to be calculated.
+
+    """
 
     space_order = -1
     time_order = -1
@@ -18,9 +54,134 @@ class ProblemTypeBase(ABC):
         self._adjoint_operator = None
 
     def set_problem(self, problem):
+        """
+        Set up the problem or sub-problem that needs to be run.
+
+        Parameters
+        ----------
+        problem : SubProblem or Problem
+            Problem on which the physics will be executed
+
+        Returns
+        -------
+
+        """
         self._problem = problem
 
+    @abstractmethod
+    def before_state(self, save_wavefield=False):
+        """
+        Prepare the problem type to run the state or forward problem.
+
+        Parameters
+        ----------
+        save_wavefield : bool, optional
+            Whether or not the wavefield needs to be stored, defaults to False.
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def state(self):
+        """
+        Run the state or forward problem.
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def after_state(self, save_wavefield=False):
+        """
+        Clean up after the state run and retrieve the time traces.
+
+        If requested, also provide a saved wavefield.
+
+        Parameters
+        ----------
+        save_wavefield : bool, optional
+            Whether or not the wavefield needs to be stored, defaults to False.
+
+        Returns
+        -------
+        Traces
+            Time traces produced by the state run.
+        Data or None
+            Wavefield produced by the state run, if any.
+
+        """
+        pass
+
+    @abstractmethod
+    def before_adjoint(self, wrt, adjoint_source, wavefield):
+        """
+        Prepare the problem type to run the adjoint problem.
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variables for which the inverse problem is being solved.
+        adjoint_source : Traces
+            Adjoint source to use in the adjoint propagation.
+        wavefield : Data
+            Stored wavefield from the forward run, to use as needed.
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def adjoint(self):
+        """
+        Run the adjoint problem.
+
+        Returns
+        -------
+
+        """
+        pass
+
+    @abstractmethod
+    def after_adjoint(self, wrt):
+        """
+        Clean up after the adjoint run and retrieve the time gradients (if needed).
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variables for which the inverse problem is being solved.
+
+        Returns
+        -------
+        VariableList
+            Updated variable list with gradients added to them.
+
+        """
+        pass
+
     def set_grad(self, wrt):
+        """
+        Prepare the problem type to calculate the gradients wrt the inputs.
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variable with respect to which the inversion is running.
+
+        Returns
+        -------
+        list
+            List of update rules (if any) for the gradients of the problem type
+            with respect to the inputs
+
+        """
         gradient_update = []
 
         for variable in wrt:
@@ -35,6 +196,20 @@ class ProblemTypeBase(ABC):
         return gradient_update
 
     def get_grad(self, wrt):
+        """
+        Retrieve the gradients calculated wrt to the inputs.
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variable with respect to which the inversion is running.
+
+        Returns
+        -------
+        VariableList
+            Updated variable list with gradients added to them.
+
+        """
         for variable in wrt:
             method = getattr(self, 'get_grad_' + variable.name, None)
 
@@ -44,27 +219,3 @@ class ProblemTypeBase(ABC):
             method(variable)
 
         return wrt
-
-    @abstractmethod
-    def before_state(self, save_wavefield=False):
-        pass
-
-    @abstractmethod
-    def state(self):
-        pass
-
-    @abstractmethod
-    def after_state(self, save_wavefield=False):
-        pass
-
-    @abstractmethod
-    def before_adjoint(self, wrt, adjoint_source, wavefield):
-        pass
-
-    @abstractmethod
-    def adjoint(self):
-        pass
-
-    @abstractmethod
-    def after_adjoint(self, wrt):
-        pass

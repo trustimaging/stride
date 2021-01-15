@@ -1,33 +1,71 @@
 
-# Some sort of iteration-wide object contains statistics about that iteration
-# It contains an iteration-wide functional value, it also contains the functional
-# values of all shots inside. Per-shot information also includes the residuals
-# for that iteration (probably only temporarily).
-# We might also want to store some other stuff, such as gradients, maybe only the
-# last one as well
-# We might also want to contain these iteration objects somewhere else?
-# For example, the Optimisation. That object tracks and saves to disk the progress of
-# the inversion. It will be the place where statistics about each iteration, each block,
-# configuration, and completed blocks and iterations are preserved.
-
-# Should we create a functional instance at the functional level, and therefore
-# use it at the runner level, or should we do something else at the iteration level
-# Or actually maybe both?
-# At the runner level we construct the output of a functional for a certain shot
-# At the iteration level, we group all of these into one
+from abc import ABC, abstractmethod
 
 
-class FunctionalBase:
+__all__ = ['FunctionalBase', 'FunctionalValue']
 
-    # return fun, residual, adjoint_source
+
+class FunctionalBase(ABC):
+    """
+    Base class for the implementation of functionals or loss functions. A functional calculates
+    a scalar value given some modelled and some observed data, as well as the residual and the adjoint source.
+
+    """
+
+    @abstractmethod
     def apply(self, shot, modelled, observed):
+        """
+        Calculate the functional.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the functional is calculated.
+        modelled : Data
+            Data of the modelled.
+        observed : Data
+            Data of the observed.
+
+        Returns
+        -------
+        FunctionalValue
+            Value of the functional and the residual.
+        Data
+            Adjoint source.
+
+        """
         pass
 
-    def gradient(self, variables):
+    def get_grad(self, variables):
+        """
+        The functional might contain components of the gradient that need to be calculated.
+
+        Parameters
+        ----------
+        variables : VariableList
+            Updated list of variables.
+
+        Returns
+        -------
+
+        """
         return variables
 
 
 class FunctionalValue:
+    """
+    Container class for the calculated functional value and the residuals.
+
+    Parameters
+    ----------
+    shot_id : int
+        ID of the shot for which the value has been calculated.
+    fun_value : float
+        Scalar value of the functional.
+    residuals : Data
+        Calculated residuals.
+
+    """
 
     def __init__(self, shot_id, fun_value, residuals):
         self.shot_id = shot_id

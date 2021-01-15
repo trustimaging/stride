@@ -24,18 +24,26 @@ class Shot(ProblemBase):
     A Shot is an even in which one or more transducers act as sources with a given wavelet and one or more
     transducers act as receivers and record some observed data.
 
-    Therefore a shot object maintains data about the ids of the transducers that will act as sources,
-    the ids of the transducers that will act as receivers, as well as the wavelets that will be fired and
+    Therefore a shot object maintains data about the ids of the transducer locations that will act as sources,
+    the ids of the transducer locations that will act as receivers, as well as the wavelets that will be fired and
     the observed data that is recorded.
 
     Parameters
     ----------
     id : int
         Identifier assigned to this shot.
+    name : str
+        Optional name for the shot.
+    problem : Problem
+        Problem to which the Shot belongs.
+    geometry : Geometry
+        Geometry referenced by the source/receiver transducer locations of the shot.
     sources : list
         Sources with which to initialise the shot, defaults to empty.
     receivers : list
         Receivers with which to initialise the shot, defaults to empty.
+    grid : Grid or any of Space or Time
+        Grid on which the Acquisitions is defined
 
     """
 
@@ -84,12 +92,7 @@ class Shot(ProblemBase):
     @property
     def source_ids(self):
         """
-        Get ids of sources in this Shot.
-
-        Returns
-        -------
-        list
-            List-like object with keys of the transducers.
+        Get ids of sources in this Shot in a list.
 
         """
         return list(self._sources.keys())
@@ -97,12 +100,7 @@ class Shot(ProblemBase):
     @property
     def receiver_ids(self):
         """
-        Get ids of receivers in this Shot.
-
-        Returns
-        -------
-        list
-            List-like object with keys of the transducers.
+        Get ids of receivers in this Shot in a list.
 
         """
         return list(self._receivers.keys())
@@ -110,12 +108,7 @@ class Shot(ProblemBase):
     @property
     def sources(self):
         """
-        Get sources in this Shot.
-
-        Returns
-        -------
-        list
-            List-like object with the transducers.
+        Get sources in this Shot as a list.
 
         """
         return list(self._sources.values())
@@ -123,12 +116,7 @@ class Shot(ProblemBase):
     @property
     def receivers(self):
         """
-        Get receivers in this Shot.
-
-        Returns
-        -------
-        list
-            List-like object with the transducers.
+        Get receivers in this Shot as a list.
 
         """
         return list(self._receivers.values())
@@ -138,11 +126,6 @@ class Shot(ProblemBase):
         """
         Get number of sources in the Shot.
 
-        Returns
-        -------
-        int
-            Number of sources.
-
         """
         return len(self.source_ids)
 
@@ -150,11 +133,6 @@ class Shot(ProblemBase):
     def num_receivers(self):
         """
         Get number of receivers in the Shot.
-
-        Returns
-        -------
-        int
-            Number of receivers.
 
         """
         return len(self.receiver_ids)
@@ -164,10 +142,7 @@ class Shot(ProblemBase):
         """
         Get the coordinates of all sources packed in an array format.
 
-        Returns
-        -------
-        2-dimensional array
-            Array containing the coordinates of all sources, with shape (n_sources, n_dimensions).
+        Coordinates are defined as a 2 or 3-dimensional array with shape (n_sources, n_dimensions).
 
         """
         coordinates = np.zeros((self.num_sources, self.space.dim), dtype=np.float32)
@@ -183,10 +158,7 @@ class Shot(ProblemBase):
         """
         Get the coordinates of all receivers packed in an array format.
 
-        Returns
-        -------
-        2-dimensional array
-            Array containing the coordinates of all receivers, with shape (n_receivers, n_dimensions).
+        Coordinates are defined as a 2 or 3-dimensional array with shape (n_receivers, n_dimensions).
 
         """
         coordinates = np.zeros((self.num_receivers, self.space.dim), dtype=np.float32)
@@ -198,6 +170,25 @@ class Shot(ProblemBase):
         return coordinates
 
     def sub_problem(self, shot, sub_problem):
+        """
+        Create a subset object for a certain shot.
+
+        A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+        This method takes care of generating a new Shot object that is linked to this new SubProblem.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the SubProblem is being generated.
+        sub_problem : SubProblem
+            Container for the sub-problem being generated.
+
+        Returns
+        -------
+        Shot
+            Newly created Shot instance.
+
+        """
         shot = Shot(self.id,
                     name=self.name, problem=sub_problem,
                     grid=self.grid, geometry=sub_problem.geometry)
@@ -218,7 +209,77 @@ class Shot(ProblemBase):
 
         return shot
 
+    def plot(self, **kwargs):
+        """
+        Plot wavelets and observed for this shot if they are allocated.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        axes = []
+
+        if self.wavelets is not None and self.wavelets.allocated:
+            axes.append(self.wavelets.plot(**kwargs))
+
+        if self.observed is not None and self.observed.allocated:
+            axes.append(self.observed.plot(**kwargs))
+
+        return axes
+
+    def plot_wavelets(self, **kwargs):
+        """
+        Plot wavelets for this shot if they are allocated.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        if self.wavelets is not None and self.wavelets.allocated:
+            return self.wavelets.plot(**kwargs)
+
+    def plot_observed(self, **kwargs):
+        """
+        Plot observed for this shot if they are allocated.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        if self.observed is not None and self.observed.allocated:
+            return self.observed.plot(**kwargs)
+
     def append_observed(self, *args, **kwargs):
+        """
+        Append the shot to the corresponding Acquisitions file.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         kwargs['parameter'] = 'acquisitions'
         kwargs['version'] = kwargs.get('version', 0)
 
@@ -258,32 +319,15 @@ class Shot(ProblemBase):
             self.observed = Traces('observed', transducer_ids=self.receiver_ids, grid=self.grid)
             self.observed.__set_desc__(description.observed)
 
-    def plot(self, **kwargs):
-        axes = []
-
-        if self.wavelets is not None and self.wavelets.allocated:
-            axes.append(self.wavelets.plot(**kwargs))
-
-        if self.observed is not None and self.observed.allocated:
-            axes.append(self.observed.plot(**kwargs))
-
-        return axes
-
-    def plot_wavelets(self, **kwargs):
-        if self.wavelets is not None and self.wavelets.allocated:
-            return self.wavelets.plot(**kwargs)
-
-    def plot_observed(self, **kwargs):
-        if self.observed is not None and self.observed.allocated:
-            return self.observed.plot(**kwargs)
-
 
 class Acquisitions(ProblemBase):
     """
-    Acquisitions establish a series of shot that will be or have been fired to generate data.
+    Acquisitions establish a series of shots that will be or have been fired to generate data.
 
-    A shot is an even in which one or more transducers act as sources with a given wavelet and one or more
-    transducers act as receivers and record some observed data.
+    A shot is an even in which one or more transducer locations act as sources with a given wavelet and one or more
+    transducer locations act as receivers and record some observed data.
+
+    Shots are identified through a numerical ID, which is >= 0.
 
     Shots can be added through ``Acquisitions.add(shot)`` and can be accessed through
     ``Acquisitions.get(shot_id)``.
@@ -292,10 +336,14 @@ class Acquisitions(ProblemBase):
 
     Parameters
     ----------
+    name : str
+        Alternative name to give to the medium.
     problem : Problem
         Problem to which the Acquisitions belongs.
-    shots : dict-like, optional
-        Shots with which to initialise the Acquisitions, defaults to empty.
+    geometry : Geometry
+        Geometry referenced by the source/receiver transducer locations of the shot.
+    grid : Grid or any of Space or Time
+        Grid on which the Acquisitions is defined
 
     """
 
@@ -317,12 +365,7 @@ class Acquisitions(ProblemBase):
     @property
     def shots(self):
         """
-        Get all shots in the Acquisitions.
-
-        Returns
-        -------
-        list
-            List of shots.
+        Get all shots in the Acquisitions as a list.
 
         """
         return list(self._shots.values())
@@ -330,12 +373,7 @@ class Acquisitions(ProblemBase):
     @property
     def shot_ids(self):
         """
-        Get all IDs of shots in the Acquisitions.
-
-        Returns
-        -------
-        list
-            List of IDs.
+        Get all IDs of shots in the Acquisitions as a list.
 
         """
         return list(self._shots.keys())
@@ -345,11 +383,6 @@ class Acquisitions(ProblemBase):
         """
         Get number of shots in the Acquisitions.
 
-        Returns
-        -------
-        int
-            Number of shots.
-
         """
         return len(self.shot_ids)
 
@@ -357,11 +390,6 @@ class Acquisitions(ProblemBase):
     def num_sources_per_shot(self):
         """
         Get maximum number of sources in any shot.
-
-        Returns
-        -------
-        int
-            Number of transducers.
 
         """
         num_transducers = max(*[each.num_sources for each in self._shots.values()])
@@ -372,11 +400,6 @@ class Acquisitions(ProblemBase):
         """
         Get maximum number of receivers in any shot.
 
-        Returns
-        -------
-        int
-            Number of transducers.
-
         """
         num_transducers = max(*[each.num_receivers for each in self._shots.values()])
         return num_transducers
@@ -385,11 +408,6 @@ class Acquisitions(ProblemBase):
     def remaining_shots(self):
         """
         Get dict of all shots that have no observed allocated.
-
-        Returns
-        -------
-        OrderedDict
-            Keys are ids of the shots and values are the shots with no observed allocated.
 
         """
         shots = OrderedDict()
@@ -402,12 +420,7 @@ class Acquisitions(ProblemBase):
     @property
     def remaining_shot_ids(self):
         """
-        Get list of all shots that have no observed allocated.
-
-        Returns
-        -------
-        list
-            List-like object with identifiers of all shots with no observed allocated.
+        Get list of all shot IDs that have no observed allocated.
 
         """
         shot_ids = []
@@ -478,6 +491,33 @@ class Acquisitions(ProblemBase):
         self._shots[item.id] = item
 
     def select_shot_ids(self, start=None, end=None, num=None, every=1, randomly=False):
+        """
+        Select a number of shots according to the rules given in the arguments to the method.
+
+        For every call to this method a new group of shots will be selected according to
+        those rules until all shots have been selected. At that point, the selection will
+        start again.
+
+        Parameters
+        ----------
+        start : int, optional
+            Start of the slice, defaults to the first id.
+        end : int, optional
+            End of the slice, defaults to the last id.
+        num : int, optional
+            Number of shots to select every time the method is called.
+        every : int, optional
+            How many shots to skip in the selection, defaults to 1, which means taking all shots
+            subsequently.
+        randomly : bool, optional
+            Whether to select the shots at random at in order, defaults to False.
+
+        Returns
+        -------
+        list
+            List with selected shots.
+
+        """
         if not len(self._shot_selection):
             ids_slice = slice(start or 0, end)
             shot_ids = self.shot_ids
@@ -513,6 +553,20 @@ class Acquisitions(ProblemBase):
         return next_slice
 
     def default(self):
+        """
+        Fill the container with the default configuration.
+
+        In this case, that means that every location in the Geometry
+        acts as a source once while every location acts as a receiver.
+
+        This generates as many shots as there are locations available in the
+        Geometry. Each Shot only has one source and as many receivers as locations
+        are in the Geometry.
+
+        Returns
+        -------
+
+        """
         for source in self._geometry.locations:
             receivers = self._geometry.locations
 
@@ -521,6 +575,18 @@ class Acquisitions(ProblemBase):
                           geometry=self._geometry, problem=self.problem))
 
     def plot(self, **kwargs):
+        """
+        Plot wavelets and observed for for all shots if they are allocated.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting.
+
+        Returns
+        -------
+
+        """
         self.plot_wavelets(**kwargs)
         self.plot_observed(**kwargs)
 
@@ -546,6 +612,18 @@ class Acquisitions(ProblemBase):
         return axis
 
     def plot_wavelets(self, **kwargs):
+        """
+        Plot wavelets for for all shots if they are allocated.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting.
+
+        Returns
+        -------
+
+        """
         if not self.get(0).wavelets.allocated:
             return None
 
@@ -560,6 +638,18 @@ class Acquisitions(ProblemBase):
         return self._plot(update)
 
     def plot_observed(self, **kwargs):
+        """
+        Plot observed for for all shots if they are allocated.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting.
+
+        Returns
+        -------
+
+        """
         if not self.get(0).observed.allocated:
             return None
 
@@ -574,6 +664,26 @@ class Acquisitions(ProblemBase):
         return self._plot(update)
 
     def sub_problem(self, shot, sub_problem):
+        """
+        Create a subset object for a certain shot.
+
+        A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+        This method takes care of selecting the portions of the Acquisitions that are needed
+        for a given shot.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the SubProblem is being generated.
+        sub_problem : SubProblem
+            Container for the sub-problem being generated.
+
+        Returns
+        -------
+        Acquisitions
+            Newly created Acquisitions instance.
+
+        """
         sub_acquisitions = Acquisitions(name=self.name,
                                         geometry=sub_problem.geometry,
                                         problem=sub_problem, grid=self.grid)

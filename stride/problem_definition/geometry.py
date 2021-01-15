@@ -10,6 +10,28 @@ __all__ = ['Geometry']
 
 
 class TransducerLocation(GriddedSaved):
+    """
+    This determines the spatial location of a specific transducer device within the
+    geometry.
+
+    The location is determined by a numerical ID (>= 0), a transducer and the
+    coordinates of the location within the space grid. In some cases, the orientation
+    of the transducer might also be needed.
+
+    Parameters
+    ----------
+    id : int
+        Numerical ID of the location (>=0).
+    name : str
+        Optional name for the transducer location.
+    transducer : Transducer
+        Transducer device to which this location refers.
+    coordinates : ndarray
+        Coordinates of the transducer in the space grid.
+    orientation : ndarray, optional
+        Orientation of the transducer with respect to its location.
+
+    """
 
     def __init__(self, id, transducer=None, coordinates=None, orientation=None,
                  name=None, *args, **kwargs):
@@ -32,6 +54,26 @@ class TransducerLocation(GriddedSaved):
         pass
 
     def sub_problem(self, shot, sub_problem):
+        """
+        Create a subset object for a certain shot.
+
+        A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+        This method takes care of creating a TransducerLocation object that links to that
+        new SubProblem.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the SubProblem is being generated.
+        sub_problem : SubProblem
+            Container for the sub-problem being generated.
+
+        Returns
+        -------
+        TransducerLocation
+            Newly created TransducerLocation instance.
+
+        """
         sub_location = TransducerLocation(self.id,
                                           name=self.name, grid=self.grid)
 
@@ -66,19 +108,25 @@ class TransducerLocation(GriddedSaved):
 
 class Geometry(ProblemBase):
     """
-    The Geometry represents a series of transducers that exist within the confines of the Medium.
+    The Geometry represents a series of transducer locations that exist within the confines of the grid.
 
-    Transducers can be added through ``Geometry.add(transducer, coordinates, orientation)`` and can be accessed through
-    ``Geometry.get(transducer_id)``.
+    Transducer locations are identified through a numerical ID, which is >= 0.
+
+    Transducer locations can be added at a certain location through ``Geometry.add(id, transducer, coordinates, [orientation])``
+    and can be accessed through ``Geometry.get(location_id)``.
 
     The Geometry also provides utilities for loading and dumping these transducers and for plotting them.
 
     Parameters
     ----------
+    name : str
+        Alternative name to give to the medium.
     problem : Problem
-        Problem to which the Medium belongs.
-    transducers : dict-like, optional
-        Transducers with which to initialise the Geometry, defaults to empty.
+        Problem to which the Geometry belongs.
+    transducers : Transducers
+        Transducers object to which the Geometry refers.
+    grid : Grid or any of Space or Time
+        Grid on which the Geometry is defined
 
     """
 
@@ -98,7 +146,7 @@ class Geometry(ProblemBase):
 
     def add(self, id, transducer, coordinates, orientation=None):
         """
-        Add a new transducer to the Geometry.
+        Add a new transducer location to the Geometry.
 
         Parameters
         ----------
@@ -116,7 +164,7 @@ class Geometry(ProblemBase):
 
         """
         if id in self._locations.keys():
-            raise ValueError('Transducer with ID "%d" already exists in the Geometry' % id)
+            raise ValueError('Transducer location with ID "%d" already exists in the Geometry' % id)
 
         instance = TransducerLocation(id, transducer, coordinates, orientation,
                                       grid=self.grid)
@@ -124,25 +172,25 @@ class Geometry(ProblemBase):
 
     def add_location(self, item):
         """
-        Add a new transducer to the Geometry.
+        Add an existing location to the Geometry.
 
         Parameters
         ----------
         item : TransducerLocation
-            Transducer instance to be added to the Geometry.
+            Transducer location instance to be added to the Geometry.
 
         Returns
         -------
 
         """
         if item.id in self._locations.keys():
-            raise ValueError('Transducer with ID "%d" already exists in the Geometry' % item.id)
+            raise ValueError('Transducer location with ID "%d" already exists in the Geometry' % item.id)
 
         self._locations[item.id] = item
 
     def get(self, id):
         """
-        Get a transducer from the Geometry with a known id.
+        Get a transducer location from the Geometry with a known id.
 
         Parameters
         ----------
@@ -151,8 +199,8 @@ class Geometry(ProblemBase):
 
         Returns
         -------
-        Transducer
-            Found Transducer.
+        TransducerLocation
+            Found TransducerLocation.
 
         """
         if isinstance(id, (np.int32, np.int64)):
@@ -165,7 +213,7 @@ class Geometry(ProblemBase):
 
     def get_slice(self, start=None, end=None, step=None):
         """
-        Get a slice of the indices of the transducer using ``slice(start, stop, step)``.
+        Get a slice of the indices of the locations using ``slice(start, stop, step)``.
 
         Parameters
         ----------
@@ -179,7 +227,7 @@ class Geometry(ProblemBase):
         Returns
         -------
         list
-            Found transducers in the slice.
+            Found transducer locations in the slice.
 
         """
         section = OrderedDict()
@@ -204,23 +252,13 @@ class Geometry(ProblemBase):
         """
         Get number of locations in the Geometry.
 
-        Returns
-        -------
-        int
-            Number of locations.
-
         """
         return len(self._locations.keys())
 
     @property
     def locations(self):
         """
-        Get all locations in the Geometry.
-
-        Returns
-        -------
-        list
-            Transducer locations in the Geometry.
+        Get all locations in the Geometry as a list.
 
         """
         return list(self._locations.values())
@@ -228,12 +266,7 @@ class Geometry(ProblemBase):
     @property
     def location_ids(self):
         """
-        Get all location IDs in the Geometry.
-
-        Returns
-        -------
-        list
-            IDs of the transducers.
+        Get all location IDs in the Geometry as a list.
 
         """
         return list(self._locations.keys())
@@ -241,27 +274,58 @@ class Geometry(ProblemBase):
     @property
     def coordinates(self):
         """
-        Get the coordinates of all transducers packed in an array format.
+        Get the coordinates of all locations packed in an array format.
 
-        Returns
-        -------
-        2-dimensional array
-            Array containing the coordinates of all transducers, with shape (n_transducers, n_dimensions).
+        Coordinates are defined as a 2 or 3-dimensional array with shape (n_transducers, n_dimensions).
 
         """
         coordinates = np.zeros((self.num_locations, self.space.dim), dtype=np.float32)
         index = 0
-        for transducer in self._locations.values():
-            coordinates[index, :] = transducer.coordinates
+        for location in self._locations.values():
+            coordinates[index, :] = location.coordinates
             index += 1
 
         return coordinates
 
     def plot(self, **kwargs):
+        """
+        Plot the locations of the transducers as scattered points.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
         title = kwargs.pop('title', self.name)
         return plotting.plot_points(self.coordinates, title=title, **kwargs)
 
     def sub_problem(self, shot, sub_problem):
+        """
+        Create a subset object for a certain shot.
+
+        A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+        This method takes care of selecting the portions of the Geometry that are needed
+        for a given shot.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the SubProblem is being generated.
+        sub_problem : SubProblem
+            Container for the sub-problem being generated.
+
+        Returns
+        -------
+        Geometry
+            Newly created Geometry instance.
+
+        """
         sub_geometry = Geometry(name=self.name,
                                 transducers=sub_problem.transducers,
                                 problem=sub_problem, grid=self.grid)

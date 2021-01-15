@@ -9,6 +9,11 @@ __all__ = ['PointTransducer']
 
 
 class PointTransducer(Transducer):
+    """
+    This class describes a point transducers, in which a single point represents the
+    effect of the device.
+
+    """
 
     type = 'point_transducer'
 
@@ -17,6 +22,15 @@ class PointTransducer(Transducer):
 
     @property
     def coordinates(self):
+        """
+        Coordinates of points in the transducer, relative to its centre.
+
+        Returns
+        -------
+        ndarray
+            Coordinate array.
+
+        """
         if self._coordinates is None:
             self._coordinates = np.zeros((self.space.dim,))
 

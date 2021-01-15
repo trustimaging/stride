@@ -71,7 +71,7 @@ def plot_points_3d(coordinates, axis=None, colour='red', size=15, title=None):
     Parameters
     ----------
     coordinates : 2-dimensional array
-        Coordinates of the points to be plotted, shape should be (n_points, 2).
+        Coordinates of the points to be plotted, shape should be (n_points, 3).
     axis : MayaVi axis, optional
         Axis in which to make the plotting, defaults to new empty one.
     colour : str
@@ -115,12 +115,12 @@ def plot_points_3d(coordinates, axis=None, colour='red', size=15, title=None):
 
 def plot_points(coordinates, axis=None, colour='red', size=15, title=None):
     """
-    Utility function to plot scattered points using Bokeh. 3D plotting is not supported yet.
+    Utility function to plot scattered points using matplotlib (2D) or MayaVi (3D).
 
     Parameters
     ----------
     coordinates : 2-dimensional array
-        Coordinates of the points to be plotted, shape should be (n_points, 2).
+        Coordinates of the points to be plotted, shape should be (n_points, dimensions).
     axis : axis, optional
         Axis in which to make the plotting, defaults to new empty one.
     colour : str

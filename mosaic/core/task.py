@@ -9,7 +9,7 @@ from .base import Base, RemoteBase, ProxyBase, MonitoredBase
 from ..utils import Future
 
 
-__all__ = ['Task', 'TaskOutput', 'MonitoredTask']
+__all__ = ['Task', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone', 'MonitoredTask']
 
 
 class Task(RemoteBase):

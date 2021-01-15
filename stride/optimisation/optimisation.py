@@ -11,7 +11,7 @@ from .pipelines import default_pipelines
 from stride.problem_definition.base import Saved
 
 
-__all__ = ['Iteration', 'Block', 'Optimisation']
+__all__ = ['Iteration', 'Block', 'Optimisation', 'VariableList', 'CallableList']
 
 
 _magic_ops = [
@@ -36,6 +36,45 @@ _magic_ops = [
 
 
 class CallableList:
+    """
+    Class representing a series of objects that contain common interfaces.
+
+    For example, let's say that we create a certain class a a callable list using it:
+
+    >>> class Klass:
+    >>>     def __init__(self, value):
+    >>>         self.value = value
+    >>>
+    >>>     def print(self):
+    >>>         print('Value: ', self.value)
+    >>>
+    >>> callable_list = CallableList([Klass(1), Klass(2)])
+
+    then we can call the common method in all elements of the list by doing:
+
+    >>> callable_list.print()
+    Value: 1
+    Value: 2
+
+    but also that we can set attributes accordingly:
+
+    >>> callable_list.value = [3, 4]
+    >>> callable_list.print()
+    Value: 3
+    Value: 4
+
+    A callable list can be iterated and ``len(callable_list)`` is also valid.
+
+    The result of an attribute access on a callable list is another callable list,
+    ensuring composability of operations.
+
+
+    Parameters
+    ----------
+    items : iterable
+        Items in the callable list.
+
+    """
 
     def __init__(self, items=None):
         self.items = items
@@ -138,6 +177,11 @@ for op in _magic_ops:
 
 
 class VariableList(CallableList):
+    """
+    A variable list is a specific type of callable list in which the items are a Struct instead of
+    a Python list.
+
+    """
 
     def __init__(self):
         super().__init__()
@@ -159,6 +203,15 @@ class VariableList(CallableList):
 
 
 class Iteration:
+    """
+    Objects of this class contain information about the iteration, such as the value of the functional.
+
+    Parameters
+    ----------
+    id : int
+        Numerical ID of the iteration.
+
+    """
 
     def __init__(self, id, **kwargs):
         self.id = id
@@ -167,13 +220,50 @@ class Iteration:
 
     @property
     def fun_value(self):
+        """
+        Functional value for this iteration across all shots.
+
+        """
         return sum([each.fun_value for each in self._fun.values()])
 
     def add_fun(self, fun):
+        """
+        Add a functional value for a particular shot to the iteration.
+
+        Parameters
+        ----------
+        fun : FunctionalValue
+
+        Returns
+        -------
+
+        """
         self._fun[fun.shot_id] = fun
 
 
 class Block:
+    """
+    A block determines a set of conditions that is maintained over a number of iterations,
+    such as the frequency band used or the step size applied.
+
+    These can be given to the block through the default ``Block.config``, which will take care
+    of creating and configuring the ``pipeline``s that implement these conditions.
+
+    Pipelines can be accessed through ``Block.pipelines`` using dot notation.
+
+    The iteration loop of the block can be started using the generator ``Block.iterations`` as:
+
+    >>> for iteration in block.iterations():
+    >>>     pass
+
+    Parameters
+    ----------
+    id : int
+        Numerical ID of the block.
+    functional : Functional
+        Functional class to be used in the inversion.
+
+    """
 
     def __init__(self, id, **kwargs):
         self.id = id
@@ -187,9 +277,22 @@ class Block:
 
     @property
     def num_iterations(self):
+        """
+        Number of iterations in the block.
+
+        """
         return self._num_iterations
 
     def iterations(self):
+        """
+        Generator of iterations.
+
+        Returns
+        -------
+        Iteration
+            New Iteration instance.
+
+        """
         for index in range(self._num_iterations):
             iteration = Iteration(index)
             self._iterations[index] = iteration
@@ -197,6 +300,36 @@ class Block:
             yield iteration
 
     def config(self, **kwargs):
+        """
+        Configure the block appropriately.
+
+        Parameters
+        ----------
+        num_iterations : int, optional
+            Number of iterations in the block, defaults to 1.
+        select_shots : dict, optional
+            Rules to select shots in each iteration, defaults to selecting all.
+        wavelets : callable or dict
+            Pipeline class to process the wavelets or dictionary with configuration for the default pipeline.
+        wavefield : callable or dict
+            Pipeline class to process the wavefield or dictionary with configuration for the default pipeline.
+        traces : callable or dict
+            Pipeline class to process the traces or dictionary with configuration for the default pipeline.
+        adjoint_source : callable or dict
+            Pipeline class to process the adjoint source or dictionary with configuration for the default pipeline.
+        local_gradient : callable or dict
+            Pipeline class to process the local gradient or dictionary with configuration for the default pipeline.
+        global_gradient : callable or dict
+            Pipeline class to process the global gradient or dictionary with configuration for the default pipeline.
+        model_iteration : callable or dict
+            Pipeline class to process the model after each iteration or dictionary with configuration for the default pipeline.
+        model_block : callable or dict
+            Pipeline class to process the model after each block or dictionary with configuration for the default pipeline.
+
+        Returns
+        -------
+
+        """
         self._num_iterations = kwargs.pop('num_iterations', 1)
         self.select_shots = kwargs.pop('select_shots', {})
 
@@ -258,6 +391,49 @@ class Block:
 
 
 class Optimisation(Saved):
+    """
+    Objects of this class act as managers of a local optimisation process.
+
+    Optimisations are performed with respect of a given ``functional``
+    (e.g. L2-norm of the difference between observed and modelled data), over
+    one or more optimisation variables (such as longitudinal speed of sound or attenuation).
+    Variables are updated according to an associated local optimiser (such as gradient descent or momentum).
+
+    Variables can be added to the optimisation through ``Optimisation.add(variable, optimiser)``.
+
+    The general convention is to divide the optimisation process in blocks and iterations,
+    although that doesn't have to be the case. A block determines a set of conditions
+    that is maintained over a number of iterations, such as the frequency band used or the
+    step size applied.
+
+    Blocks are generated through ``Optimisation.blocks``:
+
+    >>> for block in optimisation.blocks(num_blocks):
+    >>>     block.config(...)
+    >>>
+
+    The default running behaviour of the optimisation is obtained when calling ``Optimisation.run(block, problem)``:
+
+    >>> for block in optimisation.blocks(num_blocks):
+    >>>     block.config(...)
+    >>>     await optimisation.run(block, problem)
+
+    but iterations can also be run manually:
+
+    >>> for block in optimisation.blocks(num_blocks):
+    >>>     block.config(...)
+    >>>
+    >>>     for iteration in block.iterations():
+    >>>         pass
+
+    Parameters
+    ----------
+    name : str, optional
+        Optional name for the optimisation object.
+    functional : str or callable, optional
+        Name of the functional to be used, or callable defining that functional, defaults to ``l2_norm_difference``.
+
+    """
 
     def __init__(self, name='optimisation', **kwargs):
         super().__init__(name, **kwargs)
@@ -278,14 +454,26 @@ class Optimisation(Saved):
 
     @property
     def num_blocks(self):
+        """
+        Get number of blocks.
+
+        """
         return self._num_blocks
 
     @property
     def variables(self):
+        """
+        Access the variables.
+
+        """
         return self._variables
 
     @variables.setter
     def variables(self, value):
+        """
+        Set the variables
+
+        """
         if isinstance(value, list):
             for variable_value in value:
                 self._variables.items[variable_value.name] = variable_value
@@ -294,11 +482,39 @@ class Optimisation(Saved):
             self._variables = value
 
     def add(self, variable, optimiser):
+        """
+        Add a variable to the optimisation.
+
+        Parameters
+        ----------
+        variable : Variable
+            Variable to add to the optimisation.
+        optimiser : LocalOptimiser
+            Optimiser associated with the given variable.
+
+        Returns
+        -------
+
+        """
         if variable.name not in self._variables:
             self._variables.items[variable.name] = variable
             self._optimisers[variable.name] = optimiser
 
     def blocks(self, num):
+        """
+        Generator for the blocks of the optimisation.
+
+        Parameters
+        ----------
+        num : int
+            Number of blocks to generate.
+
+        Returns
+        -------
+        Block
+            Block instance.
+
+        """
         self._num_blocks = num
 
         for index in range(num):
@@ -308,6 +524,26 @@ class Optimisation(Saved):
             yield block
 
     def apply_optimiser(self, updated_variable, block=None, iteration=None, **kwargs):
+        """
+        Apply an optimiser to its associated variable.
+
+        Parameters
+        ----------
+        updated_variable : Variable
+            Container for the gradient of the variable.
+        block : Block
+            Block in which the optimisation is at the moment.
+        iteration : Iteration
+            Iteration in which the optimisation is at the moment.
+        kwargs : dict
+            Additional arguments for the optimiser.
+
+        Returns
+        -------
+        Variable
+            Updated variable.
+
+        """
         variable = self._variables[updated_variable.name]
         optimiser = self._optimisers[updated_variable.name]
 
@@ -339,11 +575,41 @@ class Optimisation(Saved):
         return variable
 
     def dump_variable(self, updated_variable, problem):
+        """
+        Dump the updated value of a variable to disk.
+
+        Parameters
+        ----------
+        updated_variable : Variable
+            Container for the gradient of the variable.
+        problem : Problem
+            Problem being executed.
+
+        Returns
+        -------
+
+        """
         variable = self._variables[updated_variable.name]
         variable.dump(path=problem.output_folder,
                       project_name=problem.name)
 
     async def run(self, block, problem, dump=True):
+        """
+        Run the default a block with default settings.
+
+        Parameters
+        ----------
+        block : Block
+            Block to run.
+        problem : Problem
+            Problem being run.
+        dump : bool, optional
+            Whether or not to dump the updated variable at each iteration, defaults to True.
+
+        Returns
+        -------
+
+        """
         runtime = mosaic.runtime()
 
         # Create an array of runners

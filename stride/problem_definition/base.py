@@ -8,6 +8,21 @@ __all__ = ['Gridded', 'Saved', 'GriddedSaved', 'ProblemBase']
 
 
 class Gridded:
+    """
+    Objects of this type are defined over a spatio-temporal grid.
+
+    This grid can be provided either as a Grid object or as any of Space, Time or SlowTime
+    objects that define a grid.
+
+    Parameters
+    ----------
+    grid : Grid, optional
+        Existing grid, if not provided one will be created.
+    space : Space, optional
+    time : Time, optional
+    slow_time : SlowTime, optional
+
+    """
 
     def __init__(self, grid=None, space=None, time=None, slow_time=None, **kwargs):
         if grid is None:
@@ -17,32 +32,74 @@ class Gridded:
 
     @property
     def grid(self):
+        """
+        Access the grid.
+
+        """
         return self._grid
 
     @property
     def space(self):
+        """
+        Access the space grid.
+
+        """
         return self._grid.space
 
     @property
     def time(self):
+        """
+        Access the time grid.
+
+        """
         return self._grid.time
 
     @property
     def slow_time(self):
+        """
+        Access the slow time grid.
+
+        """
         return self._grid.slow_time
 
     def resample(self, grid=None, space=None, time=None, slow_time=None):
-        pass
+        raise NotImplementedError('Resampling has not been implemented yet.')
 
 
 class Saved:
+    """
+    Saved objects include helper functions to interact with the file system.
+
+    Classes that inherit from Saved need to define ``__get_desc__`` and ``__set_desc__``
+    to define how the object is described to be saved and how a loaded description is
+    digested by the class respectively.
+
+    ``__get_desc__`` expects a dict-like object with all the attributes that need to
+    be stored to disk and is called when dumping the object.
+
+    ``__set_desc__`` will take a dict-like object as a parameter, which it can then be
+    used to set the state of the object, and is called when loading it.
+
+    Parameters
+    ----------
+    name : str
+        Name of the saved object.
+
+    """
 
     def __init__(self, name, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
         self.name = name
 
     def dump(self, *args, **kwargs):
+        """
+        Dump the object according to the ``__get_desc__`` description.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         description = self.__get_desc__()
 
         kwargs['parameter'] = kwargs.get('parameter', self.name)
@@ -50,6 +107,15 @@ class Saved:
             file.dump(description)
 
     def append(self, *args, **kwargs):
+        """
+        Append the object to a file according to the ``__get_desc__`` description.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         if not h5.file_exists(*args, **kwargs):
             self.dump(*args, **kwargs)
             return
@@ -61,6 +127,15 @@ class Saved:
             file.append(description)
 
     def load(self, *args, **kwargs):
+        """
+        Load the object using ``__set_desc__`` to digest the description.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         kwargs['parameter'] = self.name
         with h5.HDF5(*args, **kwargs, mode='r') as file:
             description = file.load()
@@ -75,8 +150,24 @@ class Saved:
 
 
 class GriddedSaved(Saved, Gridded):
+    """
+    Objects of this type are include utils to dump and load the instance, taking into
+    account that it is defined over a grid.
+
+    """
 
     def dump(self, *args, **kwargs):
+        """
+        Dump the object according to the ``__get_desc__`` description.
+
+        It will ensure that the grid of the instance is also dumped to disk.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         grid_description = self.grid_description()
 
         description = self.__get_desc__()
@@ -87,6 +178,17 @@ class GriddedSaved(Saved, Gridded):
             file.dump(grid_description)
 
     def append(self, *args, **kwargs):
+        """
+        Append the object to a file according to the ``__get_desc__`` description.
+
+        It will ensure that the grid of the instance is also dumped to disk.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         if not h5.file_exists(*args, **kwargs):
             self.dump(*args, **kwargs)
             return
@@ -101,6 +203,17 @@ class GriddedSaved(Saved, Gridded):
             file.append(grid_description)
 
     def load(self, *args, **kwargs):
+        """
+        Load the object using ``__set_desc__`` to digest the description.
+
+        It will use the grid loaded from file to determine the grid of the instance.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         kwargs['parameter'] = self.name
         with h5.HDF5(*args, **kwargs, mode='r') as file:
             description = file.load()
@@ -128,6 +241,15 @@ class GriddedSaved(Saved, Gridded):
             self.__set_desc__(description)
 
     def grid_description(self):
+        """
+        Get a description of the grid of the object.
+
+        Returns
+        -------
+        dict
+            Description of the grid.
+
+        """
         grid_description = dict()
 
         if self.space is not None:
@@ -155,6 +277,20 @@ class GriddedSaved(Saved, Gridded):
 
 
 class ProblemBase(GriddedSaved):
+    """
+    Base class for the different components of the problem that need to have access to it and
+    that also create sub-problems.
+
+    Parameters
+    ----------
+    name : str
+        Name of the object.
+    problem : Problem
+        Problem to which the object belongs.
+    grid : Grid or any of Space or Time
+        Grid on which the object is defined
+
+    """
 
     def __init__(self, name, problem, *args, **kwargs):
         if problem is not None:
@@ -168,7 +304,33 @@ class ProblemBase(GriddedSaved):
 
     @property
     def problem(self):
+        """
+        Access problem object.
+
+        """
         return self._problem
 
     def sub_problem(self, shot, sub_problem):
+        """
+        Create a subset object for a certain shot.
+
+        A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+        This method takes care of selecting the portions of the object that are needed
+        for a given shot.
+
+        By default, this has no effect.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the SubProblem is being generated.
+        sub_problem : SubProblem
+            Container for the sub-problem being generated.
+
+        Returns
+        -------
+        ProblemBase
+            ProblemBase instance.
+
+        """
         return self
