@@ -95,8 +95,8 @@ async def main(runtime):
 
         await optimisation.run(block, problem)
 
-    axis = optim_vp.plot()
-    plotting.show(axis)
+    optim_vp.plot()
+    plotting.show()
 
 if __name__ == '__main__':
     mosaic.run(main)

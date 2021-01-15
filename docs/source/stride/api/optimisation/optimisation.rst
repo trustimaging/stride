@@ -2,7 +2,7 @@
 Optimisation
 ==================
 
-.. autoclass:: stride.optimisation.optimisation.Iteration
+.. autoclass:: stride.optimisation.optimisation.Optimisation
     :members:
     :undoc-members:
     :show-inheritance:
@@ -12,7 +12,7 @@ Optimisation
     :undoc-members:
     :show-inheritance:
 
-.. autoclass:: stride.optimisation.optimisation.Optimisation
+.. autoclass:: stride.optimisation.optimisation.Iteration
     :members:
     :undoc-members:
     :show-inheritance:

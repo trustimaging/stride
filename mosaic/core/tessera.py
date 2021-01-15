@@ -219,12 +219,10 @@ class ArrayProxy(CMDBase):
         self._state = 'pending'
 
         self._proxies = []
-        self._locks = []
         self._runtime_id = []
         for _ in range(self._len):
             proxy = TesseraProxy(cls, *args, **kwargs)
             self._proxies.append(proxy)
-            self._locks.append(asyncio.Lock())
 
         self._uid = '%s-%s-%s' % ('array',
                                   self._cls.__name__.lower(),

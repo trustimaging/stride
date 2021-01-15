@@ -5,6 +5,13 @@ from ..pipeline import PipelineStep
 
 
 class Step(PipelineStep):
+    """
+    Normalised a series of time traces to the maximum value of the set.
+
+    Parameters
+    ----------
+
+    """
 
     def __init__(self, **kwargs):
         pass

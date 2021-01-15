@@ -1,5 +1,5 @@
 
-
+import functools
 import warnings
 try:
     from wx import wxPyDeprecationWarning
@@ -203,6 +203,7 @@ __all__ = ['plot_scalar_field', 'plot_scalar_field_2d', 'plot_scalar_field_3d']
 
 
 def prepare_plot_arguments(wrapped):
+    @functools.wraps(wrapped)
     def _prepare_plot_arguments(field, data_range=(None, None), origin=None, limit=None,
                                 axis=None, palette='viridis', title=None):
 
@@ -332,7 +333,7 @@ def plot_scalar_field_3d(field, data_range=(None, None), origin=None, limit=None
 def plot_scalar_field(field, data_range=(None, None), origin=None, limit=None,
                       axis=None, palette='viridis', title=None):
     """
-    Utility function to plot a scalar field using matplotib or MayaVi.
+    Utility function to plot a scalar field using matplotib (2D) or MayaVi (3D).
 
     Parameters
     ----------
