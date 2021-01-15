@@ -6,9 +6,6 @@ from . import steps as steps_module
 
 __all__ = ['Pipeline', 'PipelineStep']
 
-# TODO Maybe pipeline steps need to be accessible through dot notation
-#      how do we propagate configurations?
-
 
 class PipelineStep(ABC):
 

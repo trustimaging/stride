@@ -4,6 +4,9 @@ import numpy as np
 from .functional import FunctionalBase, FunctionalValue
 
 
+__all__ = ['Functional']
+
+
 class Functional(FunctionalBase):
 
     def apply(self, shot, modelled, observed):
