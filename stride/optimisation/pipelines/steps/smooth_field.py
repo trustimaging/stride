@@ -5,6 +5,15 @@ from ..pipeline import PipelineStep
 
 
 class Step(PipelineStep):
+    """
+    Apply Gaussian smoothing to a StructuredData object.
+
+    Parameters
+    ----------
+    sigma : float, optional
+        Standard deviation of the Gaussian kernel, defaults to 0.25 (25% of a grid point).
+
+    """
 
     def __init__(self, **kwargs):
         self.sigma = kwargs.pop('sigma', 0.25)

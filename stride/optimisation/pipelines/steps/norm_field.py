@@ -5,6 +5,13 @@ from ..pipeline import PipelineStep
 
 
 class Step(PipelineStep):
+    """
+    Normalise a StructuredData object between -1 and +1.
+
+    Parameters
+    ----------
+
+    """
 
     def __init__(self, **kwargs):
         self.norm_value = None

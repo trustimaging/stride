@@ -1,6 +1,7 @@
 
 import os
 import devito
+import functools
 import numpy as np
 
 from mosaic.types import Struct
@@ -24,6 +25,7 @@ class PhysicalDomain(devito.SubDomain):
 
 def _cached(func):
 
+    @functools.wraps(func)
     def cached_wrapper(self, *args, **kwargs):
         name = args[0]
         cached = kwargs.pop('cached', True)
@@ -43,6 +45,23 @@ def _cached(func):
 
 
 class GridDevito:
+    """
+    Instances of this class encapsulate the Devito grid, and interact with it by
+    generating appropriate functions on demand.
+
+    Instances will also keep a cache of created Devito functions under the ``vars``
+    attribute, which can be accessed by name using dot notation.
+
+    Parameters
+    ----------
+    space_order : int
+        Default space order of the discretisation for functions of the grid.
+    time_order : int
+        Default time order of the discretisation for functions of the grid.
+    grid : devito.Grid, optional
+        Predefined Devito grid. A new one will be created unless specified.
+
+    """
 
     def __init__(self, space_order, time_order, grid=None):
         self._problem = None
@@ -56,6 +75,18 @@ class GridDevito:
 
     # TODO The grid needs to be re-created if the space or time extent has changed
     def set_problem(self, problem):
+        """
+        Set up the problem or sub-problem that will be run on this grid.
+
+        Parameters
+        ----------
+        problem : SubProblem or Problem
+            Problem on which the physics will be executed
+
+        Returns
+        -------
+
+        """
         self._problem = problem
 
         if self.grid is None:
@@ -71,6 +102,28 @@ class GridDevito:
 
     @_cached
     def sparse_time_function(self, name, num=1, space_order=None, time_order=None, **kwargs):
+        """
+        Create a Devito SparseTimeFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        num : int, optional
+            Number of points in the function, defaults to 1.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        time_order : int, optional
+            Time order of the discretisation, defaults to the grid time order.
+        kwargs : dict
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.SparseTimeFunction
+            Generated function.
+
+        """
         time = self._problem.time
 
         space_order = space_order or self.space_order
@@ -92,6 +145,24 @@ class GridDevito:
 
     @_cached
     def function(self, name, space_order=None, **kwargs):
+        """
+        Create a Devito Function with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        kwargs : dict
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.Function
+            Generated function.
+
+        """
         space_order = space_order or self.space_order
 
         fun = devito.Function(name=name,
@@ -103,6 +174,26 @@ class GridDevito:
 
     @_cached
     def time_function(self, name, space_order=None, time_order=None, **kwargs):
+        """
+        Create a Devito TimeFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        time_order : int, optional
+            Time order of the discretisation, defaults to the grid time order.
+        kwargs : dict
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.TimeFunction
+            Generated function.
+
+        """
         space_order = space_order or self.space_order
         time_order = time_order or self.time_order
 
@@ -116,6 +207,28 @@ class GridDevito:
 
     @_cached
     def undersampled_time_function(self, name, factor, space_order=None, time_order=None, **kwargs):
+        """
+        Create an undersampled version of a Devito function with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        factor : int,=
+            Undersampling factor.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        time_order : int, optional
+            Time order of the discretisation, defaults to the grid time order.
+        kwargs : dict
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.Function
+            Generated function.
+
+        """
         time = self._problem.time
 
         time_under = devito.ConditionalDimension('time_under',
@@ -128,9 +241,24 @@ class GridDevito:
                                   space_order=space_order,
                                   time_order=time_order,
                                   time_dim=time_under,
-                                  save=buffer_size)
+                                  save=buffer_size,
+                                  **kwargs)
 
     def with_halo(self, data):
+        """
+        Pad ndarray with appropriate halo given the grid space order.
+
+        Parameters
+        ----------
+        data : ndarray
+            Array to pad
+
+        Returns
+        -------
+        ndarray
+            Padded array.
+
+        """
         pad_widths = [[self.space_order, self.space_order]
                       for _ in self._problem.space.shape]
 
@@ -138,6 +266,19 @@ class GridDevito:
 
 
 class OperatorDevito:
+    """
+    Instances of this class encapsulate Devito operators, how to configure them and how to run them.
+
+
+    Parameters
+    ----------
+    space_order : int
+        Default space order of the discretisation for functions of the grid.
+    time_order : int
+        Default time order of the discretisation for functions of the grid.
+    grid : GridDevito, optional
+        Predefined GridDevito. A new one will be created unless specified.
+    """
 
     def __init__(self, space_order, time_order, grid=None):
         self._problem = None
@@ -154,9 +295,35 @@ class OperatorDevito:
             self.grid = grid
 
     def set_problem(self, problem):
+        """
+        Set up the problem or sub-problem that will be run with this operator.
+
+        Parameters
+        ----------
+        problem : SubProblem or Problem
+            Problem on which the physics will be executed
+
+        Returns
+        -------
+
+        """
         self._problem = problem
 
     def set_operator(self, op, config=None):
+        """
+        Set up a Devito operator from a list of operations.
+
+        Parameters
+        ----------
+        op : list
+            List of operations to be given to the devito.Operator instance.
+        config : dict, optional
+            Configuration parameters to set for Devito overriding defaults.
+
+        Returns
+        -------
+
+        """
         default_config = {
             'autotuning': ['aggressive', 'runtime'],
             'opt': 'advanced',
@@ -180,18 +347,24 @@ class OperatorDevito:
                                         platform=os.getenv('DEVITO_PLATFORM', None))
 
     def compile(self):
+        """
+        Compile the operator.
+
+        Returns
+        -------
+
+        """
         compiler_flags = os.getenv('DEVITO_COMP_FLAGS', '').split(',')
         compiler_flags = [each.strip() for each in compiler_flags]
         self.operator._compiler.cflags += compiler_flags
         self.operator.cfunction
 
-    def arguments(self, **kwargs):
-        time = self._problem.time
-
-        kwargs['time_m'] = kwargs.get('time_m', 0)
-        kwargs['time_M'] = kwargs.get('time_M', time.extended_num - 1)
-
-        self.kwargs.update(kwargs)
-
     def run(self):
+        """
+        Run the operator.
+
+        Returns
+        -------
+
+        """
         self.operator.apply(**self.kwargs)

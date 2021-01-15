@@ -12,6 +12,14 @@ __all__ = ['ProcessWavelets', 'ProcessWavefield', 'ProcessTraces',
 
 
 class ProcessWavelets(Pipeline):
+    """
+    Default pipeline to process wavelets before running the forward problem.
+
+    **Default steps:**
+
+    - ``filter_wavelets``
+
+    """
 
     def __init__(self, steps=None, **kwargs):
         steps = steps or []
@@ -21,10 +29,25 @@ class ProcessWavelets(Pipeline):
 
 
 class ProcessWavefield(Pipeline):
+    """
+    Default pipeline to process the wavefield after running the forward problem.
+
+    **Default steps:**
+
+    """
     pass
 
 
 class ProcessTraces(Pipeline):
+    """
+    Default pipeline to process modelled and observed before running the functional.
+
+    **Default steps:**
+
+    - ``filter_traces``
+    - ``norm_per_shot``
+
+    """
 
     def __init__(self, steps=None, **kwargs):
         steps = steps or []
@@ -35,6 +58,14 @@ class ProcessTraces(Pipeline):
 
 
 class ProcessAdjointSource(Pipeline):
+    """
+    Default pipeline to process adjoint source before running the adjoint problem.
+
+    **Default steps:**
+
+    - ``filter_traces``
+
+    """
 
     def __init__(self, steps=None, **kwargs):
         steps = steps or []
@@ -44,10 +75,26 @@ class ProcessAdjointSource(Pipeline):
 
 
 class ProcessLocalGradient(Pipeline):
+    """
+    Default pipeline to process the gradient locally before returning it.
+
+    **Default steps:**
+
+    """
     pass
 
 
 class ProcessGlobalGradient(Pipeline):
+    """
+    Default pipeline to process the global gradient before updating the variable.
+
+    **Default steps:**
+
+    - ``mask``
+    - ``smooth_field``
+    - ``norm_field``
+
+    """
 
     def __init__(self, steps=None, **kwargs):
         steps = steps or []
@@ -59,6 +106,14 @@ class ProcessGlobalGradient(Pipeline):
 
 
 class ProcessModelIteration(Pipeline):
+    """
+    Default pipeline to process the model after each iteration.
+
+    **Default steps:**
+
+    - ``clip``
+
+    """
 
     def __init__(self, steps=None, **kwargs):
         steps = steps or []
@@ -68,4 +123,10 @@ class ProcessModelIteration(Pipeline):
 
 
 class ProcessModelBlock(Pipeline):
+    """
+    Default pipeline to process the model after each block.
+
+    **Default steps:**
+
+    """
     pass

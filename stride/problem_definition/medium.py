@@ -14,7 +14,7 @@ class Medium(ProblemBase):
     such as density or longitudinal speed of sound.
 
     A Medium defines these properties by keeping track of a series of named fields, that can be added to
-    it through ``Medium.add_field``. Valid fields are either any subclass of the type ``Field``.
+    it through ``Medium.add``.
 
     A field with a name ``field_name`` can be accessed directly through ``medium.field_name`` or
     ``medium['field_name']``.
@@ -23,8 +23,13 @@ class Medium(ProblemBase):
 
     Parameters
     ----------
+    name : str
+        Alternative name to give to the medium.
     problem : Problem
         Problem to which the Medium belongs.
+    grid : Grid or any of Space or Time
+        Grid on which the Medium is defined
+
     """
 
     def __init__(self, name='medium', problem=None, **kwargs):
@@ -46,6 +51,10 @@ class Medium(ProblemBase):
 
     @property
     def fields(self):
+        """
+        Access fields dictionary.
+
+        """
         return self._fields
 
     def items(self):
@@ -66,7 +75,7 @@ class Medium(ProblemBase):
 
         Parameters
         ----------
-        field : ScalarFunction or VectorFunction
+        field : Field object
             Field to add to the Medium.
 
         Returns
@@ -76,6 +85,22 @@ class Medium(ProblemBase):
         self._fields[field.name] = field
 
     def damping(self, damping_coefficient=None, mask=False):
+        """
+        Create a damping field based on the dimensions of the grid.
+
+        Parameters
+        ----------
+        damping_coefficient : float
+            Value of the maximum damping of the field.
+        mask : bool
+            Create the damping layer as a mask (interior filled with ones) or not (interior filled with zeros).
+
+        Returns
+        -------
+        ndarray
+            Tensor containing the damping field.
+
+        """
         # Create a damping field that corresponds to the given field, only scalar for now
         if mask:
             damp = np.ones(self.space.extended_shape, dtype=np.float32)
@@ -106,17 +131,46 @@ class Medium(ProblemBase):
         return damp
 
     def load(self, *args, **kwargs):
+        """
+        Load all fields in the Medium.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         for field_name, field in self._fields.items():
             field.load(*args, **kwargs)
 
     def dump(self, *args, **kwargs):
+        """
+        Dump all fields in the Medium.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
         for field_name, field in self._fields.items():
             field.dump(*args, **kwargs)
 
-    def dump_field(self, item, **kwargs):
-        self._get(item).dump(**kwargs)
-
     def plot(self, **kwargs):
+        """
+        Plot all fields in the Medium.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Arguments for plotting the fields.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
         axes = []
         for field in self._fields.values():
             axis = field.plot(**kwargs)

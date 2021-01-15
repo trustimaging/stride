@@ -2,10 +2,32 @@
 import numpy as np
 
 
-__all__ = ['Space', 'Time', 'SlowTime']
+__all__ = ['Space', 'Time', 'SlowTime', 'Grid']
 
 
 class Space:
+    """
+    This defines the spatial grid over which the problem is defined.
+
+    The spatial grid consists of an inner domain defined by ``shape`` and
+    an external padding defined by ``extra``. Within this extra region, a
+    further sub-region is defined as absorbing for boundary purposes as defined
+    by ``absorbing``.
+
+    The ``spacing`` defines the axis-wise spacing of the grid.
+
+    Parameters
+    ----------
+    shape : tuple
+        Shape of the inner domain.
+    spacing : tuple
+        Axis-wise spacing of the grid, in metres.
+    extra : tuple
+        Amount of axis-wise extra space around the inner domain.
+    absorbing : tuple
+        Portion of the extra space that corresponds to absorbing boundaries.
+
+    """
 
     def __init__(self, shape=None, spacing=None, extra=None, absorbing=None):
         self.dim = len(shape)
@@ -30,43 +52,23 @@ class Space:
         self.extended_limit = extended_size
 
     def resample(self):
-        pass
-
-    def pml(self, damping_coefficient=None, mask=False):
-        damp = np.ones(self.shape, dtype=np.float32) if mask else np.zeros(self.shape, dtype=np.float32)
-
-        pad_widths = [(extra, extra) for extra in self.extra]
-        damp = np.pad(damp, pad_widths, 'edge')
-
-        if damping_coefficient is None:
-            damping_coefficient = 2.0 * np.log(1.0 / 0.001) / np.max(self.extra)
-
-        for dimension in range(self.dim):
-            for index in range(self.absorbing[dimension]):
-                # Damping coefficient
-                pos = np.abs((self.absorbing[dimension] - index + 1) / float(self.absorbing[dimension]))
-                val = damping_coefficient * (pos - np.sin(2 * np.pi * pos) / (2 * np.pi))
-
-                # : slices
-                all_ind = [slice(0, d) for d in damp.shape]
-                # Left slice for dampening for dimension
-                all_ind[dimension] = slice(index, index + 1)
-                damp[tuple(all_ind)] += val / self.spacing[dimension]
-                # right slice for dampening for dimension
-                all_ind[dimension] = slice(damp.shape[dimension] - index, damp.shape[dimension] - index + 1)
-                damp[tuple(all_ind)] += val / self.spacing[dimension]
-
-        return damp
+        raise NotImplementedError('Resampling has not been implemented yet')
 
     @property
     def inner(self):
-        return tuple([slice(extra, extra + shape) for shape, extra in zip(self.shape, self.extra)])
+        """
+        Slices defining the inner domain, as a tuple of slices.
 
-    def inner_time(self, time_slice):
-        return tuple([time_slice] + list(self.inner))
+        """
+        return tuple([slice(extra, extra + shape) for shape, extra in zip(self.shape, self.extra)])
 
     @property
     def inner_mask(self):
+        """
+        Tensor of the shape of the space grid with gridpoints wihtin inner domain set to 1
+        and those outside set to 0, as an ndarray.
+
+        """
         mask = np.zeros(self.extended_shape, dtype=np.float32)
         pml_slices = self.inner
 
@@ -76,50 +78,107 @@ class Space:
 
     @property
     def mesh_indices(self):
+        """
+        Create the mesh of indices in the inner domain, as a tuple
+        of ndarray.
+
+        """
         grid = [np.arange(0, shape) for shape in self.shape]
         return np.meshgrid(*grid)
 
     @property
     def extended_mesh_indices(self):
+        """
+        Create the mesh of indices in the extended domain, as a tuple
+        of ndarray.
+
+        """
         grid = [np.arange(0, extended_shape) for extended_shape in self.extended_shape]
         return np.meshgrid(*grid)
 
     @property
     def mesh(self):
+        """
+        Create the mesh of spatial locations in the inner domain, as a tuple
+        of ndarray.
+
+        """
         grid = self.grid
         return np.meshgrid(*grid)
 
     @property
     def extended_mesh(self):
+        """
+        Create the mesh of spatial locations the full, extended domain, as a tuple
+        of ndarray.
+
+        """
         grid = self.extended_grid
         return np.meshgrid(*grid)
 
     @property
     def indices(self):
+        """
+        Indices corresponding to the grid of the inner domain, as a tuple of 1d-arrays.
+
+        """
         axes = [np.arange(0, shape) for shape in self.shape]
-        return axes
+        return tuple(axes)
 
     @property
     def extended_indices(self):
+        """
+        Indices corresponding to the grid of the extended domain, as a tuple of 1d-arrays.
+
+        """
         axes = [np.arange(0, extended_shape) for extended_shape in self.extended_shape]
-        return axes
+        return tuple(axes)
 
     @property
     def grid(self):
+        """
+        Spatial points corresponding to the grid of the inner domain, as a tuple of 1d-arrays.
+
+        """
         axes = [np.linspace(self.origin[dim], self.limit[dim], self.shape[dim],
                             endpoint=True, dtype=np.float32)
                 for dim in range(self.dim)]
-        return axes
+        return tuple(axes)
 
     @property
     def extended_grid(self):
+        """
+        Spatial points corresponding to the grid of the extended domain, as a tuple of 1d-arrays.
+
+
+        """
         axes = [np.linspace(self.pml_origin[dim], self.extended_limit[dim], self.extended_shape[dim],
                             endpoint=True, dtype=np.float32)
                 for dim in range(self.dim)]
-        return axes
+        return tuple(axes)
 
 
 class Time:
+    """
+    This defines the temporal grid over which the problem is defined
+
+    A time grid is fully defined by three of its arguments: start, stop, step or num.
+
+    The time grid can be extended with a certain amount of padding, generating an
+    inner domain and an extended domain, similar to that seen in the Space.
+
+    Parameters
+    ----------
+    start : float, optional
+        Point at which time starts, in seconds.
+    step : float, optional
+        Step between time points, in seconds.
+    num : int, optional
+        Number of time points in the grid.
+    stop : float, optional
+        Point at which time ends, in seconds.
+
+    """
 
     def __init__(self, start=None, step=None, num=None, stop=None):
         try:
@@ -166,18 +225,30 @@ class Time:
         self.extended_num = self.num + 2*self.extra
 
     def resample(self):
-        pass
+        raise NotImplementedError('Resampling has not been implemented yet')
 
     @property
     def inner(self):
+        """
+        Slice defining the inner domain.
+
+        """
         return slice(self.extra, self.extra + self.num)
 
     @property
     def grid(self):
+        """
+        Time points corresponding to the grid of the inner domain, as a 1d-array.
+
+        """
         return np.linspace(self.start, self.stop, self.num, endpoint=True, dtype=np.float32)
 
     @property
     def extended_grid(self):
+        """
+        Time points corresponding to the grid of the extended domain, as a 1d-array.
+
+        """
         return np.linspace(self.extended_start, self.extended_stop, self.extended_num, endpoint=True, dtype=np.float32)
 
 
@@ -186,6 +257,15 @@ class SlowTime:
 
 
 class Grid:
+    """
+    The grid is a container for the spatial and temporal grids.
+
+    Parameters
+    ----------
+    space : Space
+    time : Time
+    slow_time : SlowTime
+    """
 
     def __init__(self, space, time, slow_time):
         self.space = space

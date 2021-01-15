@@ -161,39 +161,33 @@ def _read_dataset(obj, lazy=True):
 
 
 class HDF5:
+    """
+    If a particular version is given, the filename will be generated without checks. If no version is given,
+    the ``path`` will be checked for the latest available version of the file.
+
+    The file will have the form ``<project_name>-<parameter in camelcase><extension>`` for version 0 and
+    ``<project_name>-<parameter in camelcase>-<version with width of 5><extension>`` for higher versions.
+
+    Parameters
+    ----------
+    filename : str
+        Full path to a file, instead of a file being formed with version.
+    path : str
+        Location of the file in the filesystem, defaults to the current working directory.
+    project_name : str
+        Name of the project, the prefix that all files of the project will have.
+    parameter : str
+        Parameter that determines which specific type of file to look for.
+    version : int, optional
+        Integer version of the file, starting at 0. If not given, the last available version will be found.
+    extension : str, optional
+        File extension, defaults to ``.h5``.
+    mode : str
+        Mode in which the file will be opened.
+
+    """
 
     def __init__(self, *args, **kwargs):
-        """
-        If a particular version is given, the filename will be generated without checks. If no version is given,
-        the ``path`` will be checked for the latest available version of the file.
-
-        The file will have the form ``<project_name>-<parameter in camelcase><extension>`` for version 0 and
-        ``<project_name>-<parameter in camelcase>-<version with width of 5><extension>`` for higher versions.
-
-        Parameters
-        ----------
-        filename : str
-            Full path to a file, instead of a file being formed with version.
-        path : str
-            Location of the file in the filesystem, defaults to the current working directory.
-        project_name : str
-            Name of the project, the prefix that all files of the project will have.
-        parameter : str
-            Parameter that determines which specific type of file to look for.
-        version : int, optional
-            Integer version of the file, starting at 0. If not given, the last available version will be found.
-        extension : str, optional
-            File extension, defaults to ``.h5``.
-        mode : str
-            Mode in which the file will be opened.
-
-        Returns
-        -------
-        str
-            Path to readable file.
-
-        """
-
         self._mode = kwargs.pop('mode')
 
         if len(args) > 0:

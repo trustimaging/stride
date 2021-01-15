@@ -5,6 +5,17 @@ from ..pipeline import PipelineStep
 
 
 class Step(PipelineStep):
+    """
+    Clip data between two extreme values.
+
+    Parameters
+    ----------
+    min : float, optional
+        Lower value for the clipping, defaults to None (no lower clipping).
+    max : float, optional
+        Upper value for the clipping, defaults to None (no upper clipping).
+
+    """
 
     def __init__(self, **kwargs):
         self.min = kwargs.pop('min', None)

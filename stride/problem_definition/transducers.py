@@ -11,6 +11,25 @@ __all__ = ['Transducers']
 
 
 class Transducers(ProblemBase):
+    """
+    The Transducers stores a reference to all the transducer devices that are
+    used in a problem.
+
+    Transducers are identified through a numerical ID, which is >= 0.
+
+    A transducer can be added through ``Transducers.add`` and accessed through
+    ``Transducers.get``.
+
+    Parameters
+    ----------
+    name : str
+        Alternative name to give to the Transducers.
+    problem : Problem
+        Problem to which the Transducers belongs.
+    grid : Grid or any of Space or Time
+        Grid on which the Transducers are defined
+
+    """
 
     def __init__(self, name='transducers', problem=None, **kwargs):
         super().__init__(name, problem, **kwargs)
@@ -88,6 +107,10 @@ class Transducers(ProblemBase):
         return section
 
     def items(self):
+        """
+        Access all transducers as iterable of (ID, transducer) pairs.
+
+        """
         return self._transducers.items()
 
     @property
@@ -95,23 +118,13 @@ class Transducers(ProblemBase):
         """
         Get number of transducers in the Transducers.
 
-        Returns
-        -------
-        int
-            Number of transducers.
-
         """
         return len(self._transducers.keys())
 
     @property
     def transducers(self):
         """
-        Get all transducers in the Transducers.
-
-        Returns
-        -------
-        list
-            List of the transducers.
+        Get all transducers as a list.
 
         """
         return list(self._transducers.values())
@@ -130,10 +143,39 @@ class Transducers(ProblemBase):
         return list(self._transducers.keys())
 
     def default(self):
+        """
+        Fill the container with the default configuration.
+
+        In this case, a single PointTransducer will be generated.
+
+        Returns
+        -------
+
+        """
         transducer = transducer_types.PointTransducer(0, grid=self.grid)
         self.add(transducer)
 
     def sub_problem(self, shot, sub_problem):
+        """
+        Create a subset object for a certain shot.
+
+        A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+        This method takes care of selecting the portions of the Transducers that are needed
+        for a given shot.
+
+        Parameters
+        ----------
+        shot : Shot
+            Shot for which the SubProblem is being generated.
+        sub_problem : SubProblem
+            Container for the sub-problem being generated.
+
+        Returns
+        -------
+        Transducers
+            Newly created Transducers instance.
+
+        """
         sub_transducers = Transducers(name=self.name,
                                       problem=sub_problem, grid=self.grid)
 

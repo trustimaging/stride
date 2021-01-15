@@ -14,6 +14,11 @@ __all__ = ['ProblemType']
 
 
 class ProblemType(ProblemTypeBase):
+    """
+    This class represents the second-order isotropic acoustic wave equation,
+    implemented using Devito.
+
+    """
 
     space_order = 4
     time_order = 2
@@ -33,6 +38,18 @@ class ProblemType(ProblemTypeBase):
         self._adjoint_operator = OperatorDevito(self.space_order, self.time_order, grid=self._grid)
 
     def set_problem(self, problem):
+        """
+        Set up the problem or sub-problem that needs to be run.
+
+        Parameters
+        ----------
+        problem : SubProblem or Problem
+            Problem on which the physics will be executed
+
+        Returns
+        -------
+
+        """
         super().set_problem(problem)
 
         self._grid.set_problem(problem)
@@ -40,6 +57,18 @@ class ProblemType(ProblemTypeBase):
         self._adjoint_operator.set_problem(problem)
 
     def before_state(self, save_wavefield=False):
+        """
+        Prepare the problem type to run the state or forward problem.
+
+        Parameters
+        ----------
+        save_wavefield : bool, optional
+            Whether or not the wavefield needs to be stored, defaults to False.
+
+        Returns
+        -------
+
+        """
         time = self._problem.time
         space = self._problem.space
         shot = self._problem.shot
@@ -133,9 +162,34 @@ class ProblemType(ProblemTypeBase):
         self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
     def state(self):
+        """
+        Run the state or forward problem.
+
+        Returns
+        -------
+
+        """
         self._state_operator.run()
 
     def after_state(self, save_wavefield=False):
+        """
+        Clean up after the state run and retrieve the time traces.
+
+        If requested, also provide a saved wavefield.
+
+        Parameters
+        ----------
+        save_wavefield : bool, optional
+            Whether or not the wavefield needs to be stored, defaults to False.
+
+        Returns
+        -------
+        Traces
+            Time traces produced by the state run.
+        Data or None
+            Wavefield produced by the state run, if any.
+
+        """
         if save_wavefield:
             wavefield_data = np.asarray(self._grid.vars.p_saved.data, dtype=np.float32)
             wavefield_data *= self._max_wavelet / self._src_scale
@@ -153,6 +207,22 @@ class ProblemType(ProblemTypeBase):
         return traces, wavefield
 
     def before_adjoint(self, wrt, adjoint_source, wavefield):
+        """
+        Prepare the problem type to run the adjoint problem.
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variables for which the inverse problem is being solved.
+        adjoint_source : Traces
+            Adjoint source to use in the adjoint propagation.
+        wavefield : Data
+            Stored wavefield from the forward run, to use as needed.
+
+        Returns
+        -------
+
+        """
         time = self._problem.time
         space = self._problem.space
         shot = self._problem.shot
@@ -240,12 +310,47 @@ class ProblemType(ProblemTypeBase):
         self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
     def adjoint(self):
+        """
+        Run the adjoint problem.
+
+        Returns
+        -------
+
+        """
         self._adjoint_operator.run()
 
     def after_adjoint(self, wrt):
+        """
+        Clean up after the adjoint run and retrieve the time gradients (if needed).
+
+        Parameters
+        ----------
+        wrt : VariableList
+            List of variables for which the inverse problem is being solved.
+
+        Returns
+        -------
+        VariableList
+            Updated variable list with gradients added to them.
+
+        """
         return self.get_grad(wrt)
 
     def set_grad_vp(self, vp):
+        """
+        Prepare the problem type to calculate the gradients wrt Vp.
+
+        Parameters
+        ----------
+        vp : Vp
+            Vp variable to calculate the gradient.
+
+        Returns
+        -------
+        tuple
+            Tuple of gradient and preconditioner updates.
+
+        """
         p = self._grid.vars.p_saved
         p_a = self._grid.vars.p_a
 
@@ -258,6 +363,20 @@ class ProblemType(ProblemTypeBase):
         return grad_update, prec_update
 
     def get_grad_vp(self, vp):
+        """
+        Retrieve the gradients calculated wrt to the input.
+
+        The variable is updated inplace.
+
+        Parameters
+        ----------
+        vp : Vp
+            Vp variable to calculate the gradient.
+
+        Returns
+        -------
+
+        """
         variable_grad = self._grid.vars.grad_vp
         variable_grad = np.asarray(variable_grad.data, dtype=np.float32)
 
