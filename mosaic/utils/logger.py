@@ -135,6 +135,12 @@ class RemoteLogger(LoggerBase):
 
 
 class LoggerManager:
+    """
+    Class that manages the creation loggers and the interface with them. It creates
+    local or remote loggers and handles the communication with loggers at different
+    levels ``info``, ``debug``, ``error`` and ``warning``.
+
+    """
 
     def __init__(self):
         self._info_logger = None
@@ -149,6 +155,13 @@ class LoggerManager:
         self._log_location = None
 
     def set_local(self):
+        """
+        Set up local loggers.
+
+        Returns
+        -------
+
+        """
         self._log_location = 'local'
 
         sys.stdout = self._stdout
@@ -178,6 +191,18 @@ class LoggerManager:
         sys.stderr = self._error_logger
 
     def set_remote(self, runtime_id='monitor'):
+        """
+        Set up remote loggers.
+
+        Parameters
+        ----------
+        runtime_id : str, optional
+            Runtime to which logging will be directed, defaults to ``monitor``.
+
+        Returns
+        -------
+
+        """
         self._log_location = 'remote'
 
         sys.stdout = self._stdout
@@ -191,7 +216,20 @@ class LoggerManager:
         sys.stdout = self._info_logger
         sys.stderr = self._error_logger
 
-    def set_level(self, level):
+    @staticmethod
+    def set_level(level):
+        """
+        Set log level from options ``info``, ``debug``, ``error`` and ``warning``.
+
+        Parameters
+        ----------
+        level : str
+            Log level
+
+        Returns
+        -------
+
+        """
         global log_level
         log_level = level
 
@@ -199,6 +237,21 @@ class LoggerManager:
         logger.setLevel(_local_log_levels[level])
 
     def info(self, buf, uid=None):
+        """
+        Log message with level ``info``.
+
+        Parameters
+        ----------
+        buf : str
+            Message to log.
+        uid : str, optional
+            UID of the runtime from which the message originates, defaults to
+            current runtime.
+
+        Returns
+        -------
+
+        """
         if self._info_logger is None:
             return
 
@@ -211,6 +264,21 @@ class LoggerManager:
             self._info_logger.flush(uid=uid)
 
     def debug(self, buf, uid=None):
+        """
+        Log message with level ``debug``.
+
+        Parameters
+        ----------
+        buf : str
+            Message to log.
+        uid : str, optional
+            UID of the runtime from which the message originates, defaults to
+            current runtime.
+
+        Returns
+        -------
+
+        """
         if self._debug_logger is None:
             return
 
@@ -223,6 +291,21 @@ class LoggerManager:
             self._debug_logger.flush(uid=uid)
 
     def error(self, buf, uid=None):
+        """
+        Log message with level ``error``.
+
+        Parameters
+        ----------
+        buf : str
+            Message to log.
+        uid : str, optional
+            UID of the runtime from which the message originates, defaults to
+            current runtime.
+
+        Returns
+        -------
+
+        """
         if self._error_logger is None:
             return
 
@@ -232,6 +315,21 @@ class LoggerManager:
             self._error_logger.flush(uid=uid)
 
     def warning(self, buf, uid=None):
+        """
+        Log message with level ``warning``.
+
+        Parameters
+        ----------
+        buf : str
+            Message to log.
+        uid : str, optional
+            UID of the runtime from which the message originates, defaults to
+            current runtime.
+
+        Returns
+        -------
+
+        """
         if self._warn_logger is None:
             return
 

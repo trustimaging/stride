@@ -1,5 +1,5 @@
 ==================
-Process
+Subprocess
 ==================
 
 .. automodule:: mosaic.utils.process

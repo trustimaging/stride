@@ -359,6 +359,26 @@ class OperatorDevito:
         self.operator._compiler.cflags += compiler_flags
         self.operator.cfunction
 
+    def arguments(self, **kwargs):
+        """
+        Prepare Devito arguments.
+
+        Parameters
+        ----------
+        kwargs : dict, optional
+            Arguments to pass to Devito.
+
+        Returns
+        -------
+
+        """
+        time = self._problem.time
+
+        kwargs['time_m'] = kwargs.get('time_m', 0)
+        kwargs['time_M'] = kwargs.get('time_M', time.extended_num - 1)
+
+        self.kwargs.update(kwargs)
+
     def run(self):
         """
         Run the operator.

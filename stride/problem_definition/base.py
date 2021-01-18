@@ -88,6 +88,8 @@ class Saved:
     """
 
     def __init__(self, name, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         self.name = name
 
     def dump(self, *args, **kwargs):
@@ -274,6 +276,9 @@ class GriddedSaved(Saved, Gridded):
             pass
 
         return grid_description
+
+    def resample(self, grid=None, space=None, time=None, slow_time=None):
+        super().resample(grid=grid, space=space, time=time, slow_time=slow_time)
 
 
 class ProblemBase(GriddedSaved):

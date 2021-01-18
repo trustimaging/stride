@@ -162,6 +162,18 @@ def _read_dataset(obj, lazy=True):
 
 class HDF5:
     """
+    This class provides an interface to read and write HDF5 files. It can be used by instantiating the
+    class on its own,
+
+    >>> file = HDF5(...)
+    >>> file.write(...)
+    >>> file.close()
+
+    or as a context manager,
+
+    >>> with HDF5(...) as file:
+    >>>     file.write(...)
+
     If a particular version is given, the filename will be generated without checks. If no version is given,
     the ``path`` will be checked for the latest available version of the file.
 
@@ -263,7 +275,9 @@ class HDF5:
 
 def file_exists(*args, **kwargs):
     """
-    Check whether a certain file exists. The file will have the form
+    Check whether a certain file exists.
+
+    The file will have the form
     ``<project_name>-<parameter in camelcase><extension>`` for version 0 and
     ``<project_name>-<parameter in camelcase>-<version with width of 5><extension>`` for higher versions.
 

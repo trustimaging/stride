@@ -7,6 +7,7 @@ __all__ = ['snake_case', 'camel_case']
 
 def snake_case(name):
     """
+    Change case to snake case.
 
     Parameters
     ----------
@@ -27,6 +28,7 @@ def snake_case(name):
 
 def camel_case(name):
     """
+    Change case to camel case.
 
     Parameters
     ----------
