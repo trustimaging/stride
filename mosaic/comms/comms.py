@@ -54,6 +54,16 @@ def validate_address(address, port=False):
 
 
 class CMD:
+    """
+    Container for a CMD for the runtime.
+
+    Parameters
+    ----------
+    cmd : dict
+        Dictionary description of the CMD.
+
+    """
+
     def __init__(self, cmd):
         self.type = cmd['type']
         self.uid = cmd['uid']
@@ -63,6 +73,18 @@ class CMD:
 
 
 class Message:
+    """
+    Container for a received message from another comms.
+
+    Parameters
+    ----------
+    sender_id : str
+        Identity of the message sender.
+    msg : dict
+        Dictionary description of the message.
+
+    """
+
     def __init__(self, sender_id, msg):
         self.method = msg['method']
         self.sender_id = sender_id
@@ -75,10 +97,39 @@ class Message:
 
 
 class Reply(Future):
+    """
+    Future-like object to asynchronously wait for a comms reply.
+
+    """
     pass
 
 
 class Connection:
+    """
+    Socket connection through ZMQ.
+
+    Parameters
+    ----------
+    uid : str
+        UID of the current runtime.
+    address : str
+        IP address of the connection.
+    port : int
+        Port to use for the connection.
+    runtime : Runtime, optional
+        Current runtime, defaults to global runtime.
+    comms : CommsManager, optional
+        Comms to which the connection belongs, defaults to global comms.
+    in_node : bool, optional
+        Whether the connection is inside the node or not, defaults to False.
+    context : zmq.Context, optional
+        ZMQ socket context, defaults to global context.
+    loop : EventLoop, optional
+        Event loop to use, defaults to global event loop.
+
+
+    """
+
     def __init__(self, uid, address, port,
                  runtime=None, comms=None, in_node=False, context=None, loop=None):
         self._runtime = runtime or mosaic.runtime()
@@ -101,26 +152,50 @@ class Connection:
 
     @property
     def uid(self):
+        """
+        Runtime UID.
+
+        """
         return self._uid
 
     @property
     def address(self):
+        """
+        Connection address.
+
+        """
         return self._address
 
     @property
     def port(self):
+        """
+        Connection port.
+
+        """
         return self._port
 
     @property
     def socket(self):
+        """
+        Connection ZMQ socket.
+
+        """
         return self._socket
 
     @property
     def state(self):
+        """
+        Connection state.
+
+        """
         return self._state
 
     @property
     def connect_address(self):
+        """
+        Full formatted address for connection.
+
+        """
         if self._in_node is True:
             return join_address('127.0.0.1', self.port)
 
@@ -129,13 +204,28 @@ class Connection:
 
     @property
     def bind_address(self):
+        """
+        Full formatted address for binding.
+
+        """
         return join_address('*', self.port)
 
     @property
     def logger(self):
+        """
+        Runtime logger.
+
+        """
         return self._runtime.logger
 
     def disconnect(self):
+        """
+        Disconnect the socket.
+
+        Returns
+        -------
+
+        """
         if self._state != 'connected':
             return
 
@@ -144,6 +234,29 @@ class Connection:
 
 
 class InboundConnection(Connection):
+    """
+    Object encapsulating an incoming connection to the CommsManager.
+
+    Parameters
+    ----------
+    uid : str
+        UID of the current runtime.
+    address : str
+        IP address of the connection.
+    port : int
+        Port to use for the connection.
+    runtime : Runtime, optional
+        Current runtime, defaults to global runtime.
+    comms : CommsManager, optional
+        Comms to which the connection belongs, defaults to global comms.
+    in_node : bool, optional
+        Whether the connection is inside the node or not, defaults to False.
+    context : zmq.Context, optional
+        ZMQ socket context, defaults to global context.
+    loop : EventLoop, optional
+        Event loop to use, defaults to global event loop.
+
+    """
 
     def __init__(self, uid, address, port=None,
                  runtime=None, comms=None, in_node=False, context=None, loop=None):
@@ -156,6 +269,12 @@ class InboundConnection(Connection):
 
     @property
     def address(self):
+        """
+        Connection address.
+
+        If no address is set, it will try to discover it.
+
+        """
         if self._address is None:
             address, port = '8.8.8.8', '53'
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -180,6 +299,13 @@ class InboundConnection(Connection):
         return self._address
 
     def connect(self):
+        """
+        Connect the socket.
+
+        Returns
+        -------
+
+        """
         if self._state != 'disconnected':
             return
 
@@ -194,6 +320,17 @@ class InboundConnection(Connection):
         self._state = 'connected'
 
     async def recv(self):
+        """
+        Asynchronously receive on the socket.
+
+        Returns
+        -------
+        str
+            Sender UID.
+        Message
+            Message object.
+
+        """
         if self._state == 'disconnected':
             warnings.warn('Trying to receive in a disconnected InboundConnection "%s"' % self.uid, Warning)
             return
@@ -239,6 +376,29 @@ class InboundConnection(Connection):
 
 
 class OutboundConnection(Connection):
+    """
+    Object encapsulating an outgoing connection from the CommsManager.
+
+    Parameters
+    ----------
+    uid : str
+        UID of the current runtime.
+    address : str
+        IP address of the connection.
+    port : int
+        Port to use for the connection.
+    runtime : Runtime, optional
+        Current runtime, defaults to global runtime.
+    comms : CommsManager, optional
+        Comms to which the connection belongs, defaults to global comms.
+    in_node : bool, optional
+        Whether the connection is inside the node or not, defaults to False.
+    context : zmq.Context, optional
+        ZMQ socket context, defaults to global context.
+    loop : EventLoop, optional
+        Event loop to use, defaults to global event loop.
+
+    """
 
     def __init__(self, uid, address, port,
                  runtime=None, comms=None, in_node=False, context=None, loop=None):
@@ -260,9 +420,20 @@ class OutboundConnection(Connection):
 
     @property
     def shaken(self):
+        """
+        Whether or not the handshake has happened.
+
+        """
         return self._shaken
 
     def connect(self):
+        """
+        Connect the socket.
+
+        Returns
+        -------
+
+        """
         if self._state != 'disconnected':
             return
 
@@ -272,10 +443,29 @@ class OutboundConnection(Connection):
         self._state = 'connected'
 
     def shake(self):
+        """
+        Complete the handshake.
+
+        Returns
+        -------
+
+        """
         self._shaken = True
 
     def start_heartbeat(self):
-        if not self._runtime.is_monitor or not self.uid.startswith('node'):
+        """
+        Start the heartbeat procedure with the remote endpoint.
+
+        After 5 failed heartbeat attempts, the endpoint is considered disconnected.
+
+        The heartbeat only operates if this is the monitor runtime.
+
+        Returns
+        -------
+
+        """
+        # if not self._runtime.is_monitor or not self.uid.startswith('node'):
+        if not self._runtime.is_monitor:
             return
 
         if self._heartbeat_timeout is not None:
@@ -286,11 +476,25 @@ class OutboundConnection(Connection):
         self._heartbeat_timeout = self._loop.timeout(self.heart, timeout=self._heartbeat_interval)
 
     def stop_heartbeat(self):
+        """
+        Stop the heartbeat.
+
+        Returns
+        -------
+
+        """
         if self._heartbeat_timeout is not None:
             self._heartbeat_timeout.cancel()
             self._heartbeat_timeout = None
 
     async def heart(self):
+        """
+        Send heart signal
+
+        Returns
+        -------
+
+        """
         self._heartbeat_attempts -= 1
 
         if self._heartbeat_attempts == 0:
@@ -304,12 +508,39 @@ class OutboundConnection(Connection):
         await self.send(method='heart')
 
     async def beat(self):
+        """
+        Process beat signal
+
+        Returns
+        -------
+
+        """
         self._heartbeat_attempts = self._heartbeat_max_attempts + 1
 
         self.stop_heartbeat()
         self.start_heartbeat()
 
     async def send(self, method, cmd=None, reply=False, **kwargs):
+        """
+        Send message through the connection.
+
+        Parameters
+        ----------
+        method : str
+            Remote method.
+        cmd : dict, optional
+            If the method is ``cmd`` a description of the command has to be provided.
+        reply : bool, optional
+            Whether the connection should wait for a reply, defaults to False.
+        kwargs : dict, optional
+            Keywird arguments for the remote method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
         if self._state == 'disconnected':
             warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
             return
@@ -377,6 +608,29 @@ class OutboundConnection(Connection):
 
 
 class CircularConnection(Connection):
+    """
+    Object encapsulating a circular connection to itself.
+
+    Parameters
+    ----------
+    uid : str
+        UID of the current runtime.
+    address : str
+        IP address of the connection.
+    port : int
+        Port to use for the connection.
+    runtime : Runtime, optional
+        Current runtime, defaults to global runtime.
+    comms : CommsManager, optional
+        Comms to which the connection belongs, defaults to global comms.
+    in_node : bool, optional
+        Whether the connection is inside the node or not, defaults to False.
+    context : zmq.Context, optional
+        ZMQ socket context, defaults to global context.
+    loop : EventLoop, optional
+        Event loop to use, defaults to global event loop.
+
+    """
 
     def __init__(self, uid, address, port,
                  runtime=None, comms=None, in_node=False, context=None, loop=None):
@@ -388,9 +642,36 @@ class CircularConnection(Connection):
         self._shaken = True
 
     def connect(self):
+        """
+        Connect the socket.
+
+        Returns
+        -------
+
+        """
         return
 
     async def send(self, method, cmd=None, reply=False, **kwargs):
+        """
+        Send message through the connection.
+
+        Parameters
+        ----------
+        method : str
+            Remote method.
+        cmd : dict, optional
+            If the method is ``cmd`` a description of the command has to be provided.
+        reply : bool, optional
+            Whether the connection should wait for a reply, defaults to False.
+        kwargs : dict, optional
+            Keywird arguments for the remote method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
         if self._state == 'disconnected':
             warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
             return
@@ -434,10 +715,28 @@ class CircularConnection(Connection):
 
 
 class CommsManager:
+    """
+    Objects of this type manage the connections and message passing between different
+    runtimes.
+
+    Parameters
+    ----------
+    runtime : Runtime, optional
+        Current runtime, defaults to global runtime.
+    address : str
+        IP address of the connection.
+    port : int
+        Port to use for the connection.
+    context : zmq.Context, optional
+        ZMQ socket context, defaults to global context.
+    loop : EventLoop, optional
+        Event loop to use, defaults to global event loop.
+
+    """
 
     _comms_methods = ['hand', 'shake', 'heart', 'beat', 'stop', 'connect', 'disconnect', 'reply']
 
-    def __init__(self, runtime, address=None, port=None, context=None, loop=None):
+    def __init__(self, runtime=None, address=None, port=None, context=None, loop=None):
         self._runtime = runtime or mosaic.runtime()
         self._loop = loop or mosaic.get_event_loop()
         self._zmq_context = context or mosaic.get_zmq_context()
@@ -477,6 +776,13 @@ class CommsManager:
         return (yield from future.__await__())
 
     def wait(self):
+        """
+        Wait until the listening loop of the comms is done.
+
+        Returns
+        -------
+
+        """
         if self._listen_future is None:
             raise RuntimeError('Cannot wait for comms that has not started listening')
 
@@ -488,23 +794,70 @@ class CommsManager:
 
     @property
     def address(self):
+        """
+        Connection address.
+
+        """
         return self._recv_socket.address
 
     @property
     def port(self):
+        """
+        Connection port.
+
+        """
         return self._recv_socket.port
 
     @property
     def logger(self):
+        """
+        Runtime logger.
+
+        """
         return self._runtime.logger
 
     def uid_address(self, uid):
+        """
+        Find remote address given UID.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+        str
+            Address.
+
+        """
         return self._send_socket[uid].address
 
     def uid_port(self, uid):
+        """
+        Find remote port given UID.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+        int
+            Port.
+
+        """
         return self._send_socket[uid].port
 
     def connect_recv(self):
+        """
+        Connect inbound connection.
+
+        Returns
+        -------
+
+        """
         if self._state != 'disconnected':
             return
 
@@ -514,6 +867,23 @@ class CommsManager:
         self._state = 'connected'
 
     def connect_send(self, uid, address, port):
+        """
+        Create and connect outbound connection for a remote runtime,
+        with a given address and port.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+        address : str
+            Remote address.
+        port : int
+            Remote port.
+
+        Returns
+        -------
+
+        """
         validate_address(address, port)
 
         if uid not in self._send_socket.keys() and uid != self._runtime.uid:
@@ -528,34 +898,96 @@ class CommsManager:
             self._send_socket[uid].connect()
 
     def connected(self, uid):
+        """
+        Check whether remote UID is connected.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
         return uid in self._send_socket.keys() or uid == self._runtime.uid
 
     def shaken(self, uid):
+        """
+        Check whether remote UID has completed handshake.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
         return self.connected(uid) and self._send_socket[uid].shaken
 
     def disconnect_recv(self):
+        """
+        Disconnect inbound connection.
+
+        Returns
+        -------
+
+        """
         self._recv_socket.socket.close()
 
     def disconnect_send(self):
+        """
+        Connect all outbound connections.
+
+        Returns
+        -------
+
+        """
         for sender_id, connection in self._send_socket.items():
             connection.socket.close()
 
     def send(self, *args, **kwargs):
+        """
+        Synchronously send message to remote runtime.
+
+        For arguments and return values check ``Comms.send_async``.
+
+        """
         wait = kwargs.pop('wait', True)
 
         return self._loop.run(self.send_async, args=args, kwargs=kwargs, wait=wait)
 
     def cmd(self, *args, **kwargs):
+        """
+        Synchronously send command to remote runtime.
+
+        For arguments and return values check ``Comms.cmd_async``.
+
+        """
         wait = kwargs.pop('wait', True)
 
         return self._loop.run(self.cmd_async, args=args, kwargs=kwargs, wait=wait)
 
     def recv(self, **kwargs):
+        """
+        Synchronously receive message from remote runtime.
+
+        For arguments and return values check ``Comms.recv_async``.
+
+        """
         wait = kwargs.pop('wait', True)
 
         return self._loop.run(self.recv_async, wait=wait)
 
     def send_recv(self, *args, **kwargs):
+        """
+        Synchronously send message to remote runtime and wait for reply.
+
+        For arguments and return values check ``Comms.send_async``.
+
+        """
         wait = kwargs.pop('wait', True)
         kwargs['reply'] = True
 
@@ -569,6 +1001,12 @@ class CommsManager:
             return future
 
     def cmd_recv(self, *args, **kwargs):
+        """
+        Synchronously send command to remote runtime and wait for reply.
+
+        For arguments and return values check ``Comms.cmd_async``.
+
+        """
         wait = kwargs.pop('wait', True)
         kwargs['reply'] = True
 
@@ -582,15 +1020,51 @@ class CommsManager:
             return future
 
     def reply(self, sender_id, uid, result):
+        """
+        Process reply from remote runtime.
+
+        Parameters
+        ----------
+        sender_id : str
+            UID of the remote endpoint.
+        uid : str
+            UID of the associated Reply.
+        result : object
+            Result of the reply.
+
+        Returns
+        -------
+
+        """
         if uid not in self._reply_futures.keys():
             return
 
         self._reply_futures[uid].set_result(result)
 
     def register_reply_future(self, future):
+        """
+        Register a Reply to be accessible later on.
+
+        Parameters
+        ----------
+        future : Reply
+
+        Returns
+        -------
+
+        """
         self._reply_futures[future.uid] = future
 
     def listen(self):
+        """
+        Start the listening loop.
+
+        Returns
+        -------
+        concurrent.futures.Future
+            Future associated with the running loop.
+
+        """
         if self._state != 'connected':
             return
 
@@ -610,6 +1084,16 @@ class CommsManager:
         return self._listen_future
 
     async def listen_async(self):
+        """
+        Asynchronous listening loop.
+
+        The loop waits on messages from the incoming connection, then
+        processes them and, if necessary, passes them to the runtime.
+
+        Returns
+        -------
+
+        """
         if self._state != 'connected':
             return
 
@@ -625,6 +1109,20 @@ class CommsManager:
                 break
 
     async def process_msg(self, sender_id, msg):
+        """
+        Process a received message to decide what to do with it.
+
+        Parameters
+        ----------
+        sender_id : str
+            UID of the remote endpoint.
+        msg : Message
+            Message object.
+
+        Returns
+        -------
+
+        """
         runtime = self._runtime
         method = getattr(runtime, msg.method, False)
         comms_method = getattr(self, msg.method, False)
@@ -663,11 +1161,48 @@ class CommsManager:
                                  kwargs=msg.kwargs)
 
     async def call(self, sender_id, method, reply, **kwargs):
+        """
+        Run method in the loop.
+
+        Parameters
+        ----------
+        sender_id : str
+            UID of the remote endpoint.
+        method : callable
+            Method to execute
+        reply : False or str
+            Whether a reply is needed and, if so, the UID of the reply.
+        kwargs : optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+
+        """
         args = (sender_id,)
 
         await self._loop.run_async(method, args=args, kwargs=kwargs)
 
     async def call_safe(self, sender_id, method, reply, **kwargs):
+        """
+        Run method in the loop, and within an exception handler that
+        will process exceptions and send them back to the sender.
+
+        Parameters
+        ----------
+        sender_id : str
+            UID of the remote endpoint.
+        method : callable
+            Method to execute
+        reply : False or str
+            Whether a reply is needed and, if so, the UID of the reply.
+        kwargs : optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+
+        """
         args = (sender_id,)
 
         async with self.send_exception(sender_id):
@@ -680,6 +1215,24 @@ class CommsManager:
                                       uid=reply, result=result)
 
     async def send_async(self, send_uid, *args, **kwargs):
+        """
+        Send message to ``sender_id`` with given arguments and keyword arguments.
+
+        Parameters
+        ----------
+        send_uid : str
+            UID of the remote runtime.
+        args : tuple, optional
+            Any arguments for the message.
+        kwargs : optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
         if send_uid == self._runtime.uid:
             return await self._circ_socket.send(*args, **kwargs)
 
@@ -689,6 +1242,22 @@ class CommsManager:
         return await self._send_socket[send_uid].send(*args, **kwargs)
 
     async def cmd_async(self, *args, **kwargs):
+        """
+        Send command with given arguments and keyword arguments.
+
+        Parameters
+        ----------
+        args : tuple, optional
+            Any arguments for the message.
+        kwargs : optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
         cmd = {
             'type': kwargs.pop('type'),
             'uid': kwargs.pop('uid'),
@@ -700,11 +1269,41 @@ class CommsManager:
         return await self.send_async(*args, method='cmd', cmd=cmd, **kwargs)
 
     async def recv_async(self):
+        """
+        Wait for received message from the inbound socket.
+
+        Returns
+        -------
+        str
+            Sender UID.
+        Message
+            Received message.
+
+        """
         sender_id, msg = await self._recv_socket.recv()
 
         return sender_id, msg
 
     async def send_recv_async(self, send_uid, *args, **kwargs):
+        """
+        Send message to ``sender_id`` with given arguments and keyword arguments,
+        and then wait for the reply.
+
+        Parameters
+        ----------
+        send_uid : str
+            UID of the remote runtime.
+        args : tuple, optional
+            Any arguments for the message.
+        kwargs : optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+        object
+            Result of the reply
+
+        """
         if send_uid == self._runtime.uid:
             future = await self._circ_socket.send(*args, reply=True, **kwargs)
 
@@ -717,6 +1316,23 @@ class CommsManager:
         return await future
 
     async def cmd_recv_async(self, *args, **kwargs):
+        """
+        Send command with given arguments and keyword arguments,
+        and then wait for the reply.
+
+        Parameters
+        ----------
+        args : tuple, optional
+            Any arguments for the message.
+        kwargs : dict, optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+        object
+            Result of the reply
+
+        """
         cmd = {
             'type': kwargs.pop('type'),
             'uid': kwargs.pop('uid'),
@@ -731,6 +1347,19 @@ class CommsManager:
 
     @contextlib.asynccontextmanager
     async def send_exception(self, uid):
+        """
+        Context manager that handles exceptions by sending them
+        back to the ``uid``.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
         try:
             yield
 
@@ -746,6 +1375,25 @@ class CommsManager:
             pass
 
     async def connect(self, sender_id, uid, address, port, notify=False):
+        """
+        Create and connect outbound connection for a remote runtime,
+        with a given address and port.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+        address : str
+            Remote address.
+        port : int
+            Remote port.
+        notify : bool, optional
+            Whether or not to notify others of a new connection, defaults to False.
+
+        Returns
+        -------
+
+        """
         self.connect_send(uid, address, port)
 
         if notify is True:
@@ -755,10 +1403,38 @@ class CommsManager:
                                       uid=uid, address=address, port=port)
 
     async def wait_for(self, uid):
+        """
+        Wait until remote endpoint has connected.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
         while uid not in self._send_socket.keys() and uid != self._runtime.uid:
             await asyncio.sleep(0.1)
 
     async def disconnect(self, sender_id, uid, notify=False):
+        """
+        Disconnect a remote endpoint.
+
+        Parameters
+        ----------
+        sender_id : str
+            Sender UID.
+        uid : str
+            Remote UID to disconnect.
+         notify : bool, optional
+            Whether or not to notify others of the disconnection, defaults to False.
+
+        Returns
+        -------
+
+        """
         if uid in self._send_socket.keys():
             self._send_socket[uid].disconnect()
 
@@ -769,6 +1445,22 @@ class CommsManager:
                                       uid=uid)
 
     async def handshake(self, uid, address, port):
+        """
+        Start handshake with remote ``uid``, located at a certain ``address`` and ``port``.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+        address : str
+            Remote address.
+        port : int
+            Remote port.
+
+        Returns
+        -------
+
+        """
         validate_address(address, port)
 
         self.connect_send(uid, address, port)
@@ -790,6 +1482,22 @@ class CommsManager:
         self._send_socket[uid].shake()
 
     async def hand(self, sender_id, address, port):
+        """
+        Handle incoming handshake.
+
+        Parameters
+        ----------
+        sender_id : str
+            Remote UID.
+        address : str
+            Remote address.
+        port : int
+            Remote port.
+
+        Returns
+        -------
+
+        """
         for connected_id, connection in self._send_socket.items():
             await self.send_async(connected_id,
                                   method='connect',
@@ -806,6 +1514,20 @@ class CommsManager:
                               network=network)
 
     async def shake(self, sender_id, network):
+        """
+        Handle confirmation of complete handshake.
+
+        Parameters
+        ----------
+        sender_id : str
+            Remote UID.
+        network : dict
+            Existing topology of connected sockets.
+
+        Returns
+        -------
+
+        """
         for uid, address in network.items():
             self.connect_send(uid, *address)
 
@@ -813,16 +1535,52 @@ class CommsManager:
                 self._send_socket[uid].shake()
 
     async def heart(self, sender_id):
+        """
+        Received ``heart`` message, respond with ``beat``.
+
+        Parameters
+        ----------
+        sender_id : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
         await self.send_async(sender_id,
                               method='beat')
 
     async def beat(self, sender_id):
+        """
+        Received ``beat`` message, the remote endpoint is alive.
+
+        Parameters
+        ----------
+        sender_id : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
         if sender_id not in self._send_socket.keys():
             return
 
         await self._send_socket[sender_id].beat()
 
     async def stop(self, sender_id):
+        """
+        Stop the CommsManager.
+
+        Parameters
+        ----------
+        sender_id : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
         self._listen_future.cancel()
 
         self.disconnect_send()
