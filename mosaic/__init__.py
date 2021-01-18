@@ -1,7 +1,7 @@
 
 from .core import tessera
 from .runtime import Head, Monitor, Node, Worker
-from .utils.process import subprocess
+from .utils.subprocess import subprocess
 from .utils import logger as mlogger
 from .utils import gather
 from .file_manipulation import yaml, h5
