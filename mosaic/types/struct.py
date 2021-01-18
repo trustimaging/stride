@@ -48,7 +48,7 @@ class Struct(ImmutableObject):
     --------
     Let's create an empty, immutable Struct:
 
-    >>> struct = Struct()
+    >>> struct = Struct(mutable=False)
     >>> struct.member = 10
     >>> struct.member
     10
@@ -59,7 +59,7 @@ class Struct(ImmutableObject):
 
     If the container was ``mutable`` instead:
 
-    >>> struct = Struct(mutable=True)
+    >>> struct = Struct()
     >>> struct.member = 10
     >>> struct.member
     10
@@ -96,6 +96,7 @@ class Struct(ImmutableObject):
     Instantiated Variant2
     >>> struct.Klass('variant_1')()
     Instantiated Variant1
+
     """
 
     _allowed_attributes = ['_content', '_extensible', '_mutable']
@@ -206,37 +207,9 @@ class Struct(ImmutableObject):
                 return exists
 
     def __getattr__(self, item):
-        """
-        Access an item in the Struct.
-
-        Parameters
-        ----------
-        item : str
-            Name of the item to find
-
-        Returns
-        -------
-        object
-            Found item in the Struct dictionary
-
-        """
         return self._get(item)
 
     def __getitem__(self, item):
-        """
-        Access an item in the Struct.
-
-        Parameters
-        ----------
-        item : str
-            Name of the item to find
-
-        Returns
-        -------
-        object
-            Found item in the Struct dictionary
-
-        """
         return self._get(item)
 
     def get(self, item, default=None):
@@ -286,44 +259,24 @@ class Struct(ImmutableObject):
             return value
 
     def __setattr__(self, item, value):
-        """
-        A Struct can be mutable in immutable. If it is mutable, members can be assigned a value as many times as
-        one wants. If it is immutable, a member can be assigned only once, and any further attempts at modifying
-        the value of the member will result in an ``AttributeError``.
-
-        Parameters
-        ----------
-        item : str
-            Name of the member to be set
-        value : object
-            Value to assign to the member
-
-        Returns
-        -------
-
-        """
         self._set(item, value)
 
     def __setitem__(self, item, value):
+        self._set(item, value)
+
+    def delete(self, item):
         """
-        A Struct can be mutable in immutable. If it is mutable, members can be assigned a value as many times as
-        one wants. If it is immutable, a member can be assigned only once, and any further attempts at modifying
-        the value of the member will result in an ``AttributeError``.
+        Delete an item from the container using its key.
 
         Parameters
         ----------
         item : str
-            Name of the member to be set
-        value : object
-            Value to assign to the member
+            Name of the item to delete.
 
         Returns
         -------
 
         """
-        self._set(item, value)
-
-    def delete(self, item):
         if item in self._content.keys() and not self._mutable:
             raise AttributeError('The attribute "%s" cannot be deleted from the container, '
                                  'this container is not mutable' % item)

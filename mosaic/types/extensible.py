@@ -40,20 +40,6 @@ class ExtensibleObject:
     """
 
     def __getattribute__(self, item):
-        """
-        Access an attribute or method of the ExtensibleObject.
-
-        Parameters
-        ----------
-        item : str
-            Name of the item to find.
-
-        Returns
-        -------
-        object
-            Found member in the ExtensibleObject.
-
-        """
         try:
             return super(ExtensibleObject, self).__getattribute__(item)
 
@@ -97,6 +83,23 @@ class ExtensibleObject:
 
 
 def extensible_module(name):
+    """
+    This function extends a module to provide it with extensibility, as defined for
+    Struct and extensible object.
+
+    TODO - Document this feature.
+
+    Parameters
+    ----------
+    name : str
+        Name of the module.
+
+    Returns
+    -------
+    callable
+
+    """
+
     def get_attribute(item):
         module = sys.modules[name]
         exists = False
