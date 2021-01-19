@@ -344,9 +344,9 @@ class RemoteBase(CMDBase):
         """
         self._proxies.add(uid)
 
-    def unregister_proxy(self, uid):
+    def deregister_proxy(self, uid):
         """
-        Unregister proxy pointing to this remote.
+        Deregister proxy pointing to this remote.
 
         Parameters
         ----------
@@ -370,7 +370,7 @@ class RemoteBase(CMDBase):
 
     def dec_ref(self):
         """
-        Decrease reference count and unregister from runtime if needed.
+        Decrease reference count and deregister from runtime if needed.
 
         Returns
         -------
@@ -379,7 +379,7 @@ class RemoteBase(CMDBase):
         self._ref_count -= 1
 
         if self._ref_count < 1:
-            self.runtime.unregister(self)
+            self.runtime.deregister(self)
 
 
 class ProxyBase(CMDBase):
@@ -428,7 +428,7 @@ class ProxyBase(CMDBase):
 
     def __del__(self):
         self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type(), as_async=False)
-        self.runtime.unregister(self)
+        self.runtime.deregister(self)
 
 
 class MonitoredBase:

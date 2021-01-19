@@ -81,6 +81,9 @@ class Subprocess:
 
         self._state = 'pending'
 
+    def __call__(self, *args, **kwargs):
+        pass
+
     def __repr__(self):
         return "<Subprocess for %s, state=%s>" % (self._target, self._state)
 
