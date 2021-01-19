@@ -76,7 +76,7 @@ class Worker(Runtime):
             UID of the new tessera.
         args : tuple, optional
             Arguments for the initialisation of the tessera.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments for the initialisation of the tessera.
 
         Returns

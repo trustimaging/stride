@@ -16,7 +16,7 @@ class GradientDescent(LocalOptimiser):
         Variable to which the optimiser refers.
     step : float, optional
         Step size for the update, defaults to 1.
-    kwargs : dict
+    kwargs
         Extra parameters to be used by the class.
 
     """
@@ -36,7 +36,7 @@ class GradientDescent(LocalOptimiser):
             Gradient to apply.
         step : float, optional
             Step size to use for this application, defaults to instance step.
-        kwargs : dict
+        kwargs
             Extra parameters to be used by the method.
 
         Returns

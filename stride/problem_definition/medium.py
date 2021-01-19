@@ -162,7 +162,7 @@ class Medium(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting the fields.
 
         Returns

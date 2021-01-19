@@ -148,7 +148,7 @@ class CMDBase(Base):
             Method of the command.
         args : tuple, optional
             Arguments for the command.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments for the command.
 
         Returns
@@ -179,7 +179,7 @@ class CMDBase(Base):
             Method of the command.
         args : tuple, optional
             Arguments for the command.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments for the command.
 
         Returns
@@ -210,7 +210,7 @@ class CMDBase(Base):
             Method of the command.
         args : tuple, optional
             Arguments for the command.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments for the command.
 
         Returns
@@ -239,7 +239,7 @@ class CMDBase(Base):
             Method of the command.
         args : tuple, optional
             Arguments for the command.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments for the command.
 
         Returns
