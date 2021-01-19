@@ -13,6 +13,33 @@ __all__ = ['Runtime', 'RuntimeProxy']
 
 
 class BaseRPC:
+    """
+    Base class representing either a mosaic runtime or a proxy to that runtime.
+
+    Runtimes represent network endpoints, and proxies represent references to those
+    endpoints. Using proxies, runtimes can  be addressed transparently through
+    remote procedural calls. That is, calling a method on the proxy will execute it
+    in the remote runtime.
+
+    Runtimes also keep a series of resident mosaic objects (such as tessera or tasks),
+    and can direct remote commands to those objects.
+
+    A runtime has a name and an (optional) set of indices, which together produce
+    a unique ID associated with that endpoint in the network. The runtime UID
+    is used to direct messages across the network.
+
+    A name ``runtime`` and indices ``(0, 0)`` will result in a UID ``runtime:0:0``,
+    while the same name with no indices will result in a UID ``runtime``.
+
+    Parameters
+    ----------
+    name : str
+        Name of the runtime.
+    indices : tuple or int, optional
+        Indices associated with the runtime, defaults to none.
+
+    """
+
     def __init__(self, name=None, indices=(), uid=None):
         if uid is not None:
             uid = uid.split(':')
@@ -34,14 +61,26 @@ class BaseRPC:
 
     @property
     def name(self):
+        """
+        Runtime name.
+
+        """
         return self._name
 
     @property
     def indices(self):
+        """
+        Runtime indices.
+
+        """
         return self._indices
 
     @property
     def uid(self):
+        """
+        Runtime UID.
+
+        """
         if len(self.indices):
             indices = ':'.join([str(each) for each in self.indices])
             return '%s:%s' % (self.name, indices)
@@ -51,14 +90,35 @@ class BaseRPC:
 
     @property
     def address(self):
+        """
+        Runtime IP address.
+
+        """
         return None
 
     @property
     def port(self):
+        """
+        Runtime port.
+
+        """
         return None
 
 
 class Runtime(BaseRPC):
+    """
+    Class representing a local runtime of any possible type.
+
+    The runtime handles the mosaic life cycle
+
+    - It handles the comms manager, the event loop, the logger and
+    keeps proxies to existing remote runtimes.
+    - It keeps track of resident mosaic objects (tessera, task) and proxies to those
+    - It routes remote commands to these resident mosaic objects.
+
+    For referece on accepted parameters, check `mosaic.init`.
+
+    """
 
     is_head = False
     is_monitor = False
@@ -297,6 +357,7 @@ class Runtime(BaseRPC):
 
 
 class RuntimeProxy(BaseRPC):
+
     def __init__(self, name=None, indices=(), uid=None, comms=None):
         super().__init__(name=name, indices=indices, uid=uid)
 

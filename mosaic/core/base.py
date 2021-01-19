@@ -47,6 +47,10 @@ class Base:
 
 
 class CMDBase(Base):
+    """
+    Base class for objects that accept remote commands, such as tesserae and tasks, and their proxies.
+
+    """
 
     type = 'none'
     is_proxy = False
@@ -67,18 +71,34 @@ class CMDBase(Base):
 
     @property
     def uid(self):
+        """
+        Object UID.
+
+        """
         return self._uid
 
     @property
     def state(self):
+        """
+        Object state.
+
+        """
         return self._state
 
     @property
     def remote_runtime(self):
+        """
+        Proxy to runtime where remote counterpart(s) is(are).
+
+        """
         raise NotImplementedError('Unimplemented Base property remote_runtime')
 
     @classmethod
     def remote_type(cls):
+        """
+        Type of the remote.
+
+        """
         NotImplementedError('Unimplemented Base method remote_type')
 
     def _fill_config(self, **kwargs):
@@ -90,6 +110,18 @@ class CMDBase(Base):
         NotImplementedError('Unimplemented Base method _remotes')
 
     def proxy(self, uid):
+        """
+        Generate proxy for specific UID.
+
+        Parameters
+        ----------
+        uid : str
+
+        Returns
+        -------
+        ProxyBase
+
+        """
         return self.runtime.proxy(uid)
 
     def _prepare_cmd(self, method, *args, **kwargs):
@@ -107,6 +139,23 @@ class CMDBase(Base):
         return remotes, cmd
 
     def cmd(self, method, *args, **kwargs):
+        """
+        Send command to remote counterparts.
+
+        Parameters
+        ----------
+        method : str
+            Method of the command.
+        args : tuple, optional
+            Arguments for the command.
+        kwargs : dict, optional
+            Keyword arguments for the command.
+
+        Returns
+        -------
+        concurrent.futures.Future
+
+        """
         wait = kwargs.pop('wait', False)
 
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
@@ -121,6 +170,23 @@ class CMDBase(Base):
         return result
 
     def cmd_recv(self, method, *args, **kwargs):
+        """
+        Send command to remote counterparts and await reply.
+
+        Parameters
+        ----------
+        method : str
+            Method of the command.
+        args : tuple, optional
+            Arguments for the command.
+        kwargs : dict, optional
+            Keyword arguments for the command.
+
+        Returns
+        -------
+        reply
+
+        """
         wait = kwargs.pop('wait', False)
 
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
@@ -135,6 +201,23 @@ class CMDBase(Base):
         return result
 
     async def cmd_async(self, method, *args, **kwargs):
+        """
+        Send async command to remote counterparts.
+
+        Parameters
+        ----------
+        method : str
+            Method of the command.
+        args : tuple, optional
+            Arguments for the command.
+        kwargs : dict, optional
+            Keyword arguments for the command.
+
+        Returns
+        -------
+        asyncio.Future
+
+        """
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
 
         result = []
@@ -147,6 +230,23 @@ class CMDBase(Base):
         return result
 
     async def cmd_recv_async(self, method, *args, **kwargs):
+        """
+        Send async command to remote counterparts and await reply.
+
+        Parameters
+        ----------
+        method : str
+            Method of the command.
+        args : tuple, optional
+            Arguments for the command.
+        kwargs : dict, optional
+            Keyword arguments for the command.
+
+        Returns
+        -------
+        asyncio.Future
+
+        """
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
 
         result = []
@@ -189,6 +289,10 @@ class CMDBase(Base):
 
 
 class RemoteBase(CMDBase):
+    """
+    Base class for CMD objects that live in a remote runtime (e.g. tesserae and tasks).
+
+    """
 
     is_proxy = False
     is_remote = True
@@ -209,6 +313,10 @@ class RemoteBase(CMDBase):
 
     @property
     def proxies(self):
+        """
+        Set of proxies that keep references to this remote.
+
+        """
         raise self._proxies
 
     @property
@@ -223,15 +331,51 @@ class RemoteBase(CMDBase):
         return list(self.remote_runtime)
 
     def register_proxy(self, uid):
+        """
+        Register a new proxy pointing to this remote.
+
+        Parameters
+        ----------
+        uid : str
+
+        Returns
+        -------
+
+        """
         self._proxies.add(uid)
 
     def unregister_proxy(self, uid):
+        """
+        Unregister proxy pointing to this remote.
+
+        Parameters
+        ----------
+        uid : str
+
+        Returns
+        -------
+
+        """
         self._proxies.remove(uid)
 
     def inc_ref(self):
+        """
+        Increase reference count.
+
+        Returns
+        -------
+
+        """
         self._ref_count += 1
 
     def dec_ref(self):
+        """
+        Decrease reference count and unregister from runtime if needed.
+
+        Returns
+        -------
+
+        """
         self._ref_count -= 1
 
         if self._ref_count < 1:
@@ -239,6 +383,10 @@ class RemoteBase(CMDBase):
 
 
 class ProxyBase(CMDBase):
+    """
+    Base class for CMD objects that represent proxies to remote objects (e.g. tessera proxies and task proxies).
+
+    """
 
     is_proxy = True
     is_remote = False
@@ -284,6 +432,10 @@ class ProxyBase(CMDBase):
 
 
 class MonitoredBase:
+    """
+    Base class for those that keep track of the state of a remote object,
+
+    """
 
     def __init__(self, uid, runtime_id):
         self.uid = uid
@@ -294,18 +446,48 @@ class MonitoredBase:
         self.history = []
 
     def update(self, **update):
+        """
+        Update internal state.
+
+        Parameters
+        ----------
+        update
+
+        Returns
+        -------
+
+        """
         self.time = str(datetime.datetime.now())
 
         for key, value in update.items():
             setattr(self, key, value)
 
     def update_history(self, **update):
+        """
+        Update internal state and add the update to the history.
+
+        Parameters
+        ----------
+        update
+
+        Returns
+        -------
+
+        """
         self.update(**update)
 
         update['time'] = self.time
         self.history.append(update)
 
     def get_update(self):
+        """
+        Get latest update.
+
+        Returns
+        -------
+        dict
+
+        """
         update = dict(
             state=self.state,
         )
