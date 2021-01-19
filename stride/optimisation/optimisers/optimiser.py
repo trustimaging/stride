@@ -14,7 +14,7 @@ class LocalOptimiser(ABC):
     ----------
     variable : Variable
         Variable to which the optimiser refers.
-    kwargs : dict
+    kwargs
         Extra parameters to be used by the class.
 
     """
@@ -31,7 +31,7 @@ class LocalOptimiser(ABC):
         ----------
         grad : Data
             Gradient to apply.
-        kwargs : dict
+        kwargs
             Extra parameters to be used by the method.
 
         Returns

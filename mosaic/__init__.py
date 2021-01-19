@@ -172,7 +172,7 @@ def run(main, *args, **kwargs):
         Entry point for mosaic.
     args : tuple, optional
         Arguments to `mosaic.init`.
-    kwargs : dict, optional
+    kwargs : optional
         Keyword arguments to `mosaic.init`.
 
     Returns

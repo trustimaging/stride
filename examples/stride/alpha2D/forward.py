@@ -1,8 +1,8 @@
 
 import mosaic
 
-from stride.problem_definition import *
-from stride.utils import wavelets, geometries
+from stride.problem_definition import Problem, ScalarField, Space, Time
+from stride.utils import wavelets
 
 
 async def main(runtime):
@@ -30,47 +30,26 @@ async def main(runtime):
                       space=space, time=time)
 
     # Create medium
-    medium = Medium(problem=problem)
-    problem.medium = medium
-
     vp = ScalarField('vp', grid=problem.grid)
     vp.load('data/alpha2D-TrueModel.h5')
 
-    medium.add(vp)
+    problem.medium.add(vp)
 
     # Create transducers
-    transducers = Transducers(problem=problem)
-    problem.transducers = transducers
-
-    transducers.default()
+    problem.transducers.default()
 
     # Create geometry
     num_transducers = 120
-
-    geometry = Geometry(transducers=transducers, problem=problem)
-    problem.geometry = geometry
-
-    radius = ((problem.space.limit[0] - 15.e-3) / 2,
-              (problem.space.limit[1] - 13.e-3) / 2)
-    centre = (problem.space.limit[0] / 2,
-              problem.space.limit[1] / 2)
-
-    coordinates = geometries.elliptical(num_transducers, radius, centre)
-
-    for index in range(num_transducers):
-        geometry.add(index, transducers.get(0), coordinates[index, :])
+    problem.geometry.default('elliptical', num_transducers)
 
     # Create acquisitions
-    acquisitions = Acquisitions(geometry=geometry, problem=problem)
-    problem.acquisitions = acquisitions
-
-    acquisitions.default()
+    problem.acquisitions.default()
 
     # Create wavelets
     f_centre = 0.20e6
     n_cycles = 2
 
-    for shot in acquisitions.shots:
+    for shot in problem.acquisitions.shots:
         shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,
                                                        time.num, time.step)
 

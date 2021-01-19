@@ -260,7 +260,7 @@ class TesseraProxy(ProxyBase):
         Class of the remote object.
     args : tuple, optional
         Arguments for the instantiation of the remote tessera.
-    kwargs : dict, optional
+    kwargs : optional
         Keyword arguments for the instantiation of the remote tessera.
 
     """
@@ -354,7 +354,7 @@ class ArrayProxy(CMDBase):
         Arguments for the instantiation of the remote tessera.
     len : int, optional
         Length of the array, defaults to 1.
-    kwargs : dict, optional
+    kwargs : optional
         Keyword arguments for the instantiation of the remote tessera.
 
     """
@@ -461,7 +461,7 @@ class ArrayProxy(CMDBase):
             Iterable to map.
         args : tuple, optional
             Arguments to the function.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments to the function.
 
         Returns
@@ -491,7 +491,7 @@ class ArrayProxy(CMDBase):
             Iterable to map.
         args : tuple, optional
             Arguments to the function.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments to the function.
 
         Returns

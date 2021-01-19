@@ -115,7 +115,7 @@ class GridDevito:
             Space order of the discretisation, defaults to the grid space order.
         time_order : int, optional
             Time order of the discretisation, defaults to the grid time order.
-        kwargs : dict
+        kwargs
             Additional arguments for the Devito constructor.
 
         Returns
@@ -154,7 +154,7 @@ class GridDevito:
             Name of the function.
         space_order : int, optional
             Space order of the discretisation, defaults to the grid space order.
-        kwargs : dict
+        kwargs
             Additional arguments for the Devito constructor.
 
         Returns
@@ -185,7 +185,7 @@ class GridDevito:
             Space order of the discretisation, defaults to the grid space order.
         time_order : int, optional
             Time order of the discretisation, defaults to the grid time order.
-        kwargs : dict
+        kwargs
             Additional arguments for the Devito constructor.
 
         Returns
@@ -220,7 +220,7 @@ class GridDevito:
             Space order of the discretisation, defaults to the grid space order.
         time_order : int, optional
             Time order of the discretisation, defaults to the grid time order.
-        kwargs : dict
+        kwargs
             Additional arguments for the Devito constructor.
 
         Returns
@@ -365,7 +365,7 @@ class OperatorDevito:
 
         Parameters
         ----------
-        kwargs : dict, optional
+        kwargs : optional
             Arguments to pass to Devito.
 
         Returns
