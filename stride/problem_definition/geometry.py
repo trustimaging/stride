@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 from .base import GriddedSaved, ProblemBase
 from .. import plotting
+from ..utils import geometries
 
 
 __all__ = ['Geometry']
@@ -243,6 +244,38 @@ class Geometry(ProblemBase):
 
         return section
 
+    def default(self, geometry_type, *args, **kwargs):
+        """
+        Fill the container with the default configuration.
+
+        In this case, that means using one of the default geometry functions in ``stride.utils.geometries``
+        and using the same transducer for all of them.
+
+        Parameters
+        ----------
+        geometry_type : str
+            Type of geometry to use.
+
+        Returns
+        -------
+
+        """
+
+        if geometry_type == 'elliptical':
+            default_radius = ((self.space.limit[0] - 15.e-3) / 2,
+                              (self.space.limit[1] - 13.e-3) / 2)
+            default_centre = (self.space.limit[0] / 2,
+                              self.space.limit[1] / 2)
+
+            kwargs['radius'] = kwargs.get('radius', default_radius)
+            kwargs['centre'] = kwargs.get('centre', default_centre)
+
+        geometry_fun = getattr(geometries, geometry_type)
+        coordinates = geometry_fun(*args, **kwargs)
+
+        for index in range(coordinates.shape[0]):
+            self.add(index, self._transducers.get(0), coordinates[index, :])
+
     @property
     def transducers(self):
         return self._transducers
@@ -293,7 +326,7 @@ class Geometry(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns

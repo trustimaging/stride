@@ -215,7 +215,7 @@ class Shot(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -240,7 +240,7 @@ class Shot(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -258,7 +258,7 @@ class Shot(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -580,7 +580,7 @@ class Acquisitions(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -617,7 +617,7 @@ class Acquisitions(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -643,7 +643,7 @@ class Acquisitions(ProblemBase):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns

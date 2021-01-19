@@ -250,7 +250,7 @@ class EventLoop:
             Function to execute in the loop.
         args : tuple, optional
             Set of arguments for the function.
-        kwargs : dict, optional
+        kwargs : optional
             Set of keyword arguments for the function.
         wait : bool, optional
             Whether or not to wait for the call to end, defaults to False.
@@ -283,7 +283,7 @@ class EventLoop:
             Function to execute.
         args : tuple, optional
             Set of arguments for the function.
-        kwargs : dict, optional
+        kwargs : optional
             Set of keyword arguments for the function.
 
         Returns
@@ -306,7 +306,7 @@ class EventLoop:
             Function to execute in the loop.
         args : tuple, optional
             Set of arguments for the function.
-        kwargs : dict, optional
+        kwargs : optional
             Set of keyword arguments for the function.
 
         Returns
@@ -349,7 +349,7 @@ class EventLoop:
             Time to wait before execution in seconds.
         args : tuple, optional
             Set of arguments for the function.
-        kwargs : dict, optional
+        kwargs : optional
             Set of keyword arguments for the function.
 
         Returns
@@ -378,7 +378,7 @@ class EventLoop:
             Time to wait between executions in seconds.
         args : tuple, optional
             Set of arguments for the function.
-        kwargs : dict, optional
+        kwargs : optional
             Set of keyword arguments for the function.
 
         Returns

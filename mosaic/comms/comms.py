@@ -532,7 +532,7 @@ class OutboundConnection(Connection):
             If the method is ``cmd`` a description of the command has to be provided.
         reply : bool, optional
             Whether the connection should wait for a reply, defaults to False.
-        kwargs : dict, optional
+        kwargs : optional
             Keywird arguments for the remote method.
 
         Returns
@@ -663,7 +663,7 @@ class CircularConnection(Connection):
             If the method is ``cmd`` a description of the command has to be provided.
         reply : bool, optional
             Whether the connection should wait for a reply, defaults to False.
-        kwargs : dict, optional
+        kwargs : optional
             Keywird arguments for the remote method.
 
         Returns
@@ -1324,7 +1324,7 @@ class CommsManager:
         ----------
         args : tuple, optional
             Any arguments for the message.
-        kwargs : dict, optional
+        kwargs : optional
             Keyword arguments for the method.
 
         Returns

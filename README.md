@@ -49,7 +49,7 @@ mrun python inverse.py
 ```
 
 
-## Documentation - TODO
+## Documentation
 
 You can build and access the documentation by running:
 
