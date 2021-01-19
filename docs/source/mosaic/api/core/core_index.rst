@@ -5,6 +5,6 @@ Core
 
 .. toctree::
 
-    base
     tessera
     task
+    base

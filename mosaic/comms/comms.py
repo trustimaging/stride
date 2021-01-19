@@ -1428,7 +1428,7 @@ class CommsManager:
             Sender UID.
         uid : str
             Remote UID to disconnect.
-         notify : bool, optional
+        notify : bool, optional
             Whether or not to notify others of the disconnection, defaults to False.
 
         Returns
