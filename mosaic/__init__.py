@@ -49,8 +49,7 @@ def init(runtime_type='head', runtime_indices=(),
     monitor_port : int, optional
         Port of the monitor to connect to.
     num_workers : int, optional
-        Number of workers to instantiate in each node, defaults to the number of
-        available cores.
+        Number of workers to instantiate in each node, defaults to 1.
     num_threads : int, optional
         Number of threads to assign to each worker, defaults to the number of
         available cores over ``num_workers``.

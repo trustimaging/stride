@@ -12,6 +12,10 @@ __all__ = ['Head']
 
 
 class Head(Runtime):
+    """
+    The head is the main runtime, where the user entry point is executed.
+
+    """
 
     is_head = True
 
@@ -19,6 +23,17 @@ class Head(Runtime):
         super().__init__(**kwargs)
 
     async def init(self, **kwargs):
+        """
+        Asynchronous counterpart of ``__init__``.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
         monitor_address = kwargs.get('monitor_address', None)
         if not self.is_monitor and monitor_address is None:
             path = os.path.join(os.getcwd(), 'mosaic-workspace')
@@ -50,7 +65,17 @@ class Head(Runtime):
             await self.init_monitor(**kwargs)
 
     async def init_monitor(self, **kwargs):
+        """
+        Init monitor runtime.
 
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
         def start_monitor(*args, **extra_kwargs):
             kwargs.update(extra_kwargs)
             mosaic.init('monitor', *args, **kwargs, wait=True)
@@ -65,6 +90,17 @@ class Head(Runtime):
         await self._comms.wait_for(monitor_proxy.uid)
 
     async def stop(self, sender_id=None):
+        """
+        Stop runtime.
+
+        Parameters
+        ----------
+        sender_id : str
+
+        Returns
+        -------
+
+        """
         if self._monitor.subprocess is not None:
             await self._monitor.stop()
             self._monitor.subprocess.join_process()
@@ -73,5 +109,12 @@ class Head(Runtime):
         os._exit(0)
 
     def set_logger(self):
+        """
+        Set up logging.
+
+        Returns
+        -------
+
+        """
         self.logger = LoggerManager()
         self.logger.set_local()
