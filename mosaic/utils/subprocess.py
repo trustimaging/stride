@@ -19,12 +19,33 @@ _open_processes = weakref.WeakSet()
 
 
 class Subprocess:
+    """
+    Class to manage a subprocess that executes a target function.
+
+    It manages the creation and destruction of the process, and can be used
+    to collect statistics about it.
+
+    Parameters
+    ----------
+    name : str, optional
+        Name to give to the subprocess.
+    target : callable
+        Target function to be executed in the subprocess.
+    cpu_affinity : list, optional
+        List of CPUs to set the affinity of the process, defaults to None.
+    daemon : bool, optional
+        Whether to start the subprocess as a daemon, defaults to False.
+
+    """
 
     def __init__(self, *args, **kwargs):
         name = kwargs.pop('name', None)
         target = kwargs.pop('target', None)
         cpu_affinity = kwargs.pop('cpu_affinity', None)
         daemon = kwargs.pop('daemon', False)
+
+        if target is None or not callable(target):
+            raise ValueError('A subprocess needs to be provided a target function.')
 
         # _keep_child_alive is the write side of a pipe, which, when it is
         # closed, causes the read side of the pipe to unblock for reading. Note
@@ -60,28 +81,75 @@ class Subprocess:
 
         self._state = 'pending'
 
+    def __call__(self, *args, **kwargs):
+        pass
+
     def __repr__(self):
         return "<Subprocess for %s, state=%s>" % (self._target, self._state)
 
     @property
     def state(self):
+        """
+        Current state of the process.
+
+        It could be ``pending``, ``running``, ``paused`` or ``stopped``.
+
+        """
         return self._state
 
     def running(self):
+        """
+        Whether or not the process is running.
+
+        Returns
+        -------
+        bool
+
+        """
         return self._state == 'running'
 
     def paused(self):
+        """
+        Whether or not the process is paused.
+
+        Returns
+        -------
+        bool
+
+        """
         return self._state == 'paused'
 
     def stopped(self):
+        """
+        Whether or not the process is stopped.
+
+        Returns
+        -------
+        bool
+
+        """
         return self._state == 'stopped'
 
     def pause_process(self):
+        """
+        Pause the subprocess.
+
+        Returns
+        -------
+
+        """
         if self._ps_process is not None:
             self._ps_process.suspend()
             self._state = 'paused'
 
     def start_process(self):
+        """
+        Start or resume the subprocess.
+
+        Returns
+        -------
+
+        """
         if self._ps_process is not None:
             self._ps_process.resume()
 
@@ -149,6 +217,13 @@ class Subprocess:
         thread.start()
 
     def stop_process(self):
+        """
+        Stop the subprocess.
+
+        Returns
+        -------
+
+        """
         if self._ps_process is not None:
             try:
                 self._ps_process.terminate()
@@ -162,15 +237,45 @@ class Subprocess:
             self._state = 'stopped'
 
     def join_process(self, timeout=0.1):
+        """
+        Join the subprocess.
+
+        Parameters
+        ----------
+        timeout : float, optional
+            Time to wait to join, defaults to 0.1.
+
+        Returns
+        -------
+
+        """
         self._mp_process.join(timeout)
 
     def memory(self):
+        """
+        Amount of RSS memory being consumed by the process.
+
+        Returns
+        -------
+        float
+            RSS memory.
+
+        """
         if self._ps_process is not None:
             return self._ps_process.memory_info().rss
 
         return 0
 
     def cpu_load(self):
+        """
+        CPU load as a percentage.
+
+        Returns
+        -------
+        float
+            CPU load.
+
+        """
         if self._ps_process is not None:
             return self._ps_process.cpu_percent(interval=None)
 

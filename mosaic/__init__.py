@@ -23,6 +23,49 @@ def init(runtime_type='head', runtime_indices=(),
          num_workers=None, num_threads=None,
          mode='local', monitor_strategy='round-robin',
          log_level='info', wait=False):
+    """
+    Starts the global mosaic runtime.
+
+    Parameters
+    ----------
+    runtime_type : str, optional
+        Type of runtime to instantiate, defaults to ``head``.
+    runtime_indices : tuple, optional
+        Indices associated with the runtime, defaults to None.
+    address : str, optional
+        Address to use for the runtime, defaults to None. If None, the comms will
+        try to guess the address.
+    port : int, optional
+        Port to use for the runtime, defaults to None. If None, the comms will
+        test ports until one becomes available.
+    parent_id : str, optional
+        UID of the parent runtime, if any.
+    parent_address : str, optional
+        Address of the parent runtime, if any.
+    parent_port : int, optional
+        Port of the parent runtime, if any.
+    monitor_address : str, optional
+        Address of the monitor to connect to.
+    monitor_port : int, optional
+        Port of the monitor to connect to.
+    num_workers : int, optional
+        Number of workers to instantiate in each node, defaults to 1.
+    num_threads : int, optional
+        Number of threads to assign to each worker, defaults to the number of
+        available cores over ``num_workers``.
+    mode : str, optional
+        Mode of the runtime, defaults to ``local``.
+    monitor_strategy : str, optional
+        Strategy used by the monitor to allocate tessera, defaults to round robin.
+    log_level : str, optional
+        Log level, defaults to ``info``.
+    wait : bool, optional
+        Whether or not to return control to calling frame, defaults to False.
+
+    Returns
+    -------
+
+    """
     global _runtime
 
     mlogger.log_level = log_level
@@ -77,6 +120,13 @@ def __getattr__(key):
 
 
 def clear_runtime():
+    """
+    Clear the global runtime.
+
+    Returns
+    -------
+
+    """
     global _runtime
 
     if _runtime is not None:
@@ -85,12 +135,26 @@ def clear_runtime():
 
 
 def runtime():
+    """
+    Access the global runtime.
+
+    Returns
+    -------
+
+    """
     global _runtime
 
     return _runtime
 
 
 def stop():
+    """
+    Stop the global runtime.
+
+    Returns
+    -------
+
+    """
     global _runtime
 
     loop = _runtime.get_event_loop()
@@ -99,6 +163,22 @@ def stop():
 
 
 def run(main, *args, **kwargs):
+    """
+    Initialise the runtime and then run the ``main`` in it.
+
+    Parameters
+    ----------
+    main : callable
+        Entry point for mosaic.
+    args : tuple, optional
+        Arguments to `mosaic.init`.
+    kwargs : dict, optional
+        Keyword arguments to `mosaic.init`.
+
+    Returns
+    -------
+
+    """
     global _runtime
 
     init(*args, **kwargs)

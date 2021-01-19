@@ -20,6 +20,7 @@ class Config(Struct):
         Dict-like object to initialise the Struct, defaults to empty.
     defaults : dict-like, optional
         Dict-like object that provides the default values of the Config object.
+
     """
 
     _allowed_attributes = ['_content', '_extensible', '_mutable', '_defaults']
@@ -43,11 +44,6 @@ class Config(Struct):
     def defaults(self):
         """
         Access the default values of the Config object.
-
-        Returns
-        -------
-        OrderedDict
-            Dictionary containing the default values of this Config.
 
         """
         return self._defaults

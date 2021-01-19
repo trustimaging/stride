@@ -8,7 +8,21 @@ __all__ = ['sizeof', 'set_main_thread', 'memory_limit']
 
 
 def sizeof(obj, seen=None):
-    """Recursively finds size of objects"""
+    """
+    Recursively finds size of objects.
+
+    Parameters
+    ----------
+    obj : object
+        Object to check size.
+    seen
+
+    Returns
+    -------
+    float
+        Size in bytes.
+
+    """
     if isinstance(obj, np.ndarray):
         size = obj.nbytes
     else:
@@ -33,16 +47,31 @@ def sizeof(obj, seen=None):
 
 
 def set_main_thread():
+    """
+    Set current thread as main thread.
+
+    Returns
+    -------
+
+    """
     threading.current_thread().name = 'MainThread'
     threading.current_thread().__class__ = threading._MainThread
 
 
 def memory_limit():
-    """Get the memory limit (in bytes) for this system.
+    """
+    Get the memory limit (in bytes) for this system.
+
     Takes the minimum value from the following locations:
     - Total system host memory
     - Cgroups limit (if set)
     - RSS rlimit (if set)
+
+    Returns
+    -------
+    float
+        Memory limit.
+
     """
     limit = psutil.virtual_memory().total
 

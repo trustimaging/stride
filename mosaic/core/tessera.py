@@ -15,6 +15,28 @@ __all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'MonitoredTessera', 'tessera
 
 
 class Tessera(RemoteBase):
+    """
+    A tessera is an actor in the mosaic parallelism model.
+
+    A tessera represents an object that is instantiated in a remote portion of
+    the network, and which we reference through a proxy. This proxy
+    allows us to execute methods on that remote object simply by calling the
+    method.
+
+    A tessera is kept in memory at the worker for as long as there are proxy references to
+    it. If none exist, it will be made available for garbage collection.
+
+    Objects of class Tessera should not be instantiated directly by the user
+    and the ``@mosaic.tessera`` decorator should be used instead.
+
+    Parameters
+    ----------
+    cls : type
+        Class of the remote object.
+    uid : str
+        UID assigned to the tessera.
+
+    """
 
     type = 'tessera'
 
@@ -34,6 +56,10 @@ class Tessera(RemoteBase):
 
     @cached_property
     def remote_runtime(self):
+        """
+        Proxies that have references to this tessera.
+
+        """
         return {self.proxy(each) for each in list(self._proxies)}
 
     def _init_cls(self, *args, **kwargs):
@@ -54,15 +80,45 @@ class Tessera(RemoteBase):
                 return self._init_cls(*args, **kwargs)
 
     def queue_task(self, task):
+        """
+        Add a task to the queue of the tessera.
+
+        Parameters
+        ----------
+        task : Task
+
+        Returns
+        -------
+
+        """
         self._task_queue.put_nowait(task)
 
     def listen(self, wait=False):
+        """
+        Start the listening loop that consumes tasks.
+
+        Parameters
+        ----------
+        wait : bool, optional
+            Whether or not to wait for the loop end, defaults to False.
+
+        Returns
+        -------
+
+        """
         if self._state != 'init':
             return
 
         self.loop.run(self.listen_async, wait=wait)
 
     async def listen_async(self):
+        """
+        Listening loop that consumes tasks from the tessera queue.
+
+        Returns
+        -------
+
+        """
         if self._state != 'init':
             return
 
@@ -100,6 +156,23 @@ class Tessera(RemoteBase):
             del task
 
     async def call_safe(self, sender_id, method, task):
+        """
+        Call a method while handling exceptions, which will be sent back to the
+        sender if they arise.
+
+        Parameters
+        ----------
+        sender_id : str
+            UID of the original caller.
+        method : callable
+            Method to execute.
+        task : Task
+            Task that has asked for the execution of the method.
+
+        Returns
+        -------
+
+        """
         async with self._task_lock:
             async with self.send_exception(sender_id, method, task):
                 future = self.loop.run_in_executor(method,
@@ -114,6 +187,23 @@ class Tessera(RemoteBase):
 
     @contextlib.asynccontextmanager
     async def send_exception(self, sender_id=None, method=None, task=None):
+        """
+        Context manager that handles exceptions by sending them
+        back to the ``uid``.
+
+        Parameters
+        ----------
+        sender_id : str
+            Remote UID.
+        method : callable
+            Method being executed.
+        task : Task
+            Task that has asked for the execution of the method.
+
+        Returns
+        -------
+
+        """
         try:
             yield
 
@@ -136,6 +226,18 @@ class Tessera(RemoteBase):
             pass
 
     async def state_changed(self, state):
+        """
+        Signal state changed.
+
+        Parameters
+        ----------
+        state : str
+            New state.
+
+        Returns
+        -------
+
+        """
         self._state = state
         await self.runtime.tessera_state_changed(self)
 
@@ -145,6 +247,23 @@ class Tessera(RemoteBase):
 
 
 class TesseraProxy(ProxyBase):
+    """
+    Objects of this class represent connections to remote tessera, allowing us to
+    call methods on them.
+
+    Objects of class TesseraProxy should not be instantiated directly by the user
+    and the ``@mosaic.tessera`` decorator should be used instead.
+
+    Parameters
+    ----------
+    cls : type
+        Class of the remote object.
+    args : tuple, optional
+        Arguments for the instantiation of the remote tessera.
+    kwargs : dict, optional
+        Keyword arguments for the instantiation of the remote tessera.
+
+    """
 
     type = 'tessera_proxy'
 
@@ -159,6 +278,10 @@ class TesseraProxy(ProxyBase):
                                   uuid.uuid4().hex)
 
     async def init(self, *args, **kwargs):
+        """
+        Asynchronous correlate of ``__init__``.
+
+        """
         kwargs = self._fill_config(**kwargs)
 
         self._runtime_id = await self.monitor.select_worker(reply=True)
@@ -174,10 +297,18 @@ class TesseraProxy(ProxyBase):
 
     @property
     def runtime_id(self):
+        """
+        UID of the runtime where the tessera lives.
+
+        """
         return self._runtime_id
 
     @cached_property
     def remote_runtime(self):
+        """
+        Proxy to the runtime where the tessera lives.
+
+        """
         return self.proxy(self._runtime_id)
 
     def __getattribute__(self, item):
@@ -207,6 +338,26 @@ class TesseraProxy(ProxyBase):
 
 
 class ArrayProxy(CMDBase):
+    """
+    Objects of this class represent more a set of remote tesserae that may live on one or
+    more remote runtimes. An array proxy allows us to reference all of them together
+    through a common interface, as well as map calls to them.
+
+    Objects of class ArrayProxy should not be instantiated directly by the user
+    and the ``@mosaic.tessera`` decorator should be used instead.
+
+    Parameters
+    ----------
+    cls : type
+        Class of the remote object.
+    args : tuple, optional
+        Arguments for the instantiation of the remote tessera.
+    len : int, optional
+        Length of the array, defaults to 1.
+    kwargs : dict, optional
+        Keyword arguments for the instantiation of the remote tessera.
+
+    """
 
     type = 'tessera_proxy_array'
 
@@ -229,6 +380,10 @@ class ArrayProxy(CMDBase):
                                   uuid.uuid4().hex)
 
     async def init(self, *args, **kwargs):
+        """
+        Asynchronous correlate of ``__init__``.
+
+        """
         for proxy in self._proxies:
             await proxy.init(*args, **kwargs)
             self._runtime_id.append(proxy.runtime_id)
@@ -239,14 +394,26 @@ class ArrayProxy(CMDBase):
 
     @property
     def runtime_id(self):
+        """
+        UID of the runtime where the tessera lives.
+
+        """
         return self._runtime_id
 
     @cached_property
     def remote_runtime(self):
+        """
+        Proxy to the runtime where the tessera lives.
+
+        """
         return [self.proxy(each) for each in self._runtime_id]
 
     @classmethod
     def remote_type(cls):
+        """
+        Type of mosaic object.
+
+        """
         return cls.type.split('_')[0]
 
     def _remotes(self):
@@ -278,11 +445,61 @@ class ArrayProxy(CMDBase):
             await proxy_queue.put(proxy)
 
     async def map(self, fun, elements, *args, **kwargs):
+        """
+        Map a function to an iterable, distributed across the proxies
+        of the proxy array.
+
+        The function is given control over a certain proxy for as long as
+        it takes to be executed. Once all mappings have completed, the
+        results are returned together
+
+        Parameters
+        ----------
+        fun : callable
+            Function to execute
+        elements : iterable
+            Iterable to map.
+        args : tuple, optional
+            Arguments to the function.
+        kwargs : dict, optional
+            Keyword arguments to the function.
+
+        Returns
+        -------
+        list
+            Results of the mapping.
+
+        """
         tasks = await self._map_tasks(fun, elements, *args, **kwargs)
 
         return await asyncio.gather(*tasks)
 
     async def map_as_completed(self, fun, elements, *args, **kwargs):
+        """
+        Generator which maps a function to an iterable,
+        distributed across the proxies of the proxy array.
+
+        The function is given control over a certain proxy for as long as
+        it takes to be executed. Once a function is completed, the result
+        to that function is yielded immediately.
+
+        Parameters
+        ----------
+        fun : callable
+            Function to execute
+        elements : iterable
+            Iterable to map.
+        args : tuple, optional
+            Arguments to the function.
+        kwargs : dict, optional
+            Keyword arguments to the function.
+
+        Returns
+        -------
+        object
+            Result of each execution as they are completed.
+
+        """
         tasks = await self._map_tasks(fun, elements, *args, **kwargs)
 
         for task in asyncio.as_completed(tasks):
@@ -324,10 +541,23 @@ class ArrayProxy(CMDBase):
 
 
 class MonitoredTessera(MonitoredBase):
+    """
+    Information container on the state of a tessera.
+
+    """
     pass
 
 
 class PickleClass:
+    """
+    A wrapper for a class that can be pickled safely.
+
+    Parameters
+    ----------
+    cls : type
+        Class to wrap.
+
+    """
 
     def __init__(self, cls):
         self.cls = cls
@@ -362,6 +592,53 @@ class PickleClass:
 
 
 def tessera(*args, **cmd_config):
+    """
+    Decorator that transforms a standard class into a tessera-capable class.
+
+    The resulting class can still be instantiated as usual ``Klass(...)``, which
+    will generate a standard local instance, or onto the mosaic runtime ``await Klass.remote(...)``,
+    which will instantiate the class in a remote endpoint and return a proxy to the user.
+
+    TODO - Better explanations and more examples.
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    Enriched class
+
+    Examples
+    --------
+
+    >>> @tessera
+    >>> class Klass:
+    >>>     def __init__(self, value):
+    >>>         self.value = value
+    >>>
+    >>>     def add(self, other):
+    >>>         self.value += other
+    >>>         return self.value
+    >>>
+    >>> # We can still generate a standard local instance
+    >>> local_instance = Klass(10)
+    >>>
+    >>> # but also a remote instance by invoking remote.
+    >>> remote_proxy = await Klass.remote(10)
+    >>>
+    >>> # The resulting proxy can be used to call the instance methods,
+    >>> task = await remote_proxy.add(5)
+    >>> # which will return immediately.
+    >>>
+    >>> # We can do some work while the remote method is executed
+    >>> # and then wait for it to end
+    >>> await task
+    >>>
+    >>> # We can retrieve the result of the task invoking result on the task
+    >>> await task.result()
+    15
+
+    """
 
     def tessera_wrapper(cls):
 

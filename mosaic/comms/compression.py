@@ -181,10 +181,10 @@ def byte_sample(b, size, n):
 
     Parameters
     ----------
-    b: bytes or memoryview
-    size: int
+    b : bytes or memoryview
+    size : int
         size of each sample to collect
-    n: int
+    n : int
         number of samples to collect
     """
 
@@ -203,7 +203,7 @@ def byte_sample(b, size, n):
 
 def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
     """
-    Maybe compress payload
+    Maybe compress payload:
 
     1.  We don't compress small messages
     2.  We sample the payload in a few spots, compress that, and if it doesn't
@@ -211,6 +211,7 @@ def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
     3.  We then compress the full original, it it doesn't compress well then we
         return the original
     4.  We return the compressed result
+
     """
 
     if isinstance(payload, pickle5.PickleBuffer):
@@ -257,6 +258,9 @@ def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
 
 
 def decompress(compression, payload):
-    """ Decompress payload according to information in the header """
+    """
+    Decompress payload according to information in the header
+
+    """
 
     return compression_methods[compression]['decompress'](payload)

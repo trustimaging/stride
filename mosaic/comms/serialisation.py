@@ -18,6 +18,22 @@ def pickle5_loads(in_band, out_band):
 
 
 def serialise(data):
+    """
+    Serialise ``data`` using Pickle protocol 5 as a default and, failing that,
+    resort to cloudpickle.
+
+    Parameters
+    ----------
+    data : object
+
+    Returns
+    -------
+    bytes
+        Pickled object, in-band.
+    list
+        List of zero-copy buffers, out-of-band.
+
+    """
     try:
         return pickle5_dumps(data)
     except pickle5.PicklingError:
@@ -25,4 +41,19 @@ def serialise(data):
 
 
 def deserialise(in_band, out_band):
+    """
+    Deserialise using Pickle protocol 5.
+
+    Parameters
+    ----------
+    in_band : bytes
+        Pickled object.
+    out_band : list
+        List of buffers.
+
+    Returns
+    -------
+    deserialised object
+
+    """
     return pickle5_loads(in_band, out_band)

@@ -13,6 +13,36 @@ __all__ = ['Runtime', 'RuntimeProxy']
 
 
 class BaseRPC:
+    """
+    Base class representing either a mosaic runtime or a proxy to that runtime.
+
+    Runtimes represent network endpoints, and proxies represent references to those
+    endpoints. Using proxies, runtimes can  be addressed transparently through
+    remote procedural calls. That is, calling a method on the proxy will execute it
+    in the remote runtime.
+
+    Runtimes also keep a series of resident mosaic objects (such as tessera or tasks),
+    and can direct remote commands to those objects.
+
+    A runtime has a name and an (optional) set of indices, which together produce
+    a unique ID associated with that endpoint in the network. The runtime UID
+    is used to direct messages across the network.
+
+    A name ``runtime`` and indices ``(0, 0)`` will result in a UID ``runtime:0:0``,
+    while the same name with no indices will result in a UID ``runtime``.
+
+    Parameters
+    ----------
+    name : str, optional
+        Name of the runtime, defaults to None. If no name is provided, the UID has
+        to be given.
+    indices : tuple or int, optional
+        Indices associated with the runtime, defaults to none.
+    uid : str
+        UID from which to find the name and indices, defaults to None.
+
+    """
+
     def __init__(self, name=None, indices=(), uid=None):
         if uid is not None:
             uid = uid.split(':')
@@ -34,14 +64,26 @@ class BaseRPC:
 
     @property
     def name(self):
+        """
+        Runtime name.
+
+        """
         return self._name
 
     @property
     def indices(self):
+        """
+        Runtime indices.
+
+        """
         return self._indices
 
     @property
     def uid(self):
+        """
+        Runtime UID.
+
+        """
         if len(self.indices):
             indices = ':'.join([str(each) for each in self.indices])
             return '%s:%s' % (self.name, indices)
@@ -51,14 +93,34 @@ class BaseRPC:
 
     @property
     def address(self):
+        """
+        Runtime IP address.
+
+        """
         return None
 
     @property
     def port(self):
+        """
+        Runtime port.
+
+        """
         return None
 
 
 class Runtime(BaseRPC):
+    """
+    Class representing a local runtime of any possible type.
+
+    The runtime handles the mosaic life cycle:
+
+    - it handles the comms manager, the event loop, the logger and keeps proxies to existing remote runtimes;
+    - it keeps track of resident mosaic objects (tessera, task) and proxies to those;
+    - it routes remote commands to these resident mosaic objects.
+
+    For referece on accepted parameters, check `mosaic.init`.
+
+    """
 
     is_head = False
     is_monitor = False
@@ -90,6 +152,17 @@ class Runtime(BaseRPC):
         self._task_proxy = weakref.WeakValueDictionary()
 
     async def init(self, **kwargs):
+        """
+        Asynchronous counterpart of ``__init__``.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
         # Start event loop
         self._loop.set_main_thread()
 
@@ -118,57 +191,154 @@ class Runtime(BaseRPC):
         self._comms.listen()
 
     def wait(self, wait=False):
+        """
+        Wait on the comms loop until done.
+
+        Parameters
+        ----------
+        wait : bool
+            Whether or not to wait, defaults to False.
+
+        Returns
+        -------
+
+        """
         if wait is True:
             self._comms.wait()
 
     @property
     def address(self):
+        """
+        IP address of the runtime.
+
+        """
         return self._comms.address
 
     @property
     def port(self):
+        """
+        Port of the runtime.
+
+        """
         return self._comms.port
 
     @property
     def num_nodes(self):
+        """
+        Number of nodes on the network.
+
+        """
         return len(self._nodes.keys())
 
     @property
     def num_workers(self):
+        """
+        Number of workers on the network.
+
+        """
         return len(self._workers.keys())
 
     # Interfaces to global objects
 
     def set_logger(self):
+        """
+        Set up logging.
+
+        Returns
+        -------
+
+        """
         pass
 
     def set_comms(self, address=None, port=None):
+        """
+        Set up comms manager.
+
+        Parameters
+        ----------
+        address : str, optional
+            Address to use, defaults to None. If None, the comms will try to
+            guess the address.
+        port : int, optional
+            Port to use, defaults to None. If None, the comms will test ports
+            until one becomes available.
+
+        Returns
+        -------
+
+        """
         if self._comms is None:
             self._comms = CommsManager(runtime=self, address=address, port=port)
             self._comms.connect_recv()
 
     def get_comms(self):
+        """
+        Access comms.
+
+        Returns
+        -------
+
+        """
         return self._comms
 
     def get_zmq_context(self):
+        """
+        Access ZMQ socket context.
+
+        Returns
+        -------
+
+        """
         if self._zmq_context is None:
             self._zmq_context = zmq.asyncio.Context()
 
         return self._zmq_context
 
     def get_event_loop(self):
+        """
+        Access event loop.
+
+        Returns
+        -------
+
+        """
         if self._loop is None:
             self._loop = EventLoop()
 
         return self._loop
 
     def get_head(self):
+        """
+        Access head runtime.
+
+        Returns
+        -------
+
+        """
         return self._head
 
     def get_monitor(self):
+        """
+        Access monitor runtime.
+
+        Returns
+        -------
+
+        """
         return self._monitor
 
     def get_node(self, uid=None):
+        """
+        Access specific node runtime.
+
+        Parameters
+        ----------
+        uid : str
+
+        Returns
+        -------
+
+        """
         if uid is not None:
             return self._nodes[uid]
 
@@ -176,6 +346,17 @@ class Runtime(BaseRPC):
             return self._node
 
     def get_worker(self, uid=None):
+        """
+        Access specific worker runtime.
+
+        Parameters
+        ----------
+        uid : str
+
+        Returns
+        -------
+
+        """
         if uid is not None:
             return self._workers[uid]
 
@@ -183,6 +364,19 @@ class Runtime(BaseRPC):
             return self._worker
 
     def proxy_from_uid(self, uid, proxy=None):
+        """
+        Generate a proxy from a UID.
+
+        Parameters
+        ----------
+        uid : str
+        proxy : BaseProxy
+
+        Returns
+        -------
+        BaseProxy
+
+        """
         proxy = proxy or self.proxy(uid=uid)
 
         found_proxy = None
@@ -206,58 +400,204 @@ class Runtime(BaseRPC):
 
     @staticmethod
     def proxy(name=None, indices=(), uid=None):
+        """
+        Generate proxy from name, indices or UID.
+
+        Parameters
+        ----------
+        name : str, optional
+        indices : tuple, optional
+        uid : str, optional
+
+        Returns
+        -------
+
+        """
         return RuntimeProxy(name=name, indices=indices, uid=uid)
 
     # Network management methods
 
     def log_info(self, sender_id, buf):
+        """
+        Log remote message from ``sender_id`` on info stream.
+
+        Parameters
+        ----------
+        sender_id : str
+        buf : str
+
+        Returns
+        -------
+
+        """
         if self.logger is None:
             return
 
         self.logger.info(buf, uid=sender_id)
 
     def log_debug(self, sender_id, buf):
+        """
+        Log remote message from ``sender_id`` on debug stream.
+
+        Parameters
+        ----------
+        sender_id : str
+        buf : str
+
+        Returns
+        -------
+
+        """
         if self.logger is None:
             return
 
         self.logger.debug(buf, uid=sender_id)
 
     def log_error(self, sender_id, buf):
+        """
+        Log remote message from ``sender_id`` on error stream.
+
+        Parameters
+        ----------
+        sender_id : str
+        buf : str
+
+        Returns
+        -------
+
+        """
         if self.logger is None:
             return
 
         self.logger.error(buf, uid=sender_id)
 
     def log_warning(self, sender_id, buf):
+        """
+        Log remote message from ``sender_id`` on warning stream.
+
+        Parameters
+        ----------
+        sender_id : str
+        buf : str
+
+        Returns
+        -------
+
+        """
         if self.logger is None:
             return
 
         self.logger.warning(buf, uid=sender_id)
 
     def raise_exception(self, sender_id, exc):
+        """
+        Raise remote exception that ocurred on ``sender_id``.
+
+        Parameters
+        ----------
+        sender_id : str
+        exc : Exception description
+
+        Returns
+        -------
+
+        """
         self.log_error(sender_id, 'Endpoint raised exception "%s"' % str(exc[1]))
         raise exc[1].with_traceback(exc[2].as_traceback())
 
     def hand(self, sender_id, address, port):
+        """
+        Handle incoming handshake petition.
+
+        Parameters
+        ----------
+        sender_id : str
+        address : str
+        port : int
+
+        Returns
+        -------
+
+        """
         self.proxy_from_uid(sender_id)
 
     def shake(self, sender_id, network):
+        """
+        Handle handshake response.
+
+        Parameters
+        ----------
+        sender_id : str
+        network : dict
+
+        Returns
+        -------
+
+        """
         for uid, address in network.items():
             self.connect(sender_id, uid, *address)
 
     def connect(self, sender_id, uid, address, port):
+        """
+        Connect to a specific remote runtime.
+
+        Parameters
+        ----------
+        sender_id : str
+        uid : str
+        address : str
+        port : int
+
+        Returns
+        -------
+
+        """
         self.hand(uid, address, port)
 
     def disconnect(self, sender_id, uid):
+        """
+        Disconnect specific remote runtime.
+
+        Parameters
+        ----------
+        sender_id : str
+        uid : str
+
+        Returns
+        -------
+
+        """
         pass
 
     def stop(self, sender_id=None):
+        """
+        Stop runtime.
+
+        Parameters
+        ----------
+        sender_id : str
+
+        Returns
+        -------
+
+        """
         if self._comms is not None:
             self._loop.run(self._comms.stop, args=(sender_id,))
 
     # Command and task management methods
 
     def register(self, obj):
+        """
+        Register CMD object with runtime.
+
+        Parameters
+        ----------
+        obj : BaseCMD
+
+        Returns
+        -------
+
+        """
         obj_type = obj.type
         obj_uid = obj.uid
         obj_store = getattr(self, '_' + obj_type)
@@ -267,7 +607,18 @@ class Runtime(BaseRPC):
 
         return obj_store[obj_uid]
 
-    def unregister(self, obj):
+    def deregister(self, obj):
+        """
+        Deregister CMD object from runtime.
+
+        Parameters
+        ----------
+        obj : BaseCMD
+
+        Returns
+        -------
+
+        """
         obj_type = obj.type
         obj_uid = obj.uid
         obj_store = getattr(self, '_' + obj_type)
@@ -280,6 +631,18 @@ class Runtime(BaseRPC):
         gc.collect()
 
     def cmd(self, sender_id, cmd):
+        """
+        Process incoming command address to one of the resident objects.
+
+        Parameters
+        ----------
+        sender_id : str
+        cmd : CMD
+
+        Returns
+        -------
+
+        """
         obj_type = cmd.type
         obj_uid = cmd.uid
         obj_store = getattr(self, '_' + obj_type)
@@ -297,6 +660,28 @@ class Runtime(BaseRPC):
 
 
 class RuntimeProxy(BaseRPC):
+    """
+    This class represents a proxy to a remote running runtime.
+
+    This proxy can be used to execute methods and commands on the remote runtime simply by
+    calling methods on it.
+
+    The proxy uses the comms to direct messages to the correct endpoint using its UID.
+
+    Parameters
+    ----------
+    name : str, optional
+        Name of the runtime, defaults to None. If no name is provided, the UID has
+        to be given.
+    indices : tuple or int, optional
+        Indices associated with the runtime, defaults to none.
+    uid : str
+        UID from which to find the name and indices, defaults to None.
+    comms : CommsManager
+        Comms instance to use, defaults to global comms.
+
+    """
+
     def __init__(self, name=None, indices=(), uid=None, comms=None):
         super().__init__(name=name, indices=indices, uid=uid)
 
@@ -305,18 +690,41 @@ class RuntimeProxy(BaseRPC):
 
     @property
     def address(self):
+        """
+        Remote runtime IP address.
+
+        """
         return self._comms.uid_address(self.uid)
 
     @property
     def port(self):
+        """
+        Remote runtime port.
+
+        """
         return self._comms.uid_port(self.uid)
 
     @property
     def subprocess(self):
+        """
+        Subprocess on which remote runtime lives, if any.
+
+        """
         return self._subprocess
 
     @subprocess.setter
     def subprocess(self, subprocess):
+        """
+        Set remote runtime subprocess.
+
+        Parameters
+        ----------
+        subprocess : Subprocess
+
+        Returns
+        -------
+
+        """
         self._subprocess = subprocess
 
     def __getattribute__(self, item):

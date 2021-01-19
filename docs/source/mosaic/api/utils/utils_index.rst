@@ -6,7 +6,7 @@ Utils
 .. toctree::
 
     event_loop
-    process
+    subprocess
     logger
     change_case
     utils

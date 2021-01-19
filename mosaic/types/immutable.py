@@ -28,6 +28,7 @@ class ImmutableObject:
     >>> klass.change_attr()
     >>> klass.attribute
     20
+
     """
 
     def __setattr__(self, key, value):
