@@ -6,6 +6,20 @@ __all__ = ['ImportedFunction']
 
 
 class ImportedFunction:
+    """
+    A function that is imported dynamically and contains information on how to serialise
+    and deserialise it.
+
+    Parameters
+    ----------
+    name : str
+        Name of the function.
+    module : str
+        Name of the module to which it belongs.
+    path : tuple
+        List of paths to look for the function.
+
+    """
 
     def __init__(self, name, module, path):
         self._name = name

@@ -14,32 +14,19 @@ from .utils import set_main_thread
 __all__ = ['EventLoop', 'Future', 'gather']
 
 
-# Most remote objects behave similarly in that they have an UID
-# they register themselves with the runtime and they have a set
-# of proxies that are, in a way, subscribed to their updates.
-#
-# Proxies share the UID with their remote counterparts and
-# they also have to register themselves with the runtime to
-# be notified by remote messages.
-#
-# Proxies are used to communicate things to the remote objects and
-# to receive updates and results from them.
-#
-# For futures, the proxy can be used both to set a result or an exception,
-# but also to ask for a result or an exception, to check the state of
-# the future or to await it.
-#
-# Setting the result or the exception of a future will trigger the notification
-# of the proxies.
-#
-# While tasks get their results (not their exceptions) lazily, only when
-# we ask for them, futures happen immediately?
-# Using all this at the level of comms seems like jumping levels of abstraction
-# in the wrong direction, is that the right way to do it, or should we use another
-# type of future and keep it simple?
-
-
 class Future:
+    """
+    A local future associated with an EventLoop.
+
+    Parameters
+    ----------
+    name : str, optional
+        Name to give to the future, defaults to ``anon``.
+    loop : EventLoop, optional
+        Loop associated with the future, defaults to current loop.
+
+    """
+
     def __init__(self, name='anon', loop=None):
         self._future = asyncio.Future()
         self._loop = loop or mosaic.get_event_loop()
@@ -51,10 +38,18 @@ class Future:
 
     @property
     def uid(self):
+        """
+        Access the UID of the future.
+
+        """
         return self._uid
 
     @property
     def state(self):
+        """
+        Check the state of the future (``pending``, ``done``, ``cancelled``).
+
+        """
         if self._future.cancelled():
             return 'cancelled'
 
@@ -66,6 +61,10 @@ class Future:
 
     @property
     def future(self):
+        """
+        The wrapped future
+
+        """
         return self._future
 
     def __repr__(self):
@@ -76,29 +75,104 @@ class Future:
         return (yield from self._future.__await__())
 
     def result(self):
+        """
+        Get the future result.
+
+        Returns
+        -------
+
+        """
         return self._future.result()
 
     def exception(self):
+        """
+        Get the future exception.
+
+        Returns
+        -------
+
+        """
         return self._future.exception()
 
     def set_result(self, result):
+        """
+        Set the future result.
+
+        Parameters
+        ----------
+        result : object
+
+        Returns
+        -------
+
+        """
         self._future.set_result(result)
 
     def set_exception(self, exc):
+        """
+        Set the future exception.
+
+        Parameters
+        ----------
+        exc : Exception
+
+        Returns
+        -------
+
+        """
         self._future.set_exception(exc)
 
     def done(self):
+        """
+        Check whether the future is done.
+
+        Returns
+        -------
+
+        """
         return self._future.done()
 
     def cancelled(self):
+        """
+        Check whether the future is cancelled.
+
+        Returns
+        -------
+
+        """
         return self._future.cancelled()
 
     def add_done_callback(self, fun):
+        """
+        Add done callback.
+
+        Parameters
+        ----------
+        fun : callable
+
+        Returns
+        -------
+
+        """
         self._future.add_done_callback(fun)
 
 
 class EventLoop:
-    def __init__(self, loop=None):  # Add option to make MainThread
+    """
+    The event loop encapsulates the asyncio (or equivalent) event loop, which
+    will run in a separate thread.
+
+    It provides helper functions to run things within the loop, in an executor,
+    and to call functions after a period of time or every fixed amount of time.
+
+    Parameters
+    ----------
+    loop : asyncio loop, optional
+        Asyncio event loop to use internally, defaults to new loop.
+
+    """
+
+    def __init__(self, loop=None):
         self._loop = loop or asyncio.new_event_loop()
         self._executor = None
         asyncio.set_event_loop(self._loop)
@@ -113,6 +187,10 @@ class EventLoop:
 
     @property
     def within_loop(self):
+        """
+        Whether we are within the loop thread or not.
+
+        """
         try:
             return self._within_loop.flag is True
 
@@ -120,6 +198,14 @@ class EventLoop:
             return False
 
     def get_event_loop(self):
+        """
+        Access the internal loop.
+
+        Returns
+        -------
+        asyncio loop
+
+        """
         return self._loop
 
     def _run_loop(self, loop):
@@ -135,6 +221,13 @@ class EventLoop:
         self._loop.run_forever()
 
     def stop(self):
+        """
+        Stop the event loop.
+
+        Returns
+        -------
+
+        """
         self._loop.call_soon_threadsafe(self._executor.shutdown)
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._executor.shutdown(wait=True)
@@ -146,6 +239,27 @@ class EventLoop:
         self.stop()
 
     def run(self, coro, args=(), kwargs=None, wait=False):
+        """
+        Schedule a function in the event loop from synchronous code.
+
+        The call can be waited or returned immediately.
+
+        Parameters
+        ----------
+        coro : callable
+            Function to execute in the loop.
+        args : tuple, optional
+            Set of arguments for the function.
+        kwargs : dict, optional
+            Set of keyword arguments for the function.
+        wait : bool, optional
+            Whether or not to wait for the call to end, defaults to False.
+
+        Returns
+        -------
+        Return value from call or concurrent.futures.Future, depending on whether it is waited or not.
+
+        """
         kwargs = kwargs or {}
 
         if not inspect.iscoroutine(coro) and not inspect.iscoroutinefunction(coro):
@@ -160,12 +274,46 @@ class EventLoop:
             return future
 
     def run_in_executor(self, callback, args=(), kwargs=None):
+        """
+        Run function in a thread executor.
+
+        Parameters
+        ----------
+        callback : callable
+            Function to execute.
+        args : tuple, optional
+            Set of arguments for the function.
+        kwargs : dict, optional
+            Set of keyword arguments for the function.
+
+        Returns
+        -------
+        asyncio.Future
+
+        """
         callback = functools.partial(callback, *args, **kwargs)
         future = self._loop.run_in_executor(self._executor, callback)
 
         return future
 
     def run_async(self, coro, args=(), kwargs=None):
+        """
+        Schedule a function in the event loop from asynchronous code.
+
+        Parameters
+        ----------
+        coro : callable
+            Function to execute in the loop.
+        args : tuple, optional
+            Set of arguments for the function.
+        kwargs : dict, optional
+            Set of keyword arguments for the function.
+
+        Returns
+        -------
+        asyncio.Task
+
+        """
         kwargs = kwargs or {}
 
         if not inspect.iscoroutine(coro) and not inspect.iscoroutinefunction(coro):
@@ -174,9 +322,41 @@ class EventLoop:
         return self._loop.create_task(coro(*args, **kwargs))
 
     def wrap_future(self, future):
+        """
+        Wrap a concurrent.futures.Future to be compatible
+        with asyncio.
+
+        Parameters
+        ----------
+        future : concurrent.futures.Future
+
+        Returns
+        -------
+        asyncio.Future
+
+        """
         return asyncio.wrap_future(future, loop=self._loop)
 
     def timeout(self, coro, timeout, args=(), kwargs=None):
+        """
+        Run function after a certain ``timeout`` in seconds.
+
+        Parameters
+        ----------
+        coro : callable
+            Function to execute in the loop.
+        timeout : float
+            Time to wait before execution in seconds.
+        args : tuple, optional
+            Set of arguments for the function.
+        kwargs : dict, optional
+            Set of keyword arguments for the function.
+
+        Returns
+        -------
+        concurrent.futures.Future
+
+        """
         kwargs = kwargs or {}
 
         async def _timeout():
@@ -187,6 +367,25 @@ class EventLoop:
         return future
 
     def interval(self, coro, interval, args=(), kwargs=None):
+        """
+        Run function every ``interval`` in seconds, starting after ``interval`` seconds.
+
+        Parameters
+        ----------
+        coro : callable
+            Function to execute in the loop.
+        interval : float
+            Time to wait between executions in seconds.
+        args : tuple, optional
+            Set of arguments for the function.
+        kwargs : dict, optional
+            Set of keyword arguments for the function.
+
+        Returns
+        -------
+        concurrent.futures.Future
+
+        """
         kwargs = kwargs or {}
 
         async def _interval():
@@ -198,10 +397,31 @@ class EventLoop:
         return future
 
     def set_main_thread(self):
+        """
+        Set loop thread as main thread.
+
+        Returns
+        -------
+
+        """
         self._loop.call_soon_threadsafe(set_main_thread)
 
 
 def gather(tasks):
+    """
+    Wait for the termination of a group of tasks concurrently.
+
+    Parameters
+    ----------
+    tasks : list
+        Set of tasks to wait.
+
+    Returns
+    -------
+    list
+        Set of results from the task list.
+
+    """
     if not isinstance(tasks, list):
         return tasks
 

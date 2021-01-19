@@ -14,17 +14,20 @@ __all__ = ['Node', 'MonitoredNode', 'MonitoredWorker', 'MonitoredGPU']
 
 
 class Node(Runtime):
+    """
+    A node represents a physically independent portion of the network,
+    such as a separate cluster node. Nodes contain one or more
+    workers, which they initialise and manage.
+
+    """
 
     is_node = True
 
-    def __init__(self, num_workers=None, num_threads=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        if num_workers is None:
-            num_workers = 1
-
-        if num_threads is None:
-            num_threads = psutil.cpu_count() // num_workers
+        num_workers = kwargs.pop('num_workers', 1)
+        num_threads = kwargs.pop('num_threads', psutil.cpu_count() // num_workers)
 
         self._num_workers = num_workers
         self._num_threads = num_threads
@@ -33,12 +36,34 @@ class Node(Runtime):
         self._monitored_node = MonitoredNode(self.uid)
 
     async def init(self, **kwargs):
+        """
+        Asynchronous counterpart of ``__init__``.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
         await super().init(**kwargs)
 
         # Start local workers
         await self.init_workers(**kwargs)
 
     async def init_workers(self, **kwargs):
+        """
+        Init workers in the node.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
         num_workers = self._num_workers
         num_threads = self._num_threads
 
@@ -88,6 +113,13 @@ class Node(Runtime):
         self._loop.interval(self.update_monitored_node, interval=0.1)
 
     def set_logger(self):
+        """
+        Set up logging.
+
+        Returns
+        -------
+
+        """
         self.logger = LoggerManager()
 
         if self.mode == 'local':
@@ -96,6 +128,13 @@ class Node(Runtime):
             self.logger.set_remote()
 
     def resource_monitor(self):
+        """
+        Monitor reseources available for workers, and worker state.
+
+        Returns
+        -------
+
+        """
         try:
             import GPUtil
             gpus = GPUtil.getGPUs()
@@ -149,12 +188,7 @@ class Node(Runtime):
                 self._monitored_node.worker_info[worker_id].state = self._workers[worker_id].subprocess.state
                 break
 
-        # How do we introduce dynamic constraints on shared resources? By pre-emptively asking for
-        # permission to run. If permission is not granted, then they will wait. Otherwise, we will take
-        # some resources and lock them for a worker. When the worker finishes with it, we can keep going, that goes back
-        # to the general resource pool.
-        # When the region exceeds the memory it asked for, it should probably be stopped somehow
-        # Info should be sent to the head node
+        # TODO Dynamic constraints and shared resources
 
         self._monitored_node.update(num_cpus=psutil.cpu_count(),
                                     num_gpus=len(gpus),
@@ -165,6 +199,17 @@ class Node(Runtime):
                                     memory_fraction=memory_fraction)
 
     async def stop(self, sender_id=None):
+        """
+        Stop runtime.
+
+        Parameters
+        ----------
+        sender_id : str
+
+        Returns
+        -------
+
+        """
         for worker_id, worker in self._workers.items():
             await worker.stop()
             worker.subprocess.join_process()
@@ -173,12 +218,23 @@ class Node(Runtime):
             super().stop(sender_id)
 
     async def update_monitored_node(self):
+        """
+        Send status update to monitor.
+
+        Returns
+        -------
+
+        """
         await self._comms.send_async('monitor',
                                      method='update_monitored_node',
                                      monitored_node=self._monitored_node.get_update())
 
 
 class MonitoredGPU:
+    """
+    Container to keep track of monitored GPU resources.
+
+    """
 
     def __init__(self, uid):
         self.uid = self.name = uid
@@ -213,6 +269,10 @@ class MonitoredGPU:
 
 
 class MonitoredWorker:
+    """
+    Container to keep track of monitored worker.
+
+    """
 
     def __init__(self, uid):
         self.uid = self.name = uid
@@ -247,6 +307,10 @@ class MonitoredWorker:
 
 
 class MonitoredNode:
+    """
+    Container to keep track of monitored node.
+
+    """
 
     def __init__(self, uid):
         self.uid = self.name = uid

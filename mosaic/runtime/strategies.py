@@ -1,24 +1,77 @@
 
 
 class MonitorStrategy:
+    """
+    Base class for the strategies used to allocate tesserae to
+    workers.
+
+    """
 
     def __init__(self, monitor):
         self._monitor = monitor
 
     def update_node(self, updated):
+        """
+        Update inner record of node state.
+
+        Parameters
+        ----------
+        updated : MonitoredNode
+
+        Returns
+        -------
+
+        """
         pass
 
     def update_tessera(self, updated):
+        """
+        Update inner record of tesserae state.
+
+        Parameters
+        ----------
+        updated : MonitoredTessera
+
+        Returns
+        -------
+
+        """
         pass
 
     def update_task(self, updated):
+        """
+        Update inner record of task state.
+
+        Parameters
+        ----------
+        updated : MonitoredTask
+
+        Returns
+        -------
+
+        """
         pass
 
     def select_worker(self, sender_id):
+        """
+        Select an appropriate worker.
+
+        Parameters
+        ----------
+        sender_id : str
+
+        Returns
+        -------
+
+        """
         pass
 
 
 class RoundRobin(MonitorStrategy):
+    """
+    Round robin strategy for allocating tesserae.
+
+    """
 
     def __init__(self, monitor):
         super().__init__(monitor)

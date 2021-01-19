@@ -9,10 +9,52 @@ from .base import Base, RemoteBase, ProxyBase, MonitoredBase
 from ..utils import Future
 
 
-__all__ = ['Task', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone', 'MonitoredTask']
+__all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone', 'MonitoredTask']
 
 
 class Task(RemoteBase):
+    """
+    When we call a method on a remote tessera, two things will happen:
+
+    - a Task will be generated on the remote tessera and queued to be executed by it;
+    - and a TaskProxy is generated on the calling side as a pointer to that remote task.
+
+    We can use the task proxy to wait for the completion of the task (``await task_proxy``),
+    as an argument to other tessera method calls, or to retrieve the result of the
+    task (``await task_proxy.result()``).
+
+    It is also possible to access references to the individual outputs of the task by
+    using ``task_proxy.outputs``. Outputs can be accessed through their position: ``task_proxy.outputs[0]``
+    will reference the first output of the task.
+
+    A reference to the termination of the task is also available through ``task_proxy.outputs.done``,
+    which can be used to create explicit dependencies between tasks, thus controlling the order
+    of execution.
+
+    Tasks on a particular tessera are guaranteed to be executed in the order in which they were called,
+    but no such guarantees exist for tasks on different tesserae.
+
+    A completed task is kept in memory at the worker for as long as there are proxy references to
+    it. If none exist, it will be made available for garbage collection.
+
+    Objects of class Task should not be instantiated directly by the user.
+
+    Parameters
+    ----------
+    uid : str
+        UID of the task.
+    sender_id : str
+        UID of the caller.
+    tessera : Tessera
+        Tessera on which the task is to be executed.
+    method : callable
+        Method associated with the task.
+    args : tuple, optional
+        Arguments to pass to the method.
+    kwargs : dict, optional
+        Keyword arguments to pass to the method.
+
+    """
 
     type = 'task'
     is_remote = True
@@ -51,10 +93,18 @@ class Task(RemoteBase):
 
     @property
     def sender_id(self):
+        """
+        Caller UID.
+
+        """
         return self._sender_id
 
     @cached_property
     def remote_runtime(self):
+        """
+         Proxies that have references to this task.
+
+        """
         return {self.proxy(each) for each in list(self._proxies)}
 
     def _fill_config(self, **kwargs):
@@ -63,17 +113,56 @@ class Task(RemoteBase):
         return super()._fill_config(**kwargs)
 
     def args_value(self):
+        """
+        Processed value of the args of the task.
+
+        Returns
+        -------
+        tuple
+
+        """
         args = [value for key, value in sorted(self._args_value.items(), key=operator.itemgetter(1))]
 
-        return args
+        return tuple(args)
 
     def kwargs_value(self):
+        """
+        Processed value of the args of the task.
+
+        Returns
+        -------
+        dict
+
+        """
         return self._kwargs_value
 
     def set_result(self, result):
+        """
+        Set task result.
+
+        Parameters
+        ----------
+        result
+
+        Returns
+        -------
+
+        """
         self._result = result
 
     def get_result(self, key=None):
+        """
+        Get task result.
+
+        Parameters
+        ----------
+        key : optional
+            Access particular item within the result, defaults to None.
+
+        Returns
+        -------
+
+        """
         if self._state == 'failed':
             raise Exception('Tried to get the result on failed task %s' % self._uid)
 
@@ -92,6 +181,17 @@ class Task(RemoteBase):
             return result[key]
 
     def check_result(self):
+        """
+        Check if the result is present.
+
+        Returns
+        -------
+        str
+            State of the task.
+        Exception or None
+            Exception if task has failed, None otherwise.
+
+        """
         if self._state == 'failed':
             return 'failed', self._exception
 
@@ -113,6 +213,14 @@ class Task(RemoteBase):
 
     # TODO Await all of the remote results together using gather
     async def prepare_args(self):
+        """
+        Prepare the arguments of the task for execution.
+
+        Returns
+        -------
+        Future
+
+        """
         waitable_types = [TaskProxy, TaskOutput, TaskDone]
 
         for index in range(len(self.args)):
@@ -168,6 +276,17 @@ class Task(RemoteBase):
         return self._ready_future
 
     async def set_exception(self, exc):
+        """
+        Set task exception
+
+        Parameters
+        ----------
+        exc : Exception
+
+        Returns
+        -------
+
+        """
         await self.state_changed('failed')
         self._exception = exc
 
@@ -177,6 +296,13 @@ class Task(RemoteBase):
         self._cleanup()
 
     async def set_done(self):
+        """
+        Set task as done.
+
+        Returns
+        -------
+
+        """
         await self.state_changed('done')
 
         await self.cmd_async(method='set_done')
@@ -210,6 +336,18 @@ class Task(RemoteBase):
             self._ready_future.set_result(True)
 
     async def state_changed(self, state):
+        """
+        Signal change in task state.
+
+        Parameters
+        ----------
+        state : str
+            New state of the task.
+
+        Returns
+        -------
+
+        """
         self._state = state
 
         if state == 'running':
@@ -227,6 +365,10 @@ class Task(RemoteBase):
 
 
 class TaskProxy(ProxyBase):
+    """
+    Proxy pointing to a remote task that has been or will be executed.
+
+    """
 
     type = 'task_proxy'
 
@@ -250,6 +392,13 @@ class TaskProxy(ProxyBase):
         self._done_future = Future()
 
     async def init(self):
+        """
+        Asynchronous correlate of ``__init__``.
+
+        Returns
+        -------
+
+        """
         await self.monitor.init_task(uid=self._uid,
                                      tessera_id=self._tessera_proxy.uid,
                                      runtime_id=self.runtime_id)
@@ -270,17 +419,36 @@ class TaskProxy(ProxyBase):
 
     @property
     def runtime_id(self):
+        """
+        UID of the runtime where the task lives.
+
+        """
         return self._tessera_proxy.runtime_id
 
     @cached_property
     def remote_runtime(self):
+        """
+        Proxy to the runtime where the task lives.
+
+        """
         return self._tessera_proxy.remote_runtime
 
     @property
     def done_future(self):
+        """
+        Future that will be completed when the remote task is done.
+
+        """
         return self._done_future
 
     def set_done(self):
+        """
+        Set task as done.
+
+        Returns
+        -------
+
+        """
         self._state = 'done'
 
         self._done_future.set_result(True)
@@ -289,6 +457,17 @@ class TaskProxy(ProxyBase):
         self._cleanup()
 
     def set_exception(self, exc):
+        """
+        Set exception during task execution.
+
+        Parameters
+        ----------
+        exc : Exception description
+
+        Returns
+        -------
+
+        """
         self._state = 'failed'
 
         exc = exc[1].with_traceback(exc[2].as_traceback())
@@ -298,13 +477,28 @@ class TaskProxy(ProxyBase):
         self._cleanup()
 
     def wait(self):
+        """
+        Wait on the task to be completed.
+
+        Returns
+        -------
+
+        """
         return self._done_future.result()
 
     def add_done_callback(self, fun):
-        self._done_future.add_done_callback(fun)
+        """
+        Add done callback.
 
-    def check_result(self):
-        self.loop.run(self.check_result_async, wait=True)
+        Parameters
+        ----------
+        fun : callable
+
+        Returns
+        -------
+
+        """
+        self._done_future.add_done_callback(fun)
 
     def _cleanup(self):
         self.args = None
@@ -314,6 +508,14 @@ class TaskProxy(ProxyBase):
         self._tessera_proxy = weakref.proxy(self._tessera_proxy)
 
     async def result(self):
+        """
+        Gather remote result from the task.
+
+        Returns
+        -------
+        Task result
+
+        """
         await self
 
         if self._result is not None:
@@ -323,7 +525,14 @@ class TaskProxy(ProxyBase):
 
         return self._result
 
-    async def check_result_async(self):
+    async def check_result(self):
+        """
+        Check the remote result.
+
+        Returns
+        -------
+
+        """
         if self._state != 'done' and self._state != 'failed':
             state, exc = await self.cmd_recv_async(method='check_result')
 
@@ -362,6 +571,10 @@ class TaskProxy(ProxyBase):
 
 
 class TaskOutputGenerator:
+    """
+    Class that generates pointers to specific outputs of a remote task,
+
+    """
 
     def __init__(self, task_proxy):
         self._task_proxy = weakref.ref(task_proxy)
@@ -403,6 +616,10 @@ class TaskOutputGenerator:
 
 
 class TaskOutputBase(Base):
+    """
+    Base class for outputs of a task.
+
+    """
 
     def __init__(self, task_proxy):
         self._task_proxy = task_proxy
@@ -442,6 +659,10 @@ class TaskOutputBase(Base):
 
 
 class TaskOutput(TaskOutputBase):
+    """
+    Pointer to specific remote output of a class.
+
+    """
 
     def __init__(self, key, task_proxy):
         super().__init__(task_proxy)
@@ -462,6 +683,14 @@ class TaskOutput(TaskOutputBase):
         return result[self._key]
 
     async def result(self):
+        """
+        Gather output from the remote task.
+
+        Returns
+        -------
+        Output
+
+        """
         await self
 
         if self._result is None and self._task_proxy._result is not None:
@@ -476,6 +705,10 @@ class TaskOutput(TaskOutputBase):
 
 
 class TaskDone(TaskOutputBase):
+    """
+    Reference to the termination of a remote task.
+
+    """
 
     def __repr__(self):
         runtime_id = self.runtime_id
@@ -485,6 +718,13 @@ class TaskDone(TaskOutputBase):
                 self.uid, runtime_id, self.state)
 
     async def result(self):
+        """
+        Wait for task termination.
+
+        Returns
+        -------
+
+        """
         await self
 
         self._result = True
@@ -493,6 +733,10 @@ class TaskDone(TaskOutputBase):
 
 
 class MonitoredTask(MonitoredBase):
+    """
+    Information container on the state of a task.
+
+    """
 
     def __init__(self, uid, tessera_id, runtime_id):
         super().__init__(uid, runtime_id)
