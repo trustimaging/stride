@@ -496,7 +496,7 @@ class ScalarField(StructuredData):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -518,7 +518,7 @@ class ScalarField(StructuredData):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -748,7 +748,7 @@ class Traces(StructuredData):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns
@@ -771,7 +771,7 @@ class Traces(StructuredData):
         ----------
         id : int
             Transducer ID.
-        kwargs : dict
+        kwargs
             Arguments for plotting.
 
         Returns

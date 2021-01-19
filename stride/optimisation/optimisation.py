@@ -289,8 +289,8 @@ class Block:
 
         Returns
         -------
-        Iteration
-            New Iteration instance.
+        iterable
+            Iteration iterables.
 
         """
         for index in range(self._num_iterations):
@@ -511,8 +511,8 @@ class Optimisation(Saved):
 
         Returns
         -------
-        Block
-            Block instance.
+        iterable
+            Blocks iterable.
 
         """
         self._num_blocks = num
@@ -535,7 +535,7 @@ class Optimisation(Saved):
             Block in which the optimisation is at the moment.
         iteration : Iteration
             Iteration in which the optimisation is at the moment.
-        kwargs : dict
+        kwargs
             Additional arguments for the optimiser.
 
         Returns

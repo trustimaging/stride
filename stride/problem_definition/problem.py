@@ -5,6 +5,7 @@ import numpy as np
 import mosaic
 
 from .base import Gridded
+from . import Medium, Transducers, Geometry, Acquisitions
 from .. import Runner
 from .. import problem_types
 from .. import plotting
@@ -58,10 +59,30 @@ class Problem(Gridded):
         self.output_folder = kwargs.pop('output_folder', os.getcwd())
 
         self.problem_config = {}
-        self.medium = kwargs.pop('medium', None)
-        self.transducers = kwargs.pop('transducers', None)
-        self.geometry = kwargs.pop('geometry', None)
-        self.acquisitions = kwargs.pop('acquisitions', None)
+
+        medium = kwargs.pop('medium', None)
+        if medium is None:
+            medium = Medium(problem=self)
+
+        self.medium = medium
+
+        transducers = kwargs.pop('transducers', None)
+        if transducers is None:
+            transducers = Transducers(problem=self)
+
+        self.transducers = transducers
+
+        geometry = kwargs.pop('geometry', None)
+        if geometry is None:
+            geometry = Geometry(transducers=transducers, problem=self)
+
+        self.geometry = geometry
+
+        acquisitions = kwargs.pop('acquisitions', None)
+        if acquisitions is None:
+            acquisitions = Acquisitions(geometry=geometry, problem=self)
+
+        self.acquisitions = acquisitions
 
         problem_type = kwargs.pop('problem_type', 'acoustic')
         problem_implementation = kwargs.pop('problem_implementation', 'devito')
@@ -110,7 +131,7 @@ class Problem(Gridded):
 
         Parameters
         ----------
-        kwargs : dict
+        kwargs
             Arguments for plotting the fields.
 
         Returns
@@ -288,7 +309,7 @@ class Problem(Gridded):
             Block instance that determines the configuration of the inverse problem.
         iteration : Iteration
             Iteration instance.
-        kwargs : dict
+        kwargs
             Extra arguments for ``run_inverse``.
 
         Returns
@@ -335,7 +356,7 @@ class Problem(Gridded):
             Variables on which the inverse problem is running.
         needs_grad : bool
             Whether or not the gradient is needed or only the functional value.
-        kwargs : dict
+        kwargs
             Extra arguments for ``run_inverse``.
 
         Returns

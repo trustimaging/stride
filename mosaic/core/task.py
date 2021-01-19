@@ -51,7 +51,7 @@ class Task(RemoteBase):
         Method associated with the task.
     args : tuple, optional
         Arguments to pass to the method.
-    kwargs : dict, optional
+    kwargs : optional
         Keyword arguments to pass to the method.
 
     """
