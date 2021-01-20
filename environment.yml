@@ -33,4 +33,4 @@ dependencies:
   - zlib
   - pip:
       - mayavi
-      - devito
+      - devito>=4.3
