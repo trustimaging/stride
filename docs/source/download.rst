@@ -2,7 +2,7 @@
 Download
 ========
 
-The recommended way to install Stride is through Anaconda's package manager, which can be downloaded
+The recommended way to install Stride is through Anaconda's package manager (version >=4.9), which can be downloaded
 in:
 
 .. _Anaconda: https://www.continuum.io/downloads
