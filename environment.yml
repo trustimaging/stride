@@ -1,4 +1,4 @@
-name: stride_test
+name: stride
 channels:
   - conda-forge
   - defaults
