@@ -1,4 +1,4 @@
-name: stride
+name: stride_test
 channels:
   - conda-forge
   - defaults
@@ -33,4 +33,4 @@ dependencies:
   - zlib
   - pip:
       - mayavi
-      - devito>=4.3
+      - devito
