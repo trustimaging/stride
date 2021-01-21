@@ -340,8 +340,6 @@ class OperatorDevito:
         for key, value in default_config.items():
             devito.parameters.configuration[key] = value
 
-        devito.parameters.configuration['opt-options']['blockinner'] = True
-
         self.operator = devito.Operator(op,
                                         subs=self.grid.grid.spacing_map,
                                         platform=os.getenv('DEVITO_PLATFORM', None))
@@ -354,9 +352,9 @@ class OperatorDevito:
         -------
 
         """
-        compiler_flags = os.getenv('DEVITO_COMP_FLAGS', '').split(',')
-        compiler_flags = [each.strip() for each in compiler_flags]
-        self.operator._compiler.cflags += compiler_flags
+        # compiler_flags = os.getenv('DEVITO_COMP_FLAGS', '').split(',')
+        # compiler_flags = [each.strip() for each in compiler_flags]
+        # self.operator._compiler.cflags += compiler_flags
         self.operator.cfunction
 
     def arguments(self, **kwargs):
