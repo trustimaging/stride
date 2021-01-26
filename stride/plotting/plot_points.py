@@ -99,12 +99,11 @@ def plot_points_3d(coordinates, axis=None, colour='red', size=15, title=None):
         'blue': (0., 0., 1.),
     }
 
-    scale_factor = size / (np.max(coordinates) * 7 / 200)
-    space_scale = 1e-3
+    scale_factor = 100 * size / np.max(coordinates)
 
-    transducers = mlab.pipeline.scalar_scatter(coordinates[:, 0] / space_scale,
-                                               coordinates[:, 1] / space_scale,
-                                               coordinates[:, 2] / space_scale,
+    transducers = mlab.pipeline.scalar_scatter(coordinates[:, 0],
+                                               coordinates[:, 1],
+                                               coordinates[:, 2],
                                                figure=axis.scene3d.mayavi_scene)
     mlab.pipeline.glyph(transducers,
                         mode='sphere', color=colour_map[colour], scale_factor=scale_factor,

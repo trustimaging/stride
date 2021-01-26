@@ -106,7 +106,7 @@ class Head(Runtime):
             self._monitor.subprocess.join_process()
 
         super().stop(sender_id)
-        os._exit(0)
+        # os._exit(0)
 
     def set_logger(self):
         """

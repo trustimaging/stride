@@ -26,8 +26,10 @@ class Node(Runtime):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        num_workers = kwargs.pop('num_workers', 1)
-        num_threads = kwargs.pop('num_threads', psutil.cpu_count() // num_workers)
+        num_workers = kwargs.pop('num_workers', None)
+        num_workers = num_workers or 1
+        num_threads = kwargs.pop('num_threads', None)
+        num_threads = num_threads or psutil.cpu_count() // num_workers
 
         self._num_workers = num_workers
         self._num_threads = num_threads
@@ -214,8 +216,7 @@ class Node(Runtime):
             await worker.stop()
             worker.subprocess.join_process()
 
-        if self.mode != 'local':
-            super().stop(sender_id)
+        super().stop(sender_id)
 
     async def update_monitored_node(self):
         """

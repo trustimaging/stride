@@ -1,7 +1,9 @@
 
+import os
 import functools
 import warnings
 try:
+    os.environ['ETS_TOOLKIT'] = 'qt4'
     from wx import wxPyDeprecationWarning
     warnings.simplefilter(action='ignore', category=wxPyDeprecationWarning)
 

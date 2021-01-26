@@ -24,7 +24,7 @@ def go(cmd, **kwargs):
     }
 
     # Initialise monitor and, if needed nodes and workers
-    init('monitor', **runtime_config, wait=False)
+    _runtime = init('monitor', **runtime_config, wait=False)
 
     # Get the initialised runtime and store its
     # ID, address and port in a tmp file for the
@@ -45,13 +45,20 @@ def go(cmd, **kwargs):
         file.write('ADD=%s\n' % runtime_address)
         file.write('PRT=%s\n' % runtime_port)
 
-    # Execute the head process
-    try:
+    loop = _runtime.get_event_loop()
+
+    def run_head():
         process = subprocess.run(cmd,
                                  stdout=_stdout,
                                  stderr=_stderr)
 
         runtime.logger.info('Process ended with code: %d' % process.returncode)
+
+    async def main():
+        await loop.run_in_executor(run_head, args=(), kwargs={})
+
+    try:
+        loop.run(main, args=(), kwargs={}, wait=True)
 
     finally:
         stop()

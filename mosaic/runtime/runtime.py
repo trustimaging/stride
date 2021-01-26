@@ -163,9 +163,6 @@ class Runtime(BaseRPC):
         -------
 
         """
-        # Start event loop
-        self._loop.set_main_thread()
-
         # Start comms
         address = kwargs.pop('address', None)
         port = kwargs.pop('port', None)
@@ -583,6 +580,9 @@ class Runtime(BaseRPC):
         """
         if self._comms is not None:
             self._loop.run(self._comms.stop, args=(sender_id,))
+
+        if self._loop is not None:
+            self._loop._stop.set()
 
     # Command and task management methods
 

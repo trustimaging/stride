@@ -23,7 +23,8 @@ class Worker(Runtime):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        num_threads = kwargs.pop('num_threads', psutil.cpu_count())
+        num_threads = kwargs.pop('num_threads', None)
+        num_threads = num_threads or psutil.cpu_count()
 
         if num_threads is None:
             num_threads = psutil.cpu_count()
@@ -45,20 +46,6 @@ class Worker(Runtime):
             self.logger.set_local()
         else:
             self.logger.set_remote()
-
-    async def stop(self, sender_id=None):
-        """
-        Stop runtime.
-
-        Parameters
-        ----------
-        sender_id : str
-
-        Returns
-        -------
-
-        """
-        pass
 
     # Command and task management methods
 

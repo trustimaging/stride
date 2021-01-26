@@ -7,10 +7,10 @@ from stride.utils import wavelets
 
 async def main(runtime):
     # Create the grid
-    shape = (500, 370)
-    extra = (100, 100)
-    absorbing = (90, 90)
-    spacing = (0.5e-3, 0.5e-3)
+    shape = (430, 496, 345)
+    extra = (100, 100, 100)
+    absorbing = (90, 90, 90)
+    spacing = (0.5e-3, 0.5e-3, 0.5e-3)
 
     space = Space(shape=shape,
                   extra=extra,
@@ -26,12 +26,12 @@ async def main(runtime):
                 num=num)
 
     # Create problem
-    problem = Problem(name='alpha2D',
+    problem = Problem(name='alpha3D',
                       space=space, time=time)
 
     # Create medium
     vp = ScalarField('vp', grid=problem.grid)
-    vp.load('data/alpha2D-TrueModel.h5')
+    vp.load('data/alpha3D-TrueModel.h5')
 
     problem.medium.add(vp)
 
@@ -39,8 +39,17 @@ async def main(runtime):
     problem.transducers.default()
 
     # Create geometry
-    num_locations = 120
-    problem.geometry.default('elliptical', num_locations)
+    radius = ((space.limit[0] - 30.0e-3) / 2,
+              (space.limit[1] - 15.0e-3) / 2,
+              (space.limit[2]) / 2)
+    centre = (space.limit[0] / 2,
+              space.limit[1] / 2 + 2.0e-3,
+              space.limit[2] / 2 - 2.5e-3)
+
+    num_locations = 1024
+
+    problem.geometry.default('ellipsoidal', num_locations, radius, centre,
+                             theta=-0.1, threshold=0.3)
 
     # Create acquisitions
     problem.acquisitions.default()

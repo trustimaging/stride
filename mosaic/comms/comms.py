@@ -499,7 +499,7 @@ class OutboundConnection(Connection):
 
         if self._heartbeat_attempts == 0:
             await self._comms.disconnect(self.uid, self.uid, notify=True)
-            await self._loop.run_async(self._runtime.disconnect, args=(self.uid, self.uid))
+            await self._loop.run(self._runtime.disconnect, args=(self.uid, self.uid))
             return
 
         interval = self._heartbeat_interval * self._heartbeat_max_attempts/self._heartbeat_attempts
@@ -1101,7 +1101,7 @@ class CommsManager:
 
         self.logger.info('Listening at %s' % self)
 
-        while True:
+        while self._state != 'disconnected':
             sender_id, msg = await self.recv_async()
             await self.process_msg(sender_id, msg)
 
@@ -1123,6 +1123,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         runtime = self._runtime
         method = getattr(runtime, msg.method, False)
         comms_method = getattr(self, msg.method, False)
@@ -1148,7 +1151,7 @@ class CommsManager:
             if msg.cmd is not None:
                 msg.kwargs['cmd'] = msg.cmd
 
-            future = self._loop.run_async(call,
+            future = self._loop.run(call,
                                           args=(sender_id, method, msg.reply),
                                           kwargs=msg.kwargs)
 
@@ -1156,7 +1159,7 @@ class CommsManager:
                 await future
 
         if comms_method is not False and msg.method in self._comms_methods:
-            self._loop.run_async(call,
+            self._loop.run(call,
                                  args=(sender_id, comms_method, False),
                                  kwargs=msg.kwargs)
 
@@ -1179,9 +1182,12 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         args = (sender_id,)
 
-        await self._loop.run_async(method, args=args, kwargs=kwargs)
+        await self._loop.run(method, args=args, kwargs=kwargs)
 
     async def call_safe(self, sender_id, method, reply, **kwargs):
         """
@@ -1203,10 +1209,13 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         args = (sender_id,)
 
         async with self.send_exception(sender_id):
-            future = self._loop.run_async(method, args=args, kwargs=kwargs)
+            future = self._loop.run(method, args=args, kwargs=kwargs)
             result = await future
 
             if reply is not False:
@@ -1238,6 +1247,9 @@ class CommsManager:
 
         if send_uid not in self._send_socket.keys():
             raise KeyError('Endpoint %s is not connected' % send_uid)
+
+        if self._state == 'disconnected':
+            return
 
         return await self._send_socket[send_uid].send(*args, **kwargs)
 
@@ -1280,6 +1292,9 @@ class CommsManager:
             Received message.
 
         """
+        if self._state == 'disconnected':
+            return None, None
+
         sender_id, msg = await self._recv_socket.recv()
 
         return sender_id, msg
@@ -1304,6 +1319,9 @@ class CommsManager:
             Result of the reply
 
         """
+        if self._state == 'disconnected':
+            return
+
         if send_uid == self._runtime.uid:
             future = await self._circ_socket.send(*args, reply=True, **kwargs)
 
@@ -1394,6 +1412,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         self.connect_send(uid, address, port)
 
         if notify is True:
@@ -1415,6 +1436,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         while uid not in self._send_socket.keys() and uid != self._runtime.uid:
             await asyncio.sleep(0.1)
 
@@ -1435,6 +1459,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         if uid in self._send_socket.keys():
             self._send_socket[uid].disconnect()
 
@@ -1461,6 +1488,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         validate_address(address, port)
 
         self.connect_send(uid, address, port)
@@ -1477,7 +1507,7 @@ class CommsManager:
                 break
 
         await self.shake(sender_id, **response.kwargs)
-        await self._loop.run_async(self._runtime.shake, args=(sender_id,), kwargs=response.kwargs)
+        await self._loop.run(self._runtime.shake, args=(sender_id,), kwargs=response.kwargs)
 
         self._send_socket[uid].shake()
 
@@ -1498,6 +1528,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         for connected_id, connection in self._send_socket.items():
             await self.send_async(connected_id,
                                   method='connect',
@@ -1528,6 +1561,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         for uid, address in network.items():
             self.connect_send(uid, *address)
 
@@ -1547,6 +1583,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         await self.send_async(sender_id,
                               method='beat')
 
@@ -1563,6 +1602,9 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         if sender_id not in self._send_socket.keys():
             return
 
@@ -1581,11 +1623,13 @@ class CommsManager:
         -------
 
         """
+        if self._state == 'disconnected':
+            return
+
         self._listen_future.cancel()
 
         self.disconnect_send()
         self.disconnect_recv()
         self._zmq_context.term()
-        self._loop.stop()
 
         self._state = 'disconnected'

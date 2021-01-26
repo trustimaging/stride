@@ -270,6 +270,20 @@ class Geometry(ProblemBase):
             kwargs['radius'] = kwargs.get('radius', default_radius)
             kwargs['centre'] = kwargs.get('centre', default_centre)
 
+        elif geometry_type == 'ellipsoidal':
+            default_radius = ((self.space.limit[0] - 15.e-3) / 2,
+                              (self.space.limit[1] - 15.e-3) / 2,
+                              (self.space.limit[2] - 15.e-3) / 2)
+            default_centre = (self.space.limit[0] / 2,
+                              self.space.limit[1] / 2,
+                              self.space.limit[2] / 2)
+
+            if len(args) < 2:
+                kwargs['radius'] = kwargs.get('radius', default_radius)
+            if len(args) < 3:
+                kwargs['centre'] = kwargs.get('centre', default_centre)
+            kwargs['threshold'] = kwargs.get('threshold', 0.3)
+
         geometry_fun = getattr(geometries, geometry_type)
         coordinates = geometry_fun(*args, **kwargs)
 
@@ -336,7 +350,12 @@ class Geometry(ProblemBase):
 
         """
         title = kwargs.pop('title', self.name)
-        return plotting.plot_points(self.coordinates, title=title, **kwargs)
+
+        coordinates = self.coordinates
+        if self.space.dim > 2:
+            coordinates = coordinates / np.array(self.space.spacing)
+
+        return plotting.plot_points(coordinates, title=title, **kwargs)
 
     def sub_problem(self, shot, sub_problem):
         """

@@ -40,8 +40,8 @@ async def main(runtime):
     problem.transducers.default()
 
     # Create geometry
-    num_transducers = 120
-    problem.geometry.default('elliptical', num_transducers)
+    num_locations = 120
+    problem.geometry.default('elliptical', num_locations)
 
     # Create acquisitions
     problem.acquisitions.load(path=problem.output_folder,

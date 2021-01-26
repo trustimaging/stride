@@ -106,7 +106,14 @@ def init(runtime_type='head', runtime_indices=(),
     loop = _runtime.get_event_loop()
     loop.run(_runtime.init, kwargs=runtime_config, wait=True)
 
-    _runtime.wait(wait=wait)
+    if wait is True:
+        try:
+            loop.run_forever()
+
+        finally:
+            loop.stop()
+
+    return _runtime
 
 
 def __getattr__(key):
@@ -159,7 +166,11 @@ def stop():
 
     loop = _runtime.get_event_loop()
 
-    return loop.run(_runtime.stop, args=(), kwargs={})
+    try:
+        loop.run(_runtime.stop, args=(), kwargs={}, wait=True)
+
+    finally:
+        loop.stop()
 
 
 def run(main, *args, **kwargs):
@@ -183,8 +194,9 @@ def run(main, *args, **kwargs):
 
     init(*args, **kwargs)
 
+    loop = _runtime.get_event_loop()
+
     try:
-        loop = _runtime.get_event_loop()
         loop.run(main, args=(_runtime,), kwargs={}, wait=True)
 
     finally:

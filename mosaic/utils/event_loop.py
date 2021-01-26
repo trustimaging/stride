@@ -3,8 +3,8 @@ import os
 import uuid
 import asyncio
 import inspect
+import weakref
 import functools
-import threading
 import concurrent.futures
 
 import mosaic
@@ -174,28 +174,15 @@ class EventLoop:
 
     def __init__(self, loop=None):
         self._loop = loop or asyncio.new_event_loop()
-        self._executor = None
         asyncio.set_event_loop(self._loop)
 
-        self._within_loop = threading.local()
-        self._thread = threading.Thread(target=self._run_loop,
-                                        args=(self._loop,))
-        self._thread.daemon = True
-        self._thread.start()
+        # TODO Figure out the best way to set this
+        num_workers = int(os.environ.get('OMP_NUM_THREADS', 2))
+        self._executor = concurrent.futures.ThreadPoolExecutor(1)
 
-        self._within_loop.flag = False
+        self._stop = asyncio.Event()
 
-    @property
-    def within_loop(self):
-        """
-        Whether we are within the loop thread or not.
-
-        """
-        try:
-            return self._within_loop.flag is True
-
-        except AttributeError:
-            return False
+        self._recurring_tasks = weakref.WeakSet()
 
     def get_event_loop(self):
         """
@@ -208,17 +195,18 @@ class EventLoop:
         """
         return self._loop
 
-    def _run_loop(self, loop):
-        self._loop = loop
-        asyncio.set_event_loop(self._loop)
+    def run_forever(self):
+        """
+        Run event loop forever.
 
-        # TODO Figure out the best way to set this
-        num_workers = int(os.environ.get('OMP_NUM_THREADS', 2))
-        self._executor = concurrent.futures.ThreadPoolExecutor(1)
+        Returns
+        -------
 
-        self._within_loop.flag = True
+        """
+        async def main():
+            await self._stop.wait()
 
-        self._loop.run_forever()
+        return self._loop.run_until_complete(main())
 
     def stop(self):
         """
@@ -228,12 +216,26 @@ class EventLoop:
         -------
 
         """
-        self._loop.call_soon_threadsafe(self._executor.shutdown)
-        self._loop.call_soon_threadsafe(self._loop.stop)
-        self._executor.shutdown(wait=True)
+        self._stop.set()
 
-        if not self.within_loop:
-            self._thread.join()
+        for task in list(self._recurring_tasks):
+            if not task.done():
+                task.cancel()
+
+        tasks = asyncio.Task.all_tasks()
+        pending = [task for task in tasks if not task.done()]
+
+        while len(pending):
+            self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+            pending = [task for task in tasks if not task.done()]
+
+        asyncio.set_event_loop(None)
+
+        self._loop.stop()
+        self._loop.close()
+        self._executor.shutdown()
+        self._executor.shutdown(wait=True)
 
     def __del__(self):
         self.stop()
@@ -265,9 +267,13 @@ class EventLoop:
         if not inspect.iscoroutine(coro) and not inspect.iscoroutinefunction(coro):
             coro = asyncio.coroutine(coro)
 
-        future = asyncio.run_coroutine_threadsafe(coro(*args, **kwargs), self._loop)
+        if not self._loop.is_running():
+            return self._loop.run_until_complete(coro(*args, **kwargs))
+
+        future = self._loop.create_task(coro(*args, **kwargs))
 
         if wait is True:
+            future = self.wrap_future(future)
             return future.result()
 
         else:
@@ -295,31 +301,6 @@ class EventLoop:
         future = self._loop.run_in_executor(self._executor, callback)
 
         return future
-
-    def run_async(self, coro, args=(), kwargs=None):
-        """
-        Schedule a function in the event loop from asynchronous code.
-
-        Parameters
-        ----------
-        coro : callable
-            Function to execute in the loop.
-        args : tuple, optional
-            Set of arguments for the function.
-        kwargs : optional
-            Set of keyword arguments for the function.
-
-        Returns
-        -------
-        asyncio.Task
-
-        """
-        kwargs = kwargs or {}
-
-        if not inspect.iscoroutine(coro) and not inspect.iscoroutinefunction(coro):
-            coro = asyncio.coroutine(coro)
-
-        return self._loop.create_task(coro(*args, **kwargs))
 
     def wrap_future(self, future):
         """
@@ -361,9 +342,11 @@ class EventLoop:
 
         async def _timeout():
             await asyncio.sleep(timeout)
-            await self.run_async(coro, args=args, kwargs=kwargs)
+            await self.run(coro, args=args, kwargs=kwargs)
 
         future = asyncio.run_coroutine_threadsafe(_timeout(), self._loop)
+        self._recurring_tasks.add(future)
+
         return future
 
     def interval(self, coro, interval, args=(), kwargs=None):
@@ -389,11 +372,13 @@ class EventLoop:
         kwargs = kwargs or {}
 
         async def _interval():
-            while True:
+            while not self._stop.is_set():
                 await asyncio.sleep(interval)
-                await self.run_async(coro, args=args, kwargs=kwargs)
+                await self.run(coro, args=args, kwargs=kwargs)
 
         future = asyncio.run_coroutine_threadsafe(_interval(), self._loop)
+        self._recurring_tasks.add(future)
+
         return future
 
     def set_main_thread(self):
