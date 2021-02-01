@@ -1,6 +1,6 @@
 
 
-# Stride - A (somewhat) general optimisation framework for ultrasound medical imaging
+# Stride - A (somewhat) general optimisation framework for medical ultrasound imaging
 
 ## Quickstart
 

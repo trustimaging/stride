@@ -627,6 +627,8 @@ class Acquisitions(ProblemBase):
         if not self.get(0).wavelets.allocated:
             return None
 
+        kwargs['plot'] = False
+
         def update(figure, axis, shot_id):
             axis.clear()
 
@@ -652,6 +654,8 @@ class Acquisitions(ProblemBase):
         """
         if not self.get(0).observed.allocated:
             return None
+
+        kwargs['plot'] = False
 
         def update(figure, axis, shot_id):
             axis.clear()

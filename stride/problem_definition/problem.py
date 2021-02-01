@@ -138,6 +138,8 @@ class Problem(Gridded):
         -------
 
         """
+        kwargs['plot'] = False
+
         # Medium
         medium_axes = self.medium.plot(**kwargs)
 

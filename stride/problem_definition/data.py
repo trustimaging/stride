@@ -506,9 +506,14 @@ class ScalarField(StructuredData):
 
         """
         title = kwargs.pop('title', self.name)
+        plot = kwargs.pop('plot', True)
+
         axis = plotting.plot_scalar_field(self.data, title=title,
                                           origin=self.space.origin, limit=self.space.limit,
                                           **kwargs)
+
+        if plot is True:
+            plotting.show(axis)
 
         return axis
 
@@ -528,9 +533,14 @@ class ScalarField(StructuredData):
 
         """
         title = kwargs.pop('title', self.name)
+        plot = kwargs.pop('plot', True)
+
         axis = plotting.plot_scalar_field(self.extended_data, title=title,
                                           origin=self.space.pml_origin, limit=self.space.extended_limit,
                                           **kwargs)
+
+        if plot is True:
+            plotting.show(axis)
 
         return axis
 
@@ -758,10 +768,16 @@ class Traces(StructuredData):
 
         """
         title = kwargs.pop('title', self.name)
+        plot = kwargs.pop('plot', True)
         time_axis = self.time.grid / 1e-6
 
-        return plotting.plot_gather(self.transducer_ids, time_axis, self.data,
+        axis = plotting.plot_gather(self.transducer_ids, time_axis, self.data,
                                     title=title, **kwargs)
+
+        if plot is True:
+            plotting.show(axis)
+
+        return axis
 
     def plot_one(self, id, **kwargs):
         """
@@ -781,11 +797,17 @@ class Traces(StructuredData):
 
         """
         title = kwargs.pop('title', self.name)
+        plot = kwargs.pop('plot', True)
         trace = self.get(id)
         time_axis = self.time.grid / 1e-6
 
-        return plotting.plot_trace(time_axis, trace,
+        axis = plotting.plot_trace(time_axis, trace,
                                    title=title, **kwargs)
+
+        if plot is True:
+            plotting.show(axis)
+
+        return axis
 
     def __get_desc__(self):
         description = super().__get_desc__()

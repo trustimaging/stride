@@ -350,12 +350,18 @@ class Geometry(ProblemBase):
 
         """
         title = kwargs.pop('title', self.name)
+        plot = kwargs.pop('plot', True)
 
         coordinates = self.coordinates
         if self.space.dim > 2:
             coordinates = coordinates / np.array(self.space.spacing)
 
-        return plotting.plot_points(coordinates, title=title, **kwargs)
+        axis = plotting.plot_points(coordinates, title=title, **kwargs)
+
+        if plot is True:
+            plotting.show(axis)
+
+        return axis
 
     def sub_problem(self, shot, sub_problem):
         """
