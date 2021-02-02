@@ -202,7 +202,7 @@ class Problem(Gridded):
 
         return sub_problem
 
-    async def forward(self, dump=True, deallocate=True):
+    async def forward(self, dump=True, deallocate=True, **kwargs):
         """
         Run the problem forward with default parameters.
 
@@ -241,9 +241,9 @@ class Problem(Gridded):
             return
 
         # Run sub-problems
-        await runners.map(self.run_forward, shot_ids, dump=dump, deallocate=deallocate)
+        await runners.map(self.run_forward, shot_ids, dump=dump, deallocate=deallocate, **kwargs)
 
-    async def run_forward(self, shot_id, runner, dump=True, deallocate=True):
+    async def run_forward(self, shot_id, runner, dump=True, deallocate=True, **kwargs):
         """
         Run a single shot forward in a given Runner using default parameters.
 
@@ -270,9 +270,9 @@ class Problem(Gridded):
         sub_problem = self.sub_problem(shot_id)
         runtime.logger.info('Giving shot %d to %s' % (shot_id, runner.runtime_id))
 
-        await runner.set_problem(sub_problem)
+        await runner.set_problem(sub_problem, **kwargs)
 
-        task = await runner.run_state(save_wavefield=False)
+        task = await runner.run_state(save_wavefield=False, **kwargs)
         traces, _ = await task.result()
 
         runtime.logger.info('Shot %d retrieved' % sub_problem.shot_id)
@@ -376,15 +376,15 @@ class Problem(Gridded):
 
         variables.update_problem(sub_problem)
 
-        await runner.set_problem(sub_problem)
+        await runner.set_problem(sub_problem, **kwargs)
 
         if needs_grad is True:
-            task = await runner.run_gradient(variables)
+            task = await runner.run_gradient(variables, **kwargs)
             fun, vars = await task.result()
 
         else:
-            task_fwd = await runner.run_state(save_wavefield=False)
-            task_fun = await runner.run_functional(task_fwd.outputs[0])
+            task_fwd = await runner.run_state(save_wavefield=False, **kwargs)
+            task_fun = await runner.run_functional(task_fwd.outputs[0], **kwargs)
             fun = await task_fun.outputs[0].result()
             vars = variables
 

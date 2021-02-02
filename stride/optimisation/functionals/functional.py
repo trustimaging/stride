@@ -13,7 +13,7 @@ class FunctionalBase(ABC):
     """
 
     @abstractmethod
-    def apply(self, shot, modelled, observed):
+    def apply(self, shot, modelled, observed, **kwargs):
         """
         Calculate the functional.
 
@@ -36,7 +36,7 @@ class FunctionalBase(ABC):
         """
         pass
 
-    def get_grad(self, variables):
+    def get_grad(self, variables, **kwargs):
         """
         The functional might contain components of the gradient that need to be calculated.
 

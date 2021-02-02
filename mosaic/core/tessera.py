@@ -3,6 +3,7 @@ import sys
 import uuid
 import tblib
 import asyncio
+import weakref
 import contextlib
 import cloudpickle
 from cached_property import cached_property
@@ -438,11 +439,9 @@ class ArrayProxy(CMDBase):
     async def _proxy(self, proxy_queue):
         proxy = await proxy_queue.get()
 
-        try:
-            yield proxy
+        yield proxy
 
-        finally:
-            await proxy_queue.put(proxy)
+        await proxy_queue.put(proxy)
 
     async def map(self, fun, elements, *args, **kwargs):
         """

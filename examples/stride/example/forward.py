@@ -1,16 +1,17 @@
 
+import numpy as np
+
 import mosaic
 
-from stride.problem_definition import *
-from stride.problem_definition.transducer_types import PointTransducer
-from stride.utils import wavelets, geometries
+from stride.problem_definition import Problem, ScalarField, Space, Time
+from stride.utils import wavelets
 
 
 async def main(runtime):
     # Create the grid
-    shape = (500, 370)
-    extra = (100, 100)
-    absorbing = (90, 90)
+    shape = (200, 200)
+    extra = (50, 50)
+    absorbing = (40, 40)
     spacing = (0.5e-3, 0.5e-3)
 
     space = Space(shape=shape,
@@ -20,7 +21,7 @@ async def main(runtime):
 
     start = 0.
     step = 0.08e-6
-    num = 2500
+    num = 2000
 
     time = Time(start=start,
                 step=step,
@@ -31,53 +32,29 @@ async def main(runtime):
                       space=space, time=time)
 
     # Create medium
-    medium = Medium(problem=problem)
-    problem.medium = medium
-
     vp = ScalarField('vp', grid=problem.grid)
-    vp.fill(1500.)
+    vp.fill(1600.)
 
-    medium.add(vp)
+    problem.medium.add(vp)
 
     # Create transducers
-    transducers = Transducers(problem=problem)
-    problem.transducers = transducers
-
-    transducer = PointTransducer(0, grid=problem.grid)
-    transducers.add(transducer)
+    problem.transducers.default()
 
     # Create geometry
-    num_transducers = 120
+    problem.geometry.add(0, problem.transducers.get(0),
+                         np.array([space.limit[0]/3, space.limit[1]/2]))
 
-    geometry = Geometry(transducers=transducers, problem=problem)
-    problem.geometry = geometry
-
-    radius = ((problem.space.limit[0] - 15.e-3) / 2,
-              (problem.space.limit[1] - 13.e-3) / 2)
-    centre = (problem.space.limit[0] / 2,
-              problem.space.limit[1] / 2)
-
-    coordinates = geometries.elliptical(num_transducers, radius, centre)
-
-    for index in range(num_transducers):
-        geometry.add(index, transducer, coordinates[index, :])
+    problem.geometry.add(1, problem.transducers.get(0),
+                         np.array([2*space.limit[0]/3, space.limit[1]/2]))
 
     # Create acquisitions
-    acquisitions = Acquisitions(geometry=geometry, problem=problem)
-    problem.acquisitions = acquisitions
-
-    for source in geometry.locations:
-        receivers = geometry.locations
-
-        acquisitions.add(Shot(source.id,
-                              sources=[source], receivers=receivers,
-                              geometry=geometry, problem=problem))
+    problem.acquisitions.default()
 
     # Create wavelets
-    f_centre = 0.10e6
+    f_centre = 0.50e6
     n_cycles = 3
 
-    for shot in acquisitions.shots:
+    for shot in problem.acquisitions.shots:
         shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,
                                                        time.num, time.step)
 
@@ -85,7 +62,16 @@ async def main(runtime):
     problem.plot()
 
     # Run
-    await problem.forward()
+    shot = problem.acquisitions.get(0)
+
+    await problem.forward(deallocate=False, dump=False)
+
+    import matplotlib.pyplot as plt
+
+    plt.plot(shot.observed.data[1]/np.max(shot.observed.data[1]), c='r')
+    plt.plot(shot.wavelets.data[0]/np.max(shot.wavelets.data[0]), c='k')
+
+    plt.show()
 
 
 if __name__ == '__main__':

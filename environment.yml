@@ -32,5 +32,4 @@ dependencies:
   - wxPython
   - zlib
   - pip:
-      - mayavi
       - devito

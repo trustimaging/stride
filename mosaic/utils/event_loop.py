@@ -216,6 +216,9 @@ class EventLoop:
         -------
 
         """
+        if self._stop.is_set():
+            return
+
         self._stop.set()
 
         for task in list(self._recurring_tasks):
@@ -225,17 +228,20 @@ class EventLoop:
         tasks = asyncio.Task.all_tasks()
         pending = [task for task in tasks if not task.done()]
 
+        for task in pending:
+            task.cancel()
+
         while len(pending):
             self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
             pending = [task for task in tasks if not task.done()]
 
-        asyncio.set_event_loop(None)
-
         self._loop.stop()
         self._loop.close()
         self._executor.shutdown()
         self._executor.shutdown(wait=True)
+
+        asyncio.set_event_loop(None)
 
     def __del__(self):
         self.stop()
@@ -262,6 +268,9 @@ class EventLoop:
         Return value from call or concurrent.futures.Future, depending on whether it is waited or not.
 
         """
+        if self._stop.is_set():
+            return
+
         kwargs = kwargs or {}
 
         if not inspect.iscoroutine(coro) and not inspect.iscoroutinefunction(coro):
@@ -297,6 +306,9 @@ class EventLoop:
         asyncio.Future
 
         """
+        if self._stop.is_set():
+            return
+
         callback = functools.partial(callback, *args, **kwargs)
         future = self._loop.run_in_executor(self._executor, callback)
 
