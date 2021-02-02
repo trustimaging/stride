@@ -20,7 +20,7 @@ class ProblemType(ProblemTypeBase):
 
     """
 
-    space_order = 4
+    space_order = 10
     time_order = 2
     undersampling_factor = 4
     kernel = 'OT4'
@@ -37,7 +37,7 @@ class ProblemType(ProblemTypeBase):
         self._state_operator = OperatorDevito(self.space_order, self.time_order, grid=self._grid)
         self._adjoint_operator = OperatorDevito(self.space_order, self.time_order, grid=self._grid)
 
-    def set_problem(self, problem):
+    def set_problem(self, problem, **kwargs):
         """
         Set up the problem or sub-problem that needs to be run.
 
@@ -56,7 +56,7 @@ class ProblemType(ProblemTypeBase):
         self._state_operator.set_problem(problem)
         self._adjoint_operator.set_problem(problem)
 
-    def before_state(self, save_wavefield=False):
+    def before_state(self, save_wavefield=False, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
 
@@ -85,9 +85,14 @@ class ProblemType(ProblemTypeBase):
             p = self._grid.time_function('p')
             m = self._grid.function('m')
 
-            # Properly create damping layer
-            damp = self._grid.function('damp')
-            damp.data[:] = self._problem.medium.damping(0.005 * np.log(1.0 / 0.001) / np.max(space.extra))
+            # Create damping layer
+            if np.max(space.extra) > 0:
+                damp = self._grid.function('damp')
+                damp.data[:] = self._problem.medium.damping(0.003 * np.log(1.0 / 0.001) / np.max(space.extra))
+
+            else:
+                damp = devito.Constant('damp')
+                damp.data = 0.
 
             # Create stencil
             stencil = self._iso_stencil(self._grid.grid, p, m, damp,
@@ -161,7 +166,7 @@ class ProblemType(ProblemTypeBase):
         self._grid.vars.src.coordinates.data[:] = shot.source_coordinates
         self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    def state(self):
+    def state(self, **kwargs):
         """
         Run the state or forward problem.
 
@@ -171,7 +176,7 @@ class ProblemType(ProblemTypeBase):
         """
         self._state_operator.run()
 
-    def after_state(self, save_wavefield=False):
+    def after_state(self, save_wavefield=False, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 
@@ -206,7 +211,7 @@ class ProblemType(ProblemTypeBase):
 
         return traces, wavefield
 
-    def before_adjoint(self, wrt, adjoint_source, wavefield):
+    def before_adjoint(self, wrt, adjoint_source, wavefield, **kwargs):
         """
         Prepare the problem type to run the adjoint problem.
 
@@ -242,8 +247,13 @@ class ProblemType(ProblemTypeBase):
             m = self._grid.function('m')
 
             # Properly create damping layer
-            damp = self._grid.function('damp')
-            damp.data[:] = self._problem.medium.damping(0.005 * np.log(1.0 / 0.001) / np.max(space.extra))
+            if np.max(space.extra) > 0:
+                damp = self._grid.function('damp')
+                damp.data[:] = self._problem.medium.damping(0.005 * np.log(1.0 / 0.001) / np.max(space.extra))
+
+            else:
+                damp = devito.Constant('damp')
+                damp.data = 0.
 
             # Create stencil
             stencil = self._iso_stencil(self._grid.grid, p_a, m, damp,
@@ -309,7 +319,7 @@ class ProblemType(ProblemTypeBase):
         self._grid.vars.src.coordinates.data[:] = shot.source_coordinates
         self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    def adjoint(self):
+    def adjoint(self, **kwargs):
         """
         Run the adjoint problem.
 
@@ -319,7 +329,7 @@ class ProblemType(ProblemTypeBase):
         """
         self._adjoint_operator.run()
 
-    def after_adjoint(self, wrt):
+    def after_adjoint(self, wrt, **kwargs):
         """
         Clean up after the adjoint run and retrieve the time gradients (if needed).
 
@@ -334,9 +344,9 @@ class ProblemType(ProblemTypeBase):
             Updated variable list with gradients added to them.
 
         """
-        return self.get_grad(wrt)
+        return self.get_grad(wrt, **kwargs)
 
-    def set_grad_vp(self, vp):
+    def set_grad_vp(self, vp, **kwargs):
         """
         Prepare the problem type to calculate the gradients wrt Vp.
 
@@ -362,7 +372,7 @@ class ProblemType(ProblemTypeBase):
 
         return grad_update, prec_update
 
-    def get_grad_vp(self, vp):
+    def get_grad_vp(self, vp, **kwargs):
         """
         Retrieve the gradients calculated wrt to the input.
 
@@ -389,13 +399,26 @@ class ProblemType(ProblemTypeBase):
         vp.grad += variable_grad
         vp.prec += variable_prec
 
+    def _biharmonic(self, field, weight):
+        space_dims = [d for d in field.dimensions if d.is_Space]
+        derivs = tuple('d%s2' % d.name for d in space_dims)
+        laplace = field.laplace
+
+        biharmonic = []
+        for d in derivs:
+            for expr in laplace.args:
+                expr = getattr(expr.evaluate * weight, d)
+                biharmonic.append(expr)
+
+        return sum(biharmonic)._eval_deriv
+
     def _laplacian(self, field, m):
         if self.kernel not in ['OT2', 'OT4']:
             raise ValueError("Unrecognized kernel")
 
         time = self._problem.time
 
-        bi_harmonic = field.biharmonic(1 / m) if self.kernel == 'OT4' else 0
+        bi_harmonic = self._biharmonic(field, 1 / m) if self.kernel == 'OT4' else 0
         laplacian = field.laplace + time.step**2/12 * bi_harmonic
 
         return laplacian
@@ -425,7 +448,21 @@ class ProblemType(ProblemTypeBase):
         # Define PDE and update rule
         eq_time = devito.solve(m * field.dt2 - laplacian + damp*u_dt, u_next)
 
+        # Define coefficients
+        # dims = grid.dimensions
+        #
+        # weights = np.array([0., 0., 0.0274017,
+        #                     -0.223818, 1.64875, -2.90467,
+        #                     1.64875, -0.223818, 0.0274017,
+        #                     0., 0.])
+        #
+        # coeffs = [devito.Coefficient(2, field, d, weights/d.spacing**2)
+        #           for d in dims]
+        # subs = devito.Substitutions(*coeffs)
+
         # Time-stepping stencil.
-        stencil = [devito.Eq(u_next, eq_time, subdomain=grid.subdomains['physical_domain'])]
+        stencil = [devito.Eq(u_next, eq_time,
+                             subdomain=grid.subdomains['physical_domain'],
+                             coefficients=None)]
 
         return stencil

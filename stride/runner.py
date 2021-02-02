@@ -26,7 +26,7 @@ class Runner:
         self.problem_type = None
         self.functional = None
 
-    def set_problem(self, problem):
+    def set_problem(self, problem, **kwargs):
         """
         Set up the problem or sub-problem that needs to be run.
 
@@ -34,6 +34,8 @@ class Runner:
         ----------
         problem : SubProblem or Problem
             Problem on which the physics will be executed
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -55,9 +57,9 @@ class Runner:
             observed = self.block.pipelines.wavelets.apply(observed)
             self.problem.shot.observed = observed
 
-        self.problem_type.set_problem(problem)
+        self.problem_type.set_problem(problem, **kwargs)
 
-    def set_block(self, block):
+    def set_block(self, block, **kwargs):
         """
         Set up the optimisation block for the inversion.
 
@@ -65,6 +67,8 @@ class Runner:
         ----------
         block : Block
             Relevant optimisation block.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -77,7 +81,7 @@ class Runner:
         if self.functional is None or self.functional.__class__ != block.functional:
             self.functional = block.functional()
 
-    def run_state(self, save_wavefield=False):
+    def run_state(self, save_wavefield=False, **kwargs):
         """
         Run all the necessary hooks on the problem type to execute the state or forward.
 
@@ -85,6 +89,8 @@ class Runner:
         ----------
         save_wavefield : bool, optional
             Whether or not the wavefield needs to be stored, defaults to False.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -94,20 +100,20 @@ class Runner:
             Wavefield produced by the state run, if any.
 
         """
-        self.problem_type.before_state(save_wavefield=save_wavefield)
+        self.problem_type.before_state(save_wavefield=save_wavefield, **kwargs)
 
         self.logger.info('(ShotID %d) Running state equation for shot' % self.problem.shot_id)
-        self.problem_type.state()
+        self.problem_type.state(**kwargs)
 
         self.logger.info('(ShotID %d) Completed state equation run for shot' % self.problem.shot_id)
-        traces, wavefield = self.problem_type.after_state(save_wavefield=save_wavefield)
+        traces, wavefield = self.problem_type.after_state(save_wavefield=save_wavefield, **kwargs)
 
         if save_wavefield is True and self.block is not None:
             wavefield = self.block.pipelines.wavefield.apply(wavefield)
 
         return traces, wavefield
 
-    def run_functional(self, modelled):
+    def run_functional(self, modelled, **kwargs):
         """
         Use some ``modelled`` data to calculate a functional value for the
         present SubProblem.
@@ -116,6 +122,8 @@ class Runner:
         ----------
         modelled : Traces
             Time traces to compare with the observed data in the shot.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -133,7 +141,7 @@ class Runner:
         if self.block is not None:
             modelled, observed = self.block.pipelines.traces.apply(modelled, observed)
 
-        fun, adjoint_source = self.functional.apply(self.problem.shot, modelled, observed)
+        fun, adjoint_source = self.functional.apply(self.problem.shot, modelled, observed, **kwargs)
 
         if self.block is not None:
             adjoint_source = self.block.pipelines.adjoint_source.apply(adjoint_source)
@@ -142,7 +150,7 @@ class Runner:
 
         return fun, adjoint_source
 
-    def run_adjoint(self, wrt, adjoint_source, wavefield):
+    def run_adjoint(self, wrt, adjoint_source, wavefield, **kwargs):
         """
         Run all the necessary hooks on the problem type to execute the adjoint problem.
 
@@ -154,6 +162,8 @@ class Runner:
             Adjoint source to use in the adjoint propagation.
         wavefield : Data
             Stored wavefield from the forward run, to use as needed.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -164,15 +174,15 @@ class Runner:
         wrt.grad.fill(0.)
         wrt.prec.fill(0.)
 
-        self.problem_type.before_adjoint(wrt, adjoint_source, wavefield)
+        self.problem_type.before_adjoint(wrt, adjoint_source, wavefield, **kwargs)
 
         self.logger.info('(ShotID %d) Running adjoint equation for shot' % self.problem.shot_id)
-        self.problem_type.adjoint()
+        self.problem_type.adjoint(**kwargs)
 
         self.logger.info('(ShotID %d) Completed adjoint equation run shot' % self.problem.shot_id)
 
-        wrt = self.problem_type.after_adjoint(wrt)
-        wrt = self.functional.get_grad(wrt)
+        wrt = self.problem_type.after_adjoint(wrt, **kwargs)
+        wrt = self.functional.get_grad(wrt, **kwargs)
 
         for variable in wrt:
             variable.grad, variable.prec = self.block.pipelines.\
@@ -180,7 +190,7 @@ class Runner:
 
         return wrt
 
-    def run_gradient(self, wrt):
+    def run_gradient(self, wrt, **kwargs):
         """
         Execute the state, functional and adjoint in order to calculate
         the gradients for a series of variables.
@@ -189,6 +199,8 @@ class Runner:
         ----------
         wrt : VariableList
             List of variables for which the inverse problem is being solved.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -199,11 +211,11 @@ class Runner:
             Updated variable list with gradients added to them, if any.
 
         """
-        traces, wavefield = self.run_state(save_wavefield=True)
+        traces, wavefield = self.run_state(save_wavefield=True, **kwargs)
 
-        fun, adjoint_source = self.run_functional(traces)
+        fun, adjoint_source = self.run_functional(traces, **kwargs)
 
-        wrt = self.run_adjoint(wrt, adjoint_source, wavefield)
+        wrt = self.run_adjoint(wrt, adjoint_source, wavefield, **kwargs)
 
         return fun, wrt
 

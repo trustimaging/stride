@@ -15,7 +15,7 @@ class Functional(FunctionalBase):
 
     """
 
-    def apply(self, shot, modelled, observed):
+    def apply(self, shot, modelled, observed, **kwargs):
         """
         Calculate the functional.
 

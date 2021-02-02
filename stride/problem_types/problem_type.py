@@ -53,7 +53,7 @@ class ProblemTypeBase(ABC):
         self._state_operator = None
         self._adjoint_operator = None
 
-    def set_problem(self, problem):
+    def set_problem(self, problem, **kwargs):
         """
         Set up the problem or sub-problem that needs to be run.
 
@@ -61,6 +61,8 @@ class ProblemTypeBase(ABC):
         ----------
         problem : SubProblem or Problem
             Problem on which the physics will be executed
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -69,7 +71,7 @@ class ProblemTypeBase(ABC):
         self._problem = problem
 
     @abstractmethod
-    def before_state(self, save_wavefield=False):
+    def before_state(self, save_wavefield=False, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
 
@@ -77,6 +79,8 @@ class ProblemTypeBase(ABC):
         ----------
         save_wavefield : bool, optional
             Whether or not the wavefield needs to be stored, defaults to False.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -85,10 +89,15 @@ class ProblemTypeBase(ABC):
         pass
 
     @abstractmethod
-    def state(self):
+    def state(self, **kwargs):
         """
         Run the state or forward problem.
 
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method.
+
         Returns
         -------
 
@@ -96,7 +105,7 @@ class ProblemTypeBase(ABC):
         pass
 
     @abstractmethod
-    def after_state(self, save_wavefield=False):
+    def after_state(self, save_wavefield=False, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 
@@ -106,6 +115,8 @@ class ProblemTypeBase(ABC):
         ----------
         save_wavefield : bool, optional
             Whether or not the wavefield needs to be stored, defaults to False.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -118,7 +129,7 @@ class ProblemTypeBase(ABC):
         pass
 
     @abstractmethod
-    def before_adjoint(self, wrt, adjoint_source, wavefield):
+    def before_adjoint(self, wrt, adjoint_source, wavefield, **kwargs):
         """
         Prepare the problem type to run the adjoint problem.
 
@@ -130,6 +141,8 @@ class ProblemTypeBase(ABC):
             Adjoint source to use in the adjoint propagation.
         wavefield : Data
             Stored wavefield from the forward run, to use as needed.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -138,10 +151,15 @@ class ProblemTypeBase(ABC):
         pass
 
     @abstractmethod
-    def adjoint(self):
+    def adjoint(self, **kwargs):
         """
         Run the adjoint problem.
 
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method.
+
         Returns
         -------
 
@@ -149,7 +167,7 @@ class ProblemTypeBase(ABC):
         pass
 
     @abstractmethod
-    def after_adjoint(self, wrt):
+    def after_adjoint(self, wrt, **kwargs):
         """
         Clean up after the adjoint run and retrieve the time gradients (if needed).
 
@@ -157,6 +175,8 @@ class ProblemTypeBase(ABC):
         ----------
         wrt : VariableList
             List of variables for which the inverse problem is being solved.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -166,7 +186,7 @@ class ProblemTypeBase(ABC):
         """
         pass
 
-    def set_grad(self, wrt):
+    def set_grad(self, wrt, **kwargs):
         """
         Prepare the problem type to calculate the gradients wrt the inputs.
 
@@ -174,6 +194,8 @@ class ProblemTypeBase(ABC):
         ----------
         wrt : VariableList
             List of variable with respect to which the inversion is running.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -190,12 +212,12 @@ class ProblemTypeBase(ABC):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            update = method(variable)
+            update = method(variable, **kwargs)
             gradient_update += update
 
         return gradient_update
 
-    def get_grad(self, wrt):
+    def get_grad(self, wrt, **kwargs):
         """
         Retrieve the gradients calculated wrt to the inputs.
 
@@ -203,6 +225,8 @@ class ProblemTypeBase(ABC):
         ----------
         wrt : VariableList
             List of variable with respect to which the inversion is running.
+        kwargs
+            Extra parameters to be used by the method.
 
         Returns
         -------
@@ -216,6 +240,6 @@ class ProblemTypeBase(ABC):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            method(variable)
+            method(variable, **kwargs)
 
         return wrt
