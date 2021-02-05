@@ -11,7 +11,7 @@ from ..utils.logger import _stdout, _stderr
 
 
 @click.command()
-@click.argument('cmd', required=True, nargs=-1)
+@click.argument('cmd', required=False, nargs=-1)
 # runtime type
 @click.option('--head', 'runtime_type', flag_value='head', show_default=True,
               help='start the head runtime')
@@ -50,7 +50,7 @@ from ..utils.logger import _stdout, _stderr
 @click.option('--error', 'log_level', flag_value='error', show_default=True,
               help='set log level to ERROR')
 @click.version_option()
-def go(cmd, **kwargs):
+def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)

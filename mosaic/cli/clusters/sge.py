@@ -68,13 +68,13 @@ num_threads_per_worker={num_threads}
 #$ -ac allow=C
 
 # wall clock time (format hours:minutes:seconds).
-#$ -l h_rt=48:00:0
+#$ -l h_rt=48:00:00
 
 # amount of RAM per core (must be an integer)
 #$ -l mem={int(node_memory/(num_threads*num_workers))}G
 
 # set the name of the job.
-#$ -N $name
+#$ -N {name}
 
 # select the MPI parallel environment and number of cores.
 # there's 40 cores per node

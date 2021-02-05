@@ -46,6 +46,7 @@ setup(
     entry_points='''
         [console_scripts]
         mrun=mosaic.cli.mrun:go
+        mscript=mosaic.cli.mscript:go
     ''',
     zip_safe=False,
     test_suite='tests'
