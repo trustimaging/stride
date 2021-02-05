@@ -4,7 +4,6 @@ click
 cloudpickle>=1.6
 cython
 devito>=4.3
-fabric
 flake8
 gputil
 h5py>=3.1

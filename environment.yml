@@ -9,7 +9,6 @@ dependencies:
   - click
   - cloudpickle>=1.6
   - cython
-  - fabric
   - flake8
   - gputil
   - h5py>=3.1

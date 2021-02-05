@@ -1,11 +1,10 @@
 
 import os
 import click
-import fabric
 import subprocess as cmd_subprocess
 
+from . import clusters
 from .. import init, stop
-from ..runtime.runtime import RuntimeProxy
 from ..comms import get_hostname
 from ..utils import subprocess
 from ..utils.logger import _stdout, _stderr
@@ -76,22 +75,13 @@ def go(cmd, **kwargs):
 
         host_name = get_hostname()
 
-        sge_nodes = os.environ.get('PE_HOSTFILE ', None)
+        sge_nodes = clusters.sge.node_list(host_name)
         if sge_nodes is not None:
-            node_list = []
-            with open(sge_nodes, 'r') as file:
-                lines = file.readlines()
-
-                for line in lines:
-                    line = line.split(' ')
-
-                    if line[0] != host_name:
-                        node_list.append(line[0])
+            node_list = sge_nodes
+            num_nodes = len(node_list)
 
         else:
-            raise RuntimeError('Only SGE clusters are currently supported.')
-
-        num_nodes = len(node_list)
+            local = True
 
     runtime_config = {
         'runtime_indices': runtime_indices,

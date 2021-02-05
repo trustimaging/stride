@@ -1,7 +1,7 @@
 
-import fabric
 import psutil
 import asyncio
+import subprocess as cmd_subprocess
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
@@ -9,8 +9,8 @@ from .node import MonitoredNode
 from .strategies import RoundRobin
 from ..core.tessera import MonitoredTessera
 from ..core.task import MonitoredTask
-from ..utils import LoggerManager
 from ..utils import subprocess
+from ..utils.logger import LoggerManager, _stdout, _stderr
 
 
 __all__ = ['Monitor', 'monitor_strategies']
@@ -120,13 +120,20 @@ class Monitor(Runtime):
         for node_index, node_address in zip(range(num_nodes), node_list):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
-            connection = fabric.Connection(node_address)
-            msg = connection.run(f'mrun --node -i {node_index} --daemon\
-                                        --monitor-address {runtime_address} --monitor-port {runtime_port}\
-                                        -n {num_nodes} -nw {num_workers} -nth {num_threads}\
-                                        --cluster --{log_level}', hide=True)
+            cmd = (f'ssh {node_address}'
+                   f'"conda activate stride;'
+                   f'mrun --node -i {node_index} --daemon'
+                   f'--monitor-address {runtime_address} --monitor-port {runtime_port}'
+                   f'-n {num_nodes} -nw {num_workers} -nth {num_threads}'
+                   f'--cluster --{log_level}"')
 
-            self.logger.info('Started node %d at %s: \n %s' % (node_index, node_address, msg.stdout))
+            print(cmd)
+
+            process = cmd_subprocess.run(cmd,
+                                         stdout=_stdout,
+                                         stderr=_stderr)
+
+            self.logger.info('Started node %d at %s: \n %s' % (node_index, node_address, process.returncode))
 
             self._nodes[node_proxy.uid] = node_proxy
             await self._comms.wait_for(node_proxy.uid)
