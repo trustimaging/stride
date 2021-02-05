@@ -100,7 +100,7 @@ class Node(Runtime):
             worker_proxy = RuntimeProxy(name='worker', indices=indices)
             worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
                                                          cpu_affinity=cpu_affinity,
-                                                         daemon=self.mode != 'local')
+                                                         daemon=False)
             worker_subprocess.start_process()
             worker_proxy.subprocess = worker_subprocess
 
@@ -123,11 +123,12 @@ class Node(Runtime):
 
         """
         self.logger = LoggerManager()
+        self.logger.set_local()
 
-        if self.mode == 'local':
-            self.logger.set_local()
-        else:
-            self.logger.set_remote()
+        # if self.mode == 'local':
+        #     self.logger.set_local()
+        # else:
+        #     self.logger.set_remote()
 
     def resource_monitor(self):
         """

@@ -87,8 +87,8 @@ def go(cmd=None, **kwargs):
         'runtime_indices': runtime_indices,
         'address': kwargs.get('address', None),
         'port': kwargs.get('port', None),
-        'monitor_address': kwargs.get('monitor-address', None),
-        'monitor_port': kwargs.get('monitor-port', None),
+        'monitor_address': kwargs.get('monitor_address', None),
+        'monitor_port': kwargs.get('monitor_port', None),
         'num_nodes': num_nodes,
         'num_workers': num_workers,
         'num_threads': num_threads,
@@ -97,15 +97,13 @@ def go(cmd=None, **kwargs):
         'node_list': node_list,
     }
 
-    print(runtime_config)
-
     # Initialise the runtime
     if runtime_type is not None:
         if kwargs.get('daemon', False):
             def start_runtime(*args, **extra_kwargs):
                 extra_kwargs.update(runtime_config)
 
-                init('node', *args, **extra_kwargs, wait=True)
+                init(runtime_type, **extra_kwargs, wait=True)
 
             runtime_subprocess = subprocess(start_runtime)(runtime_type, daemon=True)
             runtime_subprocess.start_process()

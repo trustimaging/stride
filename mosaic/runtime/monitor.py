@@ -126,8 +126,6 @@ class Monitor(Runtime):
                    f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
                    f'--cluster --{log_level}"')
 
-            print(cmd)
-
             process = cmd_subprocess.run(cmd,
                                          shell=True,
                                          stdout=_stdout,

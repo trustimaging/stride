@@ -4,6 +4,7 @@ import sys
 import atexit
 import psutil
 import signal
+import daemon
 import weakref
 import functools
 import threading
@@ -81,7 +82,6 @@ class Subprocess:
                                                          cpu_affinity,
                                                          *parent_args,
                                                          args, kwargs))
-        self._mp_process.daemon = daemon
         self._ps_process = None
         self._target = target
         self._obj = None
@@ -173,7 +173,7 @@ class Subprocess:
         self._state = 'running'
 
     def _start_process(self, target,
-                       daemon,
+                       is_daemon,
                        child_start_pipe,
                        parent_alive_pipe, keep_child_alive,
                        cpu_affinity,
@@ -192,14 +192,23 @@ class Subprocess:
 
         mosaic.clear_runtime()
 
-        self._target = target
-        self._obj = self._target(*args, **kwargs,
-                                 parent_id=parent_id,
-                                 parent_address=parent_address,
-                                 parent_port=parent_port)
+        try:
+            if is_daemon:
+                daemon_context = daemon.DaemonContext()
+                daemon_context.open()
 
-        if hasattr(self._obj, 'run') and callable(self._obj.run):
-            self._obj.run()
+            self._target = target
+            self._obj = self._target(*args, **kwargs,
+                                     parent_id=parent_id,
+                                     parent_address=parent_address,
+                                     parent_port=parent_port)
+
+            if hasattr(self._obj, 'run') and callable(self._obj.run):
+                self._obj.run()
+
+        finally:
+            if is_daemon:
+                daemon_context.close()
 
     @staticmethod
     def _immediate_exit_when_closed(parent_alive_pipe):

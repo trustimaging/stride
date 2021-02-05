@@ -187,6 +187,7 @@ class LoggerManager:
         self._error_logger = LocalLogger(logger, log_level=_local_log_levels['error'])
         self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
 
+        sys.stdout.flush()
         sys.stdout = self._info_logger
         sys.stderr = self._error_logger
 
@@ -213,6 +214,7 @@ class LoggerManager:
         self._error_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['error'])
         self._warn_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['warning'])
 
+        sys.stdout.flush()
         sys.stdout = self._info_logger
         sys.stderr = self._error_logger
 

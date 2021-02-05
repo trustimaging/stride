@@ -33,3 +33,4 @@ dependencies:
   - zlib
   - pip:
       - devito
+      - python-daemon

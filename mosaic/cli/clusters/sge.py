@@ -96,5 +96,10 @@ export OMP_NUM_THREADS={num_workers*num_threads}
 
 # run our job
 ls -l
+date
 mrun -n $num_nodes -nw $num_workers_per_node -nth $num_threads_per_worker python forward.py &> {name}-output.log
+date
+
+stat=$?
+echo "Exit status: $stat" >> "{name}-output.log"
 """
