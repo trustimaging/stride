@@ -21,7 +21,7 @@ from ..utils.logger import _stdout, _stderr
               help='start the node runtime')
 @click.option('--indices', '-i', type=str, required=False, show_default=True,
               help='runtime indices if any')
-@click.option('--daemon', type=bool, default=False, required=True, show_default=True,
+@click.option('--daemon/--inproc', type=bool, default=False, required=True, show_default=True,
               help='whether to run as a daemon')
 # network config
 @click.option('--nnodes', '-n', type=int, required=False, default=1, show_default=True,

@@ -120,20 +120,20 @@ class Monitor(Runtime):
         for node_index, node_address in zip(range(num_nodes), node_list):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
-            cmd = (f'ssh {node_address}'
-                   f'"conda activate stride;'
-                   f'mrun --node -i {node_index} --daemon'
-                   f'--monitor-address {runtime_address} --monitor-port {runtime_port}'
-                   f'-n {num_nodes} -nw {num_workers} -nth {num_threads}'
+            cmd = (f'ssh {node_address} '
+                   f'mrun --node -i {node_index} --daemon '
+                   f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
+                   f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
                    f'--cluster --{log_level}"')
 
             print(cmd)
 
             process = cmd_subprocess.run(cmd,
+                                         shell=True,
                                          stdout=_stdout,
                                          stderr=_stderr)
 
-            self.logger.info('Started node %d at %s: \n %s' % (node_index, node_address, process.returncode))
+            self.logger.info('Started node %d at %s: %s' % (node_index, node_address, process.returncode))
 
             self._nodes[node_proxy.uid] = node_proxy
             await self._comms.wait_for(node_proxy.uid)

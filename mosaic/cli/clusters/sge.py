@@ -62,7 +62,7 @@ num_workers_per_node={num_workers}
 num_threads_per_worker={num_threads}
 
 #$ -P <project_id>
-#$ -A <sub_project_id> 
+#$ -A <sub_project_id>
 
 # only allow C nodes
 #$ -ac allow=C
@@ -83,6 +83,10 @@ num_threads_per_worker={num_threads}
 # set the working directory
 #$ -cwd
 
+# set output logs
+#$ -o out.log
+#$ -e err.log
+
 # activate conda environment
 conda activate stride
 
@@ -93,4 +97,4 @@ export OMP_NUM_THREADS={num_workers*num_threads}
 # run our job
 ls -l
 mrun -n $num_nodes -nw $num_workers_per_node -nth $num_threads_per_worker python forward.py &> {name}-output.log
-    """
+"""
