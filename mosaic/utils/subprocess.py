@@ -63,11 +63,13 @@ class Subprocess:
         self._parent_start_pipe, child_start_pipe = multiprocessing.Pipe()
 
         self._parent_runtime = mosaic.runtime()
-        parent_args = ()
         if self._parent_runtime is not None:
             parent_args = (self._parent_runtime.uid,
                            self._parent_runtime.address,
                            self._parent_runtime.port,)
+
+        else:
+            parent_args = (None, None, None)
 
         self._mp_process = multiprocessing.Process(target=self._start_process,
                                                    name=name,

@@ -68,7 +68,7 @@ def go(cmd=None, **kwargs):
 
     # If not in local mode, find the node list
     node_list = None
-    if not local:
+    if not local and runtime_type in [None, 'monitor']:
         # sun grid engine   - PE_HOSTFILE
         # slurm             - SLURM_JOB_NODELIST
         # pbs/torque        - PBS_NODEFILE
