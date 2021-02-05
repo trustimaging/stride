@@ -3,6 +3,9 @@ import os
 import functools
 import warnings
 try:
+    if os.environ.get('DISPLAY', None) is None:
+        raise ModuleNotFoundError
+
     os.environ['ETS_TOOLKIT'] = 'qt4'
     from wx import wxPyDeprecationWarning
     warnings.simplefilter(action='ignore', category=wxPyDeprecationWarning)

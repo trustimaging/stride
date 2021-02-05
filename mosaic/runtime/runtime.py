@@ -56,6 +56,8 @@ class BaseRPC:
         elif name is None:
             raise ValueError('Either name and indices or UID are required to instantiate the RPC')
 
+        indices = indices or ()
+
         if type(indices) is not tuple:
             indices = (indices,)
 

@@ -22,7 +22,8 @@ def init(runtime_type='head', runtime_indices=(),
          monitor_address=None, monitor_port=None,
          num_workers=None, num_threads=None,
          mode='local', monitor_strategy='round-robin',
-         log_level='info', wait=False):
+         log_level='info', node_list=None, wait=False,
+         **kwargs):
     """
     Starts the global mosaic runtime.
 
@@ -59,14 +60,21 @@ def init(runtime_type='head', runtime_indices=(),
         Strategy used by the monitor to allocate tessera, defaults to round robin.
     log_level : str, optional
         Log level, defaults to ``info``.
+    node_list : list, optional
+        List of available node addresses to connect to.
     wait : bool, optional
         Whether or not to return control to calling frame, defaults to False.
+    kwargs : optional
+        Extra keyword arguments.
 
     Returns
     -------
 
     """
     global _runtime
+
+    if _runtime is not None:
+        return _runtime
 
     mlogger.log_level = log_level
 
@@ -77,6 +85,7 @@ def init(runtime_type='head', runtime_indices=(),
         'num_workers': num_workers,
         'num_threads': num_threads,
         'log_level': log_level,
+        'node_list': node_list,
     }
 
     if address is not None and port is not None:

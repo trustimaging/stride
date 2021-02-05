@@ -1,4 +1,5 @@
 
+import fabric
 import psutil
 import asyncio
 
@@ -63,9 +64,12 @@ class Monitor(Runtime):
         if self.mode == 'local':
             await self.init_local(**kwargs)
 
+        else:
+            await self.init_cluster(**kwargs)
+
     async def init_local(self, **kwargs):
         """
-        Init node in local mode.
+        Init nodes in local mode.
 
         Parameters
         ----------
@@ -88,6 +92,44 @@ class Monitor(Runtime):
 
         self._nodes[node_proxy.uid] = node_proxy
         await self._comms.wait_for(node_proxy.uid)
+
+    async def init_cluster(self, **kwargs):
+        """
+        Init nodes in cluster mode.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
+        node_list = kwargs.get('node_list', None)
+
+        if node_list is None:
+            raise ValueError('No node_list was provided to initialise mosaic in cluster mode')
+
+        num_nodes = len(node_list)
+        num_workers = kwargs.get('num_workers', 1)
+        num_threads = kwargs.get('num_threads', None)
+        log_level = kwargs.get('log_level', 'info')
+        runtime_address = self.address
+        runtime_port = self.port
+
+        for node_index, node_address in zip(range(num_nodes), node_list):
+            node_proxy = RuntimeProxy(name='node', indices=node_index)
+
+            connection = fabric.Connection(node_address)
+            msg = connection.run(f'mrun --node -i {node_index} --daemon\
+                                        --monitor-address {runtime_address} --monitor-port {runtime_port}\
+                                        -n {num_nodes} -nw {num_workers} -nth {num_threads}\
+                                        --cluster --{log_level}', hide=True)
+
+            self.logger.info('Started node %d at %s: \n %s' % (node_index, node_address, msg.stdout))
+
+            self._nodes[node_proxy.uid] = node_proxy
+            await self._comms.wait_for(node_proxy.uid)
 
     def set_logger(self):
         """

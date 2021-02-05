@@ -63,16 +63,21 @@ class Subprocess:
         self._parent_start_pipe, child_start_pipe = multiprocessing.Pipe()
 
         self._parent_runtime = mosaic.runtime()
+        parent_args = ()
+        if self._parent_runtime is not None:
+            parent_args = (self._parent_runtime.uid,
+                           self._parent_runtime.address,
+                           self._parent_runtime.port,)
+
         self._mp_process = multiprocessing.Process(target=self._start_process,
                                                    name=name,
                                                    args=(target,
+                                                         daemon,
                                                          child_start_pipe,
                                                          parent_alive_pipe,
                                                          self._keep_child_alive,
                                                          cpu_affinity,
-                                                         self._parent_runtime.uid,
-                                                         self._parent_runtime.address,
-                                                         self._parent_runtime.port,
+                                                         *parent_args,
                                                          args, kwargs))
         self._mp_process.daemon = daemon
         self._ps_process = None
@@ -166,6 +171,7 @@ class Subprocess:
         self._state = 'running'
 
     def _start_process(self, target,
+                       daemon,
                        child_start_pipe,
                        parent_alive_pipe, keep_child_alive,
                        cpu_affinity,
@@ -179,7 +185,8 @@ class Subprocess:
             psutil.Process().cpu_affinity(cpu_affinity)
 
         keep_child_alive.close()
-        self._immediate_exit_when_closed(parent_alive_pipe)
+        if not daemon:
+            self._immediate_exit_when_closed(parent_alive_pipe)
 
         mosaic.clear_runtime()
 
