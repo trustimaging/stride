@@ -53,8 +53,7 @@ def submission_script(name, num_nodes, num_workers, num_threads, node_memory):
 
     """
 
-    return f"""
-#!/bin/bash -l
+    return f"""#!/bin/bash -l
 
 name={name}
 num_nodes={num_nodes}
@@ -87,12 +86,20 @@ num_threads_per_worker={num_threads}
 #$ -o out.log
 #$ -e err.log
 
+# load any modules before activating the conda env
+# for example:
+# module load compilers/intel/2020/release
+
 # activate conda environment
 conda activate stride
 
 # set number of threads per process
 # use $(ppn) to use one process per node and as many threads as cores in the node
 export OMP_NUM_THREADS={num_workers*num_threads}
+
+# set any environment variables
+# for example:
+# export DEVITO_COMPILER=icc
 
 # run our job
 ls -l
