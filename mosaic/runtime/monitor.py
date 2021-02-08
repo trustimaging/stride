@@ -1,6 +1,7 @@
 
 import psutil
 import asyncio
+import subprocess as cmd_subprocess
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
@@ -8,8 +9,8 @@ from .node import MonitoredNode
 from .strategies import RoundRobin
 from ..core.tessera import MonitoredTessera
 from ..core.task import MonitoredTask
-from ..utils import LoggerManager
 from ..utils import subprocess
+from ..utils.logger import LoggerManager, _stdout, _stderr
 
 
 __all__ = ['Monitor', 'monitor_strategies']
@@ -63,9 +64,12 @@ class Monitor(Runtime):
         if self.mode == 'local':
             await self.init_local(**kwargs)
 
+        else:
+            await self.init_cluster(**kwargs)
+
     async def init_local(self, **kwargs):
         """
-        Init node in local mode.
+        Init nodes in local mode.
 
         Parameters
         ----------
@@ -88,6 +92,52 @@ class Monitor(Runtime):
 
         self._nodes[node_proxy.uid] = node_proxy
         await self._comms.wait_for(node_proxy.uid)
+
+    async def init_cluster(self, **kwargs):
+        """
+        Init nodes in cluster mode.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
+        node_list = kwargs.get('node_list', None)
+
+        if node_list is None:
+            raise ValueError('No node_list was provided to initialise mosaic in cluster mode')
+
+        num_nodes = len(node_list)
+        num_workers = kwargs.get('num_workers', 1)
+        num_threads = kwargs.get('num_threads', None)
+        log_level = kwargs.get('log_level', 'info')
+        runtime_address = self.address
+        runtime_port = self.port
+
+        for node_index, node_address in zip(range(num_nodes), node_list):
+            node_proxy = RuntimeProxy(name='node', indices=node_index)
+
+            cmd = (f'ssh {node_address} '
+                   f'"mrun --node -i {node_index} --daemon '
+                   f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
+                   f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
+                   f'--cluster --{log_level}"')
+
+            process = cmd_subprocess.run(cmd,
+                                         shell=True,
+                                         stdout=_stdout,
+                                         stderr=_stderr)
+
+            if process.returncode != 0:
+                raise RuntimeError('Failed to start node %d, error code %d' % (node_address, process.returncode))
+
+            self.logger.info('Started node %d at %s: %d' % (node_index, node_address, process.returncode))
+
+            self._nodes[node_proxy.uid] = node_proxy
+            await self._comms.wait_for(node_proxy.uid)
 
     def set_logger(self):
         """

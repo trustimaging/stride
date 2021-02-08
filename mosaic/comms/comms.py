@@ -19,7 +19,7 @@ from ..utils import Future
 from ..utils.utils import sizeof
 
 
-__all__ = ['CommsManager']
+__all__ = ['CommsManager', 'get_hostname']
 
 
 _protocol_version = '0.0.0'
@@ -51,6 +51,10 @@ def validate_address(address, port=False):
     if port is not False:
         if type(port) is not int or not 1024 <= port <= 65535:
             raise ValueError(error_msg)
+
+
+def get_hostname():
+    return socket.getfqdn(socket.gethostname())
 
 
 class CMD:
@@ -289,7 +293,7 @@ class InboundConnection(Connection):
                 if e.errno == errno.ENETUNREACH:
                     try:
                         # try get node ip address from host name
-                        host_name = socket.getfqdn(socket.gethostname())
+                        host_name = get_hostname()
                         self._address = socket.gethostbyname(host_name)
                     except Exception:
                         pass
