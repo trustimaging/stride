@@ -123,12 +123,11 @@ class Node(Runtime):
 
         """
         self.logger = LoggerManager()
-        self.logger.set_local()
 
-        # if self.mode == 'local':
-        #     self.logger.set_local()
-        # else:
-        #     self.logger.set_remote()
+        if self.mode == 'local':
+            self.logger.set_local()
+        else:
+            self.logger.set_remote()
 
     def resource_monitor(self):
         """

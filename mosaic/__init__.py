@@ -146,6 +146,8 @@ def clear_runtime():
     global _runtime
 
     if _runtime is not None:
+        mlogger.clear_logger()
+
         del _runtime
         _runtime = None
 

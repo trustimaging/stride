@@ -6,7 +6,7 @@ from cached_property import cached_property
 import mosaic
 
 
-__all__ = ['LoggerManager']
+__all__ = ['LoggerManager', 'clear_logger']
 
 
 log_level = 'info'
@@ -131,7 +131,7 @@ class RemoteLogger(LoggerBase):
             _stdout.flush()
 
         else:
-            self.remote_runtime[self._log_level](buf=buf)
+            self.remote_runtime[self._log_level](buf=buf, as_async=False)
 
 
 class LoggerManager:
@@ -347,3 +347,11 @@ class CustomFormatter(logging.Formatter):
             record.runtime_id = ''
 
         return super().format(record)
+
+
+def clear_logger():
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    sys.stdout = _stdout
+    sys.stderr = _stderr

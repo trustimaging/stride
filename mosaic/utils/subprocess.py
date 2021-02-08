@@ -194,7 +194,7 @@ class Subprocess:
 
         try:
             if is_daemon:
-                daemon_context = daemon.DaemonContext()
+                daemon_context = daemon.DaemonContext(detach_process=True)
                 daemon_context.open()
 
             self._target = target
