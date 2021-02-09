@@ -315,7 +315,7 @@ class OperatorDevito:
         """
         self._problem = problem
 
-    def set_operator(self, op, name='kernel', config=None):
+    def set_operator(self, op, name='kernel', **kwargs):
         """
         Set up a Devito operator from a list of operations.
 
@@ -325,7 +325,7 @@ class OperatorDevito:
             List of operations to be given to the devito.Operator instance.
         name : str
             Name to give to the operator, defaults to ``kernel``.
-        config : dict, optional
+        kwargs : optional
             Configuration parameters to set for Devito overriding defaults.
 
         Returns
@@ -334,24 +334,43 @@ class OperatorDevito:
         """
         default_config = {
             'autotuning': ['aggressive', 'runtime'],
-            'opt': 'advanced',
-            'compiler': os.getenv('DEVITO_COMPILER', 'gcc'),
             'develop-mode': False,
-            'language': os.getenv('DEVITO_LANGUAGE', 'openmp'),
             'mpi': False,
             'log-level': 'DEBUG',
         }
 
-        config = config or {}
-        default_config.update(config)
-
         for key, value in default_config.items():
+            if key in kwargs:
+                value = kwargs[key]
+                default_config[key] = value
+                del kwargs[key]
+
             devito.parameters.configuration[key] = value
 
-        self.operator = devito.Operator(op,
-                                        name=name,
-                                        subs=self.grid.grid.spacing_map,
-                                        platform=os.getenv('DEVITO_PLATFORM', None))
+        default_kwargs = {
+            'name': name,
+            'subs': self.grid.grid.spacing_map,
+            'opt': 'advanced',
+            'platform': os.getenv('DEVITO_PLATFORM', None),
+            'language': os.getenv('DEVITO_LANGUAGE', 'openmp'),
+            'compiler': os.getenv('DEVITO_COMPILER', None),
+        }
+
+        default_kwargs.update(kwargs)
+
+        runtime = mosaic.runtime()
+        runtime.logger.info('Operator `%s` configuration:' % name)
+
+        for key, value in default_config.items():
+            runtime.logger.info('\t * %s=%s' % (key, value))
+
+        for key, value in default_kwargs.items():
+            if key == 'name':
+                continue
+
+            runtime.logger.info('\t * %s=%s' % (key, value))
+
+        self.operator = devito.Operator(op, **default_kwargs)
 
     def compile(self):
         """

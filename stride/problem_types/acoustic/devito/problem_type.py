@@ -102,7 +102,7 @@ class ProblemType(ProblemTypeBase):
             src_term = src.inject(field=p.forward, expr=src * time.step**2 / m)
             rec_term = rec.interpolate(expr=p)
 
-            kwargs = {
+            op_kwargs = {
                 'dt': time.step,
                 'p': p,
                 'm': m,
@@ -124,11 +124,12 @@ class ProblemType(ProblemTypeBase):
 
             # Compile the operator
             self._state_operator.set_operator(stencil + src_term + rec_term + update_saved,
-                                              name='acoustic_iso_state')
+                                              name='acoustic_iso_state',
+                                              **kwargs.get('devito_config', None))
             self._state_operator.compile()
 
             # Prepare arguments
-            self._state_operator.arguments(**kwargs)
+            self._state_operator.arguments(**op_kwargs)
 
         else:
             # If the source/receiver size has changed, then create new functions for them
@@ -263,7 +264,7 @@ class ProblemType(ProblemTypeBase):
             # Define the source injection function to generate the corresponding code
             rec_term = rec.inject(field=p_a.backward, expr=-rec * time.step ** 2 / m)
 
-            kwargs = {
+            op_kwargs = {
                 'dt': time.step,
                 'p_a': p_a,
                 'p_saved': p_saved,
@@ -277,11 +278,12 @@ class ProblemType(ProblemTypeBase):
 
             # Compile the operator
             self._adjoint_operator.set_operator(stencil + rec_term + gradient_update,
-                                                name='acoustic_iso_adjoint')
+                                                name='acoustic_iso_adjoint',
+                                                config=kwargs.get('devito_config', None), **kwargs)
             self._adjoint_operator.compile()
 
             # Prepare arguments
-            self._adjoint_operator.arguments(**kwargs)
+            self._adjoint_operator.arguments(**op_kwargs)
 
         else:
             # If the source/receiver size has changed, then create new functions for them
