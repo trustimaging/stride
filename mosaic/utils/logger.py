@@ -167,11 +167,6 @@ class LoggerManager:
         sys.stdout = self._stdout
         sys.stderr = self._stderr
 
-        logging.basicConfig(
-            level=_local_log_levels[log_level],
-            format='%(asctime)s - %(levelname)-26s %(message)s',
-        )
-
         handler = logging.StreamHandler()
         handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
@@ -190,6 +185,13 @@ class LoggerManager:
         sys.stdout.flush()
         sys.stdout = self._info_logger
         sys.stderr = self._error_logger
+
+        logging.basicConfig(
+            stream=sys.stdout,
+            level=_local_log_levels[log_level],
+            format='%(message)s',
+            # format='%(asctime)s - %(levelname)-26s %(message)s',
+        )
 
     def set_remote(self, runtime_id='monitor'):
         """

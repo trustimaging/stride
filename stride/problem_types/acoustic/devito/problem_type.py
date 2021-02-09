@@ -123,7 +123,8 @@ class ProblemType(ProblemTypeBase):
                 update_saved = []
 
             # Compile the operator
-            self._state_operator.set_operator(stencil + src_term + rec_term + update_saved)
+            self._state_operator.set_operator(stencil + src_term + rec_term + update_saved,
+                                              name='acoustic_iso_state')
             self._state_operator.compile()
 
             # Prepare arguments
@@ -275,7 +276,8 @@ class ProblemType(ProblemTypeBase):
             gradient_update = self.set_grad(wrt)
 
             # Compile the operator
-            self._adjoint_operator.set_operator(stencil + rec_term + gradient_update)
+            self._adjoint_operator.set_operator(stencil + rec_term + gradient_update,
+                                                name='acoustic_iso_adjoint')
             self._adjoint_operator.compile()
 
             # Prepare arguments

@@ -4,6 +4,7 @@ import devito
 import functools
 import numpy as np
 
+import mosaic
 from mosaic.types import Struct
 
 
@@ -294,6 +295,11 @@ class OperatorDevito:
         else:
             self.grid = grid
 
+        # TODO In local mode, devito PERF is logged as ERROR
+        runtime = mosaic.runtime()
+        if runtime.mode == 'local':
+            devito.logger.logger.propagate = False
+
     def set_problem(self, problem):
         """
         Set up the problem or sub-problem that will be run with this operator.
@@ -309,7 +315,7 @@ class OperatorDevito:
         """
         self._problem = problem
 
-    def set_operator(self, op, config=None):
+    def set_operator(self, op, name='kernel', config=None):
         """
         Set up a Devito operator from a list of operations.
 
@@ -317,6 +323,8 @@ class OperatorDevito:
         ----------
         op : list
             List of operations to be given to the devito.Operator instance.
+        name : str
+            Name to give to the operator, defaults to ``kernel``.
         config : dict, optional
             Configuration parameters to set for Devito overriding defaults.
 
@@ -331,7 +339,7 @@ class OperatorDevito:
             'develop-mode': False,
             'language': os.getenv('DEVITO_LANGUAGE', 'openmp'),
             'mpi': False,
-            'log-level': 'ERROR',
+            'log-level': 'DEBUG',
         }
 
         config = config or {}
@@ -341,6 +349,7 @@ class OperatorDevito:
             devito.parameters.configuration[key] = value
 
         self.operator = devito.Operator(op,
+                                        name=name,
                                         subs=self.grid.grid.spacing_map,
                                         platform=os.getenv('DEVITO_PLATFORM', None))
 
