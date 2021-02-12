@@ -3,7 +3,6 @@ import mosaic
 
 from stride.problem_definition import Problem, ScalarField, Space, Time
 from stride.optimisation import Optimisation, GradientDescent, Vp
-from stride import plotting
 
 
 async def main(runtime):
@@ -67,7 +66,7 @@ async def main(runtime):
 
     for freq, block in zip(max_freqs, optimisation.blocks(4)):
         block.config(num_iterations=10,
-                     f_max=freq, f_min=0.05e6,
+                     f_min=0.05e6, f_max=freq,
                      min=1450., max=3000.,
                      select_shots={'num': 12, 'randomly': True})
 

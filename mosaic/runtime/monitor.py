@@ -121,23 +121,20 @@ class Monitor(Runtime):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
             cmd = (f'ssh {node_address} '
-                   f'"mrun --node -i {node_index} --daemon '
+                   f'"mrun --node -i {node_index} '
                    f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
                    f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
                    f'--cluster --{log_level}"')
 
-            process = cmd_subprocess.run(cmd,
-                                         shell=True,
-                                         stdout=_stdout,
-                                         stderr=_stderr)
-
-            if process.returncode != 0:
-                raise RuntimeError('Failed to start node %d, error code %d' % (node_address, process.returncode))
-
-            self.logger.info('Started node %d at %s: %d' % (node_index, node_address, process.returncode))
+            cmd_subprocess.Popen(cmd,
+                                 shell=True,
+                                 stdout=_stdout,
+                                 stderr=_stderr)
 
             self._nodes[node_proxy.uid] = node_proxy
             await self._comms.wait_for(node_proxy.uid)
+
+            self.logger.info('Started node %d at %s' % (node_index, node_address))
 
     def set_logger(self):
         """

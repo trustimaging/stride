@@ -1220,6 +1220,10 @@ class CommsManager:
 
         async with self.send_exception(sender_id):
             future = self._loop.run(method, args=args, kwargs=kwargs)
+
+            if future is None:
+                return
+
             result = await future
 
             if reply is not False:

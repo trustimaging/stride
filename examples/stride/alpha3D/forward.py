@@ -55,8 +55,8 @@ async def main(runtime):
     problem.acquisitions.default()
 
     # Create wavelets
-    f_centre = 0.20e6
-    n_cycles = 2
+    f_centre = 0.50e6
+    n_cycles = 3
 
     for shot in problem.acquisitions.shots:
         shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,

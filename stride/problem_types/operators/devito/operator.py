@@ -296,6 +296,12 @@ class OperatorDevito:
             self.grid = grid
 
         # TODO In local mode, devito PERF is logged as ERROR
+        # devito.logger.PERF = 21
+        # devito.logger.logger_registry['PERF'] = 21
+        #
+        # import logging
+        # logging.addLevelName(21, "PERF")
+
         runtime = mosaic.runtime()
         if runtime.mode == 'local':
             devito.logger.logger.propagate = False

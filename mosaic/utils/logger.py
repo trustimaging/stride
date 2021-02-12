@@ -220,6 +220,12 @@ class LoggerManager:
         sys.stdout = self._info_logger
         sys.stderr = self._error_logger
 
+        logging.basicConfig(
+            stream=sys.stdout,
+            level=_local_log_levels[log_level],
+            format='%(message)s',
+        )
+
     @staticmethod
     def set_level(level):
         """
@@ -341,6 +347,24 @@ class LoggerManager:
 
         if self._log_location == 'local':
             self._warn_logger.flush(uid=uid)
+
+    def warn(self, buf, uid=None):
+        """
+        Log message with level ``warning``.
+
+        Parameters
+        ----------
+        buf : str
+            Message to log.
+        uid : str, optional
+            UID of the runtime from which the message originates, defaults to
+            current runtime.
+
+        Returns
+        -------
+
+        """
+        self.warning(buf, uid=uid)
 
 
 class CustomFormatter(logging.Formatter):

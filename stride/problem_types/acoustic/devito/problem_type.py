@@ -2,6 +2,8 @@
 import devito
 import numpy as np
 
+import mosaic
+
 from stride.problem_definition import ScalarField
 from ...operators.devito import GridDevito, OperatorDevito
 from ...problem_type import ProblemTypeBase
@@ -23,10 +25,12 @@ class ProblemType(ProblemTypeBase):
     space_order = 10
     time_order = 2
     undersampling_factor = 4
-    kernel = 'OT4'
 
     def __init__(self):
         super().__init__()
+
+        self.kernel = 'OT4'
+        self.drp = True
 
         self._grad = None
 
@@ -52,9 +56,127 @@ class ProblemType(ProblemTypeBase):
         """
         super().set_problem(problem)
 
+        self.drp = kwargs.get('drp', True)
+        self.check_conditions()
+
         self._grid.set_problem(problem)
         self._state_operator.set_problem(problem)
         self._adjoint_operator.set_problem(problem)
+
+    def check_conditions(self):
+        """
+        Check CFL and dispersion conditions, and select appropriate OT method.
+
+        Returns
+        -------
+
+        """
+        time = self._problem.time
+        space = self._problem.space
+        shot = self._problem.shot
+
+        runtime = mosaic.runtime()
+
+        # Get speed of sound bounds
+        medium = self._problem.medium
+
+        vp_min = np.min(medium.vp.extended_data)
+        vp_max = np.max(medium.vp.extended_data)
+
+        # Figure out propagated bandwidth
+        wavelets = shot.wavelets.data
+
+        if not time.num % 2:
+            num_freqs = (time.num + 1) // 2
+        else:
+            num_freqs = time.num // 2 + 1
+
+        wavelets_fft = np.fft.fft(wavelets, axis=-1)[:, :num_freqs]
+        freqs = np.fft.fftfreq(time.num, time.step)[:num_freqs]
+
+        wavelets_fft = np.mean(np.abs(wavelets_fft), axis=0)
+        wavelets_fft = 20 * np.log10(wavelets_fft / np.max(wavelets_fft))
+
+        f_min = 0
+        for f in range(num_freqs):
+            if wavelets_fft[f] > -10:
+                f_min = freqs[f]
+                break
+
+        f_max = num_freqs
+        for f in reversed(range(num_freqs)):
+            if wavelets_fft[f] > -10:
+                f_max = freqs[f]
+                break
+
+        runtime.logger.info('Estimated bandwidth for the propagated '
+                            'wavelet %.3f-%.3f MHz' % (f_min / 1e6, f_max / 1e6))
+
+        # Check for dispersion
+        h = max(*space.spacing)
+
+        if self.drp:
+            runtime.logger.info('Using DRP scheme')
+
+            h_max = vp_min / (3 * f_max)
+
+        else:
+            runtime.logger.info('Deactivating DRP scheme')
+
+            h_max = vp_min / (5 * f_max)
+
+        if h > h_max:
+            runtime.logger.warn('Spatial grid spacing (%.3f mm) is '
+                                'higher than dispersion limit (%.3f mm)' % (h / 1e-3, h_max / 1e-3))
+
+        # Check for instability
+        dt = time.step
+
+        dt_max_OT2 = self._dt_max(2.0 / np.pi, h, vp_max)
+        dt_max_OT4 = self._dt_max(3.6 * np.pi, h, vp_max)
+        dt_max_OT4_OP = self._dt_max(4.0 / np.pi, h, vp_max)
+
+        recompile = False
+        if dt <= dt_max_OT2:
+            runtime.logger.info('Time grid spacing (%.3f \u03BCs) is '
+                                'below OT2 limit (%.3f \u03BCs)' % (dt / 1e-6, dt_max_OT2 / 1e-6))
+
+            if self.kernel != 'OT2':
+                recompile = True
+
+            self.kernel = 'OT2'
+
+        elif dt <= dt_max_OT4:
+            runtime.logger.info('Time grid spacing (%.3f \u03BCs) is '
+                                'above OT2 limit (%.3f \u03BCs), '
+                                'switching to OT4' % (dt / 1e-6, dt_max_OT2 / 1e-6))
+
+            if self.kernel != 'OT4':
+                recompile = True
+
+            self.kernel = 'OT4'
+
+        elif dt <= dt_max_OT4_OP:
+            runtime.logger.info('Time grid spacing (%.3f \u03BCs) is'
+                                'above OT4 limit (%.3f \u03BCs), '
+                                'switching to OT4_OP' % (dt / 1e-6, dt_max_OT4 / 1e-6))
+
+            if self.kernel != 'OT4_OP':
+                recompile = True
+
+            self.kernel = 'OT4_OP'
+
+        else:
+            runtime.logger.warn('Time grid spacing (%.3f \u03BCs) is '
+                                'above OT4_OP limit (%.3f \u03BCs)' % (dt / 1e-6, dt_max_OT4_OP / 1e-6))
+
+            if self.kernel != 'OT4_OP':
+                recompile = True
+
+            self.kernel = 'OT4_OP'
+
+        if recompile:
+            self._state_operator.operator = None
 
     def before_state(self, save_wavefield=False, **kwargs):
         """
@@ -82,8 +204,8 @@ class ProblemType(ProblemTypeBase):
             src = self._grid.sparse_time_function('src', num=num_sources)
             rec = self._grid.sparse_time_function('rec', num=num_receivers)
 
-            p = self._grid.time_function('p')
-            m = self._grid.function('m')
+            p = self._grid.time_function('p', coefficients='symbolic' if self.drp else 'standard')
+            m = self._grid.function('m', coefficients='symbolic' if self.drp else 'standard')
 
             # Create damping layer
             if np.max(space.extra) > 0:
@@ -125,11 +247,11 @@ class ProblemType(ProblemTypeBase):
             # Compile the operator
             self._state_operator.set_operator(stencil + src_term + rec_term + update_saved,
                                               name='acoustic_iso_state',
-                                              **kwargs.get('devito_config', None))
+                                              **kwargs.get('devito_config', {}))
             self._state_operator.compile()
 
             # Prepare arguments
-            self._state_operator.arguments(**op_kwargs)
+            self._state_operator.arguments(**{**op_kwargs, **kwargs.get('devito_args', {})})
 
         else:
             # If the source/receiver size has changed, then create new functions for them
@@ -243,10 +365,10 @@ class ProblemType(ProblemTypeBase):
             src = self._grid.sparse_time_function('src', num=num_sources)
             rec = self._grid.sparse_time_function('rec', num=num_receivers)
 
-            p_a = self._grid.time_function('p_a')
+            p_a = self._grid.time_function('p_a', coefficients='symbolic' if self.drp else 'standard')
             p_saved = self._grid.undersampled_time_function('p_saved',
                                                             factor=self.undersampling_factor)
-            m = self._grid.function('m')
+            m = self._grid.function('m', coefficients='symbolic' if self.drp else 'standard')
 
             # Properly create damping layer
             if np.max(space.extra) > 0:
@@ -279,11 +401,11 @@ class ProblemType(ProblemTypeBase):
             # Compile the operator
             self._adjoint_operator.set_operator(stencil + rec_term + gradient_update,
                                                 name='acoustic_iso_adjoint',
-                                                config=kwargs.get('devito_config', None), **kwargs)
+                                                **kwargs.get('devito_config', {}))
             self._adjoint_operator.compile()
 
             # Prepare arguments
-            self._adjoint_operator.arguments(**op_kwargs)
+            self._adjoint_operator.arguments(**{**op_kwargs, **kwargs.get('devito_args', {})})
 
         else:
             # If the source/receiver size has changed, then create new functions for them
@@ -403,37 +525,39 @@ class ProblemType(ProblemTypeBase):
         vp.grad += variable_grad
         vp.prec += variable_prec
 
-    def _biharmonic(self, field, weight):
-        space_dims = [d for d in field.dimensions if d.is_Space]
-        derivs = tuple('d%s2' % d.name for d in space_dims)
-        laplace = field.laplace
-
-        biharmonic = []
-        for d in derivs:
-            for expr in laplace.args:
-                expr = getattr(expr.evaluate * weight, d)
-                biharmonic.append(expr)
-
-        return sum(biharmonic)._eval_deriv
-
-    def _laplacian(self, field, m):
-        if self.kernel not in ['OT2', 'OT4']:
+    def _laplacian(self, field, laplacian, m):
+        if self.kernel not in ['OT2', 'OT4', 'OT4_OP']:
             raise ValueError("Unrecognized kernel")
 
         time = self._problem.time
 
-        bi_harmonic = self._biharmonic(field, 1 / m) if self.kernel == 'OT4' else 0
-        laplacian = field.laplace + time.step**2/12 * bi_harmonic
+        if self.drp:
+            bi_harmonic = laplacian.laplace.evaluate
 
-        return laplacian
+        else:
+            bi_harmonic = field.biharmonic(1/m)
+
+        if self.kernel == 'OT2':
+            bi_harmonic = 0
+
+        elif self.kernel == 'OT4':
+            bi_harmonic = time.step**2/12 * bi_harmonic
+
+        else:
+            bi_harmonic = time.step**2/16 * bi_harmonic
+
+        laplacian_subs = field.laplace + time.step**2/12 * bi_harmonic
+
+        return laplacian_subs
 
     def _saved(self, field, m):
-        if self.kernel not in ['OT2', 'OT4']:
+        if self.kernel not in ['OT2', 'OT4', 'OT4_OP']:
             raise ValueError("Unrecognized kernel")
 
         time = self._problem.time
 
-        bi_harmonic = field.biharmonic(m**(-2)) if self.kernel == 'OT4' else 0
+        # bi_harmonic = field.biharmonic(m**(-2)) if self.kernel == 'OT4' else 0
+        bi_harmonic = 0
         saved = field.dt2 + time.step**2/12 * bi_harmonic
 
         return saved
@@ -447,26 +571,83 @@ class ProblemType(ProblemTypeBase):
         u_dt = field.dt if forward else field.dt.T
 
         # Get the spacial FD
-        laplacian = self._laplacian(field, m)
+        laplacian = self._grid.function('laplacian', coefficients='symbolic')
+        laplacian_subs = self._laplacian(field, laplacian, m)
 
         # Define PDE and update rule
-        eq_time = devito.solve(m * field.dt2 - laplacian + damp*u_dt, u_next)
+        eq_time = devito.solve(m * field.dt2 - laplacian_subs + damp*u_dt, u_next)
 
         # Define coefficients
-        # dims = grid.dimensions
-        #
-        # weights = np.array([0., 0., 0.0274017,
-        #                     -0.223818, 1.64875, -2.90467,
-        #                     1.64875, -0.223818, 0.0274017,
-        #                     0., 0.])
-        #
-        # coeffs = [devito.Coefficient(2, field, d, weights/d.spacing**2)
-        #           for d in dims]
-        # subs = devito.Substitutions(*coeffs)
+        if self.drp:
+            dims = grid.dimensions
 
-        # Time-stepping stencil.
-        stencil = [devito.Eq(u_next, eq_time,
-                             subdomain=grid.subdomains['physical_domain'],
-                             coefficients=None)]
+            weights_1 = np.array([
+                -7.936507937e-4,
+                +9.920634921e-3,
+                -5.952380952e-2,
+                +0.238095238100,
+                -0.833333333333,
+                +0.0,
+                +0.833333333333,
+                -0.238095238100,
+                +5.952380952e-2,
+                -9.920634921e-3,
+                +7.936507937e-4,
+            ])
 
-        return stencil
+            weights_2 = np.array([
+                +0.0043726804,
+                -0.0281145606,
+                +0.1068406382,
+                -0.3705141600,
+                +1.8617697535,
+                -3.1487087031,
+                +1.8617697535,
+                -0.3705141600,
+                +0.1068406382,
+                -0.0281145606,
+                +0.0043726804,
+            ])
+
+            coeffs_field_1 = [devito.Coefficient(1, field, d, weights_1/d.spacing)
+                              for d in dims]
+            coeffs_field_2 = [devito.Coefficient(2, field, d, weights_2/d.spacing**2)
+                              for d in dims]
+
+            coeffs_lap_1 = [devito.Coefficient(1, laplacian, d, weights_1/d.spacing)
+                            for d in dims]
+            coeffs_lap_2 = [devito.Coefficient(2, laplacian, d, weights_2/d.spacing**2)
+                            for d in dims]
+
+            coeffs_m_1 = [devito.Coefficient(1, m, d, weights_1/d.spacing)
+                          for d in dims]
+            coeffs_m_2 = [devito.Coefficient(2, m, d, weights_2/d.spacing**2)
+                          for d in dims]
+
+            coeffs = coeffs_field_1 + coeffs_field_2 + \
+                     coeffs_lap_1 + coeffs_lap_2 + \
+                     coeffs_m_1 + coeffs_m_2
+            subs = devito.Substitutions(*coeffs)
+
+            # Time-stepping stencil
+            laplacian_term = devito.Eq(laplacian, 1/m * field.laplace.evaluate,
+                                       subdomain=grid.subdomains['physical_domain'],
+                                       coefficients=subs)
+
+            stencil = devito.Eq(u_next, eq_time,
+                                subdomain=grid.subdomains['physical_domain'],
+                                coefficients=subs)
+
+            return [laplacian_term, stencil]
+
+        else:
+            # Time-stepping stencil
+            stencil = devito.Eq(u_next, eq_time,
+                                subdomain=grid.subdomains['physical_domain'])
+
+            return [stencil]
+
+    def _dt_max(self, k, h, vp_max):
+        space = self._problem.space
+
+        return k * h / vp_max * 1 / np.sqrt(space.dim)
