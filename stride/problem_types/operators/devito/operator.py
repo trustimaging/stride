@@ -1,5 +1,6 @@
 
 import os
+import sys
 import devito
 import functools
 import numpy as np
@@ -295,12 +296,8 @@ class OperatorDevito:
         else:
             self.grid = grid
 
-        # TODO In local mode, devito PERF is logged as ERROR
-        # devito.logger.PERF = 21
-        # devito.logger.logger_registry['PERF'] = 21
-        #
-        # import logging
-        # logging.addLevelName(21, "PERF")
+        for handler in devito.logger.logger.handlers:
+            handler.setStream(sys.stdout)
 
         runtime = mosaic.runtime()
         if runtime.mode == 'local':
