@@ -28,6 +28,9 @@ class Gridded:
         if grid is None:
             grid = Grid(space, time, slow_time)
 
+        else:
+            grid = Grid(grid.space, grid.time, grid.slow_time)
+
         self._grid = grid
 
     @property

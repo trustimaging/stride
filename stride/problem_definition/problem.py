@@ -202,7 +202,7 @@ class Problem(Gridded):
 
         return sub_problem
 
-    async def forward(self, dump=True, deallocate=True, **kwargs):
+    async def forward(self, shot_ids=None, dump=True, deallocate=True, **kwargs):
         """
         Run the problem forward with default parameters.
 
@@ -212,6 +212,8 @@ class Problem(Gridded):
 
         Parameters
         ----------
+        shot_ids : list, optional
+            List of shot IDs to run forward, defaults to all of them.
         dump : bool, optional
             Whether or not the generated data should be dumped to disk, defaults to True.
         deallocate : bool, optional
@@ -235,10 +237,14 @@ class Problem(Gridded):
             except OSError:
                 pass
 
-        shot_ids = self.acquisitions.remaining_shot_ids
-        if not len(shot_ids):
-            runtime.logger.warning('No need to run forward, observed already exists')
-            return
+        if shot_ids is None:
+            shot_ids = self.acquisitions.remaining_shot_ids
+            if not len(shot_ids):
+                runtime.logger.warning('No need to run forward, observed already exists')
+                return
+
+        if not isinstance(shot_ids, list):
+            shot_ids = [shot_ids]
 
         # Run sub-problems
         await runners.map(self.run_forward, shot_ids, dump=dump, deallocate=deallocate, **kwargs)

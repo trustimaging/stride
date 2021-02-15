@@ -546,7 +546,7 @@ class ProblemType(ProblemTypeBase):
         else:
             bi_harmonic = time.step**2/16 * bi_harmonic
 
-        laplacian_subs = field.laplace + time.step**2/12 * bi_harmonic
+        laplacian_subs = field.laplace + bi_harmonic
 
         return laplacian_subs
 
@@ -575,7 +575,7 @@ class ProblemType(ProblemTypeBase):
         laplacian_subs = self._laplacian(field, laplacian, m)
 
         # Define PDE and update rule
-        eq_time = devito.solve(m * field.dt2 - laplacian_subs + damp*u_dt, u_next)
+        eq_time = devito.solve(m*field.dt2 - laplacian_subs + damp*u_dt, u_next)
 
         # Define coefficients
         if self.drp:

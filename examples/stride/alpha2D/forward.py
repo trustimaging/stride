@@ -57,7 +57,7 @@ async def main(runtime):
     problem.plot()
 
     # Run
-    await problem.forward(drp=False)
+    await problem.forward()
 
 
 if __name__ == '__main__':

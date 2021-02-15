@@ -69,25 +69,25 @@ class Node(Runtime):
         num_workers = self._num_workers
         num_threads = self._num_threads
 
-        available_cpus = list(range(psutil.cpu_count()))
-
-        if self.mode == 'local':
-            psutil.Process().cpu_affinity([available_cpus[2]])
-            available_cpus = available_cpus[3:]
-        else:
-            psutil.Process().cpu_affinity([available_cpus[0]])
-            available_cpus = available_cpus[1:]
-
-        cpus_per_worker = len(available_cpus) // self._num_workers
+        # available_cpus = list(range(psutil.cpu_count()))
+        #
+        # if self.mode == 'local':
+        #     psutil.Process().cpu_affinity([available_cpus[2]])
+        #     available_cpus = available_cpus[3:]
+        # else:
+        #     psutil.Process().cpu_affinity([available_cpus[0]])
+        #     available_cpus = available_cpus[1:]
+        #
+        # cpus_per_worker = len(available_cpus) // self._num_workers
 
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
 
-            if worker_index < num_workers - 1:
-                cpu_affinity = available_cpus[worker_index*cpus_per_worker:(worker_index+1)*cpus_per_worker]
-
-            else:
-                cpu_affinity = available_cpus[worker_index*cpus_per_worker:]
+            # if worker_index < num_workers - 1:
+            #     cpu_affinity = available_cpus[worker_index*cpus_per_worker:(worker_index+1)*cpus_per_worker]
+            #
+            # else:
+            #     cpu_affinity = available_cpus[worker_index*cpus_per_worker:]
 
             def start_worker(*args, **extra_kwargs):
                 kwargs.update(extra_kwargs)
@@ -99,7 +99,6 @@ class Node(Runtime):
 
             worker_proxy = RuntimeProxy(name='worker', indices=indices)
             worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
-                                                         cpu_affinity=cpu_affinity,
                                                          daemon=False)
             worker_subprocess.start_process()
             worker_proxy.subprocess = worker_subprocess

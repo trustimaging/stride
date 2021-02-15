@@ -306,10 +306,18 @@ class Shot(ProblemBase):
         self.id = description.id
 
         for source_id in description.source_ids:
-            self._sources[source_id] = self._geometry.get(source_id)
+            if self._geometry:
+                source = self._geometry.get(source_id)
+            else:
+                source = None
+            self._sources[source_id] = source
 
         for receiver_id in description.receiver_ids:
-            self._receivers[receiver_id] = self._geometry.get(receiver_id)
+            if self._geometry:
+                receiver = self._geometry.get(receiver_id)
+            else:
+                receiver = None
+            self._receivers[receiver_id] = receiver
 
         if 'wavelets' in description:
             self.wavelets = Traces('wavelets', transducer_ids=self.source_ids, grid=self.grid)

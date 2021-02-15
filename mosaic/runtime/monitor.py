@@ -1,5 +1,4 @@
 
-import psutil
 import asyncio
 import subprocess as cmd_subprocess
 
@@ -56,9 +55,9 @@ class Monitor(Runtime):
         """
         await super().init(**kwargs)
 
-        if self.mode == 'local':
-            available_cpus = list(range(psutil.cpu_count()))
-            psutil.Process().cpu_affinity([available_cpus[0]])
+        # if self.mode == 'local':
+        #     available_cpus = list(range(psutil.cpu_count()))
+        #     psutil.Process().cpu_affinity([available_cpus[0]])
 
         # Start local cluster
         if self.mode == 'local':
