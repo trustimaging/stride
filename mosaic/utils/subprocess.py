@@ -194,9 +194,10 @@ class Subprocess:
 
         try:
             if is_daemon:
+                from .logger import _stdout, _stderr
                 daemon_context = daemon.DaemonContext(detach_process=True,
-                                                      stdout=sys.stdout,
-                                                      stderr=sys.stderr)
+                                                      stdout=_stdout,
+                                                      stderr=_stderr)
                 daemon_context.open()
 
             self._target = target

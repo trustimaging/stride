@@ -1,7 +1,7 @@
 
 import os
-import sys
 import devito
+import logging
 import functools
 import numpy as np
 
@@ -296,12 +296,39 @@ class OperatorDevito:
         else:
             self.grid = grid
 
-        for handler in devito.logger.logger.handlers:
-            handler.setStream(sys.stdout)
+        devito_logger = logging.getLogger('devito')
+        devito.logger.logger = devito_logger
+
+        class RerouteFilter(logging.Filter):
+
+            def __init__(self):
+                super().__init__()
+
+            def filter(self, record):
+                _runtime = mosaic.runtime()
+
+                if record.levelno == devito.logger.PERF:
+                    _runtime.logger.info(record.msg)
+
+                elif record.levelno == logging.ERROR:
+                    _runtime.logger.error(record.msg)
+
+                elif record.levelno == logging.WARNING:
+                    _runtime.logger.warning(record.msg)
+
+                elif record.levelno == logging.DEBUG:
+                    _runtime.logger.debug(record.msg)
+
+                else:
+                    _runtime.logger.info(record.msg)
+
+                return False
+
+        devito_logger.addFilter(RerouteFilter())
 
         runtime = mosaic.runtime()
         if runtime.mode == 'local':
-            devito.logger.logger.propagate = False
+            devito_logger.propagate = False
 
     def set_problem(self, problem):
         """

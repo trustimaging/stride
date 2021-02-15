@@ -170,7 +170,7 @@ class LoggerManager:
         handler = logging.StreamHandler()
         handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
-        logger = logging.getLogger('STDOUT')
+        logger = logging.getLogger('mosaic')
         logger.propagate = False
         if logger.hasHandlers():
             logger.handlers.clear()
@@ -190,7 +190,6 @@ class LoggerManager:
             stream=sys.stdout,
             level=_local_log_levels[log_level],
             format='%(message)s',
-            # format='%(asctime)s - %(levelname)-26s %(message)s',
         )
 
     def set_remote(self, runtime_id='monitor'):
@@ -219,6 +218,16 @@ class LoggerManager:
         sys.stdout.flush()
         sys.stdout = self._info_logger
         sys.stderr = self._error_logger
+
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
+
+        logger = logging.getLogger('mosaic')
+        logger.propagate = False
+        if logger.hasHandlers():
+            logger.handlers.clear()
+
+        logger.addHandler(handler)
 
         logging.basicConfig(
             stream=sys.stdout,
