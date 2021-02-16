@@ -11,7 +11,7 @@ async def main(runtime):
     # Create the grid
     shape = (200, 200)
     extra = (50, 50)
-    absorbing = (40, 40)
+    absorbing = (45, 45)
     spacing = (0.5e-3, 0.5e-3)
 
     space = Space(shape=shape,
@@ -33,7 +33,7 @@ async def main(runtime):
 
     # Create medium
     vp = ScalarField('vp', grid=problem.grid)
-    vp.fill(1600.)
+    vp.fill(1500.)
 
     problem.medium.add(vp)
 
@@ -66,10 +66,37 @@ async def main(runtime):
 
     await problem.forward(deallocate=False, dump=False)
 
+    wavelet = shot.wavelets.data[0]
+    observed = shot.observed.data[1]
+
     import matplotlib.pyplot as plt
 
-    plt.plot(shot.observed.data[1]/np.max(shot.observed.data[1]), c='r')
-    plt.plot(shot.wavelets.data[0]/np.max(shot.wavelets.data[0]), c='k')
+    # from stride.utils import filters
+    # f_min = 0.15e6 * time.step
+    # observed = filters.highpass_filter_fir(observed, f_min)
+
+    plt.figure()
+    plt.plot(wavelet/np.max(wavelet), c='k')
+    plt.plot(observed/np.max(observed), c='r')
+
+    plt.figure()
+
+    if not time.num % 2:
+        num_freqs = (time.num + 1) // 2
+    else:
+        num_freqs = time.num // 2 + 1
+
+    wavelets_fft = np.fft.fft(wavelet, axis=-1)[:num_freqs]
+    observed_fft = np.fft.fft(observed, axis=-1)[:num_freqs]
+    freqs = np.fft.fftfreq(time.num, time.step)[:num_freqs]
+
+    wavelets_fft = np.abs(wavelets_fft)
+    observed_fft = np.abs(observed_fft)
+    wavelets_fft = 20 * np.log10(wavelets_fft / np.max(wavelets_fft))
+    observed_fft = 20 * np.log10(observed_fft / np.max(observed_fft))
+
+    plt.plot(freqs, observed_fft, c='r')
+    plt.plot(freqs, wavelets_fft, c='k')
 
     plt.show()
 

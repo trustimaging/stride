@@ -194,6 +194,7 @@ class ProblemType(ProblemTypeBase):
         time = self._problem.time
         space = self._problem.space
         shot = self._problem.shot
+        medium = self._problem.medium
 
         num_sources = shot.num_sources
         num_receivers = shot.num_receivers
@@ -210,7 +211,7 @@ class ProblemType(ProblemTypeBase):
             # Create damping layer
             if np.max(space.extra) > 0:
                 damp = self._grid.function('damp')
-                damp.data[:] = self._problem.medium.damping(0.003 * np.log(1.0 / 0.001) / np.max(space.extra))
+                damp.data[:] = self._problem.medium.damping()*medium.vp.extended_data
 
             else:
                 damp = devito.Constant('damp')
@@ -278,8 +279,6 @@ class ProblemType(ProblemTypeBase):
             self._grid.vars.p_saved.data_with_halo.fill(0.)
 
         # Set medium parameters
-        medium = self._problem.medium
-
         self._grid.vars.m.data_with_halo[:] = 1 / self._grid.with_halo(medium.vp.extended_data)**2
 
         # Set geometry
@@ -355,6 +354,7 @@ class ProblemType(ProblemTypeBase):
         time = self._problem.time
         space = self._problem.space
         shot = self._problem.shot
+        medium = self._problem.medium
 
         num_sources = shot.num_sources
         num_receivers = shot.num_receivers
@@ -373,7 +373,7 @@ class ProblemType(ProblemTypeBase):
             # Properly create damping layer
             if np.max(space.extra) > 0:
                 damp = self._grid.function('damp')
-                damp.data[:] = self._problem.medium.damping(0.005 * np.log(1.0 / 0.001) / np.max(space.extra))
+                damp.data[:] = self._problem.medium.damping()*medium.vp.extended_data
 
             else:
                 damp = devito.Constant('damp')
@@ -435,8 +435,6 @@ class ProblemType(ProblemTypeBase):
         self._grid.vars.p_saved.data[:] = wavefield.data
 
         # Set medium parameters
-        medium = self._problem.medium
-
         self._grid.vars.m.data_with_halo[:] = 1 / self._grid.with_halo(medium.vp.extended_data)**2
 
         # Set geometry
@@ -572,10 +570,10 @@ class ProblemType(ProblemTypeBase):
 
         # Get the spacial FD
         laplacian = self._grid.function('laplacian', coefficients='symbolic')
-        laplacian_subs = self._laplacian(field, laplacian, m)
+        laplacian_expr = self._laplacian(field, laplacian, m)
 
         # Define PDE and update rule
-        eq_time = devito.solve(m*field.dt2 - laplacian_subs + damp*u_dt, u_next)
+        eq_time = devito.solve(m*field.dt2 - laplacian_expr + 2*damp*u_dt + damp**2*field, u_next)
 
         # Define coefficients
         if self.drp:
