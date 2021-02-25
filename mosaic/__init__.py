@@ -1,4 +1,6 @@
 
+import asyncio
+
 from .core import tessera
 from .runtime import Head, Monitor, Node, Worker
 from .utils.subprocess import subprocess
@@ -22,7 +24,8 @@ def init(runtime_type='head', runtime_indices=(),
          monitor_address=None, monitor_port=None,
          num_workers=None, num_threads=None,
          mode='local', monitor_strategy='round-robin',
-         log_level='info', node_list=None, wait=False,
+         log_level='info', node_list=None,
+         asyncio_loop=None, wait=False,
          **kwargs):
     """
     Starts the global mosaic runtime.
@@ -62,6 +65,8 @@ def init(runtime_type='head', runtime_indices=(),
         Log level, defaults to ``info``.
     node_list : list, optional
         List of available node addresses to connect to.
+    asyncio_loop: object, optional
+        Async loop to use in our mosaic event loop, defaults to new loop.
     wait : bool, optional
         Whether or not to return control to calling frame, defaults to False.
     kwargs : optional
@@ -112,8 +117,8 @@ def init(runtime_type='head', runtime_indices=(),
         raise KeyError('Endpoint type is not recognised, available types are head, '
                        'monitor, node and worker')
 
-    loop = _runtime.get_event_loop()
-    loop.run(_runtime.init, kwargs=runtime_config, wait=True)
+    loop = _runtime.get_event_loop(asyncio_loop=asyncio_loop)
+    result = loop.run(_runtime.init, kwargs=runtime_config, wait=True)
 
     if wait is True:
         try:
@@ -122,7 +127,7 @@ def init(runtime_type='head', runtime_indices=(),
         finally:
             loop.stop()
 
-    return _runtime
+    return result
 
 
 def __getattr__(key):
@@ -182,6 +187,7 @@ def stop():
 
     finally:
         loop.stop()
+        clear_runtime()
 
 
 def run(main, *args, **kwargs):
@@ -212,3 +218,44 @@ def run(main, *args, **kwargs):
 
     finally:
         stop()
+
+
+async def interactive(switch, *args, **kwargs):
+    """
+    Initialise the runtime interactively.
+
+    Parameters
+    ----------
+    switch : str
+        Whether to switch interactive mode ``on`` or ``off``.
+    args : tuple, optional
+        Arguments to `mosaic.init`.
+    kwargs : optional
+        Keyword arguments to `mosaic.init`.
+
+    Returns
+    -------
+
+    """
+    global _runtime
+
+    if switch == 'on':
+        if _runtime is not None:
+            return
+
+        fut = init(*args, **kwargs,
+                   asyncio_loop=asyncio.get_event_loop())
+
+        await fut
+
+    else:
+        if _runtime is None:
+            return
+
+        loop = _runtime.get_event_loop()
+
+        try:
+            await loop.run(_runtime.stop, args=(), kwargs={})
+
+        finally:
+            clear_runtime()

@@ -37,9 +37,9 @@ class ProblemType(ProblemTypeBase):
         self._max_wavelet = 0.
         self._src_scale = 0.
 
-        self._grid = GridDevito(self.space_order, self.time_order)
-        self._state_operator = OperatorDevito(self.space_order, self.time_order, grid=self._grid)
-        self._adjoint_operator = OperatorDevito(self.space_order, self.time_order, grid=self._grid)
+        self._grid = None
+        self._state_operator = None
+        self._adjoint_operator = None
 
     def set_problem(self, problem, **kwargs):
         """
@@ -56,12 +56,21 @@ class ProblemType(ProblemTypeBase):
         """
         super().set_problem(problem)
 
-        self.drp = kwargs.get('drp', True)
-        self.check_conditions()
+        if self._grid is None:
+            self._grid = GridDevito(self.space_order, self.time_order)
+
+        if self._state_operator is None:
+            self._state_operator = OperatorDevito(self.space_order, self.time_order, grid=self._grid)
+
+        if self._adjoint_operator is None:
+            self._adjoint_operator = OperatorDevito(self.space_order, self.time_order, grid=self._grid)
 
         self._grid.set_problem(problem)
         self._state_operator.set_problem(problem)
         self._adjoint_operator.set_problem(problem)
+
+        self.drp = kwargs.get('drp', True)
+        self.check_conditions()
 
     def check_conditions(self):
         """

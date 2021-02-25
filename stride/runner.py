@@ -45,8 +45,8 @@ class Runner:
 
         self.problem = problem
 
-        if self.problem_type is None or self.problem_type.__class__ != problem.problem_type:
-            self.problem_type = problem.problem_type()
+        if self.problem_type is None or self.problem_type.__class__ != problem.problem_type.__class__:
+            self.problem_type = problem.problem_type
 
         if self.block is not None:
             wavelets = self.problem.shot.wavelets
@@ -78,8 +78,8 @@ class Runner:
 
         self.block = block
 
-        if self.functional is None or self.functional.__class__ != block.functional:
-            self.functional = block.functional()
+        if self.functional is None or self.functional.__class__ != block.functional.__class__:
+            self.functional = block.functional
 
     def run_state(self, save_wavefield=False, **kwargs):
         """

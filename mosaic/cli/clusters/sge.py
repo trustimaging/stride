@@ -70,13 +70,14 @@ num_threads_per_worker={num_threads}
 #$ -l h_rt=48:00:00
 
 # amount of RAM per core (must be an integer)
+# node_memory/(num_threads_per_worker*num_workers_per_node)
 #$ -l mem={int(node_memory/(num_threads*num_workers))}G
 
 # set the name of the job.
 #$ -N {name}
 
 # select the MPI parallel environment and number of cores.
-# there's 40 cores per node
+# num_threads_per_worker*num_workers_per_node*(num_nodes+1)
 #$ -pe mpi {num_threads*num_workers*(num_nodes+1)}
 
 # set the working directory
@@ -94,7 +95,7 @@ num_threads_per_worker={num_threads}
 conda activate stride
 
 # set number of threads per process
-# use $(ppn) to use one process per node and as many threads as cores in the node
+# use $(ppn) to use one worker per node and as many threads pr worker as cores in the node
 export OMP_NUM_THREADS={num_workers*num_threads}
 
 # set any environment variables

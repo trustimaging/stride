@@ -335,59 +335,59 @@ class Block:
 
         # Process wavelets
         wavelets = kwargs.pop('wavelets', {})
-        if callable(wavelets):
-            self.pipelines.wavelets = wavelets(**kwargs)
-        else:
+        if isinstance(wavelets, dict):
             self.pipelines.wavelets = default_pipelines.ProcessWavelets(**kwargs, **wavelets)
+        else:
+            self.pipelines.wavelets = wavelets
 
         # Process wavefield
         wavefield = kwargs.pop('wavefield', {})
-        if callable(wavefield):
-            self.pipelines.wavefield = wavefield(**kwargs)
-        else:
+        if isinstance(wavefield, dict):
             self.pipelines.wavefield = default_pipelines.ProcessWavefield(**kwargs, **wavefield)
+        else:
+            self.pipelines.wavefield = wavefield
 
         # Process traces
         traces = kwargs.pop('traces', {})
-        if callable(traces):
-            self.pipelines.traces = traces(**kwargs)
-        else:
+        if isinstance(traces, dict):
             self.pipelines.traces = default_pipelines.ProcessTraces(**kwargs, **traces)
+        else:
+            self.pipelines.traces = traces
 
         # Process adjoint source
         adjoint_source = kwargs.pop('adjoint_source', {})
-        if callable(adjoint_source):
-            self.pipelines.adjoint_source = adjoint_source(**kwargs)
-        else:
+        if isinstance(adjoint_source, dict):
             self.pipelines.adjoint_source = default_pipelines.ProcessAdjointSource(**kwargs, **adjoint_source)
+        else:
+            self.pipelines.adjoint_source = adjoint_source
 
         # Process local gradient
         local_gradient = kwargs.pop('local_gradient', {})
-        if callable(local_gradient):
-            self.pipelines.local_gradient = local_gradient(**kwargs)
-        else:
+        if isinstance(local_gradient, dict):
             self.pipelines.local_gradient = default_pipelines.ProcessLocalGradient(**kwargs, **local_gradient)
+        else:
+            self.pipelines.local_gradient = local_gradient
 
         # Process global gradient
         global_gradient = kwargs.pop('global_gradient', {})
-        if callable(global_gradient):
-            self.pipelines.global_gradient = global_gradient(**kwargs)
-        else:
+        if isinstance(global_gradient, dict):
             self.pipelines.global_gradient = default_pipelines.ProcessGlobalGradient(**kwargs, **global_gradient)
+        else:
+            self.pipelines.global_gradient = global_gradient
 
         # Process model iteration
         model_iteration = kwargs.pop('model_iteration', {})
-        if callable(model_iteration):
-            self.pipelines.model_iteration = model_iteration(**kwargs)
-        else:
+        if isinstance(model_iteration, dict):
             self.pipelines.model_iteration = default_pipelines.ProcessModelIteration(**kwargs, **model_iteration)
+        else:
+            self.pipelines.model_iteration = model_iteration
 
         # Process model block
         model_block = kwargs.pop('model_block', {})
-        if callable(model_block):
-            self.pipelines.model_block = model_block(**kwargs)
-        else:
+        if isinstance(model_block, dict):
             self.pipelines.model_block = default_pipelines.ProcessModelBlock(**kwargs, **model_block)
+        else:
+            self.pipelines.model_block = model_block
 
 
 class Optimisation(Saved):
@@ -430,8 +430,8 @@ class Optimisation(Saved):
     ----------
     name : str, optional
         Optional name for the optimisation object.
-    functional : str or callable, optional
-        Name of the functional to be used, or callable defining that functional, defaults to ``l2_norm_difference``.
+    functional : str or object, optional
+        Name of the functional to be used, or object defining that functional, defaults to ``l2_norm_difference``.
 
     """
 
@@ -440,12 +440,12 @@ class Optimisation(Saved):
 
         functional = kwargs.pop('functional', 'l2_norm_difference')
 
-        if callable(functional):
-            self.functional = functional
+        if isinstance(functional, str):
+            functional_module = getattr(optimisation.functionals, functional)
+            self.functional = functional_module.Functional()
 
         else:
-            functional_module = getattr(optimisation.functionals, functional)
-            self.functional = functional_module.Functional
+            self.functional = functional
 
         self._num_blocks = None
         self._variables = VariableList()

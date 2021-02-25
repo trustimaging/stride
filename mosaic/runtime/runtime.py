@@ -293,16 +293,21 @@ class Runtime(BaseRPC):
 
         return self._zmq_context
 
-    def get_event_loop(self):
+    def get_event_loop(self, asyncio_loop=None):
         """
         Access event loop.
+
+        Parameters
+        ----------
+        asyncio_loop: object, optional
+            Async loop to use in our mosaic event loop, defaults to new loop.
 
         Returns
         -------
 
         """
         if self._loop is None:
-            self._loop = EventLoop()
+            self._loop = EventLoop(loop=asyncio_loop)
 
         return self._loop
 

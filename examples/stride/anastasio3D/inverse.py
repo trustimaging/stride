@@ -3,8 +3,7 @@ import numpy as np
 
 import mosaic
 
-from stride.problem_definition import Problem, ScalarField, Space, Time
-from stride.optimisation import Optimisation, GradientDescent, Vp
+from stride import *
 
 
 async def main(runtime):

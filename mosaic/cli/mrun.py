@@ -4,7 +4,7 @@ import click
 import subprocess as cmd_subprocess
 
 from . import clusters
-from .. import init, stop
+from .. import init, stop, runtime
 from ..comms import get_hostname
 from ..utils import subprocess
 from ..utils.logger import _stdout, _stderr
@@ -114,13 +114,14 @@ def go(cmd=None, **kwargs):
         return
 
     else:
-        runtime = init('monitor', **runtime_config, wait=False)
+        init('monitor', **runtime_config, wait=False)
+        _runtime = runtime()
 
     # Get the initialised runtime
-    loop = runtime.get_event_loop()
-    runtime_id = runtime.uid
-    runtime_address = runtime.address
-    runtime_port = runtime.port
+    loop = _runtime.get_event_loop()
+    runtime_id = _runtime.uid
+    runtime_address = _runtime.address
+    runtime_port = _runtime.port
 
     # Store runtime ID, address and port in a tmp file for the
     # head to use
@@ -140,7 +141,7 @@ def go(cmd=None, **kwargs):
                                      stdout=_stdout,
                                      stderr=_stderr)
 
-        runtime.logger.info('Process ended with code: %d' % process.returncode)
+        _runtime.logger.info('Process ended with code: %d' % process.returncode)
 
     async def main():
         await loop.run_in_executor(run_head, args=(), kwargs={})

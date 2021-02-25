@@ -216,32 +216,36 @@ class EventLoop:
         -------
 
         """
-        if self._stop.is_set():
-            return
+        try:
+            if self._stop.is_set():
+                return
 
-        self._stop.set()
+            self._stop.set()
 
-        for task in list(self._recurring_tasks):
-            if not task.done():
-                task.cancel()
+            for task in list(self._recurring_tasks):
+                if not task.done():
+                    task.cancel()
 
-        tasks = asyncio.Task.all_tasks()
-        pending = [task for task in tasks if not task.done()]
-
-        for task in pending:
-            task.cancel()
-
-        while len(pending):
-            self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-
+            tasks = asyncio.Task.all_tasks()
             pending = [task for task in tasks if not task.done()]
 
-        self._loop.stop()
-        self._loop.close()
-        self._executor.shutdown()
-        self._executor.shutdown(wait=True)
+            for task in pending:
+                task.cancel()
 
-        asyncio.set_event_loop(None)
+            while len(pending):
+                self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+                pending = [task for task in tasks if not task.done()]
+
+            self._loop.stop()
+            self._loop.close()
+            self._executor.shutdown()
+            self._executor.shutdown(wait=True)
+
+            asyncio.set_event_loop(None)
+
+        except RuntimeError:
+            pass
 
     def __del__(self):
         self.stop()
@@ -280,13 +284,7 @@ class EventLoop:
             return self._loop.run_until_complete(coro(*args, **kwargs))
 
         future = self._loop.create_task(coro(*args, **kwargs))
-
-        if wait is True:
-            future = self.wrap_future(future)
-            return future.result()
-
-        else:
-            return future
+        return future
 
     def run_in_executor(self, callback, args=(), kwargs=None):
         """

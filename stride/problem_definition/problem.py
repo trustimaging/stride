@@ -44,9 +44,9 @@ class Problem(Gridded):
         Predefined Geometry of the problem.
     acquisitions : Acquisitions, optional
         Predefined Acquisitions of the problem.
-    problem_type : str or callable, optional
+    problem_type : str or object, optional
         Problem type that will be executed on this Problem, defaults to ``acoustic``.
-    problem_implementation : str or callable, optional
+    problem_implementation : str or object, optional
         Implementation of the problem type that will be executed on this Problem, defaults to ``devito``.
 
     """
@@ -87,13 +87,13 @@ class Problem(Gridded):
         problem_type = kwargs.pop('problem_type', 'acoustic')
         problem_implementation = kwargs.pop('problem_implementation', 'devito')
 
-        if callable(problem_type):
-            self.problem_type = problem_type
-
-        else:
+        if isinstance(problem_type, str):
             problem_module = getattr(problem_types, problem_type)
             problem_module = getattr(problem_module, problem_implementation)
-            self.problem_type = problem_module.problem_type.ProblemType
+            self.problem_type = problem_module.problem_type.ProblemType()
+
+        else:
+            self.problem_type = problem_type
 
     def load(self, *args, **kwargs):
         """
@@ -249,7 +249,7 @@ class Problem(Gridded):
         # Run sub-problems
         await runners.map(self.run_forward, shot_ids, dump=dump, deallocate=deallocate, **kwargs)
 
-    async def run_forward(self, shot_id, runner, dump=True, deallocate=True, **kwargs):
+    async def run_forward(self, shot_id, runner, dump=True, deallocate=False, **kwargs):
         """
         Run a single shot forward in a given Runner using default parameters.
 
@@ -265,7 +265,7 @@ class Problem(Gridded):
             Whether or not the generated data should be dumped to disk, defaults to True.
         deallocate : bool, optional
             Whether or not to deallocate the generated data after each Shot is completed,
-            defaults to True.
+            defaults to False.
 
         Returns
         -------
@@ -431,7 +431,7 @@ class SubProblem(Gridded):
         Predefined Geometry of the problem.
     acquisitions : Acquisitions, optional
         Predefined Acquisitions of the problem.
-    problem_type : callable, optional
+    problem_type : object, optional
         Problem type that will be executed on this SubProblem, defaults to ``acoustic``.
 
     """

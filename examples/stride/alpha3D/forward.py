@@ -1,7 +1,7 @@
 
 import mosaic
 
-from stride.problem_definition import Problem, ScalarField, Space, Time
+from stride import *
 from stride.utils import wavelets
 
 
