@@ -60,7 +60,7 @@ class Monitor(Runtime):
         #     psutil.Process().cpu_affinity([available_cpus[0]])
 
         # Start local cluster
-        if self.mode == 'local':
+        if self.mode in ['local', 'interactive']:
             await self.init_local(**kwargs)
 
         else:
@@ -144,7 +144,11 @@ class Monitor(Runtime):
 
         """
         self.logger = LoggerManager()
-        self.logger.set_local()
+
+        if self.mode == 'interactive':
+            self.logger.set_remote(runtime_id='head')
+        else:
+            self.logger.set_local()
 
     def update_monitored_node(self, sender_id, monitored_node):
         """

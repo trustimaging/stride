@@ -81,7 +81,7 @@ class Head(Runtime):
 
         monitor_proxy = RuntimeProxy(name='monitor')
         monitor_subprocess = subprocess(start_monitor)(name=monitor_proxy.uid,
-                                                       daemon=self.mode != 'local')
+                                                       daemon=False)
         monitor_subprocess.start_process()
         monitor_proxy.subprocess = monitor_subprocess
 

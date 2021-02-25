@@ -244,6 +244,7 @@ async def interactive(switch, *args, **kwargs):
             return
 
         fut = init(*args, **kwargs,
+                   mode='interactive',
                    asyncio_loop=asyncio.get_event_loop())
 
         await fut

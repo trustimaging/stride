@@ -274,7 +274,8 @@ class Problem(Gridded):
         runtime = mosaic.runtime()
 
         sub_problem = self.sub_problem(shot_id)
-        runtime.logger.info('\nGiving shot %d to %s' % (shot_id, runner.runtime_id))
+        runtime.logger.info('\n')
+        runtime.logger.info('Giving shot %d to %s' % (shot_id, runner.runtime_id))
 
         await runner.set_problem(sub_problem, **kwargs)
 
@@ -378,7 +379,8 @@ class Problem(Gridded):
         runtime = mosaic.runtime()
 
         sub_problem = self.sub_problem(shot_id)
-        runtime.logger.info('\nGiving shot %d to %s' % (shot_id, runner.runtime_id))
+        runtime.logger.info('\n')
+        runtime.logger.info('Giving shot %d to %s' % (shot_id, runner.runtime_id))
 
         variables.update_problem(sub_problem)
 

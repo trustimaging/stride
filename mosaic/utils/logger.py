@@ -76,12 +76,25 @@ class LocalLogger(LoggerBase):
 
     def flush(self, uid=None):
         if uid is None:
-            uid = self.runtime.uid
+            if self.runtime is not None:
+                uid = self.runtime.uid
+            else:
+                uid = ''
         uid = uid.upper()
 
         if self._linebuf != '':
             self._logger.log(self._log_level, self._linebuf.rstrip(), extra={'runtime_id': uid})
         self._linebuf = ''
+
+    def log(self, msg, uid=None):
+        if uid is None:
+            if self.runtime is not None:
+                uid = self.runtime.uid
+            else:
+                uid = ''
+        uid = uid.upper()
+
+        self._logger.log(self._log_level, msg, extra={'runtime_id': uid})
 
 
 class RemoteLogger(LoggerBase):
@@ -133,6 +146,9 @@ class RemoteLogger(LoggerBase):
         else:
             self.remote_runtime[self._log_level](buf=buf, as_async=False)
 
+    def log(self, buf, uid=None):
+        self.send(buf)
+
 
 class LoggerManager:
     """
@@ -167,7 +183,7 @@ class LoggerManager:
         sys.stdout = self._stdout
         sys.stderr = self._stderr
 
-        handler = logging.StreamHandler()
+        handler = logging.StreamHandler(self._stdout)
         handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
@@ -183,11 +199,11 @@ class LoggerManager:
         self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
 
         sys.stdout.flush()
-        sys.stdout = self._info_logger
-        sys.stderr = self._error_logger
+        # sys.stdout = self._info_logger
+        # sys.stderr = self._error_logger
 
         logging.basicConfig(
-            stream=sys.stdout,
+            # stream=self._info_logger,
             level=_local_log_levels[log_level],
             format='%(message)s',
         )
@@ -252,7 +268,7 @@ class LoggerManager:
         global log_level
         log_level = level
 
-        logger = logging.getLogger('STDOUT')
+        logger = logging.getLogger('mosaic')
         logger.setLevel(_local_log_levels[level])
 
     def info(self, buf, uid=None):
@@ -277,10 +293,7 @@ class LoggerManager:
         if log_level in ['error']:
             return
 
-        self._info_logger.write(buf, uid=uid)
-
-        if self._log_location == 'local':
-            self._info_logger.flush(uid=uid)
+        self._info_logger.log(buf, uid=uid)
 
     def debug(self, buf, uid=None):
         """
@@ -304,10 +317,7 @@ class LoggerManager:
         if log_level in ['info', 'error']:
             return
 
-        self._debug_logger.write(buf, uid=uid)
-
-        if self._log_location == 'local':
-            self._debug_logger.flush(uid=uid)
+        self._debug_logger.log(buf, uid=uid)
 
     def error(self, buf, uid=None):
         """
@@ -328,10 +338,7 @@ class LoggerManager:
         if self._error_logger is None:
             return
 
-        self._error_logger.write(buf, uid=uid)
-
-        if self._log_location == 'local':
-            self._error_logger.flush(uid=uid)
+        self._error_logger.log(buf, uid=uid)
 
     def warning(self, buf, uid=None):
         """
@@ -352,10 +359,7 @@ class LoggerManager:
         if self._warn_logger is None:
             return
 
-        self._warn_logger.write(buf, uid=uid)
-
-        if self._log_location == 'local':
-            self._warn_logger.flush(uid=uid)
+        self._warn_logger.log(buf, uid=uid)
 
     def warn(self, buf, uid=None):
         """

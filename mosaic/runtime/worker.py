@@ -45,7 +45,8 @@ class Worker(Runtime):
         if self.mode == 'local':
             self.logger.set_local()
         else:
-            self.logger.set_remote()
+            runtime_id = 'head' if self.mode == 'interactive' else 'monitor'
+            self.logger.set_remote(runtime_id=runtime_id)
 
     # Command and task management methods
 
