@@ -34,6 +34,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.token
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -117,7 +118,6 @@ venv.bak/
 # Example outputs
 *.h5
 !examples/stride/anastasio2D/data/*.h5
-!examples/stride/anastasio3D/data/*.h5
 examples/*/*.png
 
 # Legacy code
