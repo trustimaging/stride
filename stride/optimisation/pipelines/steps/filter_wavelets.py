@@ -4,7 +4,7 @@ from stride.utils import filters
 from ..pipeline import PipelineStep
 
 
-class Step(PipelineStep):
+class FilterWavelets(PipelineStep):
     """
     Filter wavelets to 3/4 of the set frequencies.
 

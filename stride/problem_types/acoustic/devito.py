@@ -4,18 +4,16 @@ import numpy as np
 
 import mosaic
 
+from stride.utils import fft
 from stride.problem_definition import ScalarField
-from ...operators.devito import GridDevito, OperatorDevito
-from ...problem_type import ProblemTypeBase
+from stride.problem_types.operators.devito import GridDevito, OperatorDevito
+from stride.problem_types.problem_type import ProblemTypeBase
 
 
-__all__ = ['ProblemType']
+__all__ = ['AcousticDevito']
 
 
-# TODO We need to be able to check stability and dispersion conditions
-
-
-class ProblemType(ProblemTypeBase):
+class AcousticDevito(ProblemTypeBase):
     """
     This class represents the second-order isotropic acoustic wave equation,
     implemented using Devito.
@@ -30,7 +28,7 @@ class ProblemType(ProblemTypeBase):
         super().__init__()
 
         self.kernel = 'OT4'
-        self.drp = True
+        self.drp = False
 
         self._grad = None
 
@@ -69,7 +67,7 @@ class ProblemType(ProblemTypeBase):
         self._state_operator.set_problem(problem)
         self._adjoint_operator.set_problem(problem)
 
-        self.drp = kwargs.get('drp', True)
+        self.drp = kwargs.get('drp', False)
         self.check_conditions()
 
     def check_conditions(self):
@@ -94,45 +92,14 @@ class ProblemType(ProblemTypeBase):
 
         # Figure out propagated bandwidth
         wavelets = shot.wavelets.data
-
-        if not time.num % 2:
-            num_freqs = (time.num + 1) // 2
-        else:
-            num_freqs = time.num // 2 + 1
-
-        wavelets_fft = np.fft.fft(wavelets, axis=-1)[:, :num_freqs]
-        freqs = np.fft.fftfreq(time.num, time.step)[:num_freqs]
-
-        wavelets_fft = np.mean(np.abs(wavelets_fft), axis=0)
-        wavelets_fft = 20 * np.log10(wavelets_fft / np.max(wavelets_fft))
-
-        f_min = 0
-        for f in range(num_freqs):
-            if wavelets_fft[f] > -10:
-                f_min = freqs[f]
-                break
-
-        f_max = num_freqs
-        for f in reversed(range(num_freqs)):
-            if wavelets_fft[f] > -10:
-                f_max = freqs[f]
-                break
+        f_min, f_max = fft.bandwidth(wavelets, time.step, cutoff=-10)
 
         runtime.logger.info('Estimated bandwidth for the propagated '
                             'wavelet %.3f-%.3f MHz' % (f_min / 1e6, f_max / 1e6))
 
         # Check for dispersion
         h = max(*space.spacing)
-
-        if self.drp:
-            runtime.logger.info('Using DRP scheme')
-
-            h_max = vp_min / (3 * f_max)
-
-        else:
-            runtime.logger.info('Deactivating DRP scheme')
-
-            h_max = vp_min / (5 * f_max)
+        h_max = vp_min / (5 * f_max)
 
         if h > h_max:
             runtime.logger.warn('Spatial grid spacing (%.3f mm) is '
@@ -143,7 +110,6 @@ class ProblemType(ProblemTypeBase):
 
         dt_max_OT2 = self._dt_max(2.0 / np.pi, h, vp_max)
         dt_max_OT4 = self._dt_max(3.6 * np.pi, h, vp_max)
-        dt_max_OT4_OP = self._dt_max(4.0 / np.pi, h, vp_max)
 
         recompile = False
         if dt <= dt_max_OT2:
@@ -165,24 +131,14 @@ class ProblemType(ProblemTypeBase):
 
             self.kernel = 'OT4'
 
-        elif dt <= dt_max_OT4_OP:
-            runtime.logger.info('Time grid spacing (%.3f \u03BCs) is'
-                                'above OT4 limit (%.3f \u03BCs), '
-                                'switching to OT4_OP' % (dt / 1e-6, dt_max_OT4 / 1e-6))
-
-            if self.kernel != 'OT4_OP':
-                recompile = True
-
-            self.kernel = 'OT4_OP'
-
         else:
             runtime.logger.warn('Time grid spacing (%.3f \u03BCs) is '
-                                'above OT4_OP limit (%.3f \u03BCs)' % (dt / 1e-6, dt_max_OT4_OP / 1e-6))
+                                'above OT4 limit (%.3f \u03BCs)' % (dt / 1e-6, dt_max_OT4 / 1e-6))
 
-            if self.kernel != 'OT4_OP':
+            if self.kernel != 'OT4':
                 recompile = True
 
-            self.kernel = 'OT4_OP'
+            self.kernel = 'OT4'
 
         if recompile:
             self._state_operator.operator = None
@@ -532,8 +488,14 @@ class ProblemType(ProblemTypeBase):
         vp.grad += variable_grad
         vp.prec += variable_prec
 
+    def _symbolic_coefficients(self, grid, field, laplacian, m):
+        raise NotImplementedError('DRP weights are not implemented in this version of stride')
+
+    def _weights(self):
+        raise NotImplementedError('DRP weights are not implemented in this version of stride')
+
     def _laplacian(self, field, laplacian, m):
-        if self.kernel not in ['OT2', 'OT4', 'OT4_OP']:
+        if self.kernel not in ['OT2', 'OT4']:
             raise ValueError("Unrecognized kernel")
 
         time = self._problem.time
@@ -547,27 +509,15 @@ class ProblemType(ProblemTypeBase):
         if self.kernel == 'OT2':
             bi_harmonic = 0
 
-        elif self.kernel == 'OT4':
-            bi_harmonic = time.step**2/12 * bi_harmonic
-
         else:
-            bi_harmonic = time.step**2/16 * bi_harmonic
+            bi_harmonic = time.step**2/12 * bi_harmonic
 
         laplacian_subs = field.laplace + bi_harmonic
 
         return laplacian_subs
 
     def _saved(self, field, m):
-        if self.kernel not in ['OT2', 'OT4', 'OT4_OP']:
-            raise ValueError("Unrecognized kernel")
-
-        time = self._problem.time
-
-        # bi_harmonic = field.biharmonic(m**(-2)) if self.kernel == 'OT4' else 0
-        bi_harmonic = 0
-        saved = field.dt2 + time.step**2/12 * bi_harmonic
-
-        return saved
+        return field.dt2
 
     def _iso_stencil(self, grid, field, m, damp, direction='forward'):
         # Forward or backward
@@ -577,7 +527,7 @@ class ProblemType(ProblemTypeBase):
         u_next = field.forward if forward else field.backward
         u_dt = field.dt if forward else field.dt.T
 
-        # Get the spacial FD
+        # Get the spatial FD
         laplacian = self._grid.function('laplacian', coefficients='symbolic')
         laplacian_expr = self._laplacian(field, laplacian, m)
 
@@ -586,55 +536,7 @@ class ProblemType(ProblemTypeBase):
 
         # Define coefficients
         if self.drp:
-            dims = grid.dimensions
-
-            weights_1 = np.array([
-                -7.936507937e-4,
-                +9.920634921e-3,
-                -5.952380952e-2,
-                +0.238095238100,
-                -0.833333333333,
-                +0.0,
-                +0.833333333333,
-                -0.238095238100,
-                +5.952380952e-2,
-                -9.920634921e-3,
-                +7.936507937e-4,
-            ])
-
-            weights_2 = np.array([
-                +0.0043726804,
-                -0.0281145606,
-                +0.1068406382,
-                -0.3705141600,
-                +1.8617697535,
-                -3.1487087031,
-                +1.8617697535,
-                -0.3705141600,
-                +0.1068406382,
-                -0.0281145606,
-                +0.0043726804,
-            ])
-
-            coeffs_field_1 = [devito.Coefficient(1, field, d, weights_1/d.spacing)
-                              for d in dims]
-            coeffs_field_2 = [devito.Coefficient(2, field, d, weights_2/d.spacing**2)
-                              for d in dims]
-
-            coeffs_lap_1 = [devito.Coefficient(1, laplacian, d, weights_1/d.spacing)
-                            for d in dims]
-            coeffs_lap_2 = [devito.Coefficient(2, laplacian, d, weights_2/d.spacing**2)
-                            for d in dims]
-
-            coeffs_m_1 = [devito.Coefficient(1, m, d, weights_1/d.spacing)
-                          for d in dims]
-            coeffs_m_2 = [devito.Coefficient(2, m, d, weights_2/d.spacing**2)
-                          for d in dims]
-
-            coeffs = coeffs_field_1 + coeffs_field_2 + \
-                     coeffs_lap_1 + coeffs_lap_2 + \
-                     coeffs_m_1 + coeffs_m_2
-            subs = devito.Substitutions(*coeffs)
+            subs = self._symbolic_coefficients(grid, field, laplacian, m)
 
             # Time-stepping stencil
             laplacian_term = devito.Eq(laplacian, 1/m * field.laplace.evaluate,

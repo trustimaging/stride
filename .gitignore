@@ -116,8 +116,6 @@ venv.bak/
 
 # Example outputs
 *.h5
-!examples/stride/alpha2D/data/*.h5
-!examples/stride/alpha3D/data/*.h5
 !examples/stride/anastasio2D/data/*.h5
 !examples/stride/anastasio3D/data/*.h5
 examples/*/*.png

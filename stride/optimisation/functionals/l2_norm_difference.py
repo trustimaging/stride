@@ -4,10 +4,10 @@ import numpy as np
 from .functional import FunctionalBase, FunctionalValue
 
 
-__all__ = ['Functional']
+__all__ = ['L2NormDifference']
 
 
-class Functional(FunctionalBase):
+class L2NormDifference(FunctionalBase):
     """
     L2-Norm of the difference between observed and modelled data:
 

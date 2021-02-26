@@ -1,4 +1,6 @@
 
+__version__ = '1.0'
+
 import asyncio
 
 from .core import tessera

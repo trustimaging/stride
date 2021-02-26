@@ -32,7 +32,7 @@ setup(
     version=stride.__version__,
     description='A (somewhat) general optimisation framework for ultrasound medical imaging',
     long_description='A (somewhat) general optimisation framework for ultrasound medical imaging',
-    url='https://github.ic.ac.uk/TRUST/stride',
+    url='https://github.com/trustimaging/stride',
     author='TRUST',
     author_email='c.cueto@imperial.ac.uk',
     license='',

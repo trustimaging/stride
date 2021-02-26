@@ -3,6 +3,7 @@ import os
 import numpy as np
 
 import mosaic
+from mosaic.utils import camel_case
 
 from .base import Gridded
 from . import Medium, Transducers, Geometry, Acquisitions
@@ -90,7 +91,7 @@ class Problem(Gridded):
         if isinstance(problem_type, str):
             problem_module = getattr(problem_types, problem_type)
             problem_module = getattr(problem_module, problem_implementation)
-            self.problem_type = problem_module.problem_type.ProblemType()
+            self.problem_type = getattr(problem_module, camel_case(problem_type + '_' + problem_implementation))()
 
         else:
             self.problem_type = problem_type
@@ -277,7 +278,7 @@ class Problem(Gridded):
         runtime.logger.info('\n')
         runtime.logger.info('Giving shot %d to %s' % (shot_id, runner.runtime_id))
 
-        await runner.set_problem(sub_problem, **kwargs)
+        await (await runner.set_problem(sub_problem, **kwargs))
 
         task = await runner.run_state(save_wavefield=False, **kwargs)
         traces, _ = await task.result()

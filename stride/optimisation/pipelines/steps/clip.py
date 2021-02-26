@@ -4,7 +4,7 @@ import numpy as np
 from ..pipeline import PipelineStep
 
 
-class Step(PipelineStep):
+class Clip(PipelineStep):
     """
     Clip data between two extreme values.
 

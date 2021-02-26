@@ -4,7 +4,7 @@ import scipy.ndimage
 from ..pipeline import PipelineStep
 
 
-class Step(PipelineStep):
+class SmoothField(PipelineStep):
     """
     Apply Gaussian smoothing to a StructuredData object.
 

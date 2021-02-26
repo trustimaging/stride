@@ -4,7 +4,7 @@ import numpy as np
 from ..pipeline import PipelineStep
 
 
-class Step(PipelineStep):
+class NormPerShot(PipelineStep):
     """
     Normalised a series of time traces to the maximum value of the set.
 

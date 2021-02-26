@@ -4,7 +4,7 @@ Stride
 
 This is the Stride documentation.
 
-`Stride <https:github.com/trustimaging/stride>`_ is a (somewhat)
+`Stride <https://github.com/trustimaging/stride>`_ is a (somewhat)
 general optimisation framework for medical ultrasound imaging.
 
 Getting started

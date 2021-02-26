@@ -4,7 +4,7 @@ import numpy as np
 from ..pipeline import PipelineStep
 
 
-class Step(PipelineStep):
+class Mask(PipelineStep):
     """
     Mask a StructuredData object to remove values outside inner domain.
 

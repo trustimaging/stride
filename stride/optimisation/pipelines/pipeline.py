@@ -1,6 +1,8 @@
 
 from abc import ABC, abstractmethod
 
+from mosaic.utils import camel_case
+
 from . import steps as steps_module
 
 
@@ -41,14 +43,14 @@ class Pipeline:
 
         self._steps = []
         for step in steps:
-            if callable(step):
+            if isinstance(step, str):
+                step_module = getattr(steps_module, step)
+                step = getattr(step_module, camel_case(step))
+
                 self._steps.append(step(**kwargs))
 
             else:
-                step_module = getattr(steps_module, step)
-                step = getattr(step_module, 'Step')
-
-                self._steps.append(step(**kwargs))
+                self._steps.append(step)
 
     def apply(self, *args, **kwargs):
         """

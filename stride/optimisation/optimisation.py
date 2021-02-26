@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import mosaic
 from mosaic.types import Struct
+from mosaic.utils import camel_case
 
 from .. import optimisation
 from .. import Runner
@@ -442,7 +443,7 @@ class Optimisation(Saved):
 
         if isinstance(functional, str):
             functional_module = getattr(optimisation.functionals, functional)
-            self.functional = functional_module.Functional()
+            self.functional = getattr(functional_module, camel_case(functional))()
 
         else:
             self.functional = functional

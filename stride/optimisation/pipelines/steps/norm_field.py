@@ -4,7 +4,7 @@ import numpy as np
 from ..pipeline import PipelineStep
 
 
-class Step(PipelineStep):
+class NormField(PipelineStep):
     """
     Normalise a StructuredData object between -1 and +1.
 

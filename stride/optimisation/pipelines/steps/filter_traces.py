@@ -4,7 +4,7 @@ from stride.utils import filters
 from ..pipeline import PipelineStep
 
 
-class Step(PipelineStep):
+class FilterTraces(PipelineStep):
     """
     Filter a set of time traces.
 
