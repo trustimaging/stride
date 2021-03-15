@@ -28,20 +28,20 @@ pip install -e .
 
 ## Running the examples
 
-The easiest way to start working with Stride is to open the Jupyter notebooks under ``examples/stride/anastasio2D`` 
-or ``examples/stride/anastasio3D``. 
+The easiest way to start working with Stride is to open the Jupyter notebooks under ``examples/stride/breast2D`` 
+or ``examples/stride/breast2D``. 
 
-You can also execute the corresponding Python scrips from any terminal. To perform a forward run on the anastasio2D example:
+You can also execute the corresponding Python scrips from any terminal. To perform a forward run on the breast2D example:
 
 ```sh
-cd examples/stride/anastasio2D
-mrun python foward.py
+cd examples/stride/breast2D
+mrun python 03_script_foward.py
 ```
 
 You can control the number of workers and threads per worker by running:
 
 ```sh
-mrun -nw 2 -nth 5 python foward.py
+mrun -nw 2 -nth 5 python 03_script_foward.py
 ```
 
 You can configure the devito solvers using environment variables. For example, to run the same code on a GPU with OpenACC you can:
@@ -50,13 +50,13 @@ You can configure the devito solvers using environment variables. For example, t
 export DEVITO_COMPILER=pgcc
 export DEVITO_LANGUAGE=openacc
 export DEVITO_PLATFORM=nvidiaX
-mrun -nw 1 -nth 5 python foward.py
+mrun -nw 1 -nth 5 python 03_script_foward.py
 ```
 
 Once you've run anastasio2D forward, you can run the corresponding inverse problem by doing:
 
 ```sh
-mrun python inverse.py
+mrun python 04_script_inverse.py
 ```
 
 

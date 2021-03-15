@@ -16,12 +16,14 @@ class Solver1:
         self.data = self.data + data
 
         time.sleep(10)
+        print('Done 1')
 
         return self.data
 
     def solve_more(self):
         print('Solve More 1')
         time.sleep(5)
+        print('Done More 1')
 
 
 @tessera
@@ -34,12 +36,14 @@ class Solver2:
         self.data = data*2
 
         time.sleep(10)
+        print('Done 2')
 
         return self.data
 
     def solve_more(self):
         print('Solve More 2')
         time.sleep(5)
+        print('Done More 2')
 
 
 async def main(runtime):

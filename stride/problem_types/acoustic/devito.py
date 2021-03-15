@@ -206,12 +206,6 @@ class AcousticDevito(ProblemTypeBase):
 
             op_kwargs = {
                 'dt': time.step,
-                'p': p,
-                'm': m,
-                'inv_m': inv_m,
-                'damp': damp,
-                'src': src,
-                'rec': rec,
             }
 
             # Define the saving of the wavefield
@@ -376,12 +370,6 @@ class AcousticDevito(ProblemTypeBase):
 
             op_kwargs = {
                 'dt': time.step,
-                'p_a': p_a,
-                'p_saved': p_saved,
-                'm': m,
-                'inv_m': inv_m,
-                'damp': damp,
-                'rec': rec,
             }
 
             # Define gradient
