@@ -1,0 +1,511 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Optimisation &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Variables" href="variables.html" />
+    <link rel="prev" title="Optimisation" href="optimisation_index.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Stride API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../runner.html">Runner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../problem_definition/problem_definition_index.html">Problem definition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../problem_types/problem_types_index.html">Problem Types</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="optimisation_index.html">Optimisation</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Optimisation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="variables.html">Variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="functionals.html">Functionals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pipelines.html">Pipelines</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../plotting/plotting_index.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Stride API Reference</a> &raquo;</li>
+        
+          <li><a href="optimisation_index.html">Optimisation</a> &raquo;</li>
+        
+      <li>Optimisation</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/stride/api/optimisation/optimisation.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="optimisation">
+<h1>Optimisation<a class="headerlink" href="#optimisation" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="stride.optimisation.optimisation.Optimisation">
+<em class="property">class </em><code class="sig-prename descclassname">stride.optimisation.optimisation.</code><code class="sig-name descname">Optimisation</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">'optimisation'</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Optimisation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="../problem_definition/base.html#stride.problem_definition.base.Saved" title="stride.problem_definition.base.Saved"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.problem_definition.base.Saved</span></code></a></p>
+<p>Objects of this class act as managers of a local optimisation process.</p>
+<p>Optimisations are performed with respect of a given <code class="docutils literal notranslate"><span class="pre">functional</span></code>
+(e.g. L2-norm of the difference between observed and modelled data), over
+one or more optimisation variables (such as longitudinal speed of sound or attenuation).
+Variables are updated according to an associated local optimiser (such as gradient descent or momentum).</p>
+<p>Variables can be added to the optimisation through <code class="docutils literal notranslate"><span class="pre">Optimisation.add(variable,</span> <span class="pre">optimiser)</span></code>.</p>
+<p>The general convention is to divide the optimisation process in blocks and iterations,
+although that doesn’t have to be the case. A block determines a set of conditions
+that is maintained over a number of iterations, such as the frequency band used or the
+step size applied.</p>
+<p>Blocks are generated through <code class="docutils literal notranslate"><span class="pre">Optimisation.blocks</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">optimisation</span><span class="o">.</span><span class="n">blocks</span><span class="p">(</span><span class="n">num_blocks</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">block</span><span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+</pre></div>
+</div>
+<p>The default running behaviour of the optimisation is obtained when calling <code class="docutils literal notranslate"><span class="pre">Optimisation.run(block,</span> <span class="pre">problem)</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">optimisation</span><span class="o">.</span><span class="n">blocks</span><span class="p">(</span><span class="n">num_blocks</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">block</span><span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">await</span> <span class="n">optimisation</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">problem</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>but iterations can also be run manually:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">optimisation</span><span class="o">.</span><span class="n">blocks</span><span class="p">(</span><span class="n">num_blocks</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="n">block</span><span class="o">.</span><span class="n">config</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="n">block</span><span class="o">.</span><span class="n">iterations</span><span class="p">():</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="k">pass</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em><em>, </em><em>optional</em>) – Optional name for the optimisation object.</p></li>
+<li><p><strong>functional</strong> (<em>str</em><em> or </em><em>object</em><em>, </em><em>optional</em>) – Name of the functional to be used, or object defining that functional, defaults to <code class="docutils literal notranslate"><span class="pre">l2_norm_difference</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Optimisation.add">
+<code class="sig-name descname">add</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">variable</span></em>, <em class="sig-param"><span class="n">optimiser</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Optimisation.add"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation.add" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a variable to the optimisation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>variable</strong> (<em>Variable</em>) – Variable to add to the optimisation.</p></li>
+<li><p><strong>optimiser</strong> (<em>LocalOptimiser</em>) – Optimiser associated with the given variable.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Optimisation.apply_optimiser">
+<code class="sig-name descname">apply_optimiser</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">updated_variable</span></em>, <em class="sig-param"><span class="n">block</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">iteration</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Optimisation.apply_optimiser"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation.apply_optimiser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Apply an optimiser to its associated variable.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>updated_variable</strong> (<em>Variable</em>) – Container for the gradient of the variable.</p></li>
+<li><p><strong>block</strong> (<a class="reference internal" href="#stride.optimisation.optimisation.Block" title="stride.optimisation.optimisation.Block"><em>Block</em></a>) – Block in which the optimisation is at the moment.</p></li>
+<li><p><strong>iteration</strong> (<a class="reference internal" href="#stride.optimisation.optimisation.Iteration" title="stride.optimisation.optimisation.Iteration"><em>Iteration</em></a>) – Iteration in which the optimisation is at the moment.</p></li>
+<li><p><strong>kwargs</strong> – Additional arguments for the optimiser.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Updated variable.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Variable</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Optimisation.blocks">
+<code class="sig-name descname">blocks</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">num</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Optimisation.blocks"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation.blocks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generator for the blocks of the optimisation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>num</strong> (<em>int</em>) – Number of blocks to generate.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Blocks iterable.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>iterable</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Optimisation.dump_variable">
+<code class="sig-name descname">dump_variable</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">updated_variable</span></em>, <em class="sig-param"><span class="n">problem</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Optimisation.dump_variable"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation.dump_variable" title="Permalink to this definition">¶</a></dt>
+<dd><p>Dump the updated value of a variable to disk.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>updated_variable</strong> (<em>Variable</em>) – Container for the gradient of the variable.</p></li>
+<li><p><strong>problem</strong> (<a class="reference internal" href="../problem_definition/problem.html#stride.problem_definition.problem.Problem" title="stride.problem_definition.problem.Problem"><em>Problem</em></a>) – Problem being executed.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Optimisation.num_blocks">
+<em class="property">property </em><code class="sig-name descname">num_blocks</code><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation.num_blocks" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get number of blocks.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Optimisation.run">
+<em class="property">async </em><code class="sig-name descname">run</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">block</span></em>, <em class="sig-param"><span class="n">problem</span></em>, <em class="sig-param"><span class="n">dump</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Optimisation.run"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation.run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run the default a block with default settings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>block</strong> (<a class="reference internal" href="#stride.optimisation.optimisation.Block" title="stride.optimisation.optimisation.Block"><em>Block</em></a>) – Block to run.</p></li>
+<li><p><strong>problem</strong> (<a class="reference internal" href="../problem_definition/problem.html#stride.problem_definition.problem.Problem" title="stride.problem_definition.problem.Problem"><em>Problem</em></a>) – Problem being run.</p></li>
+<li><p><strong>dump</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to dump the updated variable at each iteration, defaults to True.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Optimisation.variables">
+<em class="property">property </em><code class="sig-name descname">variables</code><a class="headerlink" href="#stride.optimisation.optimisation.Optimisation.variables" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access the variables.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="stride.optimisation.optimisation.Block">
+<em class="property">class </em><code class="sig-prename descclassname">stride.optimisation.optimisation.</code><code class="sig-name descname">Block</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">id</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Block"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Block" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A block determines a set of conditions that is maintained over a number of iterations,
+such as the frequency band used or the step size applied.</p>
+<p>These can be given to the block through the default <code class="docutils literal notranslate"><span class="pre">Block.config</span></code>, which will take care
+of creating and configuring the <a href="#id1"><span class="problematic" id="id2">``</span></a>pipeline``s that implement these conditions.</p>
+<p>Pipelines can be accessed through <code class="docutils literal notranslate"><span class="pre">Block.pipelines</span></code> using dot notation.</p>
+<p>The iteration loop of the block can be started using the generator <code class="docutils literal notranslate"><span class="pre">Block.iterations</span></code> as:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="n">block</span><span class="o">.</span><span class="n">iterations</span><span class="p">():</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">pass</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>id</strong> (<em>int</em>) – Numerical ID of the block.</p></li>
+<li><p><strong>functional</strong> (<em>Functional</em>) – Functional class to be used in the inversion.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Block.config">
+<code class="sig-name descname">config</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Block.config"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Block.config" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configure the block appropriately.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num_iterations</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of iterations in the block, defaults to 1.</p></li>
+<li><p><strong>select_shots</strong> (<em>dict</em><em>, </em><em>optional</em>) – Rules to select shots in each iteration, defaults to selecting all.</p></li>
+<li><p><strong>wavelets</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the wavelets or dictionary with configuration for the default pipeline.</p></li>
+<li><p><strong>wavefield</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the wavefield or dictionary with configuration for the default pipeline.</p></li>
+<li><p><strong>traces</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the traces or dictionary with configuration for the default pipeline.</p></li>
+<li><p><strong>adjoint_source</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the adjoint source or dictionary with configuration for the default pipeline.</p></li>
+<li><p><strong>local_gradient</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the local gradient or dictionary with configuration for the default pipeline.</p></li>
+<li><p><strong>global_gradient</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the global gradient or dictionary with configuration for the default pipeline.</p></li>
+<li><p><strong>model_iteration</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the model after each iteration or dictionary with configuration for the default pipeline.</p></li>
+<li><p><strong>model_block</strong> (<em>callable</em><em> or </em><em>dict</em>) – Pipeline class to process the model after each block or dictionary with configuration for the default pipeline.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Block.iterations">
+<code class="sig-name descname">iterations</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Block.iterations"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Block.iterations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generator of iterations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Iteration iterables.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>iterable</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Block.num_iterations">
+<em class="property">property </em><code class="sig-name descname">num_iterations</code><a class="headerlink" href="#stride.optimisation.optimisation.Block.num_iterations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of iterations in the block.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="stride.optimisation.optimisation.Iteration">
+<em class="property">class </em><code class="sig-prename descclassname">stride.optimisation.optimisation.</code><code class="sig-name descname">Iteration</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">id</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Iteration"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Iteration" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Objects of this class contain information about the iteration, such as the value of the functional.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>id</strong> (<em>int</em>) – Numerical ID of the iteration.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Iteration.add_fun">
+<code class="sig-name descname">add_fun</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">fun</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#Iteration.add_fun"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.Iteration.add_fun" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a functional value for a particular shot to the iteration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fun</strong> (<a class="reference internal" href="functionals.html#stride.optimisation.functionals.functional.FunctionalValue" title="stride.optimisation.functionals.functional.FunctionalValue"><em>FunctionalValue</em></a>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.Iteration.fun_value">
+<em class="property">property </em><code class="sig-name descname">fun_value</code><a class="headerlink" href="#stride.optimisation.optimisation.Iteration.fun_value" title="Permalink to this definition">¶</a></dt>
+<dd><p>Functional value for this iteration across all shots.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="stride.optimisation.optimisation.CallableList">
+<em class="property">class </em><code class="sig-prename descclassname">stride.optimisation.optimisation.</code><code class="sig-name descname">CallableList</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">items</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#CallableList"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.CallableList" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class representing a series of objects that contain common interfaces.</p>
+<p>For example, let’s say that we create a certain class a a callable list using it:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">Klass</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">def</span> <span class="nf">print</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Value: &#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">callable_list</span> <span class="o">=</span> <span class="n">CallableList</span><span class="p">([</span><span class="n">Klass</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">Klass</span><span class="p">(</span><span class="mi">2</span><span class="p">)])</span>
+</pre></div>
+</div>
+<p>then we can call the common method in all elements of the list by doing:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">callable_list</span><span class="o">.</span><span class="n">print</span><span class="p">()</span>
+<span class="go">Value: 1</span>
+<span class="go">Value: 2</span>
+</pre></div>
+</div>
+<p>but also that we can set attributes accordingly:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">callable_list</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">callable_list</span><span class="o">.</span><span class="n">print</span><span class="p">()</span>
+<span class="go">Value: 3</span>
+<span class="go">Value: 4</span>
+</pre></div>
+</div>
+<p>A callable list can be iterated and <code class="docutils literal notranslate"><span class="pre">len(callable_list)</span></code> is also valid.</p>
+<p>The result of an attribute access on a callable list is another callable list,
+ensuring composability of operations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>items</strong> (<em>iterable</em>) – Items in the callable list.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.optimisation.optimisation.CallableList.magic_op">
+<em class="property">static </em><code class="sig-name descname">magic_op</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">item</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#CallableList.magic_op"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.CallableList.magic_op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="stride.optimisation.optimisation.VariableList">
+<em class="property">class </em><code class="sig-prename descclassname">stride.optimisation.optimisation.</code><code class="sig-name descname">VariableList</code><a class="reference internal" href="../../../_modules/stride/optimisation/optimisation.html#VariableList"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.optimisation.optimisation.VariableList" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#stride.optimisation.optimisation.CallableList" title="stride.optimisation.optimisation.CallableList"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.optimisation.optimisation.CallableList</span></code></a></p>
+<p>A variable list is a specific type of callable list in which the items are a Struct instead of
+a Python list.</p>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="variables.html" class="btn btn-neutral float-right" title="Variables" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="optimisation_index.html" class="btn btn-neutral float-left" title="Optimisation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,1843 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>mosaic.comms.comms &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+          <li><a href="../../mosaic.html">mosaic</a> &raquo;</li>
+        
+      <li>mosaic.comms.comms</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for mosaic.comms.comms</h1><div class="highlight"><pre>
+<span></span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">import</span> <span class="nn">zmq</span>
+<span class="kn">import</span> <span class="nn">zmq.asyncio</span>
+<span class="kn">import</span> <span class="nn">tblib</span>
+<span class="kn">import</span> <span class="nn">errno</span>
+<span class="kn">import</span> <span class="nn">psutil</span>
+<span class="kn">import</span> <span class="nn">socket</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">import</span> <span class="nn">weakref</span>
+<span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">CancelledError</span>
+
+<span class="kn">import</span> <span class="nn">mosaic</span>
+<span class="kn">from</span> <span class="nn">.compression</span> <span class="kn">import</span> <span class="n">maybe_compress</span><span class="p">,</span> <span class="n">decompress</span>
+<span class="kn">from</span> <span class="nn">.serialisation</span> <span class="kn">import</span> <span class="n">serialise</span><span class="p">,</span> <span class="n">deserialise</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">Future</span>
+<span class="kn">from</span> <span class="nn">..utils.utils</span> <span class="kn">import</span> <span class="n">sizeof</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;CommsManager&#39;</span><span class="p">,</span> <span class="s1">&#39;get_hostname&#39;</span><span class="p">]</span>
+
+
+<span class="n">_protocol_version</span> <span class="o">=</span> <span class="s1">&#39;0.0.0&#39;</span>
+
+
+<span class="k">def</span> <span class="nf">join_address</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">protocol</span><span class="o">=</span><span class="s1">&#39;tcp&#39;</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s1">&#39;</span><span class="si">%s</span><span class="s1">://</span><span class="si">%s</span><span class="s1">:</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">protocol</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">validate_address</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">address</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Address </span><span class="si">%s</span><span class="s1"> is not valid&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">address</span><span class="p">,))</span>
+
+    <span class="k">if</span> <span class="n">port</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+        <span class="n">error_msg</span> <span class="o">=</span> <span class="s1">&#39;Address </span><span class="si">%s</span><span class="s1"> is not valid&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">address</span><span class="p">,)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">error_msg</span> <span class="o">=</span> <span class="s1">&#39;Address and port combination </span><span class="si">%s</span><span class="s1">:</span><span class="si">%d</span><span class="s1"> is not valid&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">socket</span><span class="o">.</span><span class="n">inet_pton</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">address</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">socket</span><span class="o">.</span><span class="n">inet_aton</span><span class="p">(</span><span class="n">address</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">socket</span><span class="o">.</span><span class="n">error</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">port</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">port</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">int</span> <span class="ow">or</span> <span class="ow">not</span> <span class="mi">1024</span> <span class="o">&lt;=</span> <span class="n">port</span> <span class="o">&lt;=</span> <span class="mi">65535</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_hostname</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">socket</span><span class="o">.</span><span class="n">getfqdn</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">gethostname</span><span class="p">())</span>
+
+
+<span class="k">class</span> <span class="nc">CMD</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Container for a CMD for the runtime.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cmd : dict</span>
+<span class="sd">        Dictionary description of the CMD.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cmd</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;type&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">uid</span> <span class="o">=</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;uid&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;method&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;args&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span> <span class="o">=</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;kwargs&#39;</span><span class="p">]</span>
+
+
+<span class="k">class</span> <span class="nc">Message</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Container for a received message from another comms.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sender_id : str</span>
+<span class="sd">        Identity of the message sender.</span>
+<span class="sd">    msg : dict</span>
+<span class="sd">        Dictionary description of the message.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;method&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sender_id</span> <span class="o">=</span> <span class="n">sender_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">runtime_id</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;runtime_id&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kwargs</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;kwargs&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reply</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;reply&#39;</span><span class="p">]</span>
+
+        <span class="n">cmd</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;cmd&#39;</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cmd</span> <span class="o">=</span> <span class="n">CMD</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span> <span class="k">if</span> <span class="n">cmd</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+<span class="k">class</span> <span class="nc">Reply</span><span class="p">(</span><span class="n">Future</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Future-like object to asynchronously wait for a comms reply.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">pass</span>
+
+
+<span class="k">class</span> <span class="nc">Connection</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Socket connection through ZMQ.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    uid : str</span>
+<span class="sd">        UID of the current runtime.</span>
+<span class="sd">    address : str</span>
+<span class="sd">        IP address of the connection.</span>
+<span class="sd">    port : int</span>
+<span class="sd">        Port to use for the connection.</span>
+<span class="sd">    runtime : Runtime, optional</span>
+<span class="sd">        Current runtime, defaults to global runtime.</span>
+<span class="sd">    comms : CommsManager, optional</span>
+<span class="sd">        Comms to which the connection belongs, defaults to global comms.</span>
+<span class="sd">    in_node : bool, optional</span>
+<span class="sd">        Whether the connection is inside the node or not, defaults to False.</span>
+<span class="sd">    context : zmq.Context, optional</span>
+<span class="sd">        ZMQ socket context, defaults to global context.</span>
+<span class="sd">    loop : EventLoop, optional</span>
+<span class="sd">        Event loop to use, defaults to global event loop.</span>
+
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                 <span class="n">runtime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">comms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">in_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span> <span class="o">=</span> <span class="n">runtime</span> <span class="ow">or</span> <span class="n">mosaic</span><span class="o">.</span><span class="n">runtime</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_comms</span> <span class="o">=</span> <span class="n">comms</span> <span class="ow">or</span> <span class="n">mosaic</span><span class="o">.</span><span class="n">get_comms</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span> <span class="o">=</span> <span class="n">loop</span> <span class="ow">or</span> <span class="n">mosaic</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span> <span class="o">=</span> <span class="n">context</span> <span class="ow">or</span> <span class="n">mosaic</span><span class="o">.</span><span class="n">get_zmq_context</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_uid</span> <span class="o">=</span> <span class="n">uid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_address</span> <span class="o">=</span> <span class="n">address</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_port</span> <span class="o">=</span> <span class="n">port</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_in_node</span> <span class="o">=</span> <span class="n">in_node</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;disconnected&#39;</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;&lt;</span><span class="si">%s</span><span class="s2"> object at </span><span class="si">%s</span><span class="s2">, address=</span><span class="si">%s</span><span class="s2">, port=</span><span class="si">%d</span><span class="s2">, state=</span><span class="si">%s</span><span class="s2">&gt;&quot;</span> <span class="o">%</span> \
+               <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">uid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runtime UID.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_uid</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connection address.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_address</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">port</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connection port.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_port</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">socket</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connection ZMQ socket.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">state</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connection state.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">connect_address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Full formatted address for connection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_in_node</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">join_address</span><span class="p">(</span><span class="s1">&#39;127.0.0.1&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">join_address</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">bind_address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Full formatted address for binding.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">join_address</span><span class="p">(</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">logger</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runtime logger.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">logger</span>
+
+    <span class="k">def</span> <span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Disconnect the socket.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">!=</span> <span class="s1">&#39;connected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;disconnected&#39;</span>
+
+
+<span class="k">class</span> <span class="nc">InboundConnection</span><span class="p">(</span><span class="n">Connection</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Object encapsulating an incoming connection to the CommsManager.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    uid : str</span>
+<span class="sd">        UID of the current runtime.</span>
+<span class="sd">    address : str</span>
+<span class="sd">        IP address of the connection.</span>
+<span class="sd">    port : int</span>
+<span class="sd">        Port to use for the connection.</span>
+<span class="sd">    runtime : Runtime, optional</span>
+<span class="sd">        Current runtime, defaults to global runtime.</span>
+<span class="sd">    comms : CommsManager, optional</span>
+<span class="sd">        Comms to which the connection belongs, defaults to global comms.</span>
+<span class="sd">    in_node : bool, optional</span>
+<span class="sd">        Whether the connection is inside the node or not, defaults to False.</span>
+<span class="sd">    context : zmq.Context, optional</span>
+<span class="sd">        ZMQ socket context, defaults to global context.</span>
+<span class="sd">    loop : EventLoop, optional</span>
+<span class="sd">        Event loop to use, defaults to global event loop.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">runtime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">comms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">in_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                         <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span> <span class="n">comms</span><span class="o">=</span><span class="n">comms</span><span class="p">,</span> <span class="n">in_node</span><span class="o">=</span><span class="n">in_node</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="n">loop</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">ROUTER</span><span class="p">,</span>
+                                                <span class="n">copy_threshold</span><span class="o">=</span><span class="n">zmq</span><span class="o">.</span><span class="n">COPY_THRESHOLD</span><span class="p">,</span>
+                                                <span class="n">io_loop</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connection address.</span>
+
+<span class="sd">        If no address is set, it will try to discover it.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_address</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">address</span><span class="p">,</span> <span class="n">port</span> <span class="o">=</span> <span class="s1">&#39;8.8.8.8&#39;</span><span class="p">,</span> <span class="s1">&#39;53&#39;</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">AF_INET</span><span class="p">,</span> <span class="n">socket</span><span class="o">.</span><span class="n">SOCK_DGRAM</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># This command will raise an exception if there is no internet</span>
+                <span class="c1"># connection.</span>
+                <span class="n">s</span><span class="o">.</span><span class="n">connect</span><span class="p">((</span><span class="n">address</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">port</span><span class="p">)))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_address</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">getsockname</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_address</span> <span class="o">=</span> <span class="s1">&#39;127.0.0.1&#39;</span>
+                <span class="c1"># [Errno 101] Network is unreachable</span>
+                <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">errno</span> <span class="o">==</span> <span class="n">errno</span><span class="o">.</span><span class="n">ENETUNREACH</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="c1"># try get node ip address from host name</span>
+                        <span class="n">host_name</span> <span class="o">=</span> <span class="n">get_hostname</span><span class="p">()</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_address</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">gethostbyname</span><span class="p">(</span><span class="n">host_name</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="k">pass</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">s</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_address</span>
+
+    <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connect the socket.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">!=</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_port</span> <span class="o">=</span> <span class="mi">3000</span>
+            <span class="n">existing_ports</span> <span class="o">=</span> <span class="p">[</span><span class="n">each</span><span class="o">.</span><span class="n">laddr</span><span class="o">.</span><span class="n">port</span> <span class="k">for</span> <span class="n">each</span> <span class="ow">in</span> <span class="n">psutil</span><span class="o">.</span><span class="n">net_connections</span><span class="p">()]</span>
+            <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_port</span> <span class="ow">in</span> <span class="n">existing_ports</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_port</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bind_address</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;connected&#39;</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Asynchronously receive on the socket.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Sender UID.</span>
+<span class="sd">        Message</span>
+<span class="sd">            Message object.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;Trying to receive in a disconnected InboundConnection &quot;</span><span class="si">%s</span><span class="s1">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="ne">Warning</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">multipart_msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">recv_multipart</span><span class="p">(</span><span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">sender_id</span> <span class="o">=</span> <span class="n">multipart_msg</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">multipart_msg</span> <span class="o">=</span> <span class="n">multipart_msg</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span>
+        <span class="n">num_parts</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">multipart_msg</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">multipart_msg</span><span class="p">)</span> <span class="o">!=</span> <span class="n">num_parts</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Wrong number of parts&#39;</span><span class="p">)</span>
+
+        <span class="n">sender_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">sender_id</span><span class="p">)</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">deserialise</span><span class="p">(</span><span class="n">multipart_msg</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[])</span>
+
+        <span class="k">if</span> <span class="n">num_parts</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">compressed_msg</span> <span class="o">=</span> <span class="p">[</span><span class="n">multipart_msg</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">multipart_msg</span><span class="p">[</span><span class="mi">3</span><span class="p">:]]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">compressed_msg</span> <span class="o">=</span> <span class="p">[</span><span class="n">multipart_msg</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="p">[]]</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">_msg</span> <span class="o">=</span> <span class="n">decompress</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;compression&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">compressed_msg</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">msg</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_msg</span><span class="p">)</span>
+
+        <span class="n">_msg</span> <span class="o">=</span> <span class="p">[</span><span class="n">decompress</span><span class="p">(</span><span class="n">compression</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">compression</span><span class="p">,</span> <span class="n">payload</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">header</span><span class="p">[</span><span class="s1">&#39;compression&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">],</span> <span class="n">compressed_msg</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span>
+        <span class="n">msg</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_msg</span><span class="p">)</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">deserialise</span><span class="p">(</span><span class="n">msg</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">msg</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">Message</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;update_monitored_node&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;cmd&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Received cmd </span><span class="si">%s</span><span class="s1"> </span><span class="si">%s</span><span class="s1"> from </span><span class="si">%s</span><span class="s1"> at </span><span class="si">%s</span><span class="s1"> (</span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">cmd</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
+                                                                             <span class="n">sender_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span>
+                                                                             <span class="n">msg</span><span class="o">.</span><span class="n">cmd</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Received msg </span><span class="si">%s</span><span class="s1"> from </span><span class="si">%s</span><span class="s1"> at </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span>
+
+
+<span class="k">class</span> <span class="nc">OutboundConnection</span><span class="p">(</span><span class="n">Connection</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Object encapsulating an outgoing connection from the CommsManager.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    uid : str</span>
+<span class="sd">        UID of the current runtime.</span>
+<span class="sd">    address : str</span>
+<span class="sd">        IP address of the connection.</span>
+<span class="sd">    port : int</span>
+<span class="sd">        Port to use for the connection.</span>
+<span class="sd">    runtime : Runtime, optional</span>
+<span class="sd">        Current runtime, defaults to global runtime.</span>
+<span class="sd">    comms : CommsManager, optional</span>
+<span class="sd">        Comms to which the connection belongs, defaults to global comms.</span>
+<span class="sd">    in_node : bool, optional</span>
+<span class="sd">        Whether the connection is inside the node or not, defaults to False.</span>
+<span class="sd">    context : zmq.Context, optional</span>
+<span class="sd">        ZMQ socket context, defaults to global context.</span>
+<span class="sd">    loop : EventLoop, optional</span>
+<span class="sd">        Event loop to use, defaults to global event loop.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                 <span class="n">runtime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">comms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">in_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                         <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span> <span class="n">comms</span><span class="o">=</span><span class="n">comms</span><span class="p">,</span> <span class="n">in_node</span><span class="o">=</span><span class="n">in_node</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="n">loop</span><span class="p">)</span>
+
+        <span class="n">validate_address</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span><span class="o">.</span><span class="n">socket</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">DEALER</span><span class="p">,</span>
+                                                <span class="n">copy_threshold</span><span class="o">=</span><span class="n">zmq</span><span class="o">.</span><span class="n">COPY_THRESHOLD</span><span class="p">,</span>
+                                                <span class="n">io_loop</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">())</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_attempts</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_max_attempts</span> <span class="o">=</span> <span class="mi">5</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_interval</span> <span class="o">=</span> <span class="mi">30</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shaken</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">shaken</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Whether or not the handshake has happened.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shaken</span>
+
+    <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connect the socket.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">!=</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">connect_address</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start_heartbeat</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;connected&#39;</span>
+
+    <span class="k">def</span> <span class="nf">shake</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Complete the handshake.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shaken</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">start_heartbeat</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Start the heartbeat procedure with the remote endpoint.</span>
+
+<span class="sd">        After 5 failed heartbeat attempts, the endpoint is considered disconnected.</span>
+
+<span class="sd">        The heartbeat only operates if this is the monitor runtime.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># if not self._runtime.is_monitor or not self.uid.startswith(&#39;node&#39;):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">is_monitor</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_attempts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_max_attempts</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">heart</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_interval</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">stop_heartbeat</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Stop the heartbeat.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">heart</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send heart signal</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_attempts</span> <span class="o">-=</span> <span class="mi">1</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_attempts</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comms</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="n">notify</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">disconnect</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+            <span class="k">return</span>
+
+        <span class="n">interval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_interval</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_max_attempts</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_attempts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_timeout</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">timeout</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">heart</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">interval</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s1">&#39;heart&#39;</span><span class="p">)</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">beat</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process beat signal</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_attempts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_heartbeat_max_attempts</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">stop_heartbeat</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start_heartbeat</span><span class="p">()</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">cmd</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reply</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send message through the connection.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        method : str</span>
+<span class="sd">            Remote method.</span>
+<span class="sd">        cmd : dict, optional</span>
+<span class="sd">            If the method is ``cmd`` a description of the command has to be provided.</span>
+<span class="sd">        reply : bool, optional</span>
+<span class="sd">            Whether the connection should wait for a reply, defaults to False.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keywird arguments for the remote method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Reply or None</span>
+<span class="sd">            Depending on whether a reply is expected or not.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;Trying to send in a disconnected OutboundConnection &quot;</span><span class="si">%s</span><span class="s1">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="ne">Warning</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">reply</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">reply_future</span> <span class="o">=</span> <span class="n">Reply</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">method</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_comms</span><span class="o">.</span><span class="n">register_reply_future</span><span class="p">(</span><span class="n">reply_future</span><span class="p">)</span>
+            <span class="n">reply</span> <span class="o">=</span> <span class="n">reply_future</span><span class="o">.</span><span class="n">uid</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reply_future</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span>
+            <span class="s1">&#39;runtime_id&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span>
+            <span class="s1">&#39;kwargs&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="p">,</span>
+            <span class="s1">&#39;reply&#39;</span><span class="p">:</span> <span class="n">reply</span><span class="p">,</span>
+            <span class="s1">&#39;cmd&#39;</span><span class="p">:</span> <span class="n">cmd</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;update_monitored_node&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;cmd&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Sending cmd </span><span class="si">%s</span><span class="s1"> </span><span class="si">%s</span><span class="s1"> to </span><span class="si">%s</span><span class="s1"> (</span><span class="si">%s</span><span class="s1">) from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;method&#39;</span><span class="p">],</span>
+                                                                            <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;uid&#39;</span><span class="p">],</span>
+                                                                            <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Sending msg </span><span class="si">%s</span><span class="s1"> to </span><span class="si">%s</span><span class="s1"> from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span>
+                                                                    <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">serialise</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="n">msg_size</span> <span class="o">=</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="n">compression</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">compressed_msg</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">_compression</span><span class="p">,</span> <span class="n">_compressed_msg</span> <span class="o">=</span> <span class="n">maybe_compress</span><span class="p">(</span><span class="n">msg</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">compression</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_compression</span><span class="p">)</span>
+        <span class="n">compressed_msg</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_compressed_msg</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">msg</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">_compression</span><span class="p">,</span> <span class="n">_compressed_msg</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="nb">map</span><span class="p">(</span><span class="n">maybe_compress</span><span class="p">,</span> <span class="n">msg</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+            <span class="n">compression</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_compression</span><span class="p">)</span>
+            <span class="n">compressed_msg</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_compressed_msg</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">compression</span><span class="o">.</span><span class="n">append</span><span class="p">([])</span>
+            <span class="n">compressed_msg</span><span class="o">.</span><span class="n">append</span><span class="p">([])</span>
+
+        <span class="n">header</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;version&#39;</span><span class="p">:</span> <span class="n">_protocol_version</span><span class="p">,</span>
+            <span class="s1">&#39;compression&#39;</span><span class="p">:</span> <span class="n">compression</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="n">header</span> <span class="o">=</span> <span class="n">serialise</span><span class="p">(</span><span class="n">header</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">multipart_msg</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="o">.</span><span class="n">encode</span><span class="p">()]</span>
+        <span class="n">multipart_msg</span> <span class="o">+=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="mi">3</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">compressed_msg</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">encode</span><span class="p">()]</span>
+        <span class="n">multipart_msg</span> <span class="o">+=</span> <span class="p">[</span><span class="n">header</span><span class="p">]</span>
+        <span class="n">multipart_msg</span> <span class="o">+=</span> <span class="p">[</span><span class="n">compressed_msg</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="n">multipart_msg</span> <span class="o">+=</span> <span class="n">compressed_msg</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span><span class="o">.</span><span class="n">send_multipart</span><span class="p">(</span><span class="n">multipart_msg</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="n">msg_size</span> <span class="o">&lt;</span> <span class="n">zmq</span><span class="o">.</span><span class="n">COPY_THRESHOLD</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">reply_future</span>
+
+
+<span class="k">class</span> <span class="nc">CircularConnection</span><span class="p">(</span><span class="n">Connection</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Object encapsulating a circular connection to itself.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    uid : str</span>
+<span class="sd">        UID of the current runtime.</span>
+<span class="sd">    address : str</span>
+<span class="sd">        IP address of the connection.</span>
+<span class="sd">    port : int</span>
+<span class="sd">        Port to use for the connection.</span>
+<span class="sd">    runtime : Runtime, optional</span>
+<span class="sd">        Current runtime, defaults to global runtime.</span>
+<span class="sd">    comms : CommsManager, optional</span>
+<span class="sd">        Comms to which the connection belongs, defaults to global comms.</span>
+<span class="sd">    in_node : bool, optional</span>
+<span class="sd">        Whether the connection is inside the node or not, defaults to False.</span>
+<span class="sd">    context : zmq.Context, optional</span>
+<span class="sd">        ZMQ socket context, defaults to global context.</span>
+<span class="sd">    loop : EventLoop, optional</span>
+<span class="sd">        Event loop to use, defaults to global event loop.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                 <span class="n">runtime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">comms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">in_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                         <span class="n">runtime</span><span class="o">=</span><span class="n">runtime</span><span class="p">,</span> <span class="n">comms</span><span class="o">=</span><span class="n">comms</span><span class="p">,</span> <span class="n">in_node</span><span class="o">=</span><span class="n">in_node</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="n">loop</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_socket</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;connected&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shaken</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connect the socket.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">cmd</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reply</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send message through the connection.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        method : str</span>
+<span class="sd">            Remote method.</span>
+<span class="sd">        cmd : dict, optional</span>
+<span class="sd">            If the method is ``cmd`` a description of the command has to be provided.</span>
+<span class="sd">        reply : bool, optional</span>
+<span class="sd">            Whether the connection should wait for a reply, defaults to False.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keywird arguments for the remote method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Reply or None</span>
+<span class="sd">            Depending on whether a reply is expected or not.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;Trying to send in a disconnected OutboundConnection &quot;</span><span class="si">%s</span><span class="s1">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="ne">Warning</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">reply</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">reply_future</span> <span class="o">=</span> <span class="n">Reply</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">method</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_comms</span><span class="o">.</span><span class="n">register_reply_future</span><span class="p">(</span><span class="n">reply_future</span><span class="p">)</span>
+            <span class="n">reply</span> <span class="o">=</span> <span class="n">reply_future</span><span class="o">.</span><span class="n">uid</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reply_future</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span>
+            <span class="s1">&#39;runtime_id&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span>
+            <span class="s1">&#39;kwargs&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="p">,</span>
+            <span class="s1">&#39;reply&#39;</span><span class="p">:</span> <span class="n">reply</span><span class="p">,</span>
+            <span class="s1">&#39;cmd&#39;</span><span class="p">:</span> <span class="n">cmd</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;cmd&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Sending cmd </span><span class="si">%s</span><span class="s1"> </span><span class="si">%s</span><span class="s1"> to </span><span class="si">%s</span><span class="s1"> (</span><span class="si">%s</span><span class="s1">) from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;method&#39;</span><span class="p">],</span>
+                                                                            <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="n">cmd</span><span class="p">[</span><span class="s1">&#39;uid&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Sending msg </span><span class="si">%s</span><span class="s1"> to </span><span class="si">%s</span><span class="s1"> from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+
+        <span class="n">msg</span> <span class="o">=</span> <span class="n">Message</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="n">msg</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;cmd&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Received cmd </span><span class="si">%s</span><span class="s1"> </span><span class="si">%s</span><span class="s1"> from </span><span class="si">%s</span><span class="s1"> at </span><span class="si">%s</span><span class="s1"> (</span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">cmd</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
+                                                                             <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span>
+                                                                             <span class="n">msg</span><span class="o">.</span><span class="n">cmd</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s1">&#39;Received msg </span><span class="si">%s</span><span class="s1"> from </span><span class="si">%s</span><span class="s1"> at </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">))</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comms</span><span class="o">.</span><span class="n">process_msg</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="n">msg</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">reply_future</span>
+
+
+<div class="viewcode-block" id="CommsManager"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager">[docs]</a><span class="k">class</span> <span class="nc">CommsManager</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Objects of this type manage the connections and message passing between different</span>
+<span class="sd">    runtimes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    runtime : Runtime, optional</span>
+<span class="sd">        Current runtime, defaults to global runtime.</span>
+<span class="sd">    address : str</span>
+<span class="sd">        IP address of the connection.</span>
+<span class="sd">    port : int</span>
+<span class="sd">        Port to use for the connection.</span>
+<span class="sd">    context : zmq.Context, optional</span>
+<span class="sd">        ZMQ socket context, defaults to global context.</span>
+<span class="sd">    loop : EventLoop, optional</span>
+<span class="sd">        Event loop to use, defaults to global event loop.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_comms_methods</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;hand&#39;</span><span class="p">,</span> <span class="s1">&#39;shake&#39;</span><span class="p">,</span> <span class="s1">&#39;heart&#39;</span><span class="p">,</span> <span class="s1">&#39;beat&#39;</span><span class="p">,</span> <span class="s1">&#39;stop&#39;</span><span class="p">,</span> <span class="s1">&#39;connect&#39;</span><span class="p">,</span> <span class="s1">&#39;disconnect&#39;</span><span class="p">,</span> <span class="s1">&#39;reply&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">runtime</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">address</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">loop</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span> <span class="o">=</span> <span class="n">runtime</span> <span class="ow">or</span> <span class="n">mosaic</span><span class="o">.</span><span class="n">runtime</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span> <span class="o">=</span> <span class="n">loop</span> <span class="ow">or</span> <span class="n">mosaic</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span> <span class="o">=</span> <span class="n">context</span> <span class="ow">or</span> <span class="n">mosaic</span><span class="o">.</span><span class="n">get_zmq_context</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span> <span class="o">=</span> <span class="n">InboundConnection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                                              <span class="n">runtime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="p">,</span>
+                                              <span class="n">comms</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                                              <span class="n">in_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                              <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span><span class="p">,</span>
+                                              <span class="n">loop</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">IDENTITY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">RCVHWM</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_circ_socket</span> <span class="o">=</span> <span class="n">CircularConnection</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
+                                               <span class="n">runtime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="p">,</span>
+                                               <span class="n">comms</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                                               <span class="n">in_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                               <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span><span class="p">,</span>
+                                               <span class="n">loop</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reply_futures</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">WeakValueDictionary</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reply_futures</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;disconnected&#39;</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">&quot;&lt;CommsManager object at </span><span class="si">%s</span><span class="s2">, uid=</span><span class="si">%s</span><span class="s2">, address=</span><span class="si">%s</span><span class="s2">, port=</span><span class="si">%d</span><span class="s2">, state=</span><span class="si">%s</span><span class="s2">&gt;&quot;</span> <span class="o">%</span> \
+               <span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">address</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__await__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Cannot wait for comms that has not started listening&#39;</span><span class="p">)</span>
+
+        <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">wrap_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="k">yield from</span> <span class="n">future</span><span class="o">.</span><span class="fm">__await__</span><span class="p">())</span>
+
+<div class="viewcode-block" id="CommsManager.wait"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.wait">[docs]</a>    <span class="k">def</span> <span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wait until the listening loop of the comms is done.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s1">&#39;Cannot wait for comms that has not started listening&#39;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+
+        <span class="k">except</span> <span class="n">CancelledError</span><span class="p">:</span>
+            <span class="k">pass</span></div>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">address</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connection address.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">address</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">port</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connection port.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">port</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">logger</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runtime logger.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">logger</span>
+
+<div class="viewcode-block" id="CommsManager.uid_address"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.uid_address">[docs]</a>    <span class="k">def</span> <span class="nf">uid_address</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Find remote address given UID.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Address.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">address</span></div>
+
+<div class="viewcode-block" id="CommsManager.uid_port"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.uid_port">[docs]</a>    <span class="k">def</span> <span class="nf">uid_port</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Find remote port given UID.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            Port.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">port</span></div>
+
+<div class="viewcode-block" id="CommsManager.connect_recv"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.connect_recv">[docs]</a>    <span class="k">def</span> <span class="nf">connect_recv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connect inbound connection.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">!=</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_circ_socket</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;connected&#39;</span></div>
+
+<div class="viewcode-block" id="CommsManager.connect_send"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.connect_send">[docs]</a>    <span class="k">def</span> <span class="nf">connect_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create and connect outbound connection for a remote runtime,</span>
+<span class="sd">        with a given address and port.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+<span class="sd">        address : str</span>
+<span class="sd">            Remote address.</span>
+<span class="sd">        port : int</span>
+<span class="sd">            Remote port.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">validate_address</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">uid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="ow">and</span> <span class="n">uid</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span> <span class="o">=</span> <span class="n">OutboundConnection</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span>
+                                                        <span class="n">runtime</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="p">,</span>
+                                                        <span class="n">comms</span><span class="o">=</span><span class="bp">self</span><span class="p">,</span>
+                                                        <span class="n">in_node</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                                        <span class="n">context</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span><span class="p">,</span>
+                                                        <span class="n">loop</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">IDENTITY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">setsockopt</span><span class="p">(</span><span class="n">zmq</span><span class="o">.</span><span class="n">SNDHWM</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CommsManager.connected"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.connected">[docs]</a>    <span class="k">def</span> <span class="nf">connected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check whether remote UID is connected.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">uid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="ow">or</span> <span class="n">uid</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span></div>
+
+<div class="viewcode-block" id="CommsManager.shaken"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.shaken">[docs]</a>    <span class="k">def</span> <span class="nf">shaken</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check whether remote UID has completed handshake.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">connected</span><span class="p">(</span><span class="n">uid</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">shaken</span></div>
+
+<div class="viewcode-block" id="CommsManager.disconnect_recv"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.disconnect_recv">[docs]</a>    <span class="k">def</span> <span class="nf">disconnect_recv</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Disconnect inbound connection.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CommsManager.disconnect_send"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.disconnect_send">[docs]</a>    <span class="k">def</span> <span class="nf">disconnect_send</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Connect all outbound connections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">connection</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">connection</span><span class="o">.</span><span class="n">socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CommsManager.send"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.send">[docs]</a>    <span class="k">def</span> <span class="nf">send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Synchronously send message to remote runtime.</span>
+
+<span class="sd">        For arguments and return values check ``Comms.send_async``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">wait</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="n">wait</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.cmd"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.cmd">[docs]</a>    <span class="k">def</span> <span class="nf">cmd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Synchronously send command to remote runtime.</span>
+
+<span class="sd">        For arguments and return values check ``Comms.cmd_async``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">wait</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cmd_async</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="n">wait</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.recv"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.recv">[docs]</a>    <span class="k">def</span> <span class="nf">recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Synchronously receive message from remote runtime.</span>
+
+<span class="sd">        For arguments and return values check ``Comms.recv_async``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">wait</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recv_async</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="n">wait</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.send_recv"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.send_recv">[docs]</a>    <span class="k">def</span> <span class="nf">send_recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Synchronously send message to remote runtime and wait for reply.</span>
+
+<span class="sd">        For arguments and return values check ``Comms.send_async``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">wait</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;reply&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+                                <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">wait</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">future</span></div>
+
+<div class="viewcode-block" id="CommsManager.cmd_recv"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.cmd_recv">[docs]</a>    <span class="k">def</span> <span class="nf">cmd_recv</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Synchronously send command to remote runtime and wait for reply.</span>
+
+<span class="sd">        For arguments and return values check ``Comms.cmd_async``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">wait</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;wait&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;reply&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cmd_async</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">,</span>
+                                <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">wait</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">future</span></div>
+
+<div class="viewcode-block" id="CommsManager.reply"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.reply">[docs]</a>    <span class="k">def</span> <span class="nf">reply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">result</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process reply from remote runtime.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            UID of the remote endpoint.</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            UID of the associated Reply.</span>
+<span class="sd">        result : object</span>
+<span class="sd">            Result of the reply.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">uid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reply_futures</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reply_futures</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">set_result</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.register_reply_future"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.register_reply_future">[docs]</a>    <span class="k">def</span> <span class="nf">register_reply_future</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">future</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Register a Reply to be accessible later on.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        future : Reply</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reply_futures</span><span class="p">[</span><span class="n">future</span><span class="o">.</span><span class="n">uid</span><span class="p">]</span> <span class="o">=</span> <span class="n">future</span></div>
+
+<div class="viewcode-block" id="CommsManager.listen"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.listen">[docs]</a>    <span class="k">def</span> <span class="nf">listen</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Start the listening loop.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        concurrent.futures.Future</span>
+<span class="sd">            Future associated with the running loop.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">!=</span> <span class="s1">&#39;connected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">def</span> <span class="nf">done</span><span class="p">(</span><span class="n">fut</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">exception</span> <span class="o">=</span> <span class="n">fut</span><span class="o">.</span><span class="n">exception</span><span class="p">()</span>
+
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="k">return</span>
+
+            <span class="k">if</span> <span class="n">exception</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">exception</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">listen_async</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span><span class="o">.</span><span class="n">add_done_callback</span><span class="p">(</span><span class="n">done</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span></div>
+
+<div class="viewcode-block" id="CommsManager.listen_async"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.listen_async">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">listen_async</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Asynchronous listening loop.</span>
+
+<span class="sd">        The loop waits on messages from the incoming connection, then</span>
+<span class="sd">        processes them and, if necessary, passes them to the runtime.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">!=</span> <span class="s1">&#39;connected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;listening&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s1">&#39;Listening at </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">!=</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">recv_async</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_msg</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;stop&#39;</span><span class="p">:</span>
+                <span class="k">break</span></div>
+
+<div class="viewcode-block" id="CommsManager.process_msg"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.process_msg">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">process_msg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process a received message to decide what to do with it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            UID of the remote endpoint.</span>
+<span class="sd">        msg : Message</span>
+<span class="sd">            Message object.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">runtime</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">runtime</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="n">comms_method</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">beat</span><span class="p">(</span><span class="n">sender_id</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;raise&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;stop&#39;</span><span class="p">):</span>
+            <span class="n">call</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">call</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">call</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">call_safe</span>
+
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_exception</span><span class="p">(</span><span class="n">sender_id</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comms_methods</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">method</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span><span class="s1">&#39;Class </span><span class="si">%s</span><span class="s1"> does not have method </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">runtime</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                                                                               <span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">))</span>
+
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">method</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Method </span><span class="si">%s</span><span class="s1"> of class </span><span class="si">%s</span><span class="s1"> is not callable&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">msg</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
+                                                                                <span class="n">runtime</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">cmd</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;cmd&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">cmd</span>
+
+            <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call</span><span class="p">,</span>
+                                          <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">reply</span><span class="p">),</span>
+                                          <span class="n">kwargs</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">comms_method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">future</span>
+
+        <span class="k">if</span> <span class="n">comms_method</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span> <span class="ow">and</span> <span class="n">msg</span><span class="o">.</span><span class="n">method</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comms_methods</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">call</span><span class="p">,</span>
+                                 <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span> <span class="n">comms_method</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+                                 <span class="n">kwargs</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.call"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.call">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">reply</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run method in the loop.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            UID of the remote endpoint.</span>
+<span class="sd">        method : callable</span>
+<span class="sd">            Method to execute</span>
+<span class="sd">        reply : False or str</span>
+<span class="sd">            Whether a reply is needed and, if so, the UID of the reply.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keyword arguments for the method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">sender_id</span><span class="p">,)</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.call_safe"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.call_safe">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">call_safe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">reply</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run method in the loop, and within an exception handler that</span>
+<span class="sd">        will process exceptions and send them back to the sender.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            UID of the remote endpoint.</span>
+<span class="sd">        method : callable</span>
+<span class="sd">            Method to execute</span>
+<span class="sd">        reply : False or str</span>
+<span class="sd">            Whether a reply is needed and, if so, the UID of the reply.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keyword arguments for the method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">sender_id</span><span class="p">,)</span>
+
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_exception</span><span class="p">(</span><span class="n">sender_id</span><span class="p">):</span>
+            <span class="n">future</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">method</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">future</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span>
+
+            <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">future</span>
+
+            <span class="k">if</span> <span class="n">reply</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span><span class="p">:</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span>
+                                      <span class="n">method</span><span class="o">=</span><span class="s1">&#39;reply&#39;</span><span class="p">,</span>
+                                      <span class="n">uid</span><span class="o">=</span><span class="n">reply</span><span class="p">,</span> <span class="n">result</span><span class="o">=</span><span class="n">result</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.send_async"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.send_async">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">send_uid</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send message to ``sender_id`` with given arguments and keyword arguments.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        send_uid : str</span>
+<span class="sd">            UID of the remote runtime.</span>
+<span class="sd">        args : tuple, optional</span>
+<span class="sd">            Any arguments for the message.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keyword arguments for the method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Reply or None</span>
+<span class="sd">            Depending on whether a reply is expected or not.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">send_uid</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_circ_socket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">send_uid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s1">&#39;Endpoint </span><span class="si">%s</span><span class="s1"> is not connected&#39;</span> <span class="o">%</span> <span class="n">send_uid</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">send_uid</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.cmd_async"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.cmd_async">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">cmd_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send command with given arguments and keyword arguments.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        args : tuple, optional</span>
+<span class="sd">            Any arguments for the message.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keyword arguments for the method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Reply or None</span>
+<span class="sd">            Depending on whether a reply is expected or not.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cmd</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;type&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;uid&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;uid&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;method&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;args&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;args&#39;</span><span class="p">,</span> <span class="p">()),</span>
+            <span class="s1">&#39;kwargs&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;kwargs&#39;</span><span class="p">,</span> <span class="p">{}),</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;cmd&#39;</span><span class="p">,</span> <span class="n">cmd</span><span class="o">=</span><span class="n">cmd</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.recv_async"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.recv_async">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">recv_async</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wait for received message from the inbound socket.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Sender UID.</span>
+<span class="sd">        Message</span>
+<span class="sd">            Received message.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+        <span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">msg</span></div>
+
+<div class="viewcode-block" id="CommsManager.send_recv_async"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.send_recv_async">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_recv_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">send_uid</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send message to ``sender_id`` with given arguments and keyword arguments,</span>
+<span class="sd">        and then wait for the reply.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        send_uid : str</span>
+<span class="sd">            UID of the remote runtime.</span>
+<span class="sd">        args : tuple, optional</span>
+<span class="sd">            Any arguments for the message.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keyword arguments for the method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        object</span>
+<span class="sd">            Result of the reply</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">send_uid</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">:</span>
+            <span class="n">future</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_circ_socket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">reply</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">send_uid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s1">&#39;Endpoint </span><span class="si">%s</span><span class="s1"> is not connected&#39;</span> <span class="o">%</span> <span class="n">send_uid</span><span class="p">)</span>
+
+            <span class="n">future</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">send_uid</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">reply</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="k">await</span> <span class="n">future</span></div>
+
+<div class="viewcode-block" id="CommsManager.cmd_recv_async"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.cmd_recv_async">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">cmd_recv_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send command with given arguments and keyword arguments,</span>
+<span class="sd">        and then wait for the reply.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        args : tuple, optional</span>
+<span class="sd">            Any arguments for the message.</span>
+<span class="sd">        kwargs : optional</span>
+<span class="sd">            Keyword arguments for the method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        object</span>
+<span class="sd">            Result of the reply</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cmd</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;type&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;uid&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;uid&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;method&#39;</span><span class="p">),</span>
+            <span class="s1">&#39;args&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;args&#39;</span><span class="p">,</span> <span class="p">()),</span>
+            <span class="s1">&#39;kwargs&#39;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;kwargs&#39;</span><span class="p">,</span> <span class="p">{}),</span>
+        <span class="p">}</span>
+
+        <span class="n">future</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_recv_async</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">&#39;cmd&#39;</span><span class="p">,</span> <span class="n">cmd</span><span class="o">=</span><span class="n">cmd</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">future</span></div>
+
+<div class="viewcode-block" id="CommsManager.send_exception"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.send_exception">[docs]</a>    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">asynccontextmanager</span>
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">send_exception</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Context manager that handles exceptions by sending them</span>
+<span class="sd">        back to the ``uid``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">et</span><span class="p">,</span> <span class="n">ev</span><span class="p">,</span> <span class="n">tb</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">exc_info</span><span class="p">()</span>
+            <span class="n">tb</span> <span class="o">=</span> <span class="n">tblib</span><span class="o">.</span><span class="n">Traceback</span><span class="p">(</span><span class="n">tb</span><span class="p">)</span>
+
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span>
+                                  <span class="n">method</span><span class="o">=</span><span class="s1">&#39;raise_exception&#39;</span><span class="p">,</span>
+                                  <span class="n">exc</span><span class="o">=</span><span class="p">(</span><span class="n">et</span><span class="p">,</span> <span class="n">ev</span><span class="p">,</span> <span class="n">tb</span><span class="p">))</span>
+
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">pass</span></div>
+
+<div class="viewcode-block" id="CommsManager.connect"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.connect">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="n">notify</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create and connect outbound connection for a remote runtime,</span>
+<span class="sd">        with a given address and port.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+<span class="sd">        address : str</span>
+<span class="sd">            Remote address.</span>
+<span class="sd">        port : int</span>
+<span class="sd">            Remote port.</span>
+<span class="sd">        notify : bool, optional</span>
+<span class="sd">            Whether or not to notify others of a new connection, defaults to False.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect_send</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">notify</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">connected_id</span><span class="p">,</span> <span class="n">connection</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">connected_id</span><span class="p">,</span>
+                                      <span class="n">method</span><span class="o">=</span><span class="s1">&#39;connect&#39;</span><span class="p">,</span>
+                                      <span class="n">uid</span><span class="o">=</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="o">=</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">port</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.wait_for"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.wait_for">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">wait_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wait until remote endpoint has connected.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">while</span> <span class="n">uid</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="ow">and</span> <span class="n">uid</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">uid</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.disconnect"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.disconnect">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">notify</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Disconnect a remote endpoint.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            Sender UID.</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID to disconnect.</span>
+<span class="sd">        notify : bool, optional</span>
+<span class="sd">            Whether or not to notify others of the disconnection, defaults to False.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">uid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">notify</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">connected_id</span><span class="p">,</span> <span class="n">connection</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">connected_id</span><span class="p">,</span>
+                                      <span class="n">method</span><span class="o">=</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span>
+                                      <span class="n">uid</span><span class="o">=</span><span class="n">uid</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.handshake"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.handshake">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">handshake</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Start handshake with remote ``uid``, located at a certain ``address`` and ``port``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        uid : str</span>
+<span class="sd">            Remote UID.</span>
+<span class="sd">        address : str</span>
+<span class="sd">            Remote address.</span>
+<span class="sd">        port : int</span>
+<span class="sd">            Remote port.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">validate_address</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect_send</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span>
+                              <span class="n">method</span><span class="o">=</span><span class="s1">&#39;hand&#39;</span><span class="p">,</span>
+                              <span class="n">address</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_recv_socket</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">sender_id</span><span class="p">,</span> <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">recv_async</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">uid</span> <span class="o">==</span> <span class="n">sender_id</span> <span class="ow">and</span> <span class="n">response</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s1">&#39;shake&#39;</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">shake</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span> <span class="o">**</span><span class="n">response</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_runtime</span><span class="o">.</span><span class="n">shake</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,),</span> <span class="n">kwargs</span><span class="o">=</span><span class="n">response</span><span class="o">.</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CommsManager.hand"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.hand">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">hand</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Handle incoming handshake.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            Remote UID.</span>
+<span class="sd">        address : str</span>
+<span class="sd">            Remote address.</span>
+<span class="sd">        port : int</span>
+<span class="sd">            Remote port.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">for</span> <span class="n">connected_id</span><span class="p">,</span> <span class="n">connection</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">connected_id</span><span class="p">,</span>
+                                  <span class="n">method</span><span class="o">=</span><span class="s1">&#39;connect&#39;</span><span class="p">,</span>
+                                  <span class="n">uid</span><span class="o">=</span><span class="n">sender_id</span><span class="p">,</span> <span class="n">address</span><span class="o">=</span><span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">port</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">connect_send</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span> <span class="n">address</span><span class="p">,</span> <span class="n">port</span><span class="p">)</span>
+
+        <span class="n">network</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">connected_id</span><span class="p">,</span> <span class="n">connection</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">network</span><span class="p">[</span><span class="n">connected_id</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">connection</span><span class="o">.</span><span class="n">address</span><span class="p">,</span> <span class="n">connection</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span>
+                              <span class="n">method</span><span class="o">=</span><span class="s1">&#39;shake&#39;</span><span class="p">,</span>
+                              <span class="n">network</span><span class="o">=</span><span class="n">network</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.shake"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.shake">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">shake</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">,</span> <span class="n">network</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Handle confirmation of complete handshake.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            Remote UID.</span>
+<span class="sd">        network : dict</span>
+<span class="sd">            Existing topology of connected sockets.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">for</span> <span class="n">uid</span><span class="p">,</span> <span class="n">address</span> <span class="ow">in</span> <span class="n">network</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">connect_send</span><span class="p">(</span><span class="n">uid</span><span class="p">,</span> <span class="o">*</span><span class="n">address</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">uid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">uid</span><span class="p">]</span><span class="o">.</span><span class="n">shake</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CommsManager.heart"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.heart">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">heart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Received ``heart`` message, respond with ``beat``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="n">sender_id</span><span class="p">,</span>
+                              <span class="n">method</span><span class="o">=</span><span class="s1">&#39;beat&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CommsManager.beat"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.beat">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">beat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Received ``beat`` message, the remote endpoint is alive.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">sender_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="k">return</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_send_socket</span><span class="p">[</span><span class="n">sender_id</span><span class="p">]</span><span class="o">.</span><span class="n">beat</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CommsManager.stop"><a class="viewcode-back" href="../../../mosaic/api/comms/comms.html#mosaic.comms.comms.CommsManager.stop">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Stop the CommsManager.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+<span class="sd">            Remote UID.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">==</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_listen_future</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">disconnect_send</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">disconnect_recv</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_zmq_context</span><span class="o">.</span><span class="n">term</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="s1">&#39;disconnected&#39;</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,720 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Comms &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Serialisation" href="serialisation.html" />
+    <link rel="prev" title="Comms" href="comms_index.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Mosaic API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../run.html">Running mosaic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../runtime/runtime_index.html">Runtime</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="comms_index.html">Comms</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Comms</a></li>
+<li class="toctree-l3"><a class="reference internal" href="serialisation.html">Serialisation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="compression.html">Compression</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../core/core_index.html">Core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../types/types_index.html">Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../file_manipulation/file_manipulation_index.html">File manipulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Mosaic API Reference</a> &raquo;</li>
+        
+          <li><a href="comms_index.html">Comms</a> &raquo;</li>
+        
+      <li>Comms</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/mosaic/api/comms/comms.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="comms">
+<h1>Comms<a class="headerlink" href="#comms" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="mosaic.comms.comms.CommsManager">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.comms.comms.</code><code class="sig-name descname">CommsManager</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">runtime</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">address</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">port</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">context</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">loop</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Objects of this type manage the connections and message passing between different
+runtimes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>runtime</strong> (<a class="reference internal" href="../runtime/runtime.html#mosaic.runtime.runtime.Runtime" title="mosaic.runtime.runtime.Runtime"><em>Runtime</em></a><em>, </em><em>optional</em>) – Current runtime, defaults to global runtime.</p></li>
+<li><p><strong>address</strong> (<em>str</em>) – IP address of the connection.</p></li>
+<li><p><strong>port</strong> (<em>int</em>) – Port to use for the connection.</p></li>
+<li><p><strong>context</strong> (<em>zmq.Context</em><em>, </em><em>optional</em>) – ZMQ socket context, defaults to global context.</p></li>
+<li><p><strong>loop</strong> (<a class="reference internal" href="../utils/event_loop.html#mosaic.utils.event_loop.EventLoop" title="mosaic.utils.event_loop.EventLoop"><em>EventLoop</em></a><em>, </em><em>optional</em>) – Event loop to use, defaults to global event loop.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.address">
+<em class="property">property </em><code class="sig-name descname">address</code><a class="headerlink" href="#mosaic.comms.comms.CommsManager.address" title="Permalink to this definition">¶</a></dt>
+<dd><p>Connection address.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.beat">
+<em class="property">async </em><code class="sig-name descname">beat</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.beat"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.beat" title="Permalink to this definition">¶</a></dt>
+<dd><p>Received <code class="docutils literal notranslate"><span class="pre">beat</span></code> message, the remote endpoint is alive.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.call">
+<em class="property">async </em><code class="sig-name descname">call</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">method</span></em>, <em class="sig-param"><span class="n">reply</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.call"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.call" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run method in the loop.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – UID of the remote endpoint.</p></li>
+<li><p><strong>method</strong> (<em>callable</em>) – Method to execute</p></li>
+<li><p><strong>reply</strong> (<em>False</em><em> or </em><em>str</em>) – Whether a reply is needed and, if so, the UID of the reply.</p></li>
+<li><p><strong>kwargs</strong> (<em>optional</em>) – Keyword arguments for the method.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.call_safe">
+<em class="property">async </em><code class="sig-name descname">call_safe</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">method</span></em>, <em class="sig-param"><span class="n">reply</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.call_safe"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.call_safe" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run method in the loop, and within an exception handler that
+will process exceptions and send them back to the sender.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – UID of the remote endpoint.</p></li>
+<li><p><strong>method</strong> (<em>callable</em>) – Method to execute</p></li>
+<li><p><strong>reply</strong> (<em>False</em><em> or </em><em>str</em>) – Whether a reply is needed and, if so, the UID of the reply.</p></li>
+<li><p><strong>kwargs</strong> (<em>optional</em>) – Keyword arguments for the method.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.cmd">
+<code class="sig-name descname">cmd</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.cmd"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.cmd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Synchronously send command to remote runtime.</p>
+<p>For arguments and return values check <code class="docutils literal notranslate"><span class="pre">Comms.cmd_async</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.cmd_async">
+<em class="property">async </em><code class="sig-name descname">cmd_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.cmd_async"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.cmd_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send command with given arguments and keyword arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>args</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Any arguments for the message.</p></li>
+<li><p><strong>kwargs</strong> (<em>optional</em>) – Keyword arguments for the method.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Depending on whether a reply is expected or not.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Reply or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.cmd_recv">
+<code class="sig-name descname">cmd_recv</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.cmd_recv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.cmd_recv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Synchronously send command to remote runtime and wait for reply.</p>
+<p>For arguments and return values check <code class="docutils literal notranslate"><span class="pre">Comms.cmd_async</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.cmd_recv_async">
+<em class="property">async </em><code class="sig-name descname">cmd_recv_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.cmd_recv_async"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.cmd_recv_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send command with given arguments and keyword arguments,
+and then wait for the reply.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>args</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Any arguments for the message.</p></li>
+<li><p><strong>kwargs</strong> (<em>optional</em>) – Keyword arguments for the method.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Result of the reply</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.connect">
+<em class="property">async </em><code class="sig-name descname">connect</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">address</span></em>, <em class="sig-param"><span class="n">port</span></em>, <em class="sig-param"><span class="n">notify</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.connect"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.connect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create and connect outbound connection for a remote runtime,
+with a given address and port.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p></li>
+<li><p><strong>address</strong> (<em>str</em>) – Remote address.</p></li>
+<li><p><strong>port</strong> (<em>int</em>) – Remote port.</p></li>
+<li><p><strong>notify</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to notify others of a new connection, defaults to False.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.connect_recv">
+<code class="sig-name descname">connect_recv</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.connect_recv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.connect_recv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Connect inbound connection.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.connect_send">
+<code class="sig-name descname">connect_send</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">address</span></em>, <em class="sig-param"><span class="n">port</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.connect_send"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.connect_send" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create and connect outbound connection for a remote runtime,
+with a given address and port.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p></li>
+<li><p><strong>address</strong> (<em>str</em>) – Remote address.</p></li>
+<li><p><strong>port</strong> (<em>int</em>) – Remote port.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.connected">
+<code class="sig-name descname">connected</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.connected"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.connected" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check whether remote UID is connected.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.disconnect">
+<em class="property">async </em><code class="sig-name descname">disconnect</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">notify</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.disconnect"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.disconnect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Disconnect a remote endpoint.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – Sender UID.</p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – Remote UID to disconnect.</p></li>
+<li><p><strong>notify</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to notify others of the disconnection, defaults to False.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.disconnect_recv">
+<code class="sig-name descname">disconnect_recv</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.disconnect_recv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.disconnect_recv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Disconnect inbound connection.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.disconnect_send">
+<code class="sig-name descname">disconnect_send</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.disconnect_send"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.disconnect_send" title="Permalink to this definition">¶</a></dt>
+<dd><p>Connect all outbound connections.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.hand">
+<em class="property">async </em><code class="sig-name descname">hand</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">address</span></em>, <em class="sig-param"><span class="n">port</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.hand"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.hand" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle incoming handshake.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – Remote UID.</p></li>
+<li><p><strong>address</strong> (<em>str</em>) – Remote address.</p></li>
+<li><p><strong>port</strong> (<em>int</em>) – Remote port.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.handshake">
+<em class="property">async </em><code class="sig-name descname">handshake</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">address</span></em>, <em class="sig-param"><span class="n">port</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.handshake"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.handshake" title="Permalink to this definition">¶</a></dt>
+<dd><p>Start handshake with remote <code class="docutils literal notranslate"><span class="pre">uid</span></code>, located at a certain <code class="docutils literal notranslate"><span class="pre">address</span></code> and <code class="docutils literal notranslate"><span class="pre">port</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p></li>
+<li><p><strong>address</strong> (<em>str</em>) – Remote address.</p></li>
+<li><p><strong>port</strong> (<em>int</em>) – Remote port.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.heart">
+<em class="property">async </em><code class="sig-name descname">heart</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.heart"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.heart" title="Permalink to this definition">¶</a></dt>
+<dd><p>Received <code class="docutils literal notranslate"><span class="pre">heart</span></code> message, respond with <code class="docutils literal notranslate"><span class="pre">beat</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.listen">
+<code class="sig-name descname">listen</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.listen"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.listen" title="Permalink to this definition">¶</a></dt>
+<dd><p>Start the listening loop.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Future associated with the running loop.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>concurrent.futures.Future</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.listen_async">
+<em class="property">async </em><code class="sig-name descname">listen_async</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.listen_async"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.listen_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Asynchronous listening loop.</p>
+<p>The loop waits on messages from the incoming connection, then
+processes them and, if necessary, passes them to the runtime.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.logger">
+<em class="property">property </em><code class="sig-name descname">logger</code><a class="headerlink" href="#mosaic.comms.comms.CommsManager.logger" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runtime logger.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.port">
+<em class="property">property </em><code class="sig-name descname">port</code><a class="headerlink" href="#mosaic.comms.comms.CommsManager.port" title="Permalink to this definition">¶</a></dt>
+<dd><p>Connection port.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.process_msg">
+<em class="property">async </em><code class="sig-name descname">process_msg</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">msg</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.process_msg"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.process_msg" title="Permalink to this definition">¶</a></dt>
+<dd><p>Process a received message to decide what to do with it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – UID of the remote endpoint.</p></li>
+<li><p><strong>msg</strong> (<em>Message</em>) – Message object.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.recv">
+<code class="sig-name descname">recv</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.recv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.recv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Synchronously receive message from remote runtime.</p>
+<p>For arguments and return values check <code class="docutils literal notranslate"><span class="pre">Comms.recv_async</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.recv_async">
+<em class="property">async </em><code class="sig-name descname">recv_async</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.recv_async"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.recv_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait for received message from the inbound socket.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><em>str</em> – Sender UID.</p></li>
+<li><p><em>Message</em> – Received message.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.register_reply_future">
+<code class="sig-name descname">register_reply_future</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">future</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.register_reply_future"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.register_reply_future" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register a Reply to be accessible later on.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>future</strong> (<em>Reply</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.reply">
+<code class="sig-name descname">reply</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">result</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.reply"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.reply" title="Permalink to this definition">¶</a></dt>
+<dd><p>Process reply from remote runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – UID of the remote endpoint.</p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – UID of the associated Reply.</p></li>
+<li><p><strong>result</strong> (<em>object</em>) – Result of the reply.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.send">
+<code class="sig-name descname">send</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.send"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.send" title="Permalink to this definition">¶</a></dt>
+<dd><p>Synchronously send message to remote runtime.</p>
+<p>For arguments and return values check <code class="docutils literal notranslate"><span class="pre">Comms.send_async</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.send_async">
+<em class="property">async </em><code class="sig-name descname">send_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">send_uid</span></em>, <em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.send_async"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.send_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send message to <code class="docutils literal notranslate"><span class="pre">sender_id</span></code> with given arguments and keyword arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>send_uid</strong> (<em>str</em>) – UID of the remote runtime.</p></li>
+<li><p><strong>args</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Any arguments for the message.</p></li>
+<li><p><strong>kwargs</strong> (<em>optional</em>) – Keyword arguments for the method.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Depending on whether a reply is expected or not.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>Reply or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.send_exception">
+<code class="sig-name descname">send_exception</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.send_exception"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.send_exception" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that handles exceptions by sending them
+back to the <code class="docutils literal notranslate"><span class="pre">uid</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.send_recv">
+<code class="sig-name descname">send_recv</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.send_recv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.send_recv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Synchronously send message to remote runtime and wait for reply.</p>
+<p>For arguments and return values check <code class="docutils literal notranslate"><span class="pre">Comms.send_async</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.send_recv_async">
+<em class="property">async </em><code class="sig-name descname">send_recv_async</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">send_uid</span></em>, <em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.send_recv_async"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.send_recv_async" title="Permalink to this definition">¶</a></dt>
+<dd><p>Send message to <code class="docutils literal notranslate"><span class="pre">sender_id</span></code> with given arguments and keyword arguments,
+and then wait for the reply.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>send_uid</strong> (<em>str</em>) – UID of the remote runtime.</p></li>
+<li><p><strong>args</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Any arguments for the message.</p></li>
+<li><p><strong>kwargs</strong> (<em>optional</em>) – Keyword arguments for the method.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Result of the reply</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.shake">
+<em class="property">async </em><code class="sig-name descname">shake</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">network</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.shake"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.shake" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle confirmation of complete handshake.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – Remote UID.</p></li>
+<li><p><strong>network</strong> (<em>dict</em>) – Existing topology of connected sockets.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.shaken">
+<code class="sig-name descname">shaken</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.shaken"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.shaken" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check whether remote UID has completed handshake.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.stop">
+<em class="property">async </em><code class="sig-name descname">stop</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.stop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.stop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stop the CommsManager.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.uid_address">
+<code class="sig-name descname">uid_address</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.uid_address"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.uid_address" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find remote address given UID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Address.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.uid_port">
+<code class="sig-name descname">uid_port</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.uid_port"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.uid_port" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find remote port given UID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Port.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.wait">
+<code class="sig-name descname">wait</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.wait"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.wait" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait until the listening loop of the comms is done.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.comms.comms.CommsManager.wait_for">
+<em class="property">async </em><code class="sig-name descname">wait_for</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/comms/comms.html#CommsManager.wait_for"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.comms.comms.CommsManager.wait_for" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait until remote endpoint has connected.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – Remote UID.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="serialisation.html" class="btn btn-neutral float-right" title="Serialisation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="comms_index.html" class="btn btn-neutral float-left" title="Comms" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

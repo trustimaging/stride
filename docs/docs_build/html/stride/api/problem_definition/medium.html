@@ -1,0 +1,335 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Medium &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Transducers" href="transducers.html" />
+    <link rel="prev" title="Problem" href="problem.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Stride API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../runner.html">Runner</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="problem_definition_index.html">Problem definition</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="domain.html">Domain</a></li>
+<li class="toctree-l3"><a class="reference internal" href="base.html">Base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html">Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="problem.html">Problem</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Medium</a></li>
+<li class="toctree-l3"><a class="reference internal" href="transducers.html">Transducers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="geometry.html">Geometry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="acquisitions.html">Acquisitions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../problem_types/problem_types_index.html">Problem Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../optimisation/optimisation_index.html">Optimisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plotting/plotting_index.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Stride API Reference</a> &raquo;</li>
+        
+          <li><a href="problem_definition_index.html">Problem definition</a> &raquo;</li>
+        
+      <li>Medium</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/stride/api/problem_definition/medium.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="medium">
+<h1>Medium<a class="headerlink" href="#medium" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="stride.problem_definition.medium.Medium">
+<em class="property">class </em><code class="sig-prename descclassname">stride.problem_definition.medium.</code><code class="sig-name descname">Medium</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">'medium'</span></em>, <em class="sig-param"><span class="n">problem</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/medium.html#Medium"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.medium.Medium" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="base.html#stride.problem_definition.base.ProblemBase" title="stride.problem_definition.base.ProblemBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.problem_definition.base.ProblemBase</span></code></a></p>
+<p>A Medium contains the fields that define a physical medium,
+such as density or longitudinal speed of sound.</p>
+<p>A Medium defines these properties by keeping track of a series of named fields, that can be added to
+it through <code class="docutils literal notranslate"><span class="pre">Medium.add</span></code>.</p>
+<p>A field with a name <code class="docutils literal notranslate"><span class="pre">field_name</span></code> can be accessed directly through <code class="docutils literal notranslate"><span class="pre">medium.field_name</span></code> or
+<code class="docutils literal notranslate"><span class="pre">medium['field_name']</span></code>.</p>
+<p>The Medium also provides utilities for loading and dumping these fields and for plotting them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – Alternative name to give to the medium.</p></li>
+<li><p><strong>problem</strong> (<a class="reference internal" href="problem.html#stride.problem_definition.problem.Problem" title="stride.problem_definition.problem.Problem"><em>Problem</em></a>) – Problem to which the Medium belongs.</p></li>
+<li><p><strong>grid</strong> (<em>Grid</em><em> or </em><em>any of Space</em><em> or </em><a class="reference internal" href="domain.html#stride.problem_definition.domain.Time" title="stride.problem_definition.domain.Time"><em>Time</em></a>) – Grid on which the Medium is defined</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.problem_definition.medium.Medium.add">
+<code class="sig-name descname">add</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">field</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/medium.html#Medium.add"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.medium.Medium.add" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a named field to the Medium.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>field</strong> (<em>Field object</em>) – Field to add to the Medium.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.medium.Medium.damping">
+<code class="sig-name descname">damping</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">damping_coefficient</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">mask</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">damping_type</span><span class="o">=</span><span class="default_value">'sine'</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/medium.html#Medium.damping"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.medium.Medium.damping" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a damping field based on the dimensions of the grid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>damping_coefficient</strong> (<em>float</em>) – Value of the maximum damping of the field.</p></li>
+<li><p><strong>mask</strong> (<em>bool</em><em>, </em><em>optional</em>) – Create the damping layer as a mask (interior filled with ones) or not (interior filled with zeros).</p></li>
+<li><p><strong>damping_type</strong> (<em>str</em><em>, </em><em>optional</em>) – Expression to be used for the shape of the damping function, defaults to <code class="docutils literal notranslate"><span class="pre">sine</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Tensor containing the damping field.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.medium.Medium.dump">
+<code class="sig-name descname">dump</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/medium.html#Medium.dump"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.medium.Medium.dump" title="Permalink to this definition">¶</a></dt>
+<dd><p>Dump all fields in the Medium.</p>
+<p>See <a class="reference internal" href="../../../mosaic/api/file_manipulation/h5.html#mosaic.file_manipulation.h5.HDF5" title="mosaic.file_manipulation.h5.HDF5"><code class="xref py py-class docutils literal notranslate"><span class="pre">HDF5</span></code></a> for more information on the parameters of this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.medium.Medium.fields">
+<em class="property">property </em><code class="sig-name descname">fields</code><a class="headerlink" href="#stride.problem_definition.medium.Medium.fields" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access fields dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.medium.Medium.items">
+<code class="sig-name descname">items</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/medium.html#Medium.items"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.medium.Medium.items" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access all fields as (name, field) pairs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Iterable of (name, field) pairs.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>Fields</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.medium.Medium.load">
+<code class="sig-name descname">load</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/medium.html#Medium.load"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.medium.Medium.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load all fields in the Medium.</p>
+<p>See <a class="reference internal" href="../../../mosaic/api/file_manipulation/h5.html#mosaic.file_manipulation.h5.HDF5" title="mosaic.file_manipulation.h5.HDF5"><code class="xref py py-class docutils literal notranslate"><span class="pre">HDF5</span></code></a> for more information on the parameters of this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.medium.Medium.plot">
+<code class="sig-name descname">plot</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/medium.html#Medium.plot"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.medium.Medium.plot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plot all fields in the Medium.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>kwargs</strong> – Arguments for plotting the fields.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Axes on which the plotting is done.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>axes</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="transducers.html" class="btn btn-neutral float-right" title="Transducers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="problem.html" class="btn btn-neutral float-left" title="Problem" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

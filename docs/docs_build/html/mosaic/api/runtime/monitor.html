@@ -1,0 +1,472 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Monitor &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Node" href="node.html" />
+    <link rel="prev" title="Head" href="head.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Mosaic API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../run.html">Running mosaic</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="runtime_index.html">Runtime</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="runtime.html">Runtime</a></li>
+<li class="toctree-l3"><a class="reference internal" href="head.html">Head</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Monitor</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#strategies">Strategies</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="node.html">Node</a></li>
+<li class="toctree-l3"><a class="reference internal" href="worker.html">Worker</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../comms/comms_index.html">Comms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../core/core_index.html">Core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../types/types_index.html">Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../file_manipulation/file_manipulation_index.html">File manipulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Mosaic API Reference</a> &raquo;</li>
+        
+          <li><a href="runtime_index.html">Runtime</a> &raquo;</li>
+        
+      <li>Monitor</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/mosaic/api/runtime/monitor.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="monitor">
+<h1>Monitor<a class="headerlink" href="#monitor" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="mosaic.runtime.monitor.Monitor">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.runtime.monitor.</code><code class="sig-name descname">Monitor</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="runtime.html#mosaic.runtime.runtime.Runtime" title="mosaic.runtime.runtime.Runtime"><code class="xref py py-class docutils literal notranslate"><span class="pre">mosaic.runtime.runtime.Runtime</span></code></a></p>
+<p>The monitor takes care of keeping track of the state of the network
+and collects statistics about it.</p>
+<p>It also handles the allocation of tesserae to certain workers.</p>
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.init">
+<em class="property">async </em><code class="sig-name descname">init</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.init"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.init" title="Permalink to this definition">¶</a></dt>
+<dd><p>Asynchronous counterpart of <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>kwargs</strong> – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.init_cluster">
+<em class="property">async </em><code class="sig-name descname">init_cluster</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.init_cluster"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.init_cluster" title="Permalink to this definition">¶</a></dt>
+<dd><p>Init nodes in cluster mode.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>kwargs</strong> – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.init_local">
+<em class="property">async </em><code class="sig-name descname">init_local</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.init_local"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.init_local" title="Permalink to this definition">¶</a></dt>
+<dd><p>Init nodes in local mode.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>kwargs</strong> – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.init_task">
+<code class="sig-name descname">init_task</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">tessera_id</span></em>, <em class="sig-param"><span class="n">runtime_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.init_task"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.init_task" title="Permalink to this definition">¶</a></dt>
+<dd><p>Start monitoring given task.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – </p></li>
+<li><p><strong>tessera_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>runtime_id</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.init_tessera">
+<code class="sig-name descname">init_tessera</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">runtime_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.init_tessera"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.init_tessera" title="Permalink to this definition">¶</a></dt>
+<dd><p>Start monitoring given tessera.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – </p></li>
+<li><p><strong>runtime_id</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="mosaic.runtime.monitor.Monitor.is_monitor">
+<code class="sig-name descname">is_monitor</code><em class="property"> = True</em><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.is_monitor" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.select_worker">
+<em class="property">async </em><code class="sig-name descname">select_worker</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.select_worker"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.select_worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Select appropriate worker to allocate a tessera.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – </p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>UID of selected worker.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.set_logger">
+<code class="sig-name descname">set_logger</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.set_logger"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.set_logger" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set up logging.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.stop">
+<em class="property">async </em><code class="sig-name descname">stop</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.stop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.stop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stop runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.task_state_changed">
+<code class="sig-name descname">task_state_changed</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">state</span></em>, <em class="sig-param"><span class="n">elapsed</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.task_state_changed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.task_state_changed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update monitored task state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – </p></li>
+<li><p><strong>state</strong> (<em>str</em>) – </p></li>
+<li><p><strong>elapsed</strong> (<em>float</em><em>, </em><em>optional</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.tessera_state_changed">
+<code class="sig-name descname">tessera_state_changed</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">state</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.tessera_state_changed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.tessera_state_changed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update monitored tessera state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – </p></li>
+<li><p><strong>state</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.monitor.Monitor.update_monitored_node">
+<code class="sig-name descname">update_monitored_node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">monitored_node</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/monitor.html#Monitor.update_monitored_node"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.monitor.Monitor.update_monitored_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update inner record of node state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>monitored_node</strong> (<em>dict</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<div class="section" id="strategies">
+<h2>Strategies<a class="headerlink" href="#strategies" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="mosaic.runtime.strategies.MonitorStrategy">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.runtime.strategies.</code><code class="sig-name descname">MonitorStrategy</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">monitor</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#MonitorStrategy"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.MonitorStrategy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for the strategies used to allocate tesserae to
+workers.</p>
+<dl class="py method">
+<dt id="mosaic.runtime.strategies.MonitorStrategy.select_worker">
+<code class="sig-name descname">select_worker</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#MonitorStrategy.select_worker"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.MonitorStrategy.select_worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Select an appropriate worker.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.strategies.MonitorStrategy.update_node">
+<code class="sig-name descname">update_node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">updated</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#MonitorStrategy.update_node"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.MonitorStrategy.update_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update inner record of node state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>updated</strong> (<a class="reference internal" href="node.html#mosaic.runtime.node.MonitoredNode" title="mosaic.runtime.node.MonitoredNode"><em>MonitoredNode</em></a>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.strategies.MonitorStrategy.update_task">
+<code class="sig-name descname">update_task</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">updated</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#MonitorStrategy.update_task"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.MonitorStrategy.update_task" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update inner record of task state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>updated</strong> (<a class="reference internal" href="../core/task.html#mosaic.core.task.MonitoredTask" title="mosaic.core.task.MonitoredTask"><em>MonitoredTask</em></a>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.strategies.MonitorStrategy.update_tessera">
+<code class="sig-name descname">update_tessera</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">updated</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#MonitorStrategy.update_tessera"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.MonitorStrategy.update_tessera" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update inner record of tesserae state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>updated</strong> (<a class="reference internal" href="../core/tessera.html#mosaic.core.tessera.MonitoredTessera" title="mosaic.core.tessera.MonitoredTessera"><em>MonitoredTessera</em></a>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="mosaic.runtime.strategies.RoundRobin">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.runtime.strategies.</code><code class="sig-name descname">RoundRobin</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">monitor</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#RoundRobin"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.RoundRobin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#mosaic.runtime.strategies.MonitorStrategy" title="mosaic.runtime.strategies.MonitorStrategy"><code class="xref py py-class docutils literal notranslate"><span class="pre">mosaic.runtime.strategies.MonitorStrategy</span></code></a></p>
+<p>Round robin strategy for allocating tesserae.</p>
+<dl class="py method">
+<dt id="mosaic.runtime.strategies.RoundRobin.select_worker">
+<code class="sig-name descname">select_worker</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#RoundRobin.select_worker"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.RoundRobin.select_worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Select an appropriate worker.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.strategies.RoundRobin.update_node">
+<code class="sig-name descname">update_node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">updated</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/strategies.html#RoundRobin.update_node"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.strategies.RoundRobin.update_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update inner record of node state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>updated</strong> (<a class="reference internal" href="node.html#mosaic.runtime.node.MonitoredNode" title="mosaic.runtime.node.MonitoredNode"><em>MonitoredNode</em></a>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="node.html" class="btn btn-neutral float-right" title="Node" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="head.html" class="btn btn-neutral float-left" title="Head" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

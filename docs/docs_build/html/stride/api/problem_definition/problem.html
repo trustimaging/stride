@@ -1,0 +1,429 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Problem &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Medium" href="medium.html" />
+    <link rel="prev" title="Data" href="data.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Stride API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../runner.html">Runner</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="problem_definition_index.html">Problem definition</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="domain.html">Domain</a></li>
+<li class="toctree-l3"><a class="reference internal" href="base.html">Base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html">Data</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="medium.html">Medium</a></li>
+<li class="toctree-l3"><a class="reference internal" href="transducers.html">Transducers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="geometry.html">Geometry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="acquisitions.html">Acquisitions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../problem_types/problem_types_index.html">Problem Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../optimisation/optimisation_index.html">Optimisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plotting/plotting_index.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Stride API Reference</a> &raquo;</li>
+        
+          <li><a href="problem_definition_index.html">Problem definition</a> &raquo;</li>
+        
+      <li>Problem</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/stride/api/problem_definition/problem.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="problem">
+<h1>Problem<a class="headerlink" href="#problem" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="stride.problem_definition.problem.Problem">
+<em class="property">class </em><code class="sig-prename descclassname">stride.problem_definition.problem.</code><code class="sig-name descname">Problem</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span></em>, <em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="base.html#stride.problem_definition.base.Gridded" title="stride.problem_definition.base.Gridded"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.problem_definition.base.Gridded</span></code></a></p>
+<p>The Problem is the object that fully defines the setting in which Stride works.</p>
+<p>The problem defines a medium with a set of fields (such as Vp or density), some
+transducers (such as a series of scalar point transducers), a geometry where those
+transducers are located in space, and the acquisitions that happen given that geometry.</p>
+<p>The problem also defines a problem type, which determines the physics of interest, such
+as the second-order isotropic acoustic wave equation. And a numerical implementation
+of those physics, such as through the finite-difference library Devito.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – Name of the problem.</p></li>
+<li><p><strong>grid</strong> (<em>Grid</em><em> or </em><em>any of Space</em><em> or </em><a class="reference internal" href="domain.html#stride.problem_definition.domain.Time" title="stride.problem_definition.domain.Time"><em>Time</em></a>) – Grid on which the Problem is defined</p></li>
+<li><p><strong>input_folder</strong> (<em>str</em><em>, </em><em>optional</em>) – Default folder from which files should be read, defaults to current working directory.</p></li>
+<li><p><strong>output_folder</strong> (<em>str</em><em>, </em><em>optional</em>) – Default folder to which files should be written, defaults to current working directory.</p></li>
+<li><p><strong>medium</strong> (<a class="reference internal" href="medium.html#stride.problem_definition.medium.Medium" title="stride.problem_definition.medium.Medium"><em>Medium</em></a><em>, </em><em>optional</em>) – Predefined Medium of the problem.</p></li>
+<li><p><strong>transducers</strong> (<a class="reference internal" href="transducers.html#stride.problem_definition.transducers.Transducers" title="stride.problem_definition.transducers.Transducers"><em>Transducers</em></a><em>, </em><em>optional</em>) – Predefined Transducers of the problem.</p></li>
+<li><p><strong>geometry</strong> (<a class="reference internal" href="geometry.html#stride.problem_definition.geometry.Geometry" title="stride.problem_definition.geometry.Geometry"><em>Geometry</em></a><em>, </em><em>optional</em>) – Predefined Geometry of the problem.</p></li>
+<li><p><strong>acquisitions</strong> (<a class="reference internal" href="acquisitions.html#stride.problem_definition.acquisitions.Acquisitions" title="stride.problem_definition.acquisitions.Acquisitions"><em>Acquisitions</em></a><em>, </em><em>optional</em>) – Predefined Acquisitions of the problem.</p></li>
+<li><p><strong>problem_type</strong> (<em>str</em><em> or </em><em>object</em><em>, </em><em>optional</em>) – Problem type that will be executed on this Problem, defaults to <code class="docutils literal notranslate"><span class="pre">acoustic</span></code>.</p></li>
+<li><p><strong>problem_implementation</strong> (<em>str</em><em> or </em><em>object</em><em>, </em><em>optional</em>) – Implementation of the problem type that will be executed on this Problem, defaults to <code class="docutils literal notranslate"><span class="pre">devito</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.dump">
+<code class="sig-name descname">dump</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.dump"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.dump" title="Permalink to this definition">¶</a></dt>
+<dd><p>Dump all elements in the Problem.</p>
+<p>See <a class="reference internal" href="../../../mosaic/api/file_manipulation/h5.html#mosaic.file_manipulation.h5.HDF5" title="mosaic.file_manipulation.h5.HDF5"><code class="xref py py-class docutils literal notranslate"><span class="pre">HDF5</span></code></a> for more information on the parameters of this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.forward">
+<em class="property">async </em><code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">shot_ids</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">dump</span><span class="o">=</span><span class="default_value">True</span></em>, <em class="sig-param"><span class="n">deallocate</span><span class="o">=</span><span class="default_value">True</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run the problem forward with default parameters.</p>
+<p>This will generate a series of Runners, one per available worker, and
+distribute all the available shots in the Acquisitions across those
+Runners.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shot_ids</strong> (<em>list</em><em>, </em><em>optional</em>) – List of shot IDs to run forward, defaults to all of them.</p></li>
+<li><p><strong>dump</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not the generated data should be dumped to disk, defaults to True.</p></li>
+<li><p><strong>deallocate</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to deallocate the generated data after each Shot is completed,
+defaults to True.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.inverse">
+<em class="property">async </em><code class="sig-name descname">inverse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">runners</span></em>, <em class="sig-param"><span class="n">variables</span></em>, <em class="sig-param"><span class="n">block</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">iteration</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.inverse"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.inverse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run the inverse problem with default parameters.</p>
+<p>This will generate a series of given Runners, one per available worker,
+select some shots according to the Block configuration and then distribute
+those across the Runners.</p>
+<p>As the Runners return the functional value and gradient, those are
+accumulated in per-variable buffers before returning them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>runners</strong> (<a class="reference internal" href="../../../mosaic/api/core/tessera.html#mosaic.core.tessera.ArrayProxy" title="mosaic.core.tessera.ArrayProxy"><em>ArrayProxy</em></a>) – Runners on which to distribute the shots.</p></li>
+<li><p><strong>variables</strong> (<a class="reference internal" href="../optimisation/optimisation.html#stride.optimisation.optimisation.VariableList" title="stride.optimisation.optimisation.VariableList"><em>VariableList</em></a>) – Variables on which the inverse problem is running.</p></li>
+<li><p><strong>block</strong> (<a class="reference internal" href="../optimisation/optimisation.html#stride.optimisation.optimisation.Block" title="stride.optimisation.optimisation.Block"><em>Block</em></a>) – Block instance that determines the configuration of the inverse problem.</p></li>
+<li><p><strong>iteration</strong> (<a class="reference internal" href="../optimisation/optimisation.html#stride.optimisation.optimisation.Iteration" title="stride.optimisation.optimisation.Iteration"><em>Iteration</em></a>) – Iteration instance.</p></li>
+<li><p><strong>kwargs</strong> – Extra arguments for <code class="docutils literal notranslate"><span class="pre">run_inverse</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><em>Iteration</em> – Iteration updated with the functional values returned for all shots.</p></li>
+<li><p><em>VariableList</em> – Variables of the inverse problem with the accumulated gradient of all shots.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.load">
+<code class="sig-name descname">load</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.load"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load all elements in the Problem.</p>
+<p>See <a class="reference internal" href="../../../mosaic/api/file_manipulation/h5.html#mosaic.file_manipulation.h5.HDF5" title="mosaic.file_manipulation.h5.HDF5"><code class="xref py py-class docutils literal notranslate"><span class="pre">HDF5</span></code></a> for more information on the parameters of this method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.plot">
+<code class="sig-name descname">plot</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.plot"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.plot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plot all elements in the Problem.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>kwargs</strong> – Arguments for plotting the fields.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.run_forward">
+<em class="property">async </em><code class="sig-name descname">run_forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">shot_id</span></em>, <em class="sig-param"><span class="n">runner</span></em>, <em class="sig-param"><span class="n">dump</span><span class="o">=</span><span class="default_value">True</span></em>, <em class="sig-param"><span class="n">deallocate</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.run_forward"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.run_forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run a single shot forward in a given Runner using default parameters.</p>
+<p>This means that no wavefield will be generated and the resulting traces will be stored in the Shot.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shot_id</strong> (<em>int</em>) – ID of the shot to be run.</p></li>
+<li><p><strong>runner</strong> (<a class="reference internal" href="../runner.html#stride.runner.Runner" title="stride.runner.Runner"><em>Runner</em></a>) – Runner on which the shot will be run.</p></li>
+<li><p><strong>dump</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not the generated data should be dumped to disk, defaults to True.</p></li>
+<li><p><strong>deallocate</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to deallocate the generated data after each Shot is completed,
+defaults to False.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.run_inverse">
+<em class="property">async </em><code class="sig-name descname">run_inverse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">shot_id</span></em>, <em class="sig-param"><span class="n">runner</span></em>, <em class="sig-param"><span class="n">variables</span></em>, <em class="sig-param"><span class="n">needs_grad</span><span class="o">=</span><span class="default_value">True</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.run_inverse"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.run_inverse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run the inverse problem for a single shot with default parameters.</p>
+<p>This will generate a series of given Runners, one per available worker,
+select some shots according to the Block configuration and then distribute
+those across the Runners.</p>
+<p>As the Runners return the functional value and gradient, those are
+accumulated in per-variable buffers before returning them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shot_id</strong> (<em>int</em>) – ID of the shot to be run.</p></li>
+<li><p><strong>runner</strong> (<a class="reference internal" href="../runner.html#stride.runner.Runner" title="stride.runner.Runner"><em>Runner</em></a>) – Runner on which the shot will be run.</p></li>
+<li><p><strong>variables</strong> (<a class="reference internal" href="../optimisation/optimisation.html#stride.optimisation.optimisation.VariableList" title="stride.optimisation.optimisation.VariableList"><em>VariableList</em></a>) – Variables on which the inverse problem is running.</p></li>
+<li><p><strong>needs_grad</strong> (<em>bool</em>) – Whether or not the gradient is needed or only the functional value.</p></li>
+<li><p><strong>kwargs</strong> – Extra arguments for <code class="docutils literal notranslate"><span class="pre">run_inverse</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p><em>FunctionalValue</em> – Value of the functional and other information about the inverse execution.</p></li>
+<li><p><em>VariableList</em> – Variables of the inverse problem with the gradient of this shots.</p></li>
+</ul>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.problem.Problem.sub_problem">
+<code class="sig-name descname">sub_problem</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">shot_id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#Problem.sub_problem"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.Problem.sub_problem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a subset object for a certain shot.</p>
+<p>A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+This method takes care of selecting creating a SubProblem instance and populating it
+appropriately.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>shot_id</strong> (<em>int</em>) – ID of the shot for which this sub-problem will be generated.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Newly created SubProblem instance.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#stride.problem_definition.problem.SubProblem" title="stride.problem_definition.problem.SubProblem">SubProblem</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="stride.problem_definition.problem.SubProblem">
+<em class="property">class </em><code class="sig-prename descclassname">stride.problem_definition.problem.</code><code class="sig-name descname">SubProblem</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span></em>, <em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/problem.html#SubProblem"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.problem.SubProblem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="base.html#stride.problem_definition.base.Gridded" title="stride.problem_definition.base.Gridded"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.problem_definition.base.Gridded</span></code></a></p>
+<p>The SubProblem is the object that fully defines how a specific Shot is to be run. The SubProblem
+resembles the Problem from which ir originates, but takes from it only those parts that
+are relevant for this particular Shot.</p>
+<p>The SubProblem defines a medium with a set of fields (such as Vp or density), some
+transducers (such as a series of scalar point transducers), a geometry where those
+transducers are located in space, and the acquisitions that happen given that geometry.</p>
+<p>The SubProblem also defines a problem type, which determines the physics of interest, such
+as the second-order isotropic acoustic wave equation. And a numerical implementation
+of those physics, such as through the finite-difference library Devito.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – Name of the problem.</p></li>
+<li><p><strong>grid</strong> (<em>Grid</em><em> or </em><em>any of Space</em><em> or </em><a class="reference internal" href="domain.html#stride.problem_definition.domain.Time" title="stride.problem_definition.domain.Time"><em>Time</em></a>) – Grid on which the Problem is defined</p></li>
+<li><p><strong>input_folder</strong> (<em>str</em><em>, </em><em>optional</em>) – Default folder from which files should be read, defaults to current working directory.</p></li>
+<li><p><strong>output_folder</strong> (<em>str</em><em>, </em><em>optional</em>) – Default folder to which files should be written, defaults to current working directory.</p></li>
+<li><p><strong>medium</strong> (<a class="reference internal" href="medium.html#stride.problem_definition.medium.Medium" title="stride.problem_definition.medium.Medium"><em>Medium</em></a><em>, </em><em>optional</em>) – Predefined Medium of the problem.</p></li>
+<li><p><strong>transducers</strong> (<a class="reference internal" href="transducers.html#stride.problem_definition.transducers.Transducers" title="stride.problem_definition.transducers.Transducers"><em>Transducers</em></a><em>, </em><em>optional</em>) – Predefined Transducers of the problem.</p></li>
+<li><p><strong>geometry</strong> (<a class="reference internal" href="geometry.html#stride.problem_definition.geometry.Geometry" title="stride.problem_definition.geometry.Geometry"><em>Geometry</em></a><em>, </em><em>optional</em>) – Predefined Geometry of the problem.</p></li>
+<li><p><strong>acquisitions</strong> (<a class="reference internal" href="acquisitions.html#stride.problem_definition.acquisitions.Acquisitions" title="stride.problem_definition.acquisitions.Acquisitions"><em>Acquisitions</em></a><em>, </em><em>optional</em>) – Predefined Acquisitions of the problem.</p></li>
+<li><p><strong>problem_type</strong> (<em>object</em><em>, </em><em>optional</em>) – Problem type that will be executed on this SubProblem, defaults to <code class="docutils literal notranslate"><span class="pre">acoustic</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="medium.html" class="btn btn-neutral float-right" title="Medium" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="data.html" class="btn btn-neutral float-left" title="Data" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

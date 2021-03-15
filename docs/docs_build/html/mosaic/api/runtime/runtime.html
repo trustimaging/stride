@@ -1,0 +1,637 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Runtime &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Head" href="head.html" />
+    <link rel="prev" title="Runtime" href="runtime_index.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Mosaic API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../run.html">Running mosaic</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="runtime_index.html">Runtime</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Runtime</a></li>
+<li class="toctree-l3"><a class="reference internal" href="head.html">Head</a></li>
+<li class="toctree-l3"><a class="reference internal" href="monitor.html">Monitor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="node.html">Node</a></li>
+<li class="toctree-l3"><a class="reference internal" href="worker.html">Worker</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../comms/comms_index.html">Comms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../core/core_index.html">Core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../types/types_index.html">Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../file_manipulation/file_manipulation_index.html">File manipulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Mosaic API Reference</a> &raquo;</li>
+        
+          <li><a href="runtime_index.html">Runtime</a> &raquo;</li>
+        
+      <li>Runtime</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/mosaic/api/runtime/runtime.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-mosaic.runtime.runtime">
+<span id="runtime"></span><h1>Runtime<a class="headerlink" href="#module-mosaic.runtime.runtime" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="mosaic.runtime.runtime.Runtime">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.runtime.runtime.</code><code class="sig-name descname">Runtime</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">mosaic.runtime.runtime.BaseRPC</span></code></p>
+<p>Class representing a local runtime of any possible type.</p>
+<p>The runtime handles the mosaic life cycle:</p>
+<ul class="simple">
+<li><p>it handles the comms manager, the event loop, the logger and keeps proxies to existing remote runtimes;</p></li>
+<li><p>it keeps track of resident mosaic objects (tessera, task) and proxies to those;</p></li>
+<li><p>it routes remote commands to these resident mosaic objects.</p></li>
+</ul>
+<p>For referece on accepted parameters, check <cite>mosaic.init</cite>.</p>
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.address">
+<em class="property">property </em><code class="sig-name descname">address</code><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.address" title="Permalink to this definition">¶</a></dt>
+<dd><p>IP address of the runtime.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.cmd">
+<code class="sig-name descname">cmd</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">cmd</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.cmd"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.cmd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Process incoming command address to one of the resident objects.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>cmd</strong> (<em>CMD</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.connect">
+<code class="sig-name descname">connect</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">address</span></em>, <em class="sig-param"><span class="n">port</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.connect"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.connect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Connect to a specific remote runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – </p></li>
+<li><p><strong>address</strong> (<em>str</em>) – </p></li>
+<li><p><strong>port</strong> (<em>int</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.deregister">
+<code class="sig-name descname">deregister</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">obj</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.deregister"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.deregister" title="Permalink to this definition">¶</a></dt>
+<dd><p>Deregister CMD object from runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>obj</strong> (<em>BaseCMD</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.disconnect">
+<code class="sig-name descname">disconnect</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">uid</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.disconnect"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.disconnect" title="Permalink to this definition">¶</a></dt>
+<dd><p>Disconnect specific remote runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.get_comms">
+<code class="sig-name descname">get_comms</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.get_comms"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.get_comms" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access comms.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.get_event_loop">
+<code class="sig-name descname">get_event_loop</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">asyncio_loop</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.get_event_loop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.get_event_loop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access event loop.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>asyncio_loop</strong> (<em>object</em><em>, </em><em>optional</em>) – Async loop to use in our mosaic event loop, defaults to new loop.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.get_head">
+<code class="sig-name descname">get_head</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.get_head"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.get_head" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access head runtime.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.get_monitor">
+<code class="sig-name descname">get_monitor</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.get_monitor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.get_monitor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access monitor runtime.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.get_node">
+<code class="sig-name descname">get_node</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.get_node"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.get_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access specific node runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.get_worker">
+<code class="sig-name descname">get_worker</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.get_worker"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.get_worker" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access specific worker runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>uid</strong> (<em>str</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.get_zmq_context">
+<code class="sig-name descname">get_zmq_context</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.get_zmq_context"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.get_zmq_context" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access ZMQ socket context.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.hand">
+<code class="sig-name descname">hand</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">address</span></em>, <em class="sig-param"><span class="n">port</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.hand"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.hand" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle incoming handshake petition.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>address</strong> (<em>str</em>) – </p></li>
+<li><p><strong>port</strong> (<em>int</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.init">
+<em class="property">async </em><code class="sig-name descname">init</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.init"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.init" title="Permalink to this definition">¶</a></dt>
+<dd><p>Asynchronous counterpart of <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>kwargs</strong> – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="mosaic.runtime.runtime.Runtime.is_head">
+<code class="sig-name descname">is_head</code><em class="property"> = False</em><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.is_head" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="mosaic.runtime.runtime.Runtime.is_monitor">
+<code class="sig-name descname">is_monitor</code><em class="property"> = False</em><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.is_monitor" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="mosaic.runtime.runtime.Runtime.is_node">
+<code class="sig-name descname">is_node</code><em class="property"> = False</em><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.is_node" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt id="mosaic.runtime.runtime.Runtime.is_worker">
+<code class="sig-name descname">is_worker</code><em class="property"> = False</em><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.is_worker" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.log_debug">
+<code class="sig-name descname">log_debug</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">buf</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.log_debug"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.log_debug" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log remote message from <code class="docutils literal notranslate"><span class="pre">sender_id</span></code> on debug stream.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>buf</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.log_error">
+<code class="sig-name descname">log_error</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">buf</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.log_error"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.log_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log remote message from <code class="docutils literal notranslate"><span class="pre">sender_id</span></code> on error stream.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>buf</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.log_info">
+<code class="sig-name descname">log_info</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">buf</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.log_info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.log_info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log remote message from <code class="docutils literal notranslate"><span class="pre">sender_id</span></code> on info stream.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>buf</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.log_warning">
+<code class="sig-name descname">log_warning</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">buf</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.log_warning"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.log_warning" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log remote message from <code class="docutils literal notranslate"><span class="pre">sender_id</span></code> on warning stream.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>buf</strong> (<em>str</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.num_nodes">
+<em class="property">property </em><code class="sig-name descname">num_nodes</code><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.num_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of nodes on the network.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.num_workers">
+<em class="property">property </em><code class="sig-name descname">num_workers</code><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.num_workers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Number of workers on the network.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.port">
+<em class="property">property </em><code class="sig-name descname">port</code><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.port" title="Permalink to this definition">¶</a></dt>
+<dd><p>Port of the runtime.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.proxy">
+<em class="property">static </em><code class="sig-name descname">proxy</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">()</span></em>, <em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.proxy"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.proxy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate proxy from name, indices or UID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em><em>, </em><em>optional</em>) – </p></li>
+<li><p><strong>indices</strong> (<em>tuple</em><em>, </em><em>optional</em>) – </p></li>
+<li><p><strong>uid</strong> (<em>str</em><em>, </em><em>optional</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.proxy_from_uid">
+<code class="sig-name descname">proxy_from_uid</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">uid</span></em>, <em class="sig-param"><span class="n">proxy</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.proxy_from_uid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.proxy_from_uid" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a proxy from a UID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>uid</strong> (<em>str</em>) – </p></li>
+<li><p><strong>proxy</strong> (<em>BaseProxy</em>) – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>BaseProxy</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.raise_exception">
+<code class="sig-name descname">raise_exception</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">exc</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.raise_exception"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.raise_exception" title="Permalink to this definition">¶</a></dt>
+<dd><p>Raise remote exception that ocurred on <code class="docutils literal notranslate"><span class="pre">sender_id</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>exc</strong> (<em>Exception description</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.register">
+<code class="sig-name descname">register</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">obj</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.register"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.register" title="Permalink to this definition">¶</a></dt>
+<dd><p>Register CMD object with runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>obj</strong> (<em>BaseCMD</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.set_comms">
+<code class="sig-name descname">set_comms</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">address</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">port</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.set_comms"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.set_comms" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set up comms manager.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>address</strong> (<em>str</em><em>, </em><em>optional</em>) – Address to use, defaults to None. If None, the comms will try to
+guess the address.</p></li>
+<li><p><strong>port</strong> (<em>int</em><em>, </em><em>optional</em>) – Port to use, defaults to None. If None, the comms will test ports
+until one becomes available.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.set_logger">
+<code class="sig-name descname">set_logger</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.set_logger"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.set_logger" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set up logging.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.shake">
+<code class="sig-name descname">shake</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span></em>, <em class="sig-param"><span class="n">network</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.shake"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.shake" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handle handshake response.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sender_id</strong> (<em>str</em>) – </p></li>
+<li><p><strong>network</strong> (<em>dict</em>) – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.stop">
+<code class="sig-name descname">stop</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sender_id</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.stop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.stop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stop runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>sender_id</strong> (<em>str</em>) – </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.Runtime.wait">
+<code class="sig-name descname">wait</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wait</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#Runtime.wait"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.Runtime.wait" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wait on the comms loop until done.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>wait</strong> (<em>bool</em>) – Whether or not to wait, defaults to False.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="mosaic.runtime.runtime.RuntimeProxy">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.runtime.runtime.</code><code class="sig-name descname">RuntimeProxy</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">indices</span><span class="o">=</span><span class="default_value">()</span></em>, <em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">comms</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/runtime/runtime.html#RuntimeProxy"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.runtime.runtime.RuntimeProxy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">mosaic.runtime.runtime.BaseRPC</span></code></p>
+<p>This class represents a proxy to a remote running runtime.</p>
+<p>This proxy can be used to execute methods and commands on the remote runtime simply by
+calling methods on it.</p>
+<p>The proxy uses the comms to direct messages to the correct endpoint using its UID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of the runtime, defaults to None. If no name is provided, the UID has
+to be given.</p></li>
+<li><p><strong>indices</strong> (<em>tuple</em><em> or </em><em>int</em><em>, </em><em>optional</em>) – Indices associated with the runtime, defaults to none.</p></li>
+<li><p><strong>uid</strong> (<em>str</em>) – UID from which to find the name and indices, defaults to None.</p></li>
+<li><p><strong>comms</strong> (<a class="reference internal" href="../comms/comms.html#mosaic.comms.comms.CommsManager" title="mosaic.comms.comms.CommsManager"><em>CommsManager</em></a>) – Comms instance to use, defaults to global comms.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.RuntimeProxy.address">
+<em class="property">property </em><code class="sig-name descname">address</code><a class="headerlink" href="#mosaic.runtime.runtime.RuntimeProxy.address" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remote runtime IP address.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.RuntimeProxy.port">
+<em class="property">property </em><code class="sig-name descname">port</code><a class="headerlink" href="#mosaic.runtime.runtime.RuntimeProxy.port" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remote runtime port.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.runtime.runtime.RuntimeProxy.subprocess">
+<em class="property">property </em><code class="sig-name descname">subprocess</code><a class="headerlink" href="#mosaic.runtime.runtime.RuntimeProxy.subprocess" title="Permalink to this definition">¶</a></dt>
+<dd><p>Subprocess on which remote runtime lives, if any.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="head.html" class="btn btn-neutral float-right" title="Head" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="runtime_index.html" class="btn btn-neutral float-left" title="Runtime" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

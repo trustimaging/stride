@@ -1,0 +1,275 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Predefined geometries &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Fetch" href="fetch.html" />
+    <link rel="prev" title="Wavelets" href="wavelets.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Stride API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../runner.html">Runner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../problem_definition/problem_definition_index.html">Problem definition</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../problem_types/problem_types_index.html">Problem Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../optimisation/optimisation_index.html">Optimisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plotting/plotting_index.html">Plotting</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="utils_index.html">Utils</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="filters.html">Filters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fft.html">FFT</a></li>
+<li class="toctree-l3"><a class="reference internal" href="wavelets.html">Wavelets</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Predefined geometries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fetch.html">Fetch</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Stride API Reference</a> &raquo;</li>
+        
+          <li><a href="utils_index.html">Utils</a> &raquo;</li>
+        
+      <li>Predefined geometries</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/stride/api/utils/geometries.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="predefined-geometries">
+<h1>Predefined geometries<a class="headerlink" href="#predefined-geometries" title="Permalink to this headline">¶</a></h1>
+<dl class="py function">
+<dt id="stride.utils.geometries.elliptical">
+<code class="sig-prename descclassname">stride.utils.geometries.</code><code class="sig-name descname">elliptical</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">num</span></em>, <em class="sig-param"><span class="n">radius</span></em>, <em class="sig-param"><span class="n">centre</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/utils/geometries.html#elliptical"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.utils.geometries.elliptical" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a 2D elliptical geometry for a number of points <code class="docutils literal notranslate"><span class="pre">num</span></code>, centred
+on <code class="docutils literal notranslate"><span class="pre">centre</span></code> and with radius <code class="docutils literal notranslate"><span class="pre">radius</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num</strong> (<em>int</em>) – Number of points on the geometry.</p></li>
+<li><p><strong>radius</strong> (<em>array-like</em>) – List or array with each of the two radii of the ellipsis.</p></li>
+<li><p><strong>centre</strong> (<em>array-like</em>) – List or array with the coordinates of the centre of the ellipsis.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Array containing the coordinates of points in the geometry, with shape (num, 2).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>2d-array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="stride.utils.geometries.ellipsoidal">
+<code class="sig-prename descclassname">stride.utils.geometries.</code><code class="sig-name descname">ellipsoidal</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">num</span></em>, <em class="sig-param"><span class="n">radius</span></em>, <em class="sig-param"><span class="n">centre</span></em>, <em class="sig-param"><span class="n">theta</span><span class="o">=</span><span class="default_value">0.0</span></em>, <em class="sig-param"><span class="n">axis</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">threshold</span><span class="o">=</span><span class="default_value">0.0</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/utils/geometries.html#ellipsoidal"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.utils.geometries.ellipsoidal" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate a 3D ellipsoidal geometry for a number of points <code class="docutils literal notranslate"><span class="pre">num</span></code>, centred
+on <code class="docutils literal notranslate"><span class="pre">centre</span></code> and with radius <code class="docutils literal notranslate"><span class="pre">radius</span></code>. The geometry can be rotated by
+an amount <code class="docutils literal notranslate"><span class="pre">theta</span></code>, and thresholded by eliminating <code class="docutils literal notranslate"><span class="pre">threshold</span></code> percent of it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>num</strong> (<em>int</em>) – Number of points on the geometry.</p></li>
+<li><p><strong>radius</strong> (<em>array-like</em>) – List or array with each of the two radii of the ellipsis.</p></li>
+<li><p><strong>centre</strong> (<em>array-like</em>) – List or array with the coordinates of the centre of the ellipsis.</p></li>
+<li><p><strong>theta</strong> – </p></li>
+<li><p><strong>axis</strong> – </p></li>
+<li><p><strong>threshold</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Array containing the coordinates of points in the geometry, with shape (num, 3).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>3d-array</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="fetch.html" class="btn btn-neutral float-right" title="Fetch" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="wavelets.html" class="btn btn-neutral float-left" title="Wavelets" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

@@ -1,0 +1,345 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Logger &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Change case" href="change_case.html" />
+    <link rel="prev" title="Subprocess" href="subprocess.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Mosaic API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../run.html">Running mosaic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../runtime/runtime_index.html">Runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../comms/comms_index.html">Comms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../core/core_index.html">Core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../types/types_index.html">Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../file_manipulation/file_manipulation_index.html">File manipulation</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="utils_index.html">Utils</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="event_loop.html">Event loop</a></li>
+<li class="toctree-l3"><a class="reference internal" href="subprocess.html">Subprocess</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Logger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="change_case.html">Change case</a></li>
+<li class="toctree-l3"><a class="reference internal" href="utils.html">Utils</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Mosaic API Reference</a> &raquo;</li>
+        
+          <li><a href="utils_index.html">Utils</a> &raquo;</li>
+        
+      <li>Logger</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/mosaic/api/utils/logger.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-mosaic.utils.logger">
+<span id="logger"></span><h1>Logger<a class="headerlink" href="#module-mosaic.utils.logger" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="mosaic.utils.logger.LoggerManager">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.utils.logger.</code><code class="sig-name descname">LoggerManager</code><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class that manages the creation loggers and the interface with them. It creates
+local or remote loggers and handles the communication with loggers at different
+levels <code class="docutils literal notranslate"><span class="pre">info</span></code>, <code class="docutils literal notranslate"><span class="pre">debug</span></code>, <code class="docutils literal notranslate"><span class="pre">error</span></code> and <code class="docutils literal notranslate"><span class="pre">warning</span></code>.</p>
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.debug">
+<code class="sig-name descname">debug</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">buf</span></em>, <em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.debug"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.debug" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log message with level <code class="docutils literal notranslate"><span class="pre">debug</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buf</strong> (<em>str</em>) – Message to log.</p></li>
+<li><p><strong>uid</strong> (<em>str</em><em>, </em><em>optional</em>) – UID of the runtime from which the message originates, defaults to
+current runtime.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.error">
+<code class="sig-name descname">error</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">buf</span></em>, <em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.error"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.error" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log message with level <code class="docutils literal notranslate"><span class="pre">error</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buf</strong> (<em>str</em>) – Message to log.</p></li>
+<li><p><strong>uid</strong> (<em>str</em><em>, </em><em>optional</em>) – UID of the runtime from which the message originates, defaults to
+current runtime.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.info">
+<code class="sig-name descname">info</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">buf</span></em>, <em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log message with level <code class="docutils literal notranslate"><span class="pre">info</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buf</strong> (<em>str</em>) – Message to log.</p></li>
+<li><p><strong>uid</strong> (<em>str</em><em>, </em><em>optional</em>) – UID of the runtime from which the message originates, defaults to
+current runtime.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.set_level">
+<em class="property">static </em><code class="sig-name descname">set_level</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">level</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.set_level"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.set_level" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set log level from options <code class="docutils literal notranslate"><span class="pre">info</span></code>, <code class="docutils literal notranslate"><span class="pre">debug</span></code>, <code class="docutils literal notranslate"><span class="pre">error</span></code> and <code class="docutils literal notranslate"><span class="pre">warning</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>level</strong> (<em>str</em>) – Log level</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.set_local">
+<code class="sig-name descname">set_local</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.set_local"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.set_local" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set up local loggers.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.set_remote">
+<code class="sig-name descname">set_remote</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">runtime_id</span><span class="o">=</span><span class="default_value">'monitor'</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.set_remote"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.set_remote" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set up remote loggers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>runtime_id</strong> (<em>str</em><em>, </em><em>optional</em>) – Runtime to which logging will be directed, defaults to <code class="docutils literal notranslate"><span class="pre">monitor</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.warn">
+<code class="sig-name descname">warn</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">buf</span></em>, <em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.warn"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.warn" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log message with level <code class="docutils literal notranslate"><span class="pre">warning</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buf</strong> (<em>str</em>) – Message to log.</p></li>
+<li><p><strong>uid</strong> (<em>str</em><em>, </em><em>optional</em>) – UID of the runtime from which the message originates, defaults to
+current runtime.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.utils.logger.LoggerManager.warning">
+<code class="sig-name descname">warning</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">buf</span></em>, <em class="sig-param"><span class="n">uid</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#LoggerManager.warning"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.LoggerManager.warning" title="Permalink to this definition">¶</a></dt>
+<dd><p>Log message with level <code class="docutils literal notranslate"><span class="pre">warning</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>buf</strong> (<em>str</em>) – Message to log.</p></li>
+<li><p><strong>uid</strong> (<em>str</em><em>, </em><em>optional</em>) – UID of the runtime from which the message originates, defaults to
+current runtime.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt id="mosaic.utils.logger.clear_logger">
+<code class="sig-prename descclassname">mosaic.utils.logger.</code><code class="sig-name descname">clear_logger</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/utils/logger.html#clear_logger"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.utils.logger.clear_logger" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="change_case.html" class="btn btn-neutral float-right" title="Change case" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="subprocess.html" class="btn btn-neutral float-left" title="Subprocess" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

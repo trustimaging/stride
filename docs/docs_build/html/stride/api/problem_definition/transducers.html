@@ -1,0 +1,453 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Transducers &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Geometry" href="geometry.html" />
+    <link rel="prev" title="Medium" href="medium.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Stride API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../runner.html">Runner</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="problem_definition_index.html">Problem definition</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="domain.html">Domain</a></li>
+<li class="toctree-l3"><a class="reference internal" href="base.html">Base</a></li>
+<li class="toctree-l3"><a class="reference internal" href="data.html">Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="problem.html">Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="medium.html">Medium</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Transducers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#transducer-types">Transducer types</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="geometry.html">Geometry</a></li>
+<li class="toctree-l3"><a class="reference internal" href="acquisitions.html">Acquisitions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../problem_types/problem_types_index.html">Problem Types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../optimisation/optimisation_index.html">Optimisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plotting/plotting_index.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Stride API Reference</a> &raquo;</li>
+        
+          <li><a href="problem_definition_index.html">Problem definition</a> &raquo;</li>
+        
+      <li>Transducers</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/stride/api/problem_definition/transducers.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="transducers">
+<h1>Transducers<a class="headerlink" href="#transducers" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="stride.problem_definition.transducers.Transducers">
+<em class="property">class </em><code class="sig-prename descclassname">stride.problem_definition.transducers.</code><code class="sig-name descname">Transducers</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">'transducers'</span></em>, <em class="sig-param"><span class="n">problem</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducers.html#Transducers"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducers.Transducers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="base.html#stride.problem_definition.base.ProblemBase" title="stride.problem_definition.base.ProblemBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.problem_definition.base.ProblemBase</span></code></a></p>
+<p>The Transducers stores a reference to all the transducer devices that are
+used in a problem.</p>
+<p>Transducers are identified through a numerical ID, which is &gt;= 0.</p>
+<p>A transducer can be added through <code class="docutils literal notranslate"><span class="pre">Transducers.add</span></code> and accessed through
+<code class="docutils literal notranslate"><span class="pre">Transducers.get</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – Alternative name to give to the Transducers.</p></li>
+<li><p><strong>problem</strong> (<a class="reference internal" href="problem.html#stride.problem_definition.problem.Problem" title="stride.problem_definition.problem.Problem"><em>Problem</em></a>) – Problem to which the Transducers belongs.</p></li>
+<li><p><strong>grid</strong> (<em>Grid</em><em> or </em><em>any of Space</em><em> or </em><a class="reference internal" href="domain.html#stride.problem_definition.domain.Time" title="stride.problem_definition.domain.Time"><em>Time</em></a>) – Grid on which the Transducers are defined</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.add">
+<code class="sig-name descname">add</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">item</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducers.html#Transducers.add"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.add" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a new transducer to the Transducers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>item</strong> (<a class="reference internal" href="#stride.problem_definition.transducer_types.transducer.Transducer" title="stride.problem_definition.transducer_types.transducer.Transducer"><em>Transducer</em></a>) – Transducer to be added to the Transducers.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.default">
+<code class="sig-name descname">default</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducers.html#Transducers.default"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.default" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fill the container with the default configuration.</p>
+<p>In this case, a single PointTransducer will be generated.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.get">
+<code class="sig-name descname">get</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">id</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducers.html#Transducers.get"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a transducer from the Transducers with a known id.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>id</strong> (<em>int</em>) – Identifier of the transducer.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Found Transducer.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#stride.problem_definition.transducer_types.transducer.Transducer" title="stride.problem_definition.transducer_types.transducer.Transducer">Transducer</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.get_slice">
+<code class="sig-name descname">get_slice</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">start</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">end</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">step</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducers.html#Transducers.get_slice"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.get_slice" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a slice of the indices of the transducer using <code class="docutils literal notranslate"><span class="pre">slice(start,</span> <span class="pre">stop,</span> <span class="pre">step)</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>start</strong> (<em>int</em><em>, </em><em>optional</em>) – Start of the slice, defaults to the first id.</p></li>
+<li><p><strong>end</strong> (<em>int</em><em>, </em><em>optional</em>) – End of the slice, defaults to the last id.</p></li>
+<li><p><strong>step</strong> (<em>int</em><em>, </em><em>optional</em>) – Steps in between transducers, defaults to 1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Found transducers in the slice.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.items">
+<code class="sig-name descname">items</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducers.html#Transducers.items"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.items" title="Permalink to this definition">¶</a></dt>
+<dd><p>Access all transducers as iterable of (ID, transducer) pairs.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.num_transducers">
+<em class="property">property </em><code class="sig-name descname">num_transducers</code><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.num_transducers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get number of transducers in the Transducers.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.sub_problem">
+<code class="sig-name descname">sub_problem</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">shot</span></em>, <em class="sig-param"><span class="n">sub_problem</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducers.html#Transducers.sub_problem"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.sub_problem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a subset object for a certain shot.</p>
+<p>A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+This method takes care of selecting the portions of the Transducers that are needed
+for a given shot.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shot</strong> (<a class="reference internal" href="acquisitions.html#stride.problem_definition.acquisitions.Shot" title="stride.problem_definition.acquisitions.Shot"><em>Shot</em></a>) – Shot for which the SubProblem is being generated.</p></li>
+<li><p><strong>sub_problem</strong> (<a class="reference internal" href="problem.html#stride.problem_definition.problem.SubProblem" title="stride.problem_definition.problem.SubProblem"><em>SubProblem</em></a>) – Container for the sub-problem being generated.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Newly created Transducers instance.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#stride.problem_definition.transducers.Transducers" title="stride.problem_definition.transducers.Transducers">Transducers</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.transducer_ids">
+<em class="property">property </em><code class="sig-name descname">transducer_ids</code><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.transducer_ids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get all transducer IDs in the Transducers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>IDs of the transducers.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducers.Transducers.transducers">
+<em class="property">property </em><code class="sig-name descname">transducers</code><a class="headerlink" href="#stride.problem_definition.transducers.Transducers.transducers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get all transducers as a list.</p>
+</dd></dl>
+
+</dd></dl>
+
+<div class="section" id="transducer-types">
+<h2>Transducer types<a class="headerlink" href="#transducer-types" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="stride.problem_definition.transducer_types.transducer.Transducer">
+<em class="property">class </em><code class="sig-prename descclassname">stride.problem_definition.transducer_types.transducer.</code><code class="sig-name descname">Transducer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">id</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducer_types/transducer.html#Transducer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducer_types.transducer.Transducer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">abc.ABC</span></code>, <a class="reference internal" href="base.html#stride.problem_definition.base.GriddedSaved" title="stride.problem_definition.base.GriddedSaved"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.problem_definition.base.GriddedSaved</span></code></a></p>
+<p>The transducer holds information about its location in space, its type, as well as
+other things such as IRs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>id</strong> (<em>int</em>) – Identifier assigned to this transducer.</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – Optional name for the shot.</p></li>
+<li><p><strong>grid</strong> (<em>Grid</em><em> or </em><em>any of Space</em><em> or </em><a class="reference internal" href="domain.html#stride.problem_definition.domain.Time" title="stride.problem_definition.domain.Time"><em>Time</em></a>) – Grid on which the Transducer is defined</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="stride.problem_definition.transducer_types.transducer.Transducer.coordinates">
+<em class="property">property </em><code class="sig-name descname">coordinates</code><a class="headerlink" href="#stride.problem_definition.transducer_types.transducer.Transducer.coordinates" title="Permalink to this definition">¶</a></dt>
+<dd><p>Coordinates of points in the transducer, relative to its centre.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Coordinate array.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="stride.problem_definition.transducer_types.transducer.Transducer.sub_problem">
+<code class="sig-name descname">sub_problem</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">shot</span></em>, <em class="sig-param"><span class="n">sub_problem</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducer_types/transducer.html#Transducer.sub_problem"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducer_types.transducer.Transducer.sub_problem" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a subset object for a certain shot.</p>
+<p>A SubProblem contains everything that is needed to fully determine how to run a particular shot.
+This method has no effect for this particular case.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>shot</strong> (<a class="reference internal" href="acquisitions.html#stride.problem_definition.acquisitions.Shot" title="stride.problem_definition.acquisitions.Shot"><em>Shot</em></a>) – Shot for which the SubProblem is being generated.</p></li>
+<li><p><strong>sub_problem</strong> (<a class="reference internal" href="problem.html#stride.problem_definition.problem.SubProblem" title="stride.problem_definition.problem.SubProblem"><em>SubProblem</em></a>) – Container for the sub-problem being generated.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Transducer instance.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#stride.problem_definition.transducer_types.transducer.Transducer" title="stride.problem_definition.transducer_types.transducer.Transducer">Transducer</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="stride.problem_definition.transducer_types.transducer.Transducer.type">
+<code class="sig-name descname">type</code><em class="property"> = ''</em><a class="headerlink" href="#stride.problem_definition.transducer_types.transducer.Transducer.type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Type of transducer, e.g. point_transducer</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="stride.problem_definition.transducer_types.point_transducer.PointTransducer">
+<em class="property">class </em><code class="sig-prename descclassname">stride.problem_definition.transducer_types.point_transducer.</code><code class="sig-name descname">PointTransducer</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/stride/problem_definition/transducer_types/point_transducer.html#PointTransducer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#stride.problem_definition.transducer_types.point_transducer.PointTransducer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#stride.problem_definition.transducer_types.transducer.Transducer" title="stride.problem_definition.transducer_types.transducer.Transducer"><code class="xref py py-class docutils literal notranslate"><span class="pre">stride.problem_definition.transducer_types.transducer.Transducer</span></code></a></p>
+<p>This class describes a point transducers, in which a single point represents the
+effect of the device.</p>
+<dl class="py method">
+<dt id="stride.problem_definition.transducer_types.point_transducer.PointTransducer.coordinates">
+<em class="property">property </em><code class="sig-name descname">coordinates</code><a class="headerlink" href="#stride.problem_definition.transducer_types.point_transducer.PointTransducer.coordinates" title="Permalink to this definition">¶</a></dt>
+<dd><p>Coordinates of points in the transducer, relative to its centre.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Coordinate array.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="stride.problem_definition.transducer_types.point_transducer.PointTransducer.type">
+<code class="sig-name descname">type</code><em class="property"> = 'point_transducer'</em><a class="headerlink" href="#stride.problem_definition.transducer_types.point_transducer.PointTransducer.type" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="geometry.html" class="btn btn-neutral float-right" title="Geometry" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="medium.html" class="btn btn-neutral float-left" title="Medium" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

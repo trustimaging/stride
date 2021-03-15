@@ -1,0 +1,608 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>mosaic.runtime.node &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+          <li><a href="../../mosaic.html">mosaic</a> &raquo;</li>
+        
+      <li>mosaic.runtime.node</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for mosaic.runtime.node</h1><div class="highlight"><pre>
+<span></span>
+<span class="kn">import</span> <span class="nn">psutil</span>
+<span class="kn">import</span> <span class="nn">datetime</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+
+<span class="kn">import</span> <span class="nn">mosaic</span>
+<span class="kn">from</span> <span class="nn">.runtime</span> <span class="kn">import</span> <span class="n">Runtime</span><span class="p">,</span> <span class="n">RuntimeProxy</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">LoggerManager</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">subprocess</span>
+<span class="kn">from</span> <span class="nn">..utils.utils</span> <span class="kn">import</span> <span class="n">memory_limit</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Node&#39;</span><span class="p">,</span> <span class="s1">&#39;MonitoredNode&#39;</span><span class="p">,</span> <span class="s1">&#39;MonitoredWorker&#39;</span><span class="p">,</span> <span class="s1">&#39;MonitoredGPU&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="Node"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.Node">[docs]</a><span class="k">class</span> <span class="nc">Node</span><span class="p">(</span><span class="n">Runtime</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A node represents a physically independent portion of the network,</span>
+<span class="sd">    such as a separate cluster node. Nodes contain one or more</span>
+<span class="sd">    workers, which they initialise and manage.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">is_node</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;num_workers&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="n">num_workers</span> <span class="ow">or</span> <span class="mi">1</span>
+        <span class="n">num_threads</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;num_threads&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">num_threads</span> <span class="o">=</span> <span class="n">num_threads</span> <span class="ow">or</span> <span class="n">psutil</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="o">//</span> <span class="n">num_workers</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span> <span class="o">=</span> <span class="n">num_workers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_threads</span> <span class="o">=</span> <span class="n">num_threads</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_memory_limit</span> <span class="o">=</span> <span class="n">memory_limit</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span> <span class="o">=</span> <span class="n">MonitoredNode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uid</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Node.init"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.Node.init">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Asynchronous counterpart of ``__init__``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kwargs</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Start local workers</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_workers</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Node.init_workers"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.Node.init_workers">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">init_workers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Init workers in the node.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kwargs</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span>
+        <span class="n">num_threads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_num_threads</span>
+
+        <span class="c1"># available_cpus = list(range(psutil.cpu_count()))</span>
+        <span class="c1">#</span>
+        <span class="c1"># if self.mode == &#39;local&#39;:</span>
+        <span class="c1">#     psutil.Process().cpu_affinity([available_cpus[2]])</span>
+        <span class="c1">#     available_cpus = available_cpus[3:]</span>
+        <span class="c1"># else:</span>
+        <span class="c1">#     psutil.Process().cpu_affinity([available_cpus[0]])</span>
+        <span class="c1">#     available_cpus = available_cpus[1:]</span>
+        <span class="c1">#</span>
+        <span class="c1"># cpus_per_worker = len(available_cpus) // self._num_workers</span>
+
+        <span class="k">for</span> <span class="n">worker_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="p">):</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">indices</span> <span class="o">+</span> <span class="p">(</span><span class="n">worker_index</span><span class="p">,)</span>
+
+            <span class="c1"># if worker_index &lt; num_workers - 1:</span>
+            <span class="c1">#     cpu_affinity = available_cpus[worker_index*cpus_per_worker:(worker_index+1)*cpus_per_worker]</span>
+            <span class="c1">#</span>
+            <span class="c1"># else:</span>
+            <span class="c1">#     cpu_affinity = available_cpus[worker_index*cpus_per_worker:]</span>
+
+            <span class="k">def</span> <span class="nf">start_worker</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">extra_kwargs</span><span class="p">):</span>
+                <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">extra_kwargs</span><span class="p">)</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;runtime_indices&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">indices</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;num_workers&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">num_workers</span>
+                <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;num_threads&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">num_threads</span>
+
+                <span class="n">mosaic</span><span class="o">.</span><span class="n">init</span><span class="p">(</span><span class="s1">&#39;worker&#39;</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="n">worker_proxy</span> <span class="o">=</span> <span class="n">RuntimeProxy</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;worker&#39;</span><span class="p">,</span> <span class="n">indices</span><span class="o">=</span><span class="n">indices</span><span class="p">)</span>
+            <span class="n">worker_subprocess</span> <span class="o">=</span> <span class="n">subprocess</span><span class="p">(</span><span class="n">start_worker</span><span class="p">)(</span><span class="n">name</span><span class="o">=</span><span class="n">worker_proxy</span><span class="o">.</span><span class="n">uid</span><span class="p">,</span>
+                                                         <span class="n">daemon</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">worker_subprocess</span><span class="o">.</span><span class="n">start_process</span><span class="p">()</span>
+            <span class="n">worker_proxy</span><span class="o">.</span><span class="n">subprocess</span> <span class="o">=</span> <span class="n">worker_subprocess</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="n">worker_proxy</span><span class="o">.</span><span class="n">uid</span><span class="p">]</span> <span class="o">=</span> <span class="n">worker_proxy</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="p">[</span><span class="n">worker_proxy</span><span class="o">.</span><span class="n">uid</span><span class="p">]</span> <span class="o">=</span> <span class="n">worker_proxy</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comms</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="n">worker_proxy</span><span class="o">.</span><span class="n">uid</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">resource_monitor</span><span class="p">()</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_monitored_node</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">interval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">resource_monitor</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_loop</span><span class="o">.</span><span class="n">interval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">update_monitored_node</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Node.set_logger"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.Node.set_logger">[docs]</a>    <span class="k">def</span> <span class="nf">set_logger</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set up logging.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">LoggerManager</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s1">&#39;local&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">set_local</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">runtime_id</span> <span class="o">=</span> <span class="s1">&#39;head&#39;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">==</span> <span class="s1">&#39;interactive&#39;</span> <span class="k">else</span> <span class="s1">&#39;monitor&#39;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">set_remote</span><span class="p">(</span><span class="n">runtime_id</span><span class="o">=</span><span class="n">runtime_id</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Node.resource_monitor"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.Node.resource_monitor">[docs]</a>    <span class="k">def</span> <span class="nf">resource_monitor</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Monitor reseources available for workers, and worker state.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">import</span> <span class="nn">GPUtil</span>
+            <span class="n">gpus</span> <span class="o">=</span> <span class="n">GPUtil</span><span class="o">.</span><span class="n">getGPUs</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="n">gpus</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">cpu_load</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="n">memory_fraction</span> <span class="o">=</span> <span class="mf">0.</span>
+
+        <span class="k">for</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="n">gpus</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">gpu</span><span class="o">.</span><span class="n">id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">[</span><span class="n">gpu</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">MonitoredGPU</span><span class="p">(</span><span class="n">gpu</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">[</span><span class="n">gpu</span><span class="o">.</span><span class="n">id</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">gpu_load</span><span class="o">=</span><span class="n">gpu</span><span class="o">.</span><span class="n">load</span><span class="p">,</span>
+                                                         <span class="n">memory_limit</span><span class="o">=</span><span class="n">gpu</span><span class="o">.</span><span class="n">memoryTotal</span><span class="o">*</span><span class="mi">1024</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span>
+                                                         <span class="n">memory_fraction</span><span class="o">=</span><span class="n">gpu</span><span class="o">.</span><span class="n">memoryUtil</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">worker_id</span><span class="p">,</span> <span class="n">worker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">worker_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">worker_info</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">MonitoredWorker</span><span class="p">(</span><span class="n">worker_id</span><span class="p">)</span>
+
+            <span class="n">worker_cpu_load</span> <span class="o">=</span> <span class="n">worker</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">cpu_load</span><span class="p">()</span>
+            <span class="n">worker_memory_fraction</span> <span class="o">=</span> <span class="n">worker</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">memory</span><span class="p">()</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memory_limit</span>
+
+            <span class="n">cpu_load</span> <span class="o">+=</span> <span class="n">worker_cpu_load</span>
+            <span class="n">memory_fraction</span> <span class="o">+=</span> <span class="n">worker_memory_fraction</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="o">=</span><span class="n">worker</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">state</span><span class="p">,</span>
+                                                               <span class="n">cpu_load</span><span class="o">=</span><span class="n">worker_cpu_load</span><span class="p">,</span>
+                                                               <span class="n">memory_fraction</span><span class="o">=</span><span class="n">worker_memory_fraction</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">memory_fraction</span> <span class="o">&gt;</span> <span class="mf">0.95</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">sort_workers</span><span class="p">(</span><span class="n">desc</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">worker_id</span><span class="p">,</span> <span class="n">worker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">worker_info</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">paused</span><span class="p">():</span>
+                    <span class="k">continue</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">pause_process</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">state</span>
+                <span class="k">break</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">sort_workers</span><span class="p">(</span><span class="n">desc</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">worker_id</span><span class="p">,</span> <span class="n">worker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">worker_info</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">running</span><span class="p">():</span>
+                    <span class="k">continue</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">start_process</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">state</span>
+                <span class="k">break</span>
+
+        <span class="c1"># TODO Dynamic constraints and shared resources</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">num_cpus</span><span class="o">=</span><span class="n">psutil</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">(),</span>
+                                    <span class="n">num_gpus</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">gpus</span><span class="p">),</span>
+                                    <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_workers</span><span class="p">,</span>
+                                    <span class="n">num_threads</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_num_threads</span><span class="p">,</span>
+                                    <span class="n">cpu_load</span><span class="o">=</span><span class="n">cpu_load</span><span class="p">,</span>
+                                    <span class="n">memory_limit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_memory_limit</span><span class="p">,</span>
+                                    <span class="n">memory_fraction</span><span class="o">=</span><span class="n">memory_fraction</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Node.stop"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.Node.stop">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sender_id</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Stop runtime.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sender_id : str</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">worker_id</span><span class="p">,</span> <span class="n">worker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_own_workers</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">await</span> <span class="n">worker</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+            <span class="n">worker</span><span class="o">.</span><span class="n">subprocess</span><span class="o">.</span><span class="n">join_process</span><span class="p">()</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">stop</span><span class="p">(</span><span class="n">sender_id</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Node.update_monitored_node"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.Node.update_monitored_node">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">update_monitored_node</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Send status update to monitor.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_comms</span><span class="o">.</span><span class="n">send_async</span><span class="p">(</span><span class="s1">&#39;monitor&#39;</span><span class="p">,</span>
+                                     <span class="n">method</span><span class="o">=</span><span class="s1">&#39;update_monitored_node&#39;</span><span class="p">,</span>
+                                     <span class="n">monitored_node</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_monitored_node</span><span class="o">.</span><span class="n">get_update</span><span class="p">())</span></div></div>
+
+
+<div class="viewcode-block" id="MonitoredGPU"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredGPU">[docs]</a><span class="k">class</span> <span class="nc">MonitoredGPU</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Container to keep track of monitored GPU resources.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">uid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">gpu_load</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_limit</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="MonitoredGPU.update"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredGPU.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">update</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">update</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MonitoredGPU.update_history"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredGPU.update_history">[docs]</a>    <span class="k">def</span> <span class="nf">update_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">update</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">update</span><span class="p">)</span>
+
+        <span class="n">update</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">update</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MonitoredGPU.get_update"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredGPU.get_update">[docs]</a>    <span class="k">def</span> <span class="nf">get_update</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">update</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">gpu_load</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_load</span><span class="p">,</span>
+            <span class="n">memory_limit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">memory_limit</span><span class="p">,</span>
+            <span class="n">memory_fraction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">update</span></div></div>
+
+
+<div class="viewcode-block" id="MonitoredWorker"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredWorker">[docs]</a><span class="k">class</span> <span class="nc">MonitoredWorker</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Container to keep track of monitored worker.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">uid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="s1">&#39;running&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_load</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="MonitoredWorker.update"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredWorker.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">update</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">update</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MonitoredWorker.update_history"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredWorker.update_history">[docs]</a>    <span class="k">def</span> <span class="nf">update_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">update</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">update</span><span class="p">)</span>
+
+        <span class="n">update</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">update</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MonitoredWorker.get_update"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredWorker.get_update">[docs]</a>    <span class="k">def</span> <span class="nf">get_update</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">update</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">cpu_load</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cpu_load</span><span class="p">,</span>
+            <span class="n">memory_fraction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">update</span></div></div>
+
+
+<div class="viewcode-block" id="MonitoredNode"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredNode">[docs]</a><span class="k">class</span> <span class="nc">MonitoredNode</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Container to keep track of monitored node.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">uid</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">uid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">uid</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="s1">&#39;running&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_cpus</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_gpus</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_limit</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cpu_load</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="MonitoredNode.update"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredNode.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">update</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s1">&#39;gpu_info&#39;</span> <span class="ow">in</span> <span class="n">update</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">gpu_id</span><span class="p">,</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="n">update</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;gpu_info&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">gpu_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">[</span><span class="n">gpu_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">MonitoredGPU</span><span class="p">(</span><span class="n">gpu_id</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">[</span><span class="n">gpu_id</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">gpu</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;worker_info&#39;</span> <span class="ow">in</span> <span class="n">update</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">worker_id</span><span class="p">,</span> <span class="n">worker</span> <span class="ow">in</span> <span class="n">update</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;worker_info&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">worker_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">MonitoredWorker</span><span class="p">(</span><span class="n">worker_id</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">worker</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">())</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">update</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MonitoredNode.update_history"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredNode.update_history">[docs]</a>    <span class="k">def</span> <span class="nf">update_history</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">update</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s1">&#39;gpu_info&#39;</span> <span class="ow">in</span> <span class="n">update</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">gpu_id</span><span class="p">,</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="n">update</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;gpu_info&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">gpu_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">[</span><span class="n">gpu_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">MonitoredGPU</span><span class="p">(</span><span class="n">gpu_id</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">[</span><span class="n">gpu_id</span><span class="p">]</span><span class="o">.</span><span class="n">update_history</span><span class="p">(</span><span class="o">**</span><span class="n">gpu</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s1">&#39;worker_info&#39;</span> <span class="ow">in</span> <span class="n">update</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">worker_id</span><span class="p">,</span> <span class="n">worker</span> <span class="ow">in</span> <span class="n">update</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;worker_info&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">worker_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">MonitoredWorker</span><span class="p">(</span><span class="n">worker_id</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span><span class="p">[</span><span class="n">worker_id</span><span class="p">]</span><span class="o">.</span><span class="n">update_history</span><span class="p">(</span><span class="o">**</span><span class="n">worker</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">update</span><span class="p">)</span>
+
+        <span class="n">update</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">update</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MonitoredNode.get_update"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredNode.get_update">[docs]</a>    <span class="k">def</span> <span class="nf">get_update</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">update</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
+            <span class="n">state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">num_cpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_cpus</span><span class="p">,</span>
+            <span class="n">num_gpus</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_gpus</span><span class="p">,</span>
+            <span class="n">num_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">,</span>
+            <span class="n">num_threads</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span><span class="p">,</span>
+            <span class="n">memory_limit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">memory_limit</span><span class="p">,</span>
+            <span class="n">cpu_load</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cpu_load</span><span class="p">,</span>
+            <span class="n">memory_fraction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">update</span><span class="p">[</span><span class="s1">&#39;gpu_info&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="n">update</span><span class="p">[</span><span class="s1">&#39;worker_info&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">gpu_id</span><span class="p">,</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">update</span><span class="p">[</span><span class="s1">&#39;gpu_info&#39;</span><span class="p">][</span><span class="n">gpu_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">gpu</span><span class="o">.</span><span class="n">get_update</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">worker_id</span><span class="p">,</span> <span class="n">worker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">update</span><span class="p">[</span><span class="s1">&#39;worker_info&#39;</span><span class="p">][</span><span class="n">worker_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">worker</span><span class="o">.</span><span class="n">get_update</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">update</span></div>
+
+<div class="viewcode-block" id="MonitoredNode.sort_workers"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredNode.sort_workers">[docs]</a>    <span class="k">def</span> <span class="nf">sort_workers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_info</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                                              <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">memory_fraction</span><span class="p">,</span>
+                                              <span class="n">reverse</span><span class="o">=</span><span class="n">desc</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="MonitoredNode.sort_gpus"><a class="viewcode-back" href="../../../mosaic/api/runtime/node.html#mosaic.runtime.node.MonitoredNode.sort_gpus">[docs]</a>    <span class="k">def</span> <span class="nf">sort_gpus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gpu_info</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span>
+                                           <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">memory_fraction</span><span class="p">,</span>
+                                           <span class="n">reverse</span><span class="o">=</span><span class="n">desc</span><span class="p">))</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

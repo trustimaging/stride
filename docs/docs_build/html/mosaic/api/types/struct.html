@@ -1,0 +1,417 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Struct &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Config" href="config.html" />
+    <link rel="prev" title="Immutable" href="immutable.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api_index.html">Mosaic API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../run.html">Running mosaic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../runtime/runtime_index.html">Runtime</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../comms/comms_index.html">Comms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../core/core_index.html">Core</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="types_index.html">Types</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="extensible.html">Extensible</a></li>
+<li class="toctree-l3"><a class="reference internal" href="immutable.html">Immutable</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Struct</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html">Config</a></li>
+<li class="toctree-l3"><a class="reference internal" href="imported_function.html">Imported function</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../file_manipulation/file_manipulation_index.html">File manipulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../utils/utils_index.html">Utils</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../api_index.html">Mosaic API Reference</a> &raquo;</li>
+        
+          <li><a href="types_index.html">Types</a> &raquo;</li>
+        
+      <li>Struct</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+            <a href="../../../_sources/mosaic/api/types/struct.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="module-mosaic.types.struct">
+<span id="struct"></span><h1>Struct<a class="headerlink" href="#module-mosaic.types.struct" title="Permalink to this headline">¶</a></h1>
+<dl class="py class">
+<dt id="mosaic.types.struct.Struct">
+<em class="property">class </em><code class="sig-prename descclassname">mosaic.types.struct.</code><code class="sig-name descname">Struct</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">content</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">extensible</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">mutable</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="immutable.html#mosaic.types.immutable.ImmutableObject" title="mosaic.types.immutable.ImmutableObject"><code class="xref py py-class docutils literal notranslate"><span class="pre">mosaic.types.immutable.ImmutableObject</span></code></a></p>
+<p>Structs represent dictionary-like objects that provide some extra features over Python’s <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>.</p>
+<p>Their internal representation is an <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>, a dictionary that maintains the order in which members
+were added to it. Unlike traditional Python dicts, however, both square-bracket and dot notation are allowed
+to access the members of the Struct.</p>
+<p>Structs can be <code class="docutils literal notranslate"><span class="pre">extensible</span></code> and <code class="docutils literal notranslate"><span class="pre">mutable</span></code>, which is determined when they are instantiated and remains
+unchanged for the life of the object.</p>
+<p>When a Struct is not <code class="docutils literal notranslate"><span class="pre">mutable</span></code>, its members can only be assigned once, any further attempts at modifying
+the value of a member will result in an <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code>. For <code class="docutils literal notranslate"><span class="pre">mutable</span></code> Structs the values of its
+members can be changed as many times as needed.</p>
+<p>Whether or not a Struct is <code class="docutils literal notranslate"><span class="pre">extensible</span></code> affects how its members are accessed. When trying to find a member
+of the Struct, a naive search is performed first, assuming that the item exists
+within its internal dictionary.</p>
+<p>If the search fails, and the Struct is not <code class="docutils literal notranslate"><span class="pre">extensible</span></code> an <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> is raised. Otherwise,
+a new search starts for members in the dictionary with a similar signature to the requested item.</p>
+<p>If this search fails, an <code class="docutils literal notranslate"><span class="pre">AttributeError</span></code> is raised. If if does not fail and a match is found, the match
+is returned wrapped in a function that will evaluate whether the variant exists and is callable.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>content</strong> (<em>dict-like</em><em>, </em><em>optional</em>) – Dict-like object to initialise the Struct, defaults to empty.</p></li>
+<li><p><strong>extensible</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not the Struct should be extensible, defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>mutable</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not the Struct should be mutable, defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Let’s create an empty, immutable Struct:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span> <span class="o">=</span> <span class="n">Struct</span><span class="p">(</span><span class="n">mutable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">member</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">member</span>
+<span class="go">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="p">[</span><span class="s1">&#39;member&#39;</span><span class="p">]</span>
+<span class="go">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">member</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="go">AttributeError(&#39;The attribute member already exists in the container, this container is not mutable&#39;)</span>
+</pre></div>
+</div>
+<p>If the container was <code class="docutils literal notranslate"><span class="pre">mutable</span></code> instead:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span> <span class="o">=</span> <span class="n">Struct</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">member</span> <span class="o">=</span> <span class="mi">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">member</span>
+<span class="go">10</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">member</span> <span class="o">=</span> <span class="mi">20</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">member</span>
+<span class="go">20</span>
+</pre></div>
+</div>
+<p>The same way mutability affects member assignment, extensibility affects how the members of the Struct are
+accessed:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">function_variant_1</span><span class="p">():</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Executed variant_1&#39;</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">def</span> <span class="nf">function_variant_2</span><span class="p">():</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Executed variant_2&#39;</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">KlassVariant1</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Instantiated Variant1&#39;</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span> <span class="nc">KlassVariant2</span><span class="p">:</span>
+<span class="gp">&gt;&gt;&gt; </span>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">&gt;&gt;&gt; </span>        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Instantiated Variant2&#39;</span><span class="p">)</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span> <span class="o">=</span> <span class="n">Struct</span><span class="p">(</span><span class="n">extensible</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">function_variant_1</span> <span class="o">=</span> <span class="n">function_variant_1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">function_variant_2</span> <span class="o">=</span> <span class="n">function_variant_2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">KlassVariant1</span> <span class="o">=</span> <span class="n">KlassVariant1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">KlassVariant2</span> <span class="o">=</span> <span class="n">KlassVariant2</span>
+<span class="go">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">use</span><span class="o">=</span><span class="s1">&#39;variant_1&#39;</span><span class="p">)</span>
+<span class="go">Executed variant_1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">Klass</span><span class="p">(</span><span class="s1">&#39;Variant2&#39;</span><span class="p">)()</span>
+<span class="go">Instantiated Variant2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">struct</span><span class="o">.</span><span class="n">Klass</span><span class="p">(</span><span class="s1">&#39;variant_1&#39;</span><span class="p">)()</span>
+<span class="go">Instantiated Variant1</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.copy">
+<code class="sig-name descname">copy</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.copy"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.copy" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a deepcopy of the Struct.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Copied Struct</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference internal" href="#mosaic.types.struct.Struct" title="mosaic.types.struct.Struct">Struct</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.delete">
+<code class="sig-name descname">delete</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">item</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.delete"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.delete" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete an item from the container using its key.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>item</strong> (<em>str</em>) – Name of the item to delete.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.get">
+<code class="sig-name descname">get</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">item</span></em>, <em class="sig-param"><span class="n">default</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.get"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.get" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an item from the Struct or a default value if it is not found.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>item</strong> (<em>str</em>) – Name of the item to find</p></li>
+<li><p><strong>default</strong> (<em>object</em><em>, </em><em>optional</em>) – Default value to be returned in case the item is not found, defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.items">
+<code class="sig-name descname">items</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.items"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.items" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the list of keys and values in the Struct.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>List of keys and values in the Struct.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>odict_items</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.keys">
+<code class="sig-name descname">keys</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.keys"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.keys" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the list of keys in the Struct.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>List of keys in the Struct.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>odict_keys</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.pop">
+<code class="sig-name descname">pop</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">item</span></em>, <em class="sig-param"><span class="n">default</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.pop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.pop" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns an item from the Struct and deletes it, or returns a default value if it is not found.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>item</strong> (<em>str</em>) – Name of the item to find</p></li>
+<li><p><strong>default</strong> (<em>object</em><em>, </em><em>optional</em>) – Default value to be returned in case the item is not found</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.update">
+<code class="sig-name descname">update</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">content</span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.update"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.update" title="Permalink to this definition">¶</a></dt>
+<dd><p>Updates the Struct with the contents of a dict-like object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>content</strong> (<em>dict-like</em>) – Content with which to update the Struct</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="mosaic.types.struct.Struct.values">
+<code class="sig-name descname">values</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/mosaic/types/struct.html#Struct.values"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mosaic.types.struct.Struct.values" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the list of values in the Struct.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>List of values in the Struct.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>odict_values</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="config.html" class="btn btn-neutral float-right" title="Config" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="immutable.html" class="btn btn-neutral float-left" title="Immutable" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

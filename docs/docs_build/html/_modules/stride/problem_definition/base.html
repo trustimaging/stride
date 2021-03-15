@@ -1,0 +1,542 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>stride.problem_definition.base &mdash; Stride</title>
+  
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link href="../../../_static/style.css" rel="stylesheet" type="text/css">
+
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> Stride
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                1.0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../download.html">Download</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stride/api/api_index.html">Stride API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../mosaic/api/api_index.html">Mosaic API Reference</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Stride</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>stride.problem_definition.base</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for stride.problem_definition.base</h1><div class="highlight"><pre>
+<span></span>
+<span class="kn">from</span> <span class="nn">mosaic</span> <span class="kn">import</span> <span class="n">h5</span>
+
+<span class="kn">from</span> <span class="nn">.domain</span> <span class="kn">import</span> <span class="n">Space</span><span class="p">,</span> <span class="n">Time</span><span class="p">,</span> <span class="n">Grid</span>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Gridded&#39;</span><span class="p">,</span> <span class="s1">&#39;Saved&#39;</span><span class="p">,</span> <span class="s1">&#39;GriddedSaved&#39;</span><span class="p">,</span> <span class="s1">&#39;ProblemBase&#39;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="Gridded"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.Gridded">[docs]</a><span class="k">class</span> <span class="nc">Gridded</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Objects of this type are defined over a spatio-temporal grid.</span>
+
+<span class="sd">    This grid can be provided either as a Grid object or as any of Space, Time or SlowTime</span>
+<span class="sd">    objects that define a grid.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    grid : Grid, optional</span>
+<span class="sd">        Existing grid, if not provided one will be created.</span>
+<span class="sd">    space : Space, optional</span>
+<span class="sd">    time : Time, optional</span>
+<span class="sd">    slow_time : SlowTime, optional</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grid</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">slow_time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">grid</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">grid</span> <span class="o">=</span> <span class="n">Grid</span><span class="p">(</span><span class="n">space</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">slow_time</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">grid</span> <span class="o">=</span> <span class="n">Grid</span><span class="p">(</span><span class="n">grid</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="n">grid</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">grid</span><span class="o">.</span><span class="n">slow_time</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span> <span class="o">=</span> <span class="n">grid</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">grid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Access the grid.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">space</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Access the space grid.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="o">.</span><span class="n">space</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">time</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Access the time grid.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="o">.</span><span class="n">time</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">slow_time</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Access the slow time grid.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="o">.</span><span class="n">slow_time</span>
+
+<div class="viewcode-block" id="Gridded.resample"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.Gridded.resample">[docs]</a>    <span class="k">def</span> <span class="nf">resample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grid</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">slow_time</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;Resampling has not been implemented yet.&#39;</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="Saved"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.Saved">[docs]</a><span class="k">class</span> <span class="nc">Saved</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Saved objects include helper functions to interact with the file system.</span>
+
+<span class="sd">    Classes that inherit from Saved need to define ``__get_desc__`` and ``__set_desc__``</span>
+<span class="sd">    to define how the object is described to be saved and how a loaded description is</span>
+<span class="sd">    digested by the class respectively.</span>
+
+<span class="sd">    ``__get_desc__`` expects a dict-like object with all the attributes that need to</span>
+<span class="sd">    be stored to disk and is called when dumping the object.</span>
+
+<span class="sd">    ``__set_desc__`` will take a dict-like object as a parameter, which it can then be</span>
+<span class="sd">    used to set the state of the object, and is called when loading it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Name of the saved object.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+<div class="viewcode-block" id="Saved.dump"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.Saved.dump">[docs]</a>    <span class="k">def</span> <span class="nf">dump</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Dump the object according to the ``__get_desc__`` description.</span>
+
+<span class="sd">        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_desc__</span><span class="p">()</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;parameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;parameter&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">h5</span><span class="o">.</span><span class="n">HDF5</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">description</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Saved.append"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.Saved.append">[docs]</a>    <span class="k">def</span> <span class="nf">append</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Append the object to a file according to the ``__get_desc__`` description.</span>
+
+<span class="sd">        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">h5</span><span class="o">.</span><span class="n">file_exists</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">description</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_desc__</span><span class="p">()</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;parameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;parameter&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">h5</span><span class="o">.</span><span class="n">HDF5</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">description</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Saved.load"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.Saved.load">[docs]</a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load the object using ``__set_desc__`` to digest the description.</span>
+
+<span class="sd">        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;parameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">with</span> <span class="n">h5</span><span class="o">.</span><span class="n">HDF5</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">description</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">__set_desc__</span><span class="p">(</span><span class="n">description</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__get_desc__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">__set_desc__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">description</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="GriddedSaved"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.GriddedSaved">[docs]</a><span class="k">class</span> <span class="nc">GriddedSaved</span><span class="p">(</span><span class="n">Saved</span><span class="p">,</span> <span class="n">Gridded</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Objects of this type are include utils to dump and load the instance, taking into</span>
+<span class="sd">    account that it is defined over a grid.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="GriddedSaved.dump"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.GriddedSaved.dump">[docs]</a>    <span class="k">def</span> <span class="nf">dump</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Dump the object according to the ``__get_desc__`` description.</span>
+
+<span class="sd">        It will ensure that the grid of the instance is also dumped to disk.</span>
+
+<span class="sd">        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">grid_description</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_description</span><span class="p">()</span>
+
+        <span class="n">description</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_desc__</span><span class="p">()</span>
+        <span class="n">grid_description</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">description</span><span class="p">)</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;parameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;parameter&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">h5</span><span class="o">.</span><span class="n">HDF5</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">grid_description</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GriddedSaved.append"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.GriddedSaved.append">[docs]</a>    <span class="k">def</span> <span class="nf">append</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Append the object to a file according to the ``__get_desc__`` description.</span>
+
+<span class="sd">        It will ensure that the grid of the instance is also dumped to disk.</span>
+
+<span class="sd">        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">h5</span><span class="o">.</span><span class="n">file_exists</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">grid_description</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_description</span><span class="p">()</span>
+
+        <span class="n">description</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__get_desc__</span><span class="p">()</span>
+        <span class="n">grid_description</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">description</span><span class="p">)</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;parameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;parameter&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">h5</span><span class="o">.</span><span class="n">HDF5</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">file</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">grid_description</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GriddedSaved.load"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.GriddedSaved.load">[docs]</a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load the object using ``__set_desc__`` to digest the description.</span>
+
+<span class="sd">        It will use the grid loaded from file to determine the grid of the instance.</span>
+
+<span class="sd">        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;parameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">with</span> <span class="n">h5</span><span class="o">.</span><span class="n">HDF5</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+            <span class="n">description</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
+
+            <span class="c1"># TODO If there&#39;s already a grid and they don&#39;t match, resample instead or overwriting</span>
+            <span class="k">if</span> <span class="s1">&#39;space&#39;</span> <span class="ow">in</span> <span class="n">description</span><span class="p">:</span>
+                <span class="n">space</span> <span class="o">=</span> <span class="n">Space</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                              <span class="n">spacing</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span>
+                              <span class="n">extra</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">extra</span><span class="p">,</span>
+                              <span class="n">absorbing</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">absorbing</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="o">.</span><span class="n">space</span> <span class="o">=</span> <span class="n">space</span>
+
+            <span class="k">if</span> <span class="s1">&#39;time&#39;</span> <span class="ow">in</span> <span class="n">description</span><span class="p">:</span>
+                <span class="n">time</span> <span class="o">=</span> <span class="n">Time</span><span class="p">(</span><span class="n">start</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
+                            <span class="n">stop</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span>
+                            <span class="n">step</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">step</span><span class="p">,</span>
+                            <span class="n">num</span><span class="o">=</span><span class="n">description</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">num</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_grid</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">time</span>
+
+            <span class="k">if</span> <span class="s1">&#39;slow_time&#39;</span> <span class="ow">in</span> <span class="n">description</span><span class="p">:</span>
+                <span class="k">pass</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">__set_desc__</span><span class="p">(</span><span class="n">description</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="GriddedSaved.grid_description"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.GriddedSaved.grid_description">[docs]</a>    <span class="k">def</span> <span class="nf">grid_description</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get a description of the grid of the object.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Description of the grid.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">grid_description</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span>
+            <span class="n">grid_description</span><span class="p">[</span><span class="s1">&#39;space&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;shape&#39;</span><span class="p">:</span> <span class="n">space</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="s1">&#39;spacing&#39;</span><span class="p">:</span> <span class="n">space</span><span class="o">.</span><span class="n">spacing</span><span class="p">,</span>
+                <span class="s1">&#39;extra&#39;</span><span class="p">:</span> <span class="n">space</span><span class="o">.</span><span class="n">extra</span><span class="p">,</span>
+                <span class="s1">&#39;absorbing&#39;</span><span class="p">:</span> <span class="n">space</span><span class="o">.</span><span class="n">absorbing</span><span class="p">,</span>
+            <span class="p">}</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">time</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">time</span>
+            <span class="n">grid_description</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s1">&#39;start&#39;</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
+                <span class="s1">&#39;stop&#39;</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span>
+                <span class="s1">&#39;step&#39;</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">step</span><span class="p">,</span>
+                <span class="s1">&#39;num&#39;</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">num</span><span class="p">,</span>
+            <span class="p">}</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">slow_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="k">return</span> <span class="n">grid_description</span></div>
+
+<div class="viewcode-block" id="GriddedSaved.resample"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.GriddedSaved.resample">[docs]</a>    <span class="k">def</span> <span class="nf">resample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grid</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">slow_time</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">grid</span><span class="o">=</span><span class="n">grid</span><span class="p">,</span> <span class="n">space</span><span class="o">=</span><span class="n">space</span><span class="p">,</span> <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span> <span class="n">slow_time</span><span class="o">=</span><span class="n">slow_time</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="ProblemBase"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.ProblemBase">[docs]</a><span class="k">class</span> <span class="nc">ProblemBase</span><span class="p">(</span><span class="n">GriddedSaved</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Base class for the different components of the problem that need to have access to it and</span>
+<span class="sd">    that also create sub-problems.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Name of the object.</span>
+<span class="sd">    problem : Problem</span>
+<span class="sd">        Problem to which the object belongs.</span>
+<span class="sd">    grid : Grid or any of Space or Time</span>
+<span class="sd">        Grid on which the object is defined</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">problem</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">problem</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;space&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;space&#39;</span><span class="p">,</span> <span class="n">problem</span><span class="o">.</span><span class="n">space</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;time&#39;</span><span class="p">,</span> <span class="n">problem</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;slow_time&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;slow_time&#39;</span><span class="p">,</span> <span class="n">problem</span><span class="o">.</span><span class="n">slow_time</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_problem</span> <span class="o">=</span> <span class="n">problem</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">problem</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Access problem object.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_problem</span>
+
+<div class="viewcode-block" id="ProblemBase.sub_problem"><a class="viewcode-back" href="../../../stride/api/problem_definition/base.html#stride.problem_definition.base.ProblemBase.sub_problem">[docs]</a>    <span class="k">def</span> <span class="nf">sub_problem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shot</span><span class="p">,</span> <span class="n">sub_problem</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a subset object for a certain shot.</span>
+
+<span class="sd">        A SubProblem contains everything that is needed to fully determine how to run a particular shot.</span>
+<span class="sd">        This method takes care of selecting the portions of the object that are needed</span>
+<span class="sd">        for a given shot.</span>
+
+<span class="sd">        By default, this has no effect.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        shot : Shot</span>
+<span class="sd">            Shot for which the SubProblem is being generated.</span>
+<span class="sd">        sub_problem : SubProblem</span>
+<span class="sd">            Container for the sub-problem being generated.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ProblemBase</span>
+<span class="sd">            ProblemBase instance.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright .
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
