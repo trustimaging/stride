@@ -19,3 +19,46 @@ To install Stride, follow these steps:
     conda env create -f environment.yml
     conda activate stride
     pip install -e .
+
+
+Additional packages
+-------------------
+
+To access the 3D visualisation capabilities, we also recommend installing MayaVi:
+
+.. code-block:: shell
+
+    conda install -c conda-forge mayavi
+
+
+and installing Jupyter notebook is recommended to access all the examples:
+
+.. code-block:: shell
+
+    conda install -c conda-forge notebook
+
+
+GPU support
+-----------
+
+The Devito library uses OpenACC to generate GPU code. The recommended way to access the necessary
+compilers is to install the `NVIDIA HPC SDK <https://developer.nvidia.com/nvidia-hpc-sdk-downloads>`_.
+
+.. code-block:: shell
+
+    wget https://developer.download.nvidia.com/hpc-sdk/21.2/nvhpc_2021_212_Linux_x86_64_cuda_multi.tar.gz
+    tar xpzf nvhpc_2021_212_Linux_x86_64_cuda_multi.tar.gz
+    cd nvhpc_2021_212_Linux_x86_64_cuda_multi/
+    sudo ./install
+
+During the installation, select the `single system install` option.
+
+Once the installation is done, you can add the following lines to your `~/.bashrc`:
+
+.. code-block:: shell
+
+    export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/compilers/bin/:$PATH
+    export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/compilers/lib/:$LD_LIBRARY_PATH
+    export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/bin/:$PATH
+    export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/lib/:$LD_LIBRARY_PATH
+
