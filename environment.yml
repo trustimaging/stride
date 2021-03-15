@@ -1,0 +1,36 @@
+name: stride
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.7
+  - blosc
+  - cached-property
+  - click
+  - cloudpickle>=1.6
+  - cython
+  - flake8
+  - gputil
+  - h5py>=3.1
+  - matplotlib==3.1
+  - numpy>=1.19
+  - pickle5
+  - pip
+  - pre-commit
+  - psutil
+  - pyflakes
+  - pytest
+  - pytest-cov
+  - pyyaml
+  - pytest-runner
+  - pyzmq>=20.0
+  - scikit-image
+  - scipy>=1.6
+  - sphinx
+  - sphinx_rtd_theme
+  - traitsui
+  - wxPython
+  - zlib
+  - pip:
+      - devito
+      - python-daemon
