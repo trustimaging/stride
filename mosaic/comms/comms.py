@@ -313,13 +313,26 @@ class InboundConnection(Connection):
         if self._state != 'disconnected':
             return
 
+        # OSX does not like looking into other processes connections
+        try:
+            existing_ports = [each.laddr.port for each in psutil.net_connections()]
+        except psutil.AccessDenied:
+            existing_ports = []
+
         if self._port is None:
             self._port = 3000
-            existing_ports = [each.laddr.port for each in psutil.net_connections()]
-            while self._port in existing_ports:
-                self._port += 1
 
-        self._socket.bind(self.bind_address)
+        while self._port in existing_ports:
+            self._port += 1
+
+        # If no existing ports were retrieved, we might need to do
+        # some trial and error
+        while True:
+            try:
+                self._socket.bind(self.bind_address)
+                break
+            except zmq.error.ZMQError:
+                self._port += 1
 
         self._state = 'connected'
 

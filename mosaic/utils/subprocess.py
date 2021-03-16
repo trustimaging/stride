@@ -283,10 +283,9 @@ class Subprocess:
 
         """
         if self._ps_process is not None:
+            # OSX does not allow accessing information on external processes
             try:
                 return self._ps_process.memory_info().rss
-
-            # OSX does not allow accessing information on external processes
             except psutil.AccessDenied:
                 pass
 
@@ -303,7 +302,11 @@ class Subprocess:
 
         """
         if self._ps_process is not None:
-            return self._ps_process.cpu_percent(interval=None)
+            # OSX does not allow accessing information on external processes
+            try:
+                return self._ps_process.cpu_percent(interval=None)
+            except psutil.AccessDenied:
+                pass
 
         return 0
 
