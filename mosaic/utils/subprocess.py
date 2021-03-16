@@ -283,7 +283,12 @@ class Subprocess:
 
         """
         if self._ps_process is not None:
-            return self._ps_process.memory_info().rss
+            try:
+                return self._ps_process.memory_info().rss
+
+            # OSX does not allow accessing information on external processes
+            except psutil.AccessDenied:
+                pass
 
         return 0
 
