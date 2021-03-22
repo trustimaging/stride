@@ -1,12 +1,16 @@
 
 
-# Stride - A (somewhat) general optimisation framework for medical ultrasound imaging
+# Stride - A (somewhat) general optimisation framework for medical ultrasound tomography
+
+[![Build Status](https://github.com/trustimaging/stride/workflows/CI/badge.svg)](https://github.com/trustimaging/stride/actions?query=workflow%3ACI)
 
 Stride is an open-source library for medical ultrasound modelling and tomography. 
 It lets users easily prototype medical imaging algorithms with only a few lines of Python code that 
 can run seamlessly on a Jupyter notebook, a multi-node CPU cluster or a DGX station with production-grade performance. 
 Stride provides end-to-end definition of the imaging process using state-of-the-art reconstruction algorithms, 
 and the flexibility to (re)define every step of the optimisation.
+
+- [Documentation](https://strideimaging.readthedocs.io/)
 
 
 ## Quickstart
@@ -62,14 +66,16 @@ mrun python 04_script_inverse.py
 
 ## Documentation
 
-You can build and access the documentation by running:
+The documentation for Stride is available online [here](https://strideimaging.readthedocs.io/).
+
+You can also build and access the documentation by running:
 
 ```sh
 cd docs
 make html
 ```
 
-and opening the generated ``docs_build/index.html`` in your browser.
+and opening the generated ``build/index.html`` in your browser.
 
 
 

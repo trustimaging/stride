@@ -1,8 +1,12 @@
 
+import os
 import numpy as np
 
 
 try:
+    if not os.environ.get('DISPLAY', None):
+        raise ModuleNotFoundError
+
     import matplotlib.pyplot as plt
 
     ENABLED_2D_PLOTTING = True
@@ -85,7 +89,7 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
     """
 
     if not ENABLED_2D_PLOTTING:
-        return None
+        return None, None
 
     if len(args) > 2:
         trace_axis = args[0]

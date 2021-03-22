@@ -2,6 +2,7 @@
 import gc
 import copy
 import numpy as np
+import scipy.ndimage
 
 from .base import GriddedSaved
 from .. import plotting
@@ -93,8 +94,6 @@ class StructuredData(Data):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._data = None
-
         shape = kwargs.pop('shape', None)
         extended_shape = kwargs.pop('extended_shape', None)
         inner = kwargs.pop('inner', None)
@@ -104,14 +103,17 @@ class StructuredData(Data):
             extended_shape = extended_shape or shape
 
             if inner is None:
-                extra = [each_extended - each_shape for each_extended, each_shape in zip(extended_shape, shape)]
-                inner = tuple([slice(each_extra, each_extra + each_shape) for each_extra, each_shape in zip(extra, shape)])
+                extra = [each_extended - each_shape
+                         for each_extended, each_shape in zip(extended_shape, shape)]
+                inner = tuple([slice(each_extra, each_extra + each_shape)
+                               for each_extra, each_shape in zip(extra, shape)])
 
         self._shape = shape
         self._extended_shape = extended_shape
         self._inner = inner
         self._dtype = dtype
 
+        self._data = None
         data = kwargs.pop('data', None)
 
         if data is not None:
@@ -255,7 +257,7 @@ class StructuredData(Data):
 
         self._data.fill(value)
 
-    def pad_data(self, data):
+    def pad_data(self, data, smooth=False):
         """
         Pad input data to match the extended shape of the StructuredData.
 
@@ -263,6 +265,8 @@ class StructuredData(Data):
         ----------
         data : ndarray
             Array to pad.
+        smooth : bool, optional
+            Whether or not to smooth the padding area, defaults to False
 
         Returns
         -------
@@ -276,7 +280,25 @@ class StructuredData(Data):
         pad_widths = [[each // 2, each // 2] for each in pad_widths]
 
         if np.asarray(pad_widths).sum() > 0:
-            return np.pad(data, pad_widths, mode='edge')
+            data = np.pad(data, pad_widths, mode='edge')
+
+            if smooth is True:
+                for dim, width in zip(range(len(pad_widths)), pad_widths):
+                    # : slices
+                    all_ind = [slice(0, d) for d in data.shape]
+
+                    for pos in range(0, width[0], 5):
+                        sigma = pos / width[0] * 3.0
+
+                        # Left slice for dimension
+                        all_ind[dim] = slice(0, width[0] + 1 - pos)
+                        data[tuple(all_ind)] = scipy.ndimage.gaussian_filter(data[tuple(all_ind)], sigma=sigma)
+
+                        # right slice for dimension
+                        all_ind[dim] = slice(data.shape[dim] - width[1] - 1 + pos, data.shape[dim])
+                        data[tuple(all_ind)] = scipy.ndimage.gaussian_filter(data[tuple(all_ind)], sigma=sigma)
+
+            return data
 
         else:
             return data
@@ -418,10 +440,9 @@ class StructuredData(Data):
 
         self._inner = tuple(inner)
 
-        if hasattr(description.data, 'load'):
-            data = description.data.load()
-        else:
-            data = description.data
+        data = description.data
+        if hasattr(data, 'load'):
+            data = data.load()
 
         self.extended_data[:] = self.pad_data(data)
 
@@ -563,9 +584,17 @@ class ScalarField(StructuredData):
         return description
 
     def __set_desc__(self, description):
-        super().__set_desc__(description)
+        # TODO Not entirely convinved by this solution
+        # super().__set_desc__(description)
 
+        self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
+
+        data = description.data
+        if hasattr(data, 'load'):
+            data = data.load()
+
+        self.extended_data[:] = self.pad_data(data)
 
 
 class VectorField(ScalarField):

@@ -248,7 +248,7 @@ class Block:
     such as the frequency band used or the step size applied.
 
     These can be given to the block through the default ``Block.config``, which will take care
-    of creating and configuring the ``pipeline``s that implement these conditions.
+    of creating and configuring the ``pipeline`` that implement these conditions.
 
     Pipelines can be accessed through ``Block.pipelines`` using dot notation.
 

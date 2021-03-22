@@ -39,6 +39,10 @@ def fetch(origin, dest, token=None):
     if os.path.exists(dest):
         return
 
+    folder = os.path.dirname(dest)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
     if origin in known_assets:
         origin = known_assets[origin]
 

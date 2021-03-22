@@ -2,7 +2,7 @@
 import mosaic
 
 from stride import *
-from stride.utils import wavelets
+from stride.utils import fetch, wavelets
 
 
 async def main(runtime):
@@ -31,6 +31,7 @@ async def main(runtime):
 
     # Create medium
     vp = ScalarField('vp', grid=problem.grid)
+    fetch('anastasio2D', dest='data/anastasio2D-TrueModel.h5')
     vp.load('data/anastasio2D-TrueModel.h5')
 
     problem.medium.add(vp)
