@@ -68,11 +68,20 @@ class AcousticDevito(ProblemTypeBase):
         self._adjoint_operator.set_problem(problem)
 
         self.drp = kwargs.get('drp', False)
-        self.check_conditions()
+        preferred_kernel = kwargs.get('kernel', None)
+        self.check_conditions(preferred_kernel)
 
-    def check_conditions(self):
+        runtime = mosaic.runtime()
+        runtime.logger.info('Selected time stepping scheme %s' % (self.kernel,))
+
+    def check_conditions(self, preferred_kernel=None):
         """
         Check CFL and dispersion conditions, and select appropriate OT method.
+
+        Parameters
+        ----------
+        preferred_kernel : str, optional
+            Preferred kernel to run, defaults to internally calculated.
 
         Returns
         -------
@@ -109,36 +118,38 @@ class AcousticDevito(ProblemTypeBase):
         dt = time.step
 
         dt_max_OT2 = self._dt_max(2.0 / np.pi, h, vp_max)
-        dt_max_OT4 = self._dt_max(3.6 * np.pi, h, vp_max)
+        dt_max_OT4 = self._dt_max(3.6 / np.pi, h, vp_max)
+
+        crossing_factor = dt*vp_max / h * 100
 
         recompile = False
         if dt <= dt_max_OT2:
-            runtime.logger.info('Time grid spacing (%.3f \u03BCs) is '
-                                'below OT2 limit (%.3f \u03BCs)' % (dt / 1e-6, dt_max_OT2 / 1e-6))
+            runtime.logger.info('Time grid spacing (%.3f \u03BCs | %d%%) is '
+                                'below OT2 limit (%.3f \u03BCs)' %
+                                (dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
 
-            if self.kernel != 'OT2':
-                recompile = True
-
-            self.kernel = 'OT2'
+            selected_kernel = 'OT2'
 
         elif dt <= dt_max_OT4:
-            runtime.logger.info('Time grid spacing (%.3f \u03BCs) is '
-                                'above OT2 limit (%.3f \u03BCs), '
-                                'switching to OT4' % (dt / 1e-6, dt_max_OT2 / 1e-6))
+            runtime.logger.info('Time grid spacing (%.3f \u03BCs | %d%%) is '
+                                'above OT2 limit (%.3f \u03BCs)'
+                                % (dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
 
-            if self.kernel != 'OT4':
-                recompile = True
-
-            self.kernel = 'OT4'
+            selected_kernel = 'OT4'
 
         else:
-            runtime.logger.warn('Time grid spacing (%.3f \u03BCs) is '
-                                'above OT4 limit (%.3f \u03BCs)' % (dt / 1e-6, dt_max_OT4 / 1e-6))
+            runtime.logger.warn('Time grid spacing (%.3f \u03BCs | %d%%) is '
+                                'above OT4 limit (%.3f \u03BCs)'
+                                % (dt / 1e-6, crossing_factor, dt_max_OT4 / 1e-6))
 
-            if self.kernel != 'OT4':
-                recompile = True
+            selected_kernel = 'OT4'
 
-            self.kernel = 'OT4'
+        selected_kernel = selected_kernel if preferred_kernel is None else preferred_kernel
+
+        if self.kernel != selected_kernel:
+            recompile = True
+
+        self.kernel = selected_kernel
 
         # Select undersampling level
         f_max *= 4
@@ -150,6 +161,8 @@ class AcousticDevito(ProblemTypeBase):
             recompile = True
 
         self.undersampling_factor = undersampling
+
+        runtime.logger.info('Selected undersampling level %d' % (undersampling,))
 
         # Maybe recompile
         if recompile:
@@ -213,7 +226,7 @@ class AcousticDevito(ProblemTypeBase):
                 p_saved = self._grid.undersampled_time_function('p_saved',
                                                                 factor=self.undersampling_factor)
 
-                update_saved = [devito.Eq(p_saved, self._saved(p, m))]
+                update_saved = [devito.Eq(p_saved, self._saved(p, m, inv_m))]
                 kwargs['p_saved'] = p_saved
 
             else:
@@ -257,9 +270,10 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.vars.inv_m.data_with_halo[:] = self._grid.with_halo(medium.vp.extended_data)**2
 
         # Set geometry
+        wavelets = shot.wavelets.data
         self._src_scale = 1000. / (np.max(medium.vp.extended_data)**2 * time.step**2)
-        self._max_wavelet = np.max(np.abs(shot.wavelets.data))
-        self._grid.vars.src.data[:] = shot.wavelets.data.T * self._src_scale / self._max_wavelet
+        self._max_wavelet = np.max(np.abs(wavelets))
+        self._grid.vars.src.data[:] = wavelets.T * self._src_scale / self._max_wavelet
 
         self._grid.vars.src.coordinates.data[:] = shot.source_coordinates
         self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
@@ -569,7 +583,7 @@ class AcousticDevito(ProblemTypeBase):
         u_dt = field.dt if forward else field.dt.T
 
         # Get the spatial FD
-        laplacian = self._grid.function('laplacian', coefficients='symbolic')
+        laplacian = self._grid.function('laplacian', coefficients='symbolic' if self.drp else 'standard')
         laplacian_expr = self._laplacian(field, laplacian, m, inv_m)
 
         # Define PDE and update rule

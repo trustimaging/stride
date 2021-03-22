@@ -223,8 +223,8 @@ class GriddedSaved(Saved, Gridded):
         with h5.HDF5(*args, **kwargs, mode='r') as file:
             description = file.load()
 
-            # TODO If there's already a grid and they don't match, resample instead or overwriting
-            if 'space' in description:
+            # TODO If there's already a grid and they don't match, resample instead
+            if 'space' in description and self._grid.space is None:
                 space = Space(shape=description.space.shape,
                               spacing=description.space.spacing,
                               extra=description.space.extra,
@@ -232,7 +232,7 @@ class GriddedSaved(Saved, Gridded):
 
                 self._grid.space = space
 
-            if 'time' in description:
+            if 'time' in description and self._grid.time is None:
                 time = Time(start=description.time.start,
                             stop=description.time.stop,
                             step=description.time.step,

@@ -203,7 +203,7 @@ class Problem(Gridded):
 
         return sub_problem
 
-    async def forward(self, shot_ids=None, dump=True, deallocate=True, **kwargs):
+    async def forward(self, shot_ids=None, dump=True, deallocate=False, **kwargs):
         """
         Run the problem forward with default parameters.
 
@@ -219,7 +219,7 @@ class Problem(Gridded):
             Whether or not the generated data should be dumped to disk, defaults to True.
         deallocate : bool, optional
             Whether or not to deallocate the generated data after each Shot is completed,
-            defaults to True.
+            defaults to False.
 
         Returns
         -------
