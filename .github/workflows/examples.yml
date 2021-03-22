@@ -47,9 +47,9 @@ jobs:
       shell: bash -l {0}
       run: |
         mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_2D.py
-        mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_3D.py
+      # mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_3D.py
     - name: Breast 2D
       shell: bash -l {0}
       run: |
         mrun -nw 1 -nth 2 python examples/stride/breast2D/03_script_forward.py
-        mrun -nw 1 -nth 2 python examples/stride/breast2D/03_script_inverse.py
+        mrun -nw 1 -nth 2 python examples/stride/breast2D/04_script_inverse.py
