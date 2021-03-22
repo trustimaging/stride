@@ -107,6 +107,11 @@ class AcousticDevito(ProblemTypeBase):
                             'wavelet %.3f-%.3f MHz' % (f_min / 1e6, f_max / 1e6))
 
         # Check for dispersion
+        if self.drp is True:
+            self.drp = False
+
+            runtime.logger.warn('DRP weights are not implemented in this version of stride')
+
         h = max(*space.spacing)
         h_max = vp_min / (5 * f_max)
 

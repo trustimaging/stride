@@ -3,7 +3,6 @@ import sys
 import uuid
 import tblib
 import asyncio
-import weakref
 import contextlib
 import cloudpickle
 from cached_property import cached_property
