@@ -6,7 +6,6 @@ on:
    push:
      branches:
        - master
-       - fw3d_match
    pull_request:
      branches:
        - master

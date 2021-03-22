@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - master
-      - fw3d_match
   pull_request:
     branches:
       - master
@@ -47,7 +46,7 @@ jobs:
       shell: bash -l {0}
       run: |
         mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_2D.py
-      # mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_3D.py
+        mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_3D.py
     - name: Breast 2D
       shell: bash -l {0}
       run: |
