@@ -141,7 +141,11 @@ def go(cmd=None, **kwargs):
                                      stdout=_stdout,
                                      stderr=_stderr)
 
-        _runtime.logger.info('Process ended with code: %d' % process.returncode)
+        if process.returncode == 0:
+            _runtime.logger.info('Process ended with code: %d' % process.returncode)
+
+        else:
+            raise RuntimeError('Process ended with code: %d' % process.returncode)
 
     async def main():
         await loop.run_in_executor(run_head, args=(), kwargs={})
