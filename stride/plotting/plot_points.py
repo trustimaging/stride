@@ -1,7 +1,11 @@
 
+import os
 import numpy as np
 
 try:
+    if not os.environ.get('DISPLAY', None):
+        raise ModuleNotFoundError
+
     import matplotlib.pyplot as plt
 
     ENABLED_2D_PLOTTING = True
@@ -9,6 +13,9 @@ except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
 try:
+    if not os.environ.get('DISPLAY', None):
+        raise ModuleNotFoundError
+
     from mayavi import mlab
     from mayavi.core.ui.api import MlabSceneModel
 

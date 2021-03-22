@@ -3,7 +3,7 @@ import os
 import functools
 import warnings
 try:
-    if os.environ.get('DISPLAY', None) is None:
+    if not os.environ.get('DISPLAY', None):
         raise ModuleNotFoundError
 
     os.environ['ETS_TOOLKIT'] = 'qt4'
@@ -26,6 +26,9 @@ except (ModuleNotFoundError, RuntimeError):
     ENABLED_3D_PLOTTING = False
 
 try:
+    if not os.environ.get('DISPLAY', None):
+        raise ModuleNotFoundError
+
     import matplotlib.pyplot as plt
 
     ENABLED_2D_PLOTTING = True
