@@ -10,6 +10,8 @@ can run seamlessly on a Jupyter notebook, a multi-node CPU cluster or a DGX stat
 Stride provides end-to-end definition of the imaging process using state-of-the-art reconstruction algorithms, 
 and the flexibility to (re)define every step of the optimisation.
 
+- [Documentation](https://strideimaging.readthedocs.io/)
+
 
 ## Quickstart
 
@@ -64,7 +66,9 @@ mrun python 04_script_inverse.py
 
 ## Documentation
 
-You can build and access the documentation by running:
+The documentation for Stride is available online [here](https://strideimaging.readthedocs.io/).
+
+You can also build and access the documentation by running:
 
 ```sh
 cd docs

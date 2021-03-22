@@ -11,7 +11,7 @@ from stride.utils import wavelets
 
 async def main(runtime):
     # Create the grid
-    shape = (500, 500, 500)
+    shape = (300, 300, 300)
     extra = (50, 50, 50)
     absorbing = (40, 40, 40)
     spacing = (0.5e-3, 0.5e-3, 0.5e-3)

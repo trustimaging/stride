@@ -34,7 +34,6 @@ async def main(runtime):
     # Create medium
     vp = ScalarField('vp', grid=problem.grid)
     fetch('anastasio3D',
-          token='<GitHub access token>',
           dest='data/anastasio3D-TrueModel.h5')
     vp.load('data/anastasio3D-TrueModel.h5')
 
