@@ -6,6 +6,8 @@
 
 [![Build Status](https://github.com/trustimaging/stride/workflows/CI/badge.svg)](https://github.com/trustimaging/stride/actions?query=workflow%3ACI)
 [![Documentation Status](https://readthedocs.org/projects/strideimaging/badge/?version=latest)](https://strideimaging.readthedocs.io/en/latest/?badge=latest)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/trustimaging/stride/HEAD)
+
 
 
 Stride is an open-source library for medical ultrasound modelling and tomography. 
@@ -66,6 +68,8 @@ Once you've run anastasio2D forward, you can run the corresponding inverse probl
 ```sh
 mrun python 04_script_inverse.py
 ```
+
+You can also open our interactive Jupyter notebooks in the public [binder](https://mybinder.org/v2/gh/trustimaging/stride/HEAD).
 
 
 ## Documentation
