@@ -2,10 +2,11 @@
 Stride
 ======
 
-This is the Stride documentation.
-
-`Stride <https://github.com/trustimaging/stride>`_ is a (somewhat)
-general optimisation framework for medical ultrasound imaging.
+`Stride <https://github.com/trustimaging/stride>`_ is an open-source library for medical ultrasound modelling and tomography.
+It lets users easily prototype medical imaging algorithms with only a few lines of Python code that
+can run seamlessly on a Jupyter notebook, a multi-node CPU cluster or a DGX station with production-grade performance.
+Stride provides end-to-end definition of the imaging process using state-of-the-art reconstruction algorithms,
+and the flexibility to (re)define every step of the optimisation.
 
 Getting started
 ---------------
