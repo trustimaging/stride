@@ -1,5 +1,7 @@
 
 
+![stride](docs/source/_static/stride_logo.png)
+
 # Stride - A (somewhat) general optimisation framework for medical ultrasound tomography
 
 [![Build Status](https://github.com/trustimaging/stride/workflows/CI/badge.svg)](https://github.com/trustimaging/stride/actions?query=workflow%3ACI)
