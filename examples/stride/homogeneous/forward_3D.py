@@ -23,7 +23,7 @@ async def main(runtime):
 
     start = 0.
     step = 0.08e-6
-    num = 2500
+    num = 1200
 
     time = Time(start=start,
                 step=step,
