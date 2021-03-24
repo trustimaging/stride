@@ -1,6 +1,6 @@
 
 
-![stride](docs/source/_static/stride_logo.png)
+<img src="docs/source/_static/stride_logo.png" width="600" style="max-width:100%; margin:0 auto; display:block;">
 
 # Stride - A (somewhat) general optimisation framework for medical ultrasound tomography
 
