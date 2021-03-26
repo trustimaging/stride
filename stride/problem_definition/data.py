@@ -587,6 +587,24 @@ class ScalarField(StructuredData):
         # TODO Not entirely convinved by this solution
         # super().__set_desc__(description)
 
+        # TODO and this should not be repeated
+        if self.space is not None and self._shape is None:
+            shape = ()
+            extended_shape = ()
+            inner = ()
+            if self._time_dependent:
+                shape += (self.time.num,)
+                extended_shape += (self.time.extended_num,)
+                inner += (self.time.inner,)
+
+            shape += self.space.shape
+            extended_shape += self.space.extended_shape
+            inner += self.space.inner
+
+            self._shape = shape
+            self._extended_shape = extended_shape
+            self._inner = inner
+
         self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
 

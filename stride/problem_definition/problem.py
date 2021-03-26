@@ -385,7 +385,7 @@ class Problem(Gridded):
 
         variables.update_problem(sub_problem)
 
-        await runner.set_problem(sub_problem, **kwargs)
+        await (await runner.set_problem(sub_problem, **kwargs))
 
         if needs_grad is True:
             task = await runner.run_gradient(variables, **kwargs)

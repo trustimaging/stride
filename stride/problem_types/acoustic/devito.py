@@ -232,7 +232,6 @@ class AcousticDevito(ProblemTypeBase):
                                                                 factor=self.undersampling_factor)
 
                 update_saved = [devito.Eq(p_saved, self._saved(p, m, inv_m))]
-                kwargs['p_saved'] = p_saved
 
             else:
                 update_saved = []
