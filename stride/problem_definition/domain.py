@@ -51,6 +51,22 @@ class Space:
         self.limit = size
         self.extended_limit = extended_size
 
+    @property
+    def size(self):
+        """
+        Alias for the domain limit.
+
+        """
+        return self.limit
+
+    @property
+    def extended_size(self):
+        """
+        Alias for the extended domain limit.
+
+        """
+        return self.extended_limit
+
     def resample(self):
         raise NotImplementedError('Resampling has not been implemented yet')
 

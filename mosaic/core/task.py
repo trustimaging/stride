@@ -74,8 +74,8 @@ class Task(RemoteBase):
         self._tic = None
         self._elapsed = None
 
-        self._args_pending = weakref.WeakSet()
-        self._kwargs_pending = weakref.WeakSet()
+        self._args_pending = set()
+        self._kwargs_pending = set()
 
         self._args_value = dict()
         self._kwargs_value = dict()
@@ -121,7 +121,7 @@ class Task(RemoteBase):
         tuple
 
         """
-        args = [value for key, value in sorted(self._args_value.items(), key=operator.itemgetter(1))]
+        args = [value for key, value in sorted(self._args_value.items(), key=operator.itemgetter(0))]
 
         return tuple(args)
 
@@ -234,10 +234,13 @@ class Task(RemoteBase):
                         self._args_value[index] = None
                     self._args_pending.add(arg)
 
-                    def callback(fut):
-                        self.loop.run(self._set_arg_done, args=(index, arg))
+                    def callback(_index, _arg):
+                        def _callback(fut):
+                            self.loop.run(self._set_arg_done, args=(_index, _arg))
 
-                    arg.add_done_callback(callback)
+                        return _callback
+
+                    arg.add_done_callback(callback(index, arg))
 
                 else:
                     result = await arg.result()
@@ -257,10 +260,13 @@ class Task(RemoteBase):
                         self._kwargs_value[key] = None
                     self._kwargs_pending.add(value)
 
-                    def callback(fut):
-                        self.loop.run(self._set_kwarg_done, args=(key, value))
+                    def callback(_key, _arg):
+                        def _callback(fut):
+                            self.loop.run(self._set_kwarg_done, args=(_key, _arg))
 
-                    value.add_done_callback(callback)
+                        return _callback
+
+                    value.add_done_callback(callback(key, value))
 
                 else:
                     result = await value.result()
@@ -317,7 +323,10 @@ class Task(RemoteBase):
         if not isinstance(arg, TaskDone):
             self._args_value[index] = result
 
-        self._args_pending.remove(arg)
+        try:
+            self._args_pending.remove(arg)
+        except KeyError:
+            pass
         await self._check_ready()
 
     async def _set_kwarg_done(self, index, arg):
@@ -327,7 +336,10 @@ class Task(RemoteBase):
         if not isinstance(arg, TaskDone):
             self._kwargs_value[index] = result
 
-        self._kwargs_pending.remove(arg)
+        try:
+            self._kwargs_pending.remove(arg)
+        except KeyError:
+            pass
         await self._check_ready()
 
     async def _check_ready(self):
@@ -565,7 +577,7 @@ class TaskProxy(ProxyBase):
         # Synchronise the task state, in case something has happened between
         # the moment when it was pickled until it has been re-registered on
         # this side
-        # instance.check_result()
+        instance.loop.run(instance.check_result)
 
         return instance
 

@@ -3,6 +3,7 @@ import os
 import devito
 import logging
 import functools
+import itertools
 import numpy as np
 
 import mosaic
@@ -12,17 +13,90 @@ from mosaic.types import Struct
 __all__ = ['OperatorDevito', 'GridDevito']
 
 
-class PhysicalDomain(devito.SubDomain):
+class FullDomain(devito.SubDomain):
 
-    name = 'physical_domain'
+    name = 'full_domain'
 
     def __init__(self, space_order, extra):
-        super(PhysicalDomain, self).__init__()
+        super().__init__()
+
         self.space_order = space_order
         self.extra = extra
 
     def define(self, dimensions):
         return {dimension: dimension for dimension in dimensions}
+
+
+class InteriorDomain(devito.SubDomain):
+
+    name = 'interior_domain'
+
+    def __init__(self, space_order, extra):
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        return {dimension: ('middle', extra, extra)
+                for dimension, extra in zip(dimensions, self.extra)}
+
+
+class PMLSide(devito.SubDomain):
+
+    def __init__(self, space_order, extra, dim, side):
+        self.dim = dim
+        self.side = side
+        self.name = 'pml_' + side + str(dim)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: dimension for dimension in dimensions}
+        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+
+        return domain
+
+
+class PMLCentre(devito.SubDomain):
+
+    def __init__(self, space_order, extra, dim, side):
+        self.dim = dim
+        self.side = side
+        self.name = 'pml_' + side + str(dim)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: ('middle', extra, extra)
+                  for dimension, extra in zip(dimensions, self.extra)}
+        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+
+        return domain
+
+
+class PMLCorner(devito.SubDomain):
+
+    def __init__(self, space_order, extra, *sides):
+        self.sides = sides
+        self.name = 'pml_' + '_'.join(sides)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: (side, extra)
+                  for dimension, side, extra in zip(dimensions, self.sides, self.extra)}
+
+        return domain
 
 
 def _cached(func):
@@ -75,6 +149,14 @@ class GridDevito:
 
         self.grid = grid
 
+        self.full = None
+        self.interior = None
+        self.pml = None
+        self.pml_centres = None
+        self.pml_corners = None
+        self.pml_left = None
+        self.pml_right = None
+
     # TODO The grid needs to be re-created if the space or time extent has changed
     def set_problem(self, problem):
         """
@@ -93,13 +175,35 @@ class GridDevito:
 
         if self.grid is None:
             space = problem.space
+            order = self.space_order
+            extra = space.absorbing
 
             extended_extent = tuple(np.array(space.spacing) * (np.array(space.extended_shape) - 1))
-            physical_domain = PhysicalDomain(self.space_order, space.extra)
+
+            self.full = FullDomain(order, extra)
+            self.interior = InteriorDomain(order, extra)
+            self.pml_left = tuple()
+            self.pml_right = tuple()
+            self.pml_centres = tuple()
+
+            for dim in range(space.dim):
+                self.pml_left += (PMLSide(order, extra, dim, 'left'),)
+                self.pml_right += (PMLSide(order, extra, dim, 'right'),)
+                self.pml_centres += (PMLCentre(order, extra, dim, 'left'),
+                                     PMLCentre(order, extra, dim, 'right'))
+
+            self.pml_corners = [PMLCorner(order, extra, *sides)
+                                for sides in itertools.product(['left', 'right'],
+                                                               repeat=space.dim)]
+            self.pml_corners = tuple(self.pml_corners)
+
+            self.pml = self.pml_centres + self.pml_corners
+
             self.grid = devito.Grid(extent=extended_extent,
                                     shape=space.extended_shape,
                                     origin=space.pml_origin,
-                                    subdomains=physical_domain,
+                                    subdomains=(self.full, self.interior,) +
+                                               self.pml + self.pml_left + self.pml_right,
                                     dtype=np.float32)
 
     @_cached

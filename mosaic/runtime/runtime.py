@@ -611,8 +611,16 @@ class Runtime(BaseRPC):
 
         if obj_uid not in obj_store.keys():
             obj_store[obj_uid] = obj
+            obj._registered = True
 
         return obj_store[obj_uid]
+
+    def needs_registering(self, obj):
+        obj_type = obj.type
+        obj_uid = obj.uid
+        obj_store = getattr(self, '_' + obj_type)
+
+        return obj_uid not in obj_store.keys()
 
     def deregister(self, obj):
         """

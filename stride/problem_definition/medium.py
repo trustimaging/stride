@@ -1,5 +1,4 @@
 
-import numpy as np
 from collections import OrderedDict
 
 from .base import ProblemBase
@@ -83,69 +82,6 @@ class Medium(ProblemBase):
 
         """
         self._fields[field.name] = field
-
-    def damping(self, damping_coefficient=None, mask=False, damping_type='sine'):
-        """
-        Create a damping field based on the dimensions of the grid.
-
-        Parameters
-        ----------
-        damping_coefficient : float
-            Value of the maximum damping of the field.
-        mask : bool, optional
-            Create the damping layer as a mask (interior filled with ones) or not (interior filled with zeros).
-        damping_type : str, optional
-            Expression to be used for the shape of the damping function, defaults to ``sine``.
-
-        Returns
-        -------
-        ndarray
-            Tensor containing the damping field.
-
-        """
-        # Create a damping field that corresponds to the given field, only scalar for now
-        if mask:
-            damp = np.ones(self.space.extended_shape, dtype=np.float32)
-        else:
-            damp = np.zeros(self.space.extended_shape, dtype=np.float32)
-
-        spacing = self.space.spacing
-        absorbing = self.space.absorbing
-
-        if damping_coefficient is None:
-            if damping_type == 'sine':
-                damping_coefficient = 10 * 3/2 * np.log(1.0 / 0.001)
-
-            elif damping_type == 'quadratic':
-                damping_coefficient = 10 * 3/2 * np.log(1.0 / 0.001)
-
-        for dimension in range(self.space.dim):
-
-            dimension_coefficient = damping_coefficient / absorbing[dimension] \
-                if absorbing[dimension] > 15 else 0.67
-
-            for index in range(absorbing[dimension]):
-                # Damping coefficient
-                pos = np.abs((absorbing[dimension] - index + 1) / float(absorbing[dimension]))
-                if damping_type == 'sine':
-                    val = dimension_coefficient * (pos - np.sin(2 * np.pi * pos) / (2 * np.pi))
-
-                elif damping_type == 'quadratic':
-                    val = dimension_coefficient * pos**2
-
-                else:
-                    raise ValueError('Allowed dumping type are (`sine`, `quadratic`)')
-
-                # : slices
-                all_ind = [slice(0, d) for d in damp.shape]
-                # Left slice for dampening for dimension
-                all_ind[dimension] = slice(index, index + 1)
-                damp[tuple(all_ind)] += val * self.time.step / spacing[dimension]
-                # right slice for dampening for dimension
-                all_ind[dimension] = slice(damp.shape[dimension] - index, damp.shape[dimension] - index + 1)
-                damp[tuple(all_ind)] += val * self.time.step / spacing[dimension]
-
-        return damp
 
     def load(self, *args, **kwargs):
         """
