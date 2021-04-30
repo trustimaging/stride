@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DEVITO_COMPILER: gcc-7
+      DEVITO_COMPILER: gcc
       DEVITO_LANGUAGE: "openmp"
       PYTHON_VERSION: "3.7"
 
