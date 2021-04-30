@@ -117,7 +117,7 @@ class ComplexFrequencyShiftPML2(Boundary):
 
             # Calculate the auxiliary fields
             pde_3 = u_3_dt + (alpha_i + sigma_i) * u_3 - sigma_i ** 2 * (sigma_di + alpha_di) * u_di
-            pde_2 = u_2_dt + (alpha_i + sigma_i) * u_2 - sigma_i * (2 * sigma_di * u_di + alpha_di * u_di + sigma_i * u_di2) + u_3_next
+            pde_2 = u_2_dt + (alpha_i + sigma_i) * u_2 - sigma_i * (2 * sigma_di * u_di + alpha_di * u_di + sigma_i * u_di2) + u_3_next  # noqa: E501
             pde_1 = u_1_dt + (alpha_i + sigma_i) * u_1 - (sigma_di * u_di + 2 * sigma_i * u_di2) + u_2_next
 
             # with the corresponding stencils
