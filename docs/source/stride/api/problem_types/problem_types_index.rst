@@ -8,4 +8,4 @@ Problem Types
     problem_type
     acoustic
     operators
-
+    boundaries
