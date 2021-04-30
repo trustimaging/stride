@@ -1,7 +1,9 @@
 
+import os
 import devito
 from devito.types import Buffer
 import numpy as np
+import scipy.signal
 
 import mosaic
 from mosaic.utils import camel_case
@@ -33,6 +35,7 @@ class AcousticDevito(ProblemTypeBase):
         self.drp = False
         self.undersampling_factor = 4
         self.boundary_type = 'sponge_boundary_2'
+        self.interpolation_type = 'linear'
 
         self._grad = None
 
@@ -84,13 +87,21 @@ class AcousticDevito(ProblemTypeBase):
         self._adjoint_operator.set_problem(problem)
         self._boundary.set_problem(problem)
 
+        self.interpolation_type = kwargs.get('interpolation_type', 'linear')
         self.drp = kwargs.get('drp', False)
         preferred_kernel = kwargs.get('kernel', None)
         preferred_undersampling = kwargs.get('undersampling', None)
+
         self.check_conditions(preferred_kernel, preferred_undersampling)
 
+        # Recompile every time if using hicks
+        if self.interpolation_type == 'hicks':
+            self._state_operator.operator = None
+            self._adjoint_operator.operator = None
+
         runtime = mosaic.runtime()
-        runtime.logger.info('Selected time stepping scheme %s' % (self.kernel,))
+        runtime.logger.info('(ShotID %d) Selected time stepping scheme %s' %
+                            (self._problem.shot_id, self.kernel,))
 
     def check_conditions(self, preferred_kernel=None, preferred_undersampling=None):
         """
@@ -125,21 +136,32 @@ class AcousticDevito(ProblemTypeBase):
 
         self._bandwidth = (f_min, f_centre, f_max)
 
-        runtime.logger.info('Estimated bandwidth for the propagated '
-                            'wavelet %.3f-%.3f MHz' % (f_min / 1e6, f_max / 1e6))
+        runtime.logger.info('(ShotID %d) Estimated bandwidth for the propagated '
+                            'wavelet %.3f-%.3f MHz' % (self._problem.shot_id, f_min / 1e6, f_max / 1e6))
 
         # Check for dispersion
         if self.drp is True:
             self.drp = False
 
-            runtime.logger.warn('DRP weights are not implemented in this version of stride')
+            runtime.logger.warn('(ShotID %d) DRP weights are not implemented in this version of stride' %
+                                self._problem.shot_id)
 
         h = max(*space.spacing)
-        h_max = vp_min / (5 * f_max)
+
+        wavelength = vp_min / f_max
+        ppw = wavelength / h
+        ppw_max = 5
+
+        h_max = wavelength / ppw_max
 
         if h > h_max:
-            runtime.logger.warn('Spatial grid spacing (%.3f mm) is '
-                                'higher than dispersion limit (%.3f mm)' % (h / 1e-3, h_max / 1e-3))
+            runtime.logger.warn('(ShotID %d) Spatial grid spacing (%.3f mm | %d PPW) is '
+                                'higher than dispersion limit (%.3f mm | %d PPW)' %
+                                (self._problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
+        else:
+            runtime.logger.info('(ShotID %d) Spatial grid spacing (%.3f mm | %d PPW) is '
+                                'below dispersion limit (%.3f mm | %d PPW)' %
+                                (self._problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
 
         # Check for instability
         dt = time.step
@@ -151,23 +173,23 @@ class AcousticDevito(ProblemTypeBase):
 
         recompile = False
         if dt <= dt_max_OT2:
-            runtime.logger.info('Time grid spacing (%.3f \u03BCs | %d%%) is '
+            runtime.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
                                 'below OT2 limit (%.3f \u03BCs)' %
-                                (dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
+                                (self._problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
 
             selected_kernel = 'OT2'
 
         elif dt <= dt_max_OT4:
-            runtime.logger.info('Time grid spacing (%.3f \u03BCs | %d%%) is '
+            runtime.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
                                 'above OT2 limit (%.3f \u03BCs)'
-                                % (dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
+                                % (self._problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
 
             selected_kernel = 'OT4'
 
         else:
-            runtime.logger.warn('Time grid spacing (%.3f \u03BCs | %d%%) is '
+            runtime.logger.warn('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
                                 'above OT4 limit (%.3f \u03BCs)'
-                                % (dt / 1e-6, crossing_factor, dt_max_OT4 / 1e-6))
+                                % (self._problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT4 / 1e-6))
 
             selected_kernel = 'OT4'
 
@@ -189,7 +211,8 @@ class AcousticDevito(ProblemTypeBase):
 
         self.undersampling_factor = undersampling
 
-        runtime.logger.info('Selected undersampling level %d' % (undersampling,))
+        runtime.logger.info('(ShotID %d) Selected undersampling level %d' %
+                            (self._problem.shot_id, undersampling,))
 
         # Maybe recompile
         if recompile:
@@ -222,18 +245,25 @@ class AcousticDevito(ProblemTypeBase):
             save = Buffer(save_wavefield) if type(save_wavefield) is int else None
 
             # Define variables
-            src = self._grid.sparse_time_function('src', num=num_sources)
-            rec = self._grid.sparse_time_function('rec', num=num_receivers)
+            src = self._grid.sparse_time_function('src', num=num_sources,
+                                                  coordinates=shot.source_coordinates,
+                                                  interpolation_type=self.interpolation_type)
+            rec = self._grid.sparse_time_function('rec', num=num_receivers,
+                                                  coordinates=shot.receiver_coordinates,
+                                                  interpolation_type=self.interpolation_type)
 
             p = self._grid.time_function('p', coefficients='symbolic' if self.drp else 'standard', save=save)
+            vp = self._grid.function('vp', coefficients='symbolic' if self.drp else 'standard')
             m = self._grid.function('m', coefficients='symbolic' if self.drp else 'standard')
             inv_m = self._grid.function('inv_m', coefficients='symbolic' if self.drp else 'standard')
 
             # Create stencil
-            stencil = self._iso_stencil(p, m, inv_m, direction='forward')
+            stencil = self._iso_stencil(p, vp, m, inv_m, direction='forward')
 
             # Define the source injection function to generate the corresponding code
-            src_term = src.inject(field=p.forward, expr=src * time.step**2 / m)
+            # pressure_to_mass_acc = time.step / (vp * space.spacing**3)
+            # solve_p_dt = time.step**2 * vp**2
+            src_term = src.inject(field=p.forward, expr=src * time.step**3 * vp / max(*space.spacing)**3)
             rec_term = rec.interpolate(expr=p)
 
             op_kwargs = {
@@ -245,7 +275,7 @@ class AcousticDevito(ProblemTypeBase):
                 p_saved = self._grid.undersampled_time_function('p_saved',
                                                                 factor=self.undersampling_factor)
 
-                update_saved = [devito.Eq(p_saved, self._saved(p, m, inv_m))]
+                update_saved = [devito.Eq(p_saved, self._saved(p, vp, m, inv_m))]
 
             else:
                 update_saved = []
@@ -279,23 +309,31 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.vars.src.data_with_halo.fill(0.)
         self._grid.vars.rec.data_with_halo.fill(0.)
         self._grid.vars.p.data_with_halo.fill(0.)
-        self._boundary.clear()
 
         if save_wavefield is True:
             self._grid.vars.p_saved.data_with_halo.fill(0.)
 
         # Set medium parameters
-        self._grid.vars.m.data_with_halo[:] = 1 / self._grid.with_halo(medium.vp.extended_data)**2
-        self._grid.vars.inv_m.data_with_halo[:] = self._grid.with_halo(medium.vp.extended_data)**2
+        vp_with_halo = self._grid.with_halo(medium.vp.extended_data)
+        self._grid.vars.vp.data_with_halo[:] = vp_with_halo
+        self._grid.vars.m.data_with_halo[:] = 1 / vp_with_halo**2
+        self._grid.vars.inv_m.data_with_halo[:] = vp_with_halo**2
 
-        # Set geometry
+        # Set geometry and wavelet
         wavelets = shot.wavelets.data
-        self._src_scale = 1000. / (np.max(medium.vp.extended_data)**2 * time.step**2)
-        self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
-        self._grid.vars.src.data[:] = wavelets.T * self._src_scale / self._max_wavelet
 
-        self._grid.vars.src.coordinates.data[:] = shot.source_coordinates
-        self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
+        # self._src_scale = 1000. / (np.max(medium.vp.extended_data)**2 * time.step**2)
+        self._src_scale = 1000.
+        self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
+
+        window = scipy.signal.get_window(('tukey', 0.01), time.num, False)  # TODO This should happen in a pipeline
+        window = window.reshape((time.num, 1))
+
+        self._grid.vars.src.data[:] = wavelets.T * self._src_scale / self._max_wavelet * window
+
+        if self.interpolation_type == 'linear':
+            self._grid.vars.src.coordinates.data[:] = shot.source_coordinates
+            self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
     def state(self, **kwargs):
         """
@@ -331,7 +369,11 @@ class AcousticDevito(ProblemTypeBase):
                 wavefield_data = np.asarray(self._grid.vars.p_saved.data_with_halo, dtype=np.float32)
 
             else:
-                wavefield_data = np.asarray(self._grid.vars.p.data_with_halo, dtype=np.float32)
+                wavefield_data = np.asarray(self._grid.vars.p.data, dtype=np.float32)
+
+            wavefield_slice = kwargs.pop('wavefield_slice', None)
+            if wavefield_slice is not None:
+                wavefield_data = wavefield_data[wavefield_slice]
 
             wavefield_data *= self._max_wavelet / self._src_scale
 
@@ -341,6 +383,10 @@ class AcousticDevito(ProblemTypeBase):
 
             self._grid.deallocate('p_saved')
 
+            if os.environ.get('STRIDE_DUMP_WAVEFIELD', None) == 'yes':
+                wavefield.dump(path=self._problem.output_folder,
+                               project_name=self._problem.name)
+
         else:
             wavefield = None
 
@@ -349,6 +395,9 @@ class AcousticDevito(ProblemTypeBase):
         traces = self._problem.shot.observed.alike('modelled', data=traces_data)
 
         self._grid.deallocate('p')
+        self._grid.deallocate('src')
+        self._grid.deallocate('rec')
+        self._grid.deallocate('vp')
         self._grid.deallocate('m')
         self._grid.deallocate('inv_m')
         self._boundary.deallocate()
@@ -383,16 +432,19 @@ class AcousticDevito(ProblemTypeBase):
         # If there's no previous operator, generate one
         if self._adjoint_operator.operator is None:
             # Define variables
-            rec = self._grid.sparse_time_function('rec', num=num_receivers)
+            rec = self._grid.sparse_time_function('rec', num=num_receivers,
+                                                  coordinates=shot.receiver_coordinates,
+                                                  interpolation_type=self.interpolation_type)
 
             p_a = self._grid.time_function('p_a', coefficients='symbolic' if self.drp else 'standard')
             p_saved = self._grid.undersampled_time_function('p_saved',
                                                             factor=self.undersampling_factor)
+            vp = self._grid.function('vp', coefficients='symbolic' if self.drp else 'standard')
             m = self._grid.function('m', coefficients='symbolic' if self.drp else 'standard')
             inv_m = self._grid.function('inv_m', coefficients='symbolic' if self.drp else 'standard')
 
             # Create stencil
-            stencil = self._iso_stencil(p_a, m, inv_m, direction='backward')
+            stencil = self._iso_stencil(p_a, vp, m, inv_m, direction='backward')
 
             # Define the source injection function to generate the corresponding code
             rec_term = rec.inject(field=p_a.backward, expr=-rec * time.step ** 2 / m)
@@ -454,14 +506,19 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.vars.p_saved._data = wavefield_data
 
         # Set medium parameters
-        self._grid.vars.m.data_with_halo[:] = 1 / self._grid.with_halo(medium.vp.extended_data)**2
-        self._grid.vars.inv_m.data_with_halo[:] = self._grid.with_halo(medium.vp.extended_data)**2
+        vp_with_halo = self._grid.with_halo(medium.vp.extended_data)
+        self._grid.vars.vp.data_with_halo[:] = vp_with_halo
+        self._grid.vars.m.data_with_halo[:] = 1 / vp_with_halo**2
+        self._grid.vars.inv_m.data_with_halo[:] = vp_with_halo**2
 
-        # Set geometry
-        self._grid.vars.rec.data[:] = adjoint_source.data.T
+        # Set geometry and adjoint source
+        window = scipy.signal.get_window(('tukey', 0.01), time.num, False)
+        window = window.reshape((time.num, 1))
 
-        self._grid.vars.src.coordinates.data[:] = shot.source_coordinates
-        self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
+        self._grid.vars.rec.data[:] = adjoint_source.data.T * window
+
+        if self.interpolation_type == 'linear':
+            self._grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
     def adjoint(self, wrt, adjoint_source, wavefield, **kwargs):
         """
@@ -504,6 +561,7 @@ class AcousticDevito(ProblemTypeBase):
         wavefield.deallocate()
         self._grid.deallocate('p_saved')
         self._grid.deallocate('p_a')
+        self._grid.deallocate('vp')
         self._grid.deallocate('m')
         self._grid.deallocate('inv_m')
         self._boundary.deallocate()
@@ -572,7 +630,7 @@ class AcousticDevito(ProblemTypeBase):
     def _weights(self):
         raise NotImplementedError('DRP weights are not implemented in this version of stride')
 
-    def _laplacian(self, field, laplacian, m, inv_m):
+    def _laplacian(self, field, laplacian, vp, m, inv_m):
         if self.kernel not in ['OT2', 'OT4']:
             raise ValueError("Unrecognized kernel")
 
@@ -588,10 +646,10 @@ class AcousticDevito(ProblemTypeBase):
 
         return laplacian_subs
 
-    def _saved(self, field, m, inv_m):
+    def _saved(self, field, vp, m, inv_m):
         return field.dt2
 
-    def _iso_stencil(self, field, m, inv_m, direction='forward'):
+    def _iso_stencil(self, field, vp, m, inv_m, direction='forward'):
         # Forward or backward
         forward = direction == 'forward'
 
@@ -600,11 +658,11 @@ class AcousticDevito(ProblemTypeBase):
 
         # Get the spatial FD
         laplacian = self._grid.function('laplacian', coefficients='symbolic' if self.drp else 'standard')
-        laplacian_expr = self._laplacian(field, laplacian, m, inv_m)
+        laplacian_expr = self._laplacian(field, laplacian, vp, m, inv_m)
 
         # Get the subs
         if self.drp:
-            subs = self._symbolic_coefficients(field, laplacian, m, inv_m)
+            subs = self._symbolic_coefficients(field, laplacian, vp, m, inv_m)
         else:
             subs = None
 
@@ -621,7 +679,7 @@ class AcousticDevito(ProblemTypeBase):
         if 'PML' in self.boundary_type:
             eq_boundary = devito.solve(m*field.dt2 - field.laplace + boundary_term, u_next)
         else:
-            eq_boundary = devito.solve(m * field.dt2 - laplacian.laplace + boundary_term, u_next)
+            eq_boundary = devito.solve(m*field.dt2 - laplacian.laplace + boundary_term, u_next)
 
         # Define coefficients
         if self.drp:

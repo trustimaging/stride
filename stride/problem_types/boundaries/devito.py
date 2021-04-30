@@ -51,7 +51,8 @@ class ComplexFrequencyShiftPML2(Boundary):
     def apply(self, field, velocity, direction='forward', **kwargs):
         space = self._problem.space
 
-        # TODO PML performance might be sensitive to choice of R and thickness
+        # TODO PML performance might be sensitive to choice of R and thickness,
+        #  it is quite problem dependent
         reflection_coefficient = kwargs.pop('reflection_coefficient', 1e-10)
         f_centre = kwargs.pop('f_centre')
         subs = kwargs.pop('subs', None)
