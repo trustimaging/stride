@@ -57,7 +57,7 @@ class Vp(ScalarField):
         grad = self.grad
         prec = self.prec
 
-        prec += 1e-6 * np.max(prec.data)
+        prec += 1e-6 * np.max(prec.data) + 1e-31
         grad /= prec
 
         return grad

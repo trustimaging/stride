@@ -86,3 +86,28 @@ def ricker(centre_freq, n_samples, dt, offset=0):
     signal = np.pad(signal, ((offset, n_samples - offset - n_tone),), mode='constant', constant_values=0.)
 
     return signal
+
+
+def continuous_wave(centre_freq, n_samples, dt):
+    """
+    Generate a continuous wave.
+
+    Parameters
+    ----------
+    centre_freq : float
+        Centre frequency of the signal.
+    n_samples : int
+        Length of the wavelet.
+    dt : float
+        Discretisation step for the time axis.
+
+    Returns
+    -------
+    1-dimensional array
+        Generated wavelet.
+
+    """
+    time_array = np.linspace(0, dt * (n_samples - 1), n_samples, endpoint=True)
+    signal = np.sin(2 * np.pi * centre_freq * time_array)
+
+    return signal

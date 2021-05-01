@@ -248,9 +248,9 @@ class Problem(Gridded):
             shot_ids = [shot_ids]
 
         # Run sub-problems
-        await runners.map(self.run_forward, shot_ids, dump=dump, deallocate=deallocate, **kwargs)
+        return await runners.map(self.run_forward, shot_ids, dump=dump, deallocate=deallocate, **kwargs)
 
-    async def run_forward(self, shot_id, runner, dump=True, deallocate=False, **kwargs):
+    async def run_forward(self, shot_id, runner, dump=True, deallocate=False, save_wavefield=False, **kwargs):
         """
         Run a single shot forward in a given Runner using default parameters.
 
@@ -267,6 +267,9 @@ class Problem(Gridded):
         deallocate : bool, optional
             Whether or not to deallocate the generated data after each Shot is completed,
             defaults to False.
+        save_wavefield : bool, optional
+            Whether or not to retrieve the computed wavefield,
+            defaults to False.
 
         Returns
         -------
@@ -280,8 +283,8 @@ class Problem(Gridded):
 
         await (await runner.set_problem(sub_problem, **kwargs))
 
-        task = await runner.run_state(save_wavefield=False, **kwargs)
-        traces, _ = await task.result()
+        task = await runner.run_state(save_wavefield=save_wavefield, **kwargs)
+        traces, wavefield = await task.result()
 
         runtime.logger.info('Shot %d retrieved' % sub_problem.shot_id)
 
@@ -296,6 +299,8 @@ class Problem(Gridded):
 
         if deallocate is True:
             shot.observed.deallocate()
+
+        return traces, wavefield
 
     async def inverse(self, runners, variables,
                       block=None, iteration=None, **kwargs):

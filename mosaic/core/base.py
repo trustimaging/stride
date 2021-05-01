@@ -61,6 +61,7 @@ class CMDBase(Base):
 
         self._uid = None
         self._state = ''
+        self._registered = False
 
         # CMD specific config
         self.retries = 0
@@ -418,6 +419,7 @@ class ProxyBase(CMDBase):
     @classmethod
     def _deserialisation_helper(cls, state):
         instance = super()._deserialisation_helper(state)
+        instance._registered = False
 
         obj_type = cls.remote_type()
 
@@ -428,7 +430,8 @@ class ProxyBase(CMDBase):
 
     def __del__(self):
         self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type(), as_async=False)
-        self.runtime.deregister(self)
+        if self._registered and self.runtime:
+            self.runtime.deregister(self)
 
 
 class MonitoredBase:

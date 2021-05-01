@@ -7,6 +7,7 @@ import contextlib
 import cloudpickle
 from cached_property import cached_property
 
+import mosaic
 from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, MonitoredBase
 
@@ -284,7 +285,8 @@ class TesseraProxy(ProxyBase):
         """
         kwargs = self._fill_config(**kwargs)
 
-        self._runtime_id = await self.monitor.select_worker(reply=True)
+        runtime = kwargs.pop('runtime', None)
+        self._runtime_id = await self.select_worker(runtime)
 
         self._state = 'pending'
         await self.monitor.init_tessera(uid=self._uid,
@@ -310,6 +312,17 @@ class TesseraProxy(ProxyBase):
 
         """
         return self.proxy(self._runtime_id)
+
+    @classmethod
+    async def select_worker(cls, runtime=None):
+        if hasattr(runtime, 'uid'):
+            runtime = runtime.uid
+
+        if runtime is None:
+            monitor = mosaic.get_monitor()
+            runtime = await monitor.select_worker(reply=True)
+
+        return runtime
 
     def __getattribute__(self, item):
         try:
@@ -663,6 +676,7 @@ def tessera(*args, **cmd_config):
 
         cls.remote = remote
         cls.tessera = tessera
+        cls.select_worker = TesseraProxy.select_worker
 
         method_list = [func for func in dir(Base) if not func.startswith("__")]
         for method in method_list:

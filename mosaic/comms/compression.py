@@ -119,7 +119,7 @@ with contextlib.suppress(ImportError):
 
     compression_methods['blosc'] = {
         'compress': functools.partial(blosc.compress, clevel=5, cname='lz4'),
-        'decompress': blosc.decompress,
+        'decompress': functools.partial(blosc.decompress, as_bytearray=True),
     }
     default_compression = 'blosc'
 
@@ -226,7 +226,7 @@ def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
         return None, payload
     if nbytes < min_size:
         return None, payload
-    if nbytes > 2 ** 31:  # Too large, compression libraries often fail
+    if nbytes > 5e9:  # Too large, compression libraries often fail
         return None, payload
 
     min_size = int(min_size)
@@ -262,5 +262,4 @@ def decompress(compression, payload):
     Decompress payload according to information in the header
 
     """
-
     return compression_methods[compression]['decompress'](payload)

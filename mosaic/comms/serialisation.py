@@ -13,7 +13,6 @@ def pickle5_dumps(data):
 
 
 def pickle5_loads(in_band, out_band):
-    out_band = [bytearray(each) for each in out_band]
     return pickle5.loads(in_band, buffers=out_band)
 
 

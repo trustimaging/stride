@@ -1,9 +1,12 @@
 
 import os
+import gc
 import devito
 import logging
 import functools
+import itertools
 import numpy as np
+import scipy.special
 
 import mosaic
 from mosaic.types import Struct
@@ -12,17 +15,111 @@ from mosaic.types import Struct
 __all__ = ['OperatorDevito', 'GridDevito']
 
 
-class PhysicalDomain(devito.SubDomain):
+class FullDomain(devito.SubDomain):
 
-    name = 'physical_domain'
+    name = 'full_domain'
 
     def __init__(self, space_order, extra):
-        super(PhysicalDomain, self).__init__()
+        super().__init__()
+
         self.space_order = space_order
         self.extra = extra
 
     def define(self, dimensions):
         return {dimension: dimension for dimension in dimensions}
+
+
+class InteriorDomain(devito.SubDomain):
+
+    name = 'interior_domain'
+
+    def __init__(self, space_order, extra):
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        return {dimension: ('middle', extra, extra)
+                for dimension, extra in zip(dimensions, self.extra)}
+
+
+class PMLSide(devito.SubDomain):
+
+    def __init__(self, space_order, extra, dim, side):
+        self.dim = dim
+        self.side = side
+        self.name = 'pml_side_' + side + str(dim)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: dimension for dimension in dimensions}
+        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+
+        return domain
+
+
+class PMLCentre(devito.SubDomain):
+
+    def __init__(self, space_order, extra, dim, side):
+        self.dim = dim
+        self.side = side
+        self.name = 'pml_centre_' + side + str(dim)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: ('middle', extra, extra)
+                  for dimension, extra in zip(dimensions, self.extra)}
+        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+
+        return domain
+
+
+class PMLCorner(devito.SubDomain):
+
+    def __init__(self, space_order, extra, *sides):
+        self.sides = sides
+        self.name = 'pml_corner_' + '_'.join(sides)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: (side, extra)
+                  for dimension, side, extra in zip(dimensions, self.sides, self.extra)}
+
+        return domain
+
+
+class PMLPartial(devito.SubDomain):
+
+    def __init__(self, space_order, extra, dim, side):
+        self.dim = dim
+        self.side = side
+        self.name = 'pml_partial_' + side + str(dim)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: ('middle', extra, extra)
+                  for dimension, extra in zip(dimensions, self.extra)}
+        domain[dimensions[0]] = dimensions[0]
+        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+
+        return domain
 
 
 def _cached(func):
@@ -75,6 +172,15 @@ class GridDevito:
 
         self.grid = grid
 
+        self.full = None
+        self.interior = None
+        self.pml = None
+        self.pml_centres = None
+        self.pml_corners = None
+        self.pml_partials = None
+        self.pml_left = None
+        self.pml_right = None
+
     # TODO The grid needs to be re-created if the space or time extent has changed
     def set_problem(self, problem):
         """
@@ -93,17 +199,44 @@ class GridDevito:
 
         if self.grid is None:
             space = problem.space
+            order = self.space_order
+            extra = space.absorbing
 
             extended_extent = tuple(np.array(space.spacing) * (np.array(space.extended_shape) - 1))
-            physical_domain = PhysicalDomain(self.space_order, space.extra)
+
+            self.full = FullDomain(order, extra)
+            self.interior = InteriorDomain(order, extra)
+            self.pml_left = tuple()
+            self.pml_right = tuple()
+            self.pml_centres = tuple()
+            self.pml_partials = tuple()
+
+            for dim in range(space.dim):
+                self.pml_left += (PMLSide(order, extra, dim, 'left'),)
+                self.pml_right += (PMLSide(order, extra, dim, 'right'),)
+                self.pml_centres += (PMLCentre(order, extra, dim, 'left'),
+                                     PMLCentre(order, extra, dim, 'right'))
+                self.pml_partials += (PMLPartial(order, extra, dim, 'left'),
+                                      PMLPartial(order, extra, dim, 'right'))
+
+            self.pml_corners = [PMLCorner(order, extra, *sides)
+                                for sides in itertools.product(['left', 'right'],
+                                                               repeat=space.dim)]
+            self.pml_corners = tuple(self.pml_corners)
+
+            self.pml = self.pml_partials
+
             self.grid = devito.Grid(extent=extended_extent,
                                     shape=space.extended_shape,
                                     origin=space.pml_origin,
-                                    subdomains=physical_domain,
+                                    subdomains=(self.full, self.interior,) +
+                                               self.pml + self.pml_left + self.pml_right +
+                                               self.pml_centres + self.pml_corners,
                                     dtype=np.float32)
 
     @_cached
-    def sparse_time_function(self, name, num=1, space_order=None, time_order=None, **kwargs):
+    def sparse_time_function(self, name, num=1, space_order=None, time_order=None,
+                             coordinates=None, interpolation_type='linear', **kwargs):
         """
         Create a Devito SparseTimeFunction with parameters provided.
 
@@ -117,6 +250,12 @@ class GridDevito:
             Space order of the discretisation, defaults to the grid space order.
         time_order : int, optional
             Time order of the discretisation, defaults to the grid time order.
+        coordinates : ndarray, optional
+            Spatial coordinates of the sparse points (num points, dimensions), only
+            needed when interpolation is not linear.
+        interpolation_type : str, optional
+            Type of interpolation to perform (``linear`` or ``hicks``), defaults
+            to ``linear``, computationally more efficient but less accurate.
         kwargs
             Additional arguments for the Devito constructor.
 
@@ -133,17 +272,66 @@ class GridDevito:
 
         # Define variables
         p_dim = devito.Dimension(name='p_%s' % name)
-        fun = devito.SparseTimeFunction(name=name,
-                                        grid=self.grid,
-                                        dimensions=(self.grid.time_dim, p_dim),
-                                        npoint=num,
-                                        nt=time.extended_num,
-                                        space_order=space_order,
-                                        time_order=time_order,
-                                        dtype=np.float32,
-                                        **kwargs)
+
+        sparse_kwargs = dict(name=name,
+                             grid=self.grid,
+                             dimensions=(self.grid.time_dim, p_dim),
+                             npoint=num,
+                             nt=time.extended_num,
+                             space_order=space_order,
+                             time_order=time_order,
+                             dtype=np.float32)
+        sparse_kwargs.update(kwargs)
+
+        if interpolation_type == 'linear':
+            fun = devito.SparseTimeFunction(**sparse_kwargs)
+
+        elif interpolation_type == 'hicks':
+            r = sparse_kwargs.pop('r', 7)
+
+            reference_gridpoints, coefficients = self.calculate_hicks(coordinates)
+
+            fun = devito.PrecomputedSparseTimeFunction(r=r,
+                                                       gridpoints=reference_gridpoints,
+                                                       interpolation_coeffs=coefficients,
+                                                       **sparse_kwargs)
+
+        else:
+            raise ValueError('Only "linear" and "hicks" interpolations are allowed.')
 
         return fun
+
+    def calculate_hicks(self, coordinates):
+        space = self._problem.space
+
+        # Calculate the reference gridpoints and offsets
+        grid_coordinates = (coordinates - np.array(space.pml_origin)) / np.array(space.spacing)
+        reference_gridpoints = np.round(grid_coordinates).astype(np.int32)
+        offsets = grid_coordinates - reference_gridpoints
+
+        # Pre-calculate stuff
+        kaiser_b = 4.14
+        kaiser_half_width = 3
+        kaiser_den = scipy.special.iv(0, kaiser_b)
+        kaiser_extended_width = kaiser_half_width/0.99
+
+        # Calculate coefficients
+        r = 2*kaiser_half_width+1
+        num = coordinates.shape[0]
+        coefficients = np.zeros((num, space.dim, r))
+
+        for grid_point in range(-kaiser_half_width, kaiser_half_width+1):
+            index = kaiser_half_width + grid_point
+
+            x = grid_point + offsets
+
+            weights = (x / kaiser_extended_width)**2
+            weights[weights > 1] = 1
+            weights = scipy.special.iv(0, kaiser_b * np.sqrt(1 - weights)) / kaiser_den
+
+            coefficients[:, :, index] = np.sinc(x) * weights
+
+        return reference_gridpoints - kaiser_half_width, coefficients
 
     @_cached
     def function(self, name, space_order=None, **kwargs):
@@ -170,6 +358,7 @@ class GridDevito:
         fun = devito.Function(name=name,
                               grid=self.grid,
                               space_order=space_order,
+                              dtype=np.float32,
                               **kwargs)
 
         return fun
@@ -203,6 +392,7 @@ class GridDevito:
                                   grid=self.grid,
                                   time_order=time_order,
                                   space_order=space_order,
+                                  dtype=np.float32,
                                   **kwargs)
 
         return fun
@@ -262,6 +452,7 @@ class GridDevito:
         if name in self.vars:
             del self.vars[name]._data
             self.vars[name]._data = None
+            gc.collect()
 
     def with_halo(self, data):
         """
