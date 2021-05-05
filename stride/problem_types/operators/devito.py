@@ -116,7 +116,11 @@ class PMLPartial(devito.SubDomain):
     def define(self, dimensions):
         domain = {dimension: ('middle', extra, extra)
                   for dimension, extra in zip(dimensions, self.extra)}
+
         domain[dimensions[0]] = dimensions[0]
+        if len(dimensions) > 2:
+            domain[dimensions[1]] = dimensions[1]
+
         domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
 
         return domain
