@@ -134,16 +134,16 @@ def disk(num, radius, centre, orientation, boundary_points=2):
     """
 
     golden_angle = (np.sqrt(5) + 1) / 2
-    theta = 2 * np.pi * np.arange(num, dtype=np.float32) / golden_angle**2
     boundary_points = boundary_points or 2.
-    boundary_points = round(boundary_points*np.sqrt(num))
+    boundary_points = round(boundary_points * np.sqrt(num))
+    theta = 2 * np.pi * np.arange(num, dtype=np.float32) / golden_angle**2
 
     # Calculate discretisation in polar coordinates
     r = np.zeros_like(theta)
 
     for sample in range(1, num):
         r[sample] = 1 if sample > num - boundary_points \
-            else np.sqrt(sample - 0.5) / np.sqrt(num - (boundary_points + 1) / 2)
+            else np.sqrt(sample - 0.5) / np.sqrt(num - (boundary_points/0.99 + 1) / 2)
 
     # Change to Cartesian coordinates
     r *= radius

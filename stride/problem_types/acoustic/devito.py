@@ -263,7 +263,7 @@ class AcousticDevito(ProblemTypeBase):
             # Define the source injection function to generate the corresponding code
             # pressure_to_mass_acc = time.step / (vp * space.spacing**3)
             # solve_p_dt = time.step**2 * vp**2
-            src_term = src.inject(field=p.forward, expr=src * time.step**3 * vp / max(*space.spacing)**3)
+            src_term = src.inject(field=p.forward, expr=src * time.step**2 * inv_m)
             rec_term = rec.interpolate(expr=p)
 
             op_kwargs = {
@@ -323,8 +323,11 @@ class AcousticDevito(ProblemTypeBase):
         wavelets = shot.wavelets.data
 
         # self._src_scale = 1000. / (np.max(medium.vp.extended_data)**2 * time.step**2)
-        self._src_scale = 1000.
-        self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
+        # self._src_scale = 1000.
+        # self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
+
+        self._src_scale = 1
+        self._max_wavelet = 1
 
         window = scipy.signal.get_window(('tukey', 0.01), time.num, False)  # TODO This should happen in a pipeline
         window = window.reshape((time.num, 1))
@@ -447,7 +450,7 @@ class AcousticDevito(ProblemTypeBase):
             stencil = self._iso_stencil(p_a, vp, m, inv_m, direction='backward')
 
             # Define the source injection function to generate the corresponding code
-            rec_term = rec.inject(field=p_a.backward, expr=-rec * time.step ** 2 / m)
+            rec_term = rec.inject(field=p_a.backward, expr=-rec * time.step**2 * inv_m)
 
             op_kwargs = {
                 'dt': time.step,
@@ -512,7 +515,7 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.vars.inv_m.data_with_halo[:] = vp_with_halo**2
 
         # Set geometry and adjoint source
-        window = scipy.signal.get_window(('tukey', 0.01), time.num, False)
+        window = scipy.signal.get_window(('tukey', 0.01), time.num, False)  # TODO This should happen in a pipeline
         window = window.reshape((time.num, 1))
 
         self._grid.vars.rec.data[:] = adjoint_source.data.T * window
@@ -660,6 +663,9 @@ class AcousticDevito(ProblemTypeBase):
         laplacian = self._grid.function('laplacian', coefficients='symbolic' if self.drp else 'standard')
         laplacian_expr = self._laplacian(field, laplacian, vp, m, inv_m)
 
+        if self.kernel == 'OT2':
+            laplacian = field
+
         # Get the subs
         if self.drp:
             subs = self._symbolic_coefficients(field, laplacian, vp, m, inv_m)
@@ -676,38 +682,44 @@ class AcousticDevito(ProblemTypeBase):
         # TODO The only way to make the PML work is to use OT2 in the boundary,
         #      a PML formulation including the extra term is needed for this.
         eq_interior = devito.solve(m*field.dt2 - laplacian.laplace, u_next)
-        if 'PML' in self.boundary_type:
-            eq_boundary = devito.solve(m*field.dt2 - field.laplace + boundary_term, u_next)
-        else:
-            eq_boundary = devito.solve(m*field.dt2 - laplacian.laplace + boundary_term, u_next)
+        eq_boundary = devito.solve(m*field.dt2 - laplacian.laplace + boundary_term, u_next)
 
         # Define coefficients
+        stencils = []
         if self.drp:
             # Time-stepping stencil
-            laplacian_term = devito.Eq(laplacian, laplacian_expr,
-                                       subdomain=self._grid.full,
-                                       coefficients=subs)
+            if self.kernel != 'OT2':
+                laplacian_term = devito.Eq(laplacian, laplacian_expr,
+                                           subdomain=self._grid.full,
+                                           coefficients=subs)
+                stencils.append(laplacian_term)
 
             stencil_interior = devito.Eq(u_next, eq_interior,
                                          subdomain=self._grid.interior,
                                          coefficients=subs)
+            stencils.append(stencil_interior)
 
             stencil_boundary = [devito.Eq(u_next, eq_boundary,
                                           subdomain=dom,
                                           coefficients=subs) for dom in self._grid.pml]
+            stencils += stencil_boundary
 
         else:
             # Time-stepping stencil
-            laplacian_term = devito.Eq(laplacian, laplacian_expr,
-                                       subdomain=self._grid.full)
+            if self.kernel != 'OT2':
+                laplacian_term = devito.Eq(laplacian, laplacian_expr,
+                                           subdomain=self._grid.full)
+                stencils.append(laplacian_term)
 
             stencil_interior = devito.Eq(u_next, eq_interior,
                                          subdomain=self._grid.interior)
+            stencils.append(stencil_interior)
 
             stencil_boundary = [devito.Eq(u_next, eq_boundary,
                                           subdomain=dom) for dom in self._grid.pml]
+            stencils += stencil_boundary
 
-        return eq_before + [laplacian_term, stencil_interior] + stencil_boundary + eq_after
+        return eq_before + stencils + eq_after
 
     def _dt_max(self, k, h, vp_max):
         space = self._problem.space
