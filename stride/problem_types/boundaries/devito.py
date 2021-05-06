@@ -26,8 +26,7 @@ class SpongeBoundary2(Boundary):
             damp.data[:] = 7 * self.damping(velocity=velocity) * time.step
 
         else:
-            damp = devito.Constant('damp')
-            damp.data = 0.
+            damp = 0
 
         self.damp = damp
 

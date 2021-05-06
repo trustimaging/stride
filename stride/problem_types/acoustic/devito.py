@@ -36,6 +36,7 @@ class AcousticDevito(ProblemTypeBase):
         self.undersampling_factor = 4
         self.boundary_type = 'sponge_boundary_2'
         self.interpolation_type = 'linear'
+        self.attenuation_power = 0
 
         self._grad = None
 
@@ -88,6 +89,7 @@ class AcousticDevito(ProblemTypeBase):
         self._boundary.set_problem(problem)
 
         self.interpolation_type = kwargs.get('interpolation_type', 'linear')
+        self.attenuation_power = kwargs.get('attenuation_power', 0)
         self.drp = kwargs.get('drp', False)
         preferred_kernel = kwargs.get('kernel', None)
         preferred_undersampling = kwargs.get('undersampling', None)
@@ -265,8 +267,15 @@ class AcousticDevito(ProblemTypeBase):
             else:
                 rho = buoy = None
 
+            if 'alpha' in medium.fields:
+                alpha = self._grid.function('alpha', coefficients='symbolic' if self.drp else 'standard')
+
+            else:
+                alpha = None
+
             # Create stencil
-            stencil = self._iso_stencil(p, vp, vp2, inv_vp2, rho=rho, buoy=buoy,
+            stencil = self._iso_stencil(p, vp, vp2, inv_vp2,
+                                        rho=rho, buoy=buoy, alpha=alpha,
                                         direction='forward')
 
             # Define the source injection function to generate the corresponding code
@@ -333,15 +342,17 @@ class AcousticDevito(ProblemTypeBase):
             self._grid.vars.rho.data_with_halo[:] = rho_with_halo
             self._grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
+        if 'alpha' in medium.fields:
+            db_cm_to_np_m = np.log(10)/20 * 1e2
+
+            alpha_with_halo = self._grid.with_halo(medium.alpha.extended_data)*db_cm_to_np_m
+            self._grid.vars.alpha.data_with_halo[:] = alpha_with_halo
+
         # Set geometry and wavelet
         wavelets = shot.wavelets.data
 
-        # self._src_scale = 1000. / (np.max(medium.vp.extended_data)**2 * time.step**2)
-        # self._src_scale = 1000.
-        # self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
-
-        self._src_scale = 1
-        self._max_wavelet = 1
+        self._src_scale = 1000.
+        self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
 
         window = scipy.signal.get_window(('tukey', 0.01), time.num, False)  # TODO This should happen in a pipeline
         window = window.reshape((time.num, 1))
@@ -419,6 +430,7 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.deallocate('inv_vp2')
         self._grid.deallocate('rho')
         self._grid.deallocate('buoy')
+        self._grid.deallocate('alpha')
         self._boundary.deallocate()
 
         return traces, wavefield
@@ -470,8 +482,15 @@ class AcousticDevito(ProblemTypeBase):
             else:
                 rho = buoy = None
 
+            if 'alpha' in medium.fields:
+                alpha = self._grid.function('alpha', coefficients='symbolic' if self.drp else 'standard')
+
+            else:
+                alpha = None
+
             # Create stencil
-            stencil = self._iso_stencil(p_a, vp, vp2, inv_vp2, rho=rho, buoy=buoy,
+            stencil = self._iso_stencil(p_a, vp, vp2, inv_vp2,
+                                        rho=rho, buoy=buoy, alpha=alpha,
                                         direction='backward')
 
             # Define the source injection function to generate the corresponding code
@@ -544,6 +563,12 @@ class AcousticDevito(ProblemTypeBase):
             self._grid.vars.rho.data_with_halo[:] = rho_with_halo
             self._grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
+        if 'alpha' in medium.fields:
+            db_cm_to_np_m = np.log(10)/20 * 1e2
+
+            alpha_with_halo = self._grid.with_halo(medium.alpha.extended_data)*db_cm_to_np_m
+            self._grid.vars.alpha.data_with_halo[:] = alpha_with_halo
+
         # Set geometry and adjoint source
         window = scipy.signal.get_window(('tukey', 0.01), time.num, False)  # TODO This should happen in a pipeline
         window = window.reshape((time.num, 1))
@@ -599,6 +624,7 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.deallocate('inv_vp2')
         self._grid.deallocate('rho')
         self._grid.deallocate('buoy')
+        self._grid.deallocate('alpha')
         self._boundary.deallocate()
 
         return self.get_grad(wrt, **kwargs)
@@ -674,7 +700,6 @@ class AcousticDevito(ProblemTypeBase):
 
         else:
             return field.laplace + rho * devito.grad(buoy).dot(devito.grad(field))
-            # return rho * devito.div(buoy * devito.grad(field, shift=.5), shift=-.5)
 
     def _laplacian(self, field, laplacian, vp, vp2, inv_vp2, **kwargs):
         if self.kernel not in ['OT2', 'OT4']:
@@ -722,6 +747,24 @@ class AcousticDevito(ProblemTypeBase):
         else:
             subs = None
 
+        # Get the attenuation term
+        alpha = kwargs.get('alpha', None)
+        if alpha is not None:
+            if self.attenuation_power == 0:
+                u = field
+                u_dt = u.dt if direction == 'forward' else u.dt.T
+
+                attenuation_term = 2*alpha/vp * u_dt
+            elif self.attenuation_power == 2:
+                u = -field.laplace
+                u_dt = u.dt if direction == 'forward' else u.dt.T
+
+                attenuation_term = 2*alpha*vp * u_dt
+            else:
+                raise ValueError('The "attenuation_exponent" can only take values (0, 2).')
+        else:
+            attenuation_term = 0
+
         # Set up the boundary
         medium = self._problem.medium
         boundary_term, eq_before, eq_after = self._boundary.apply(field, medium.vp.extended_data,
@@ -731,8 +774,8 @@ class AcousticDevito(ProblemTypeBase):
         # Define PDE and update rule
         # TODO The only way to make the PML work is to use OT2 in the boundary,
         #      a PML formulation including the extra term is needed for this.
-        eq_interior = devito.solve(inv_vp2*field.dt2 - laplacian_term, u_next)
-        eq_boundary = devito.solve(inv_vp2*field.dt2 - laplacian_term + boundary_term, u_next)
+        eq_interior = devito.solve(inv_vp2*field.dt2 - laplacian_term + attenuation_term, u_next)
+        eq_boundary = devito.solve(inv_vp2*field.dt2 - laplacian_term + attenuation_term + boundary_term, u_next)
 
         # Time-stepping stencil
         stencils = []
