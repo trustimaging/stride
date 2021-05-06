@@ -253,17 +253,26 @@ class AcousticDevito(ProblemTypeBase):
                                                   interpolation_type=self.interpolation_type)
 
             p = self._grid.time_function('p', coefficients='symbolic' if self.drp else 'standard', save=save)
+
             vp = self._grid.function('vp', coefficients='symbolic' if self.drp else 'standard')
-            m = self._grid.function('m', coefficients='symbolic' if self.drp else 'standard')
-            inv_m = self._grid.function('inv_m', coefficients='symbolic' if self.drp else 'standard')
+            vp2 = self._grid.function('vp2', coefficients='symbolic' if self.drp else 'standard')
+            inv_vp2 = self._grid.function('inv_vp2', coefficients='symbolic' if self.drp else 'standard')
+
+            if 'rho' in medium.fields:
+                rho = self._grid.function('rho', coefficients='symbolic' if self.drp else 'standard')
+                buoy = self._grid.function('buoy', coefficients='symbolic' if self.drp else 'standard')
+
+            else:
+                rho = buoy = None
 
             # Create stencil
-            stencil = self._iso_stencil(p, vp, m, inv_m, direction='forward')
+            stencil = self._iso_stencil(p, vp, vp2, inv_vp2, rho=rho, buoy=buoy,
+                                        direction='forward')
 
             # Define the source injection function to generate the corresponding code
             # pressure_to_mass_acc = time.step / (vp * space.spacing**3)
             # solve_p_dt = time.step**2 * vp**2
-            src_term = src.inject(field=p.forward, expr=src * time.step**2 * inv_m)
+            src_term = src.inject(field=p.forward, expr=src * time.step**2 * vp2)
             rec_term = rec.interpolate(expr=p)
 
             op_kwargs = {
@@ -275,7 +284,7 @@ class AcousticDevito(ProblemTypeBase):
                 p_saved = self._grid.undersampled_time_function('p_saved',
                                                                 factor=self.undersampling_factor)
 
-                update_saved = [devito.Eq(p_saved, self._saved(p, vp, m, inv_m))]
+                update_saved = [devito.Eq(p_saved, self._saved(p, vp, vp2, inv_vp2))]
 
             else:
                 update_saved = []
@@ -316,8 +325,13 @@ class AcousticDevito(ProblemTypeBase):
         # Set medium parameters
         vp_with_halo = self._grid.with_halo(medium.vp.extended_data)
         self._grid.vars.vp.data_with_halo[:] = vp_with_halo
-        self._grid.vars.m.data_with_halo[:] = 1 / vp_with_halo**2
-        self._grid.vars.inv_m.data_with_halo[:] = vp_with_halo**2
+        self._grid.vars.vp2.data_with_halo[:] = vp_with_halo**2
+        self._grid.vars.inv_vp2.data_with_halo[:] = 1 / vp_with_halo**2
+
+        if 'rho' in medium.fields:
+            rho_with_halo = self._grid.with_halo(medium.rho.extended_data)
+            self._grid.vars.rho.data_with_halo[:] = rho_with_halo
+            self._grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
         # Set geometry and wavelet
         wavelets = shot.wavelets.data
@@ -401,8 +415,10 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.deallocate('src')
         self._grid.deallocate('rec')
         self._grid.deallocate('vp')
-        self._grid.deallocate('m')
-        self._grid.deallocate('inv_m')
+        self._grid.deallocate('vp2')
+        self._grid.deallocate('inv_vp2')
+        self._grid.deallocate('rho')
+        self._grid.deallocate('buoy')
         self._boundary.deallocate()
 
         return traces, wavefield
@@ -442,15 +458,24 @@ class AcousticDevito(ProblemTypeBase):
             p_a = self._grid.time_function('p_a', coefficients='symbolic' if self.drp else 'standard')
             p_saved = self._grid.undersampled_time_function('p_saved',
                                                             factor=self.undersampling_factor)
+
             vp = self._grid.function('vp', coefficients='symbolic' if self.drp else 'standard')
-            m = self._grid.function('m', coefficients='symbolic' if self.drp else 'standard')
-            inv_m = self._grid.function('inv_m', coefficients='symbolic' if self.drp else 'standard')
+            vp2 = self._grid.function('vp2', coefficients='symbolic' if self.drp else 'standard')
+            inv_vp2 = self._grid.function('inv_vp2', coefficients='symbolic' if self.drp else 'standard')
+
+            if 'rho' in medium.fields:
+                rho = self._grid.function('rho', coefficients='symbolic' if self.drp else 'standard')
+                buoy = self._grid.function('buoy', coefficients='symbolic' if self.drp else 'standard')
+
+            else:
+                rho = buoy = None
 
             # Create stencil
-            stencil = self._iso_stencil(p_a, vp, m, inv_m, direction='backward')
+            stencil = self._iso_stencil(p_a, vp, vp2, inv_vp2, rho=rho, buoy=buoy,
+                                        direction='backward')
 
             # Define the source injection function to generate the corresponding code
-            rec_term = rec.inject(field=p_a.backward, expr=-rec * time.step**2 * inv_m)
+            rec_term = rec.inject(field=p_a.backward, expr=-rec * time.step**2 * vp2)
 
             op_kwargs = {
                 'dt': time.step,
@@ -511,8 +536,13 @@ class AcousticDevito(ProblemTypeBase):
         # Set medium parameters
         vp_with_halo = self._grid.with_halo(medium.vp.extended_data)
         self._grid.vars.vp.data_with_halo[:] = vp_with_halo
-        self._grid.vars.m.data_with_halo[:] = 1 / vp_with_halo**2
-        self._grid.vars.inv_m.data_with_halo[:] = vp_with_halo**2
+        self._grid.vars.vp2.data_with_halo[:] = vp_with_halo**2
+        self._grid.vars.inv_vp2.data_with_halo[:] = 1 / vp_with_halo**2
+
+        if 'rho' in medium.fields:
+            rho_with_halo = self._grid.with_halo(medium.rho.extended_data)
+            self._grid.vars.rho.data_with_halo[:] = rho_with_halo
+            self._grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
         # Set geometry and adjoint source
         window = scipy.signal.get_window(('tukey', 0.01), time.num, False)  # TODO This should happen in a pipeline
@@ -565,8 +595,10 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.deallocate('p_saved')
         self._grid.deallocate('p_a')
         self._grid.deallocate('vp')
-        self._grid.deallocate('m')
-        self._grid.deallocate('inv_m')
+        self._grid.deallocate('vp2')
+        self._grid.deallocate('inv_vp2')
+        self._grid.deallocate('rho')
+        self._grid.deallocate('buoy')
         self._boundary.deallocate()
 
         return self.get_grad(wrt, **kwargs)
@@ -627,13 +659,24 @@ class AcousticDevito(ProblemTypeBase):
         self._grid.deallocate('grad_vp')
         self._grid.deallocate('prec_vp')
 
-    def _symbolic_coefficients(self, *fields):
+    def _symbolic_coefficients(self, *functions):
         raise NotImplementedError('DRP weights are not implemented in this version of stride')
 
     def _weights(self):
         raise NotImplementedError('DRP weights are not implemented in this version of stride')
 
-    def _laplacian(self, field, laplacian, vp, m, inv_m):
+    def _diff_op(self, field, **kwargs):
+        rho = kwargs.pop('rho', None)
+        buoy = kwargs.pop('buoy', None)
+
+        if buoy is None:
+            return field.laplace
+
+        else:
+            return field.laplace + rho * devito.grad(buoy).dot(devito.grad(field))
+            # return rho * devito.div(buoy * devito.grad(field, shift=.5), shift=-.5)
+
+    def _laplacian(self, field, laplacian, vp, vp2, inv_vp2, **kwargs):
         if self.kernel not in ['OT2', 'OT4']:
             raise ValueError("Unrecognized kernel")
 
@@ -643,16 +686,16 @@ class AcousticDevito(ProblemTypeBase):
             bi_harmonic = 0
 
         else:
-            bi_harmonic = time.step**2/12 * inv_m*field.laplace
+            bi_harmonic = time.step**2/12 * vp2*self._diff_op(field, **kwargs)
 
-        laplacian_subs = field + bi_harmonic
+        laplacian_update = field + bi_harmonic
 
-        return laplacian_subs
+        return laplacian_update
 
-    def _saved(self, field, vp, m, inv_m):
+    def _saved(self, field, vp, vp2, inv_vp2, *kwargs):
         return field.dt2
 
-    def _iso_stencil(self, field, vp, m, inv_m, direction='forward'):
+    def _iso_stencil(self, field, vp, vp2, inv_vp2, direction='forward', **kwargs):
         # Forward or backward
         forward = direction == 'forward'
 
@@ -661,14 +704,21 @@ class AcousticDevito(ProblemTypeBase):
 
         # Get the spatial FD
         laplacian = self._grid.function('laplacian', coefficients='symbolic' if self.drp else 'standard')
-        laplacian_expr = self._laplacian(field, laplacian, vp, m, inv_m)
+        laplacian_update = self._laplacian(field, laplacian, vp, vp2, inv_vp2, **kwargs)
 
         if self.kernel == 'OT2':
-            laplacian = field
+            laplacian_term = self._diff_op(laplacian_update, **kwargs)
+        else:
+            laplacian_term = self._diff_op(laplacian, **kwargs)
 
         # Get the subs
         if self.drp:
-            subs = self._symbolic_coefficients(field, laplacian, vp, m, inv_m)
+            extra_functions = ()
+            if kwargs.get('rho', None) is not None:
+                extra_functions = (kwargs.get('rho'), kwargs.get('buoy'))
+
+            subs = self._symbolic_coefficients(field, laplacian, vp, vp2, inv_vp2,
+                                               *extra_functions)
         else:
             subs = None
 
@@ -681,43 +731,27 @@ class AcousticDevito(ProblemTypeBase):
         # Define PDE and update rule
         # TODO The only way to make the PML work is to use OT2 in the boundary,
         #      a PML formulation including the extra term is needed for this.
-        eq_interior = devito.solve(m*field.dt2 - laplacian.laplace, u_next)
-        eq_boundary = devito.solve(m*field.dt2 - laplacian.laplace + boundary_term, u_next)
+        eq_interior = devito.solve(inv_vp2*field.dt2 - laplacian_term, u_next)
+        eq_boundary = devito.solve(inv_vp2*field.dt2 - laplacian_term + boundary_term, u_next)
 
-        # Define coefficients
+        # Time-stepping stencil
         stencils = []
-        if self.drp:
-            # Time-stepping stencil
-            if self.kernel != 'OT2':
-                laplacian_term = devito.Eq(laplacian, laplacian_expr,
-                                           subdomain=self._grid.full,
-                                           coefficients=subs)
-                stencils.append(laplacian_term)
 
-            stencil_interior = devito.Eq(u_next, eq_interior,
-                                         subdomain=self._grid.interior,
-                                         coefficients=subs)
-            stencils.append(stencil_interior)
+        if self.kernel != 'OT2':
+            stencil_laplacian = devito.Eq(laplacian, laplacian_update,
+                                          subdomain=self._grid.full,
+                                          coefficients=subs)
+            stencils.append(stencil_laplacian)
 
-            stencil_boundary = [devito.Eq(u_next, eq_boundary,
-                                          subdomain=dom,
-                                          coefficients=subs) for dom in self._grid.pml]
-            stencils += stencil_boundary
+        stencil_interior = devito.Eq(u_next, eq_interior,
+                                     subdomain=self._grid.interior,
+                                     coefficients=subs)
+        stencils.append(stencil_interior)
 
-        else:
-            # Time-stepping stencil
-            if self.kernel != 'OT2':
-                laplacian_term = devito.Eq(laplacian, laplacian_expr,
-                                           subdomain=self._grid.full)
-                stencils.append(laplacian_term)
-
-            stencil_interior = devito.Eq(u_next, eq_interior,
-                                         subdomain=self._grid.interior)
-            stencils.append(stencil_interior)
-
-            stencil_boundary = [devito.Eq(u_next, eq_boundary,
-                                          subdomain=dom) for dom in self._grid.pml]
-            stencils += stencil_boundary
+        stencil_boundary = [devito.Eq(u_next, eq_boundary,
+                                      subdomain=dom,
+                                      coefficients=subs) for dom in self._grid.pml]
+        stencils += stencil_boundary
 
         return eq_before + stencils + eq_after
 

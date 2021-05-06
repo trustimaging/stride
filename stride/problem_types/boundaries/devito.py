@@ -121,21 +121,12 @@ class ComplexFrequencyShiftPML2(Boundary):
             # with the corresponding stencils
             pml_domain = (self._grid.pml_left[dim_i], self._grid.pml_right[dim_i])
 
-            if subs is None:
-                stencil_3 = [devito.Eq(u_3_next, devito.solve(pde_3, u_3_next, ),
-                                       subdomain=dom) for dom in pml_domain]
-                stencil_2 = [devito.Eq(u_2_next, devito.solve(pde_2, u_2_next, ),
-                                       subdomain=dom) for dom in pml_domain]
-                stencil_1 = [devito.Eq(u_1_next, devito.solve(pde_1, u_1_next, ),
-                                       subdomain=dom) for dom in pml_domain]
-
-            else:
-                stencil_3 = [devito.Eq(u_3_next, devito.solve(pde_3, u_3_next, ),
-                                       subdomain=dom, coefficients=subs) for dom in pml_domain]
-                stencil_2 = [devito.Eq(u_2_next, devito.solve(pde_2, u_2_next, ),
-                                       subdomain=dom, coefficients=subs) for dom in pml_domain]
-                stencil_1 = [devito.Eq(u_1_next, devito.solve(pde_1, u_1_next, ),
-                                       subdomain=dom, coefficients=subs) for dom in pml_domain]
+            stencil_3 = [devito.Eq(u_3_next, devito.solve(pde_3, u_3_next, ),
+                                   subdomain=dom, coefficients=subs) for dom in pml_domain]
+            stencil_2 = [devito.Eq(u_2_next, devito.solve(pde_2, u_2_next, ),
+                                   subdomain=dom, coefficients=subs) for dom in pml_domain]
+            stencil_1 = [devito.Eq(u_1_next, devito.solve(pde_1, u_1_next, ),
+                                   subdomain=dom, coefficients=subs) for dom in pml_domain]
 
             eq_preparation += [eq_sigma_di, eq_alpha_di]
             eq_before += stencil_3 + stencil_2 + stencil_1
