@@ -27,28 +27,46 @@ jobs:
     steps:
     - name: Checkout stride
       uses: actions/checkout@v2
+      with:
+        repository: trustimaging/stride
+        path: "stride"
 
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
-       activate-environment: stride
-       environment-file: environment.yml
-       python-version: 3.7
-       auto-activate-base: false
+        activate-environment: stride
+        environment-file: "stride/environment.yml"
+        python-version: 3.7
+        auto-activate-base: false
 
-    - name: Install dependencies
-      # See setup-miniconda README, necessary to activate environment
+    - name: Checkout devito
+      uses: actions/checkout@v2
+      with:
+        repository: devitocodes/devito
+        path: "devito"
+
+    - name: Manually install devito
       shell: bash -l {0}
       run: |
+        cd devito
+        pip uninstall -y devito
+        pip install -e .
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        cd stride
         pip install -e .
 
     - name: Homogeneous examples
       shell: bash -l {0}
       run: |
+        cd stride
         mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_2D.py
         mrun -nw 1 -nth 2 python examples/stride/homogeneous/forward_3D.py
     - name: Breast 2D
       shell: bash -l {0}
       run: |
+        cd stride
         mrun -nw 1 -nth 2 python examples/stride/breast2D/03_script_forward.py
         mrun -nw 1 -nth 2 python examples/stride/breast2D/04_script_inverse.py

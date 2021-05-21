@@ -3,7 +3,7 @@ cached-property
 click
 cloudpickle>=1.6
 cython
-devito>=4.2.3
+devito>=4.4
 flake8
 gputil
 h5py>=3.1
