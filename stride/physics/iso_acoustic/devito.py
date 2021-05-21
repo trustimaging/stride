@@ -235,21 +235,22 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
         if alpha is not None:
-            db_cm_to_np_m = np.log(10)/20 * 1e2
+            db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
 
-            alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_cm_to_np_m
+            alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_to_neper
             self.dev_grid.vars.alpha.data_with_halo[:] = alpha_with_halo
 
         # Set geometry and wavelet
         wavelets = wavelets.data
 
-        self._src_scale = 1000.
+        self._src_scale = 1
         self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
 
         window = scipy.signal.get_window(('tukey', 0.01), self.time.num, False)
         window = window.reshape((self.time.num, 1))
 
         self.dev_grid.vars.src.data[:] = wavelets.T * self._src_scale / self._max_wavelet * window
+        # self.src_t.data[:] = wavelets[0, :] / self._max_wavelet
 
         if self.interpolation_type == 'linear':
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
@@ -319,7 +320,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 wavefield_data = np.asarray(self.dev_grid.vars.p_saved.data_with_halo, dtype=np.float32)
 
             else:
-                wavefield_data = np.asarray(self.dev_grid.vars.p.data.data_with_halo, dtype=np.float32)
+                wavefield_data = np.asarray(self.dev_grid.vars.p.data, dtype=np.float32)
 
             wavefield_slice = kwargs.pop('wavefield_slice', None)
             if wavefield_slice is not None:
@@ -435,9 +436,9 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
         if alpha is not None:
-            db_cm_to_np_m = np.log(10)/20 * 1e2
+            db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
 
-            alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_cm_to_np_m
+            alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_to_neper
             self.dev_grid.vars.alpha.data_with_halo[:] = alpha_with_halo
 
         # Set geometry and adjoint source
@@ -759,12 +760,18 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Get the spatial FD
         laplacian = self.dev_grid.function('laplacian',
                                            coefficients='symbolic' if self.drp else 'standard')
-        laplacian_update = self._laplacian(field, laplacian, vp_fun, vp2_fun, inv_vp2_fun, **kwargs)
+        laplacian_update = self._laplacian(field, laplacian, vp_fun, vp2_fun, inv_vp2_fun,
+                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
+                                           **kwargs)
 
         if self.kernel == 'OT2':
-            laplacian_term = self._diff_op(laplacian_update, **kwargs)
+            laplacian_term = self._diff_op(laplacian_update,
+                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
+                                           **kwargs)
         else:
-            laplacian_term = self._diff_op(laplacian, **kwargs)
+            laplacian_term = self._diff_op(laplacian,
+                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
+                                           **kwargs)
 
         # Get the subs
         if self.drp:
@@ -868,7 +875,10 @@ class IsoAcousticDevito(ProblemTypeBase):
             return field.laplace
 
         else:
-            return field.laplace + rho * devito.grad(buoy).dot(devito.grad(field))
+            if self.drp:
+                return field.laplace + rho * devito.grad(buoy).dot(devito.grad(field))
+            else:
+                return rho * devito.div(buoy * devito.grad(field, shift=0.5), shift=-0.5)
 
     def _saved(self, field, *kwargs):
         return field.dt2

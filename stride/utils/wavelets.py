@@ -88,7 +88,7 @@ def ricker(centre_freq, n_samples, dt, offset=0):
     return signal
 
 
-def continuous_wave(centre_freq, n_samples, dt):
+def continuous_wave(centre_freq, n_samples, dt, ramp_length=4, phase=0):
     """
     Generate a continuous wave.
 
@@ -100,6 +100,11 @@ def continuous_wave(centre_freq, n_samples, dt):
         Length of the wavelet.
     dt : float
         Discretisation step for the time axis.
+    ramp_length : int, optional
+        Length of the up-ramp used to reduce start-up
+        transients in periods, defaults to 4.
+    phase : float, optional
+        Phase shift on the wave, in [rad]. Defaults to 0.
 
     Returns
     -------
@@ -108,6 +113,15 @@ def continuous_wave(centre_freq, n_samples, dt):
 
     """
     time_array = np.linspace(0, dt * (n_samples - 1), n_samples, endpoint=True)
-    signal = np.sin(2 * np.pi * centre_freq * time_array)
+    signal = np.sin(2 * np.pi * centre_freq * time_array + phase)
+
+    if ramp_length > 0:
+        period = 1 / centre_freq
+
+        ramp_length_points = int(np.round(ramp_length * period / dt))
+        ramp_axis = np.linspace(0, np.pi, ramp_length_points, endpoint=True)
+
+        ramp = (-np.cos(ramp_axis) + 1) * 0.5
+        signal[:ramp_length_points] *= ramp
 
     return signal

@@ -31,6 +31,12 @@ jobs:
         repository: trustimaging/stride
         path: "stride"
 
+    - name: Checkout devito
+      uses: actions/checkout@v2
+      with:
+        repository: devitocodes/devito
+        path: "devito"
+
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
@@ -38,12 +44,6 @@ jobs:
         environment-file: "stride/environment.yml"
         python-version: 3.7
         auto-activate-base: false
-
-    - name: Checkout devito
-      uses: actions/checkout@v2
-      with:
-        repository: devitocodes/devito
-        path: "devito"
 
     - name: Install dependencies
       shell: bash -l {0}

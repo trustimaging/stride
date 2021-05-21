@@ -5,9 +5,9 @@ __version__ = '1.1'
 
 import mosaic
 
-from . import problem
-from . import physics
-from . import optimisation
+from .problem import *
+from .physics import *
+from .optimisation import *
 
 
 async def forward(problem, pde, *args, **kwargs):
@@ -135,10 +135,10 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
-    process_wavelets = optimisation.ProcessWavelets.remote(f_min=f_min, f_max=f_max,
-                                                           len=runtime.num_workers)
-    process_traces = optimisation.ProcessTraces.remote(f_min=f_min, f_max=f_max,
-                                                       len=runtime.num_workers)
+    process_wavelets = ProcessWavelets.remote(f_min=f_min, f_max=f_max,
+                                              len=runtime.num_workers)
+    process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
+                                          len=runtime.num_workers)
 
     for iteration in block.iterations(num_iters):
         runtime.logger.info('Starting iteration %d (out of %d), '

@@ -202,7 +202,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
 
         Parameters
         ----------
-        wrt : tuple
+        wrt
             Tuple of variables with respect to which the inversion is running.
         kwargs
             Extra parameters to be used by the method.
@@ -236,7 +236,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
 
         Parameters
         ----------
-        wrt : tuple
+        wrt
             Tuple of variables with respect to which the inversion is running.
         kwargs
             Extra parameters to be used by the method.
@@ -263,7 +263,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
 
         Parameters
         ----------
-        wrt : tuple
+        wrt
             Tuple of variables with respect to which the inversion is running.
         kwargs
             Extra parameters to be used by the method.

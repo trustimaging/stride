@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from stride import *
-from stride.problem import *
 from stride.utils import wavelets
 
 from utils import analytical_3d
@@ -64,7 +63,7 @@ async def main(runtime):
                                                    time.num, time.step)
 
     # Create the PDE
-    pde = physics.IsoAcousticDevito.remote(space=space, time=time)
+    pde = IsoAcousticDevito.remote(space=space, time=time)
 
     # Run
     shot.observed.deallocate()

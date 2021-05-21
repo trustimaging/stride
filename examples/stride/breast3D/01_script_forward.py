@@ -1,7 +1,6 @@
 
 import numpy as np
 
-from stride.problem import *
 from stride import *
 from stride.utils import fetch, wavelets
 
@@ -68,7 +67,7 @@ async def main(runtime):
     problem.plot()
 
     # Create the PDE
-    pde = physics.IsoAcousticDevito.remote(grid=problem.grid, len=runtime.num_workers)
+    pde = IsoAcousticDevito.remote(grid=problem.grid, len=runtime.num_workers)
 
     # Run
     await forward(problem, pde, vp)

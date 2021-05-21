@@ -1,7 +1,6 @@
 
 import numpy as np
 
-from stride.problem import *
 from stride import *
 
 
@@ -60,22 +59,22 @@ async def main(runtime):
     problem.plot()
 
     # Create the PDE
-    pde = physics.IsoAcousticDevito.remote(grid=problem.grid, len=runtime.num_workers)
+    pde = IsoAcousticDevito.remote(grid=problem.grid, len=runtime.num_workers)
 
     # Create loss
-    loss = optimisation.L2DistanceLoss.remote(len=runtime.num_workers)
+    loss = L2DistanceLoss.remote(len=runtime.num_workers)
 
     # Create optimiser
     step_size = 10
-    process_grad = optimisation.ProcessGlobalGradient()
-    process_model = optimisation.ProcessModelIteration(min=1400., max=1700.)
+    process_grad = ProcessGlobalGradient()
+    process_model = ProcessModelIteration(min=1400., max=1700.)
 
-    optimiser = optimisation.GradientDescent(vp, step_size=step_size,
-                                             process_grad=process_grad,
-                                             process_model=process_model)
+    optimiser = GradientDescent(vp, step_size=step_size,
+                                process_grad=process_grad,
+                                process_model=process_model)
 
     # Run optimisation
-    optimisation_loop = optimisation.OptimisationLoop()
+    optimisation_loop = OptimisationLoop()
 
     max_freqs = [0.3e6, 0.4e6, 0.5e6, 0.6e6]
 
