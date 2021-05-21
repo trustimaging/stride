@@ -71,7 +71,7 @@ class Task(RemoteBase):
         self.args = args
         self.kwargs = kwargs
 
-        self._tic = None
+        self._tic = 0
         self._elapsed = None
 
         self._args_pending = set()
@@ -106,6 +106,14 @@ class Task(RemoteBase):
 
         """
         return {self.proxy(each) for each in list(self._proxies)}
+
+    @classmethod
+    def remote_cls(cls):
+        """
+        Class of the remote.
+
+        """
+        return TaskProxy
 
     def _fill_config(self, **kwargs):
         kwargs['max_retries'] = kwargs.get('max_retries', self._tessera.max_retries)
@@ -175,7 +183,7 @@ class Task(RemoteBase):
         else:
             result = self._result
 
-            if not isinstance(result, tuple) and not isinstance(result, dict):
+            if not hasattr(type(result), '__getitem__'):
                 result = (result,)
 
             return result[key]
@@ -236,7 +244,7 @@ class Task(RemoteBase):
 
                     def callback(_index, _arg):
                         def _callback(fut):
-                            self.loop.run(self._set_arg_done, args=(_index, _arg))
+                            self.loop.run(self._set_arg_done, _index, _arg)
 
                         return _callback
 
@@ -262,7 +270,7 @@ class Task(RemoteBase):
 
                     def callback(_key, _arg):
                         def _callback(fut):
-                            self.loop.run(self._set_kwarg_done, args=(_key, _arg))
+                            self.loop.run(self._set_kwarg_done, _key, _arg)
 
                         return _callback
 
@@ -373,7 +381,7 @@ class Task(RemoteBase):
 
     def __del__(self):
         self.logger.debug('Garbage collected object %s' % self)
-        self.loop.run(self.state_changed, args=('collected',))
+        self.loop.run(self.state_changed, 'collected')
 
 
 class TaskProxy(ProxyBase):
@@ -387,9 +395,10 @@ class TaskProxy(ProxyBase):
     def __init__(self, proxy, method, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._uid = '%s-%s-%s' % ('task',
-                                  method,
-                                  uuid.uuid4().hex)
+        self._uid = '%s-%s-%s-%s' % ('task',
+                                     proxy._cls.cls.__name__.lower(),
+                                     method,
+                                     uuid.uuid4().hex)
         self._tessera_proxy = proxy
 
         self._fill_config(**kwargs)
@@ -397,11 +406,11 @@ class TaskProxy(ProxyBase):
         self.method = method
         self.args = args
         self.kwargs = kwargs
-        self.outputs = TaskOutputGenerator(self)
 
         self._state = 'pending'
         self._result = None
         self._done_future = Future()
+        self.outputs = TaskOutputGenerator(self)
 
     async def init(self):
         """
@@ -452,6 +461,14 @@ class TaskProxy(ProxyBase):
 
         """
         return self._done_future
+
+    @classmethod
+    def remote_cls(cls):
+        """
+        Class of the remote.
+
+        """
+        return Task
 
     def set_done(self):
         """
@@ -555,7 +572,8 @@ class TaskProxy(ProxyBase):
                 self.set_exception(exc)
 
     def __await__(self):
-        return (yield from self._done_future.__await__())
+        yield from self._done_future.__await__()
+        return self
 
     _serialisation_attrs = ProxyBase._serialisation_attrs + ['_tessera_proxy', 'method']
 
@@ -589,7 +607,7 @@ class TaskOutputGenerator:
     """
 
     def __init__(self, task_proxy):
-        self._task_proxy = weakref.ref(task_proxy)
+        self._task_proxy = task_proxy
 
         self._generated_outputs = weakref.WeakValueDictionary()
 
@@ -598,7 +616,7 @@ class TaskOutputGenerator:
 
         return "<%s object at %s, uid=%s, runtime=%s, state=%s>" % \
                (self.__class__.__name__, id(self),
-                self._task_proxy().uid, runtime_id, self._task_proxy().state)
+                self._task_proxy().uid, runtime_id, self._task_proxy.state)
 
     def __getattribute__(self, item):
         try:
@@ -607,9 +625,9 @@ class TaskOutputGenerator:
         except AttributeError:
             if item not in self._generated_outputs:
                 if item == 'done':
-                    generated_output = TaskDone(self._task_proxy())
+                    generated_output = TaskDone(self._task_proxy)
                 else:
-                    generated_output = TaskOutput(item, self._task_proxy())
+                    generated_output = TaskOutput(item, self._task_proxy)
 
                 self._generated_outputs[item] = generated_output
 
@@ -618,9 +636,9 @@ class TaskOutputGenerator:
     def __getitem__(self, item):
         if item not in self._generated_outputs:
             if item == 'done':
-                generated_output = TaskDone(self._task_proxy())
+                generated_output = TaskDone(self._task_proxy)
             else:
-                generated_output = TaskOutput(item, self._task_proxy())
+                generated_output = TaskOutput(item, self._task_proxy)
 
             self._generated_outputs[item] = generated_output
 
@@ -652,6 +670,10 @@ class TaskOutputBase(Base):
     @cached_property
     def remote_runtime(self):
         return self._task_proxy.remote_runtime
+
+    @property
+    def init_future(self):
+        return self._task_proxy.init_future
 
     @property
     def done_future(self):

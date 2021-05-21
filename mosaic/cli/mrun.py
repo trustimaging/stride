@@ -148,10 +148,10 @@ def go(cmd=None, **kwargs):
             raise RuntimeError('Process ended with code: %d' % process.returncode)
 
     async def main():
-        await loop.run_in_executor(run_head, args=(), kwargs={})
+        await loop.run_in_executor(run_head)
 
     try:
-        loop.run(main, args=(), kwargs={}, wait=True)
+        loop.run(main)
 
     finally:
         stop()

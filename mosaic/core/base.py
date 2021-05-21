@@ -2,6 +2,7 @@
 import datetime
 
 import mosaic
+from ..utils import Future
 
 
 __all__ = ['RemoteBase', 'ProxyBase', 'MonitoredBase']
@@ -62,10 +63,21 @@ class CMDBase(Base):
         self._uid = None
         self._state = ''
         self._registered = False
+        self._init_future = Future()
 
         # CMD specific config
         self.retries = 0
         self.max_retries = None
+
+    async def __init_async__(self, *args, **kwargs):
+        await self.init(*args, **kwargs)
+
+        self._init_future.set_result(True)
+
+        return self
+
+    async def init(self, *args, **kwargs):
+        pass
 
     def __repr__(self):
         NotImplementedError('Unimplemented Base method __repr__')
@@ -87,6 +99,14 @@ class CMDBase(Base):
         return self._state
 
     @property
+    def init_future(self):
+        """
+        Init state of the object.
+
+        """
+        return self._init_future
+
+    @property
     def remote_runtime(self):
         """
         Proxy to runtime where remote counterpart(s) is(are).
@@ -101,6 +121,14 @@ class CMDBase(Base):
 
         """
         NotImplementedError('Unimplemented Base method remote_type')
+
+    @classmethod
+    def remote_cls(cls):
+        """
+        Class of the remote.
+
+        """
+        NotImplementedError('Unimplemented Base method remote_cls')
 
     def _fill_config(self, **kwargs):
         self.max_retries = kwargs.pop('max_retries', 0)
@@ -272,9 +300,12 @@ class CMDBase(Base):
     @classmethod
     def _deserialisation_helper(cls, state):
         instance = cls.__new__(cls)
+        instance._init_future = Future()
 
         for attr, value in state.items():
             setattr(instance, attr, value)
+
+        instance._init_future.set_result(True)
 
         return instance
 
@@ -304,6 +335,8 @@ class RemoteBase(CMDBase):
         self._uid = uid
         self._ref_count = 1
         self._proxies = set()
+
+        self._init_future.set_result(True)
 
     def __repr__(self):
         runtime_id = self.runtime.uid
@@ -382,6 +415,13 @@ class RemoteBase(CMDBase):
         if self._ref_count < 1:
             self.runtime.deregister(self)
 
+    _serialisation_attrs = CMDBase._serialisation_attrs + []
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        remote_cls = cls.remote_cls()
+        return remote_cls._deserialisation_helper(state)
+
 
 class ProxyBase(CMDBase):
     """
@@ -424,13 +464,14 @@ class ProxyBase(CMDBase):
         obj_type = cls.remote_type()
 
         instance = instance.runtime.register(instance)
-        instance.remote_runtime.inc_ref(uid=instance.uid, type=obj_type, as_async=False)
+        if instance.is_proxy and instance._registered:
+            instance.remote_runtime.inc_ref(uid=instance.uid, type=obj_type, as_async=False)
 
         return instance
 
     def __del__(self):
-        self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type(), as_async=False)
         if self._registered and self.runtime:
+            self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type(), as_async=False)
             self.runtime.deregister(self)
 
 

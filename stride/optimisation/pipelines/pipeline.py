@@ -1,27 +1,10 @@
 
-from abc import ABC, abstractmethod
-
 from mosaic.utils import camel_case
 
 from . import steps as steps_module
 
 
-__all__ = ['Pipeline', 'PipelineStep']
-
-
-class PipelineStep(ABC):
-    """
-    Base class for processing steps in pipelines.
-
-    """
-
-    @abstractmethod
-    def apply(self, *args, **kwargs):
-        """
-        Apply the processing step to the arguments.
-
-        """
-        pass
+__all__ = ['Pipeline']
 
 
 class Pipeline:
@@ -39,8 +22,9 @@ class Pipeline:
     """
 
     def __init__(self, steps=None, **kwargs):
-        steps = steps or []
+        self._no_grad = kwargs.pop('no_grad', False)
 
+        steps = steps or []
         self._steps = []
         for step in steps:
             if isinstance(step, str):
@@ -52,16 +36,28 @@ class Pipeline:
             else:
                 self._steps.append(step)
 
-    def apply(self, *args, **kwargs):
+    async def __call__(self, *args, **kwargs):
         """
         Apply all steps in the pipeline in order.
 
         """
         next_args = args
 
+        needs_grad = dict()
+        if self._no_grad:
+            for arg in args:
+                if hasattr(arg, 'needs_grad'):
+                    needs_grad[arg.name] = arg.needs_grad
+                    arg.needs_grad = False
+
         for step in self._steps:
-            next_args = step.apply(*next_args, **kwargs)
+            next_args = await step(*next_args, **kwargs)
             next_args = (next_args,) if len(args) == 1 else next_args
+
+        if self._no_grad:
+            for arg in next_args:
+                if hasattr(arg, 'needs_grad'):
+                    arg.needs_grad = needs_grad[arg.name]
 
         if len(args) == 1:
             return next_args[0]

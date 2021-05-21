@@ -1,10 +1,10 @@
 
 import numpy as np
 
-from ..pipeline import PipelineStep
+from ....core import Operator
 
 
-class Clip(PipelineStep):
+class Clip(Operator):
     """
     Clip data between two extreme values.
 
@@ -18,12 +18,17 @@ class Clip(PipelineStep):
     """
 
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
         self.min = kwargs.pop('min', None)
         self.max = kwargs.pop('max', None)
 
-    def apply(self, field, **kwargs):
+    def forward(self, field, **kwargs):
         if self.min is not None or self.max is not None:
             field.extended_data[:] = np.clip(field.extended_data,
                                              self.min, self.max)
 
         return field
+
+    def adjoint(self, d_field, field, **kwargs):
+        raise NotImplementedError('No adjoint implemented for step %s' % self.__class__.__name__)

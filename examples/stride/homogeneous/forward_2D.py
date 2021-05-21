@@ -3,11 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.lines as lines
 
-import mosaic
-
 from stride import *
-from utils import analytical_2d
+from stride.problem import *
 from stride.utils import wavelets
+
+from utils import analytical_2d
 
 
 async def main(runtime):
@@ -35,14 +35,18 @@ async def main(runtime):
                       space=space, time=time)
 
     # Create medium
-    vp = ScalarField('vp', grid=problem.grid)
+    vp = ScalarField(name='vp', grid=problem.grid)
     vp.fill(1500.)
 
-    rho = ScalarField('rho', grid=problem.grid)
+    rho = ScalarField(name='rho', grid=problem.grid)
     rho.fill(1000.)
+
+    alpha = ScalarField(name='alpha', grid=problem.grid)
+    alpha.fill(0.)
 
     problem.medium.add(vp)
     problem.medium.add(rho)
+    problem.medium.add(alpha)
 
     # Create transducers
     problem.transducers.default()
@@ -68,15 +72,21 @@ async def main(runtime):
     shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,
                                                    time.num, time.step)
 
+    # Create the PDE
+    pde = physics.IsoAcousticDevito.remote(space=space, time=time)
+
     # Set up test cases
     cases = {
-        'OT2': {'drp': False, 'kernel': 'OT2', 'colour': 'r', 'line_style': '--'},
-        'OT2-DRP': {'drp': True, 'kernel': 'OT2', 'colour': 'g', 'line_style': '--'},
-        'OT2-DRP-hicks': {'drp': True, 'kernel': 'OT2', 'interpolation_type': 'hicks', 'colour': 'b', 'line_style': '--'},
-        'OT2-DRP-PML': {'drp': True, 'kernel': 'OT2', 'boundary_type': 'complex_frequency_shift_PML_2', 'colour': 'y', 'line_style': '--'},
-        'OT4': {'drp': False, 'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
-        'OT4-DRP': {'drp': True, 'kernel': 'OT4', 'colour': 'g', 'line_style': '-.'},
-        'OT4-DRP-hicks': {'drp': True, 'kernel': 'OT4', 'interpolation_type': 'hicks', 'colour': 'b', 'line_style': '-.'},
+        'OT2': {'kernel': 'OT2', 'colour': 'r', 'line_style': '--'},
+        'OT2-hicks': {'kernel': 'OT2', 'interpolation_type': 'hicks', 'colour': 'b', 'line_style': '--'},
+        'OT2-PML': {'kernel': 'OT2', 'boundary_type': 'complex_frequency_shift_PML_2', 'colour': 'y', 'line_style': '--'},
+        'OT4': {'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
+        'OT4-hicks': {'kernel': 'OT4', 'interpolation_type': 'hicks', 'colour': 'b', 'line_style': '-.'},
+        'OT4-rho': {'rho': rho, 'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
+        'OT4-alpha-0': {'alpha': alpha, 'attenuation_power': 0, 'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
+        'OT4-alpha-2': {'alpha': alpha, 'attenuation_power': 2, 'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
+        'OT4-rho-alpha-0': {'rho': rho, 'alpha': alpha, 'attenuation_power': 0, 'kernel': 'OT4', 'colour': 'r',
+                            'line_style': '-.'},
     }
 
     # Run
@@ -93,11 +103,14 @@ async def main(runtime):
         runtime.logger.info('===== Running %s' % case)
 
         shot.observed.deallocate()
+        sub_problem = problem.sub_problem(shot.id)
+        shot_wavelets = sub_problem.shot.wavelets
 
-        await problem.forward(**config, dump=False)
+        await pde.clear_operators()
+        traces = await pde(shot_wavelets, vp, problem=sub_problem, **config).result()
 
         # Check consistency with analytical solution
-        data_stride = shot.observed.data.copy()
+        data_stride = traces.data.copy()
         data_stride /= np.max(np.abs(data_stride))
         error = np.sqrt(np.sum((data_stride - data_analytic)**2)/data_analytic.shape[0])
 

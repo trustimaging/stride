@@ -1,10 +1,10 @@
 
 from stride.utils import filters
 
-from ..pipeline import PipelineStep
+from ....core import Operator
 
 
-class FilterWavelets(PipelineStep):
+class FilterWavelets(Operator):
     """
     Filter wavelets to 3/4 of the set frequencies.
 
@@ -18,10 +18,18 @@ class FilterWavelets(PipelineStep):
     """
 
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
         self.f_min = kwargs.pop('f_min', None)
         self.f_max = kwargs.pop('f_max', None)
 
-    def apply(self, wavelets, **kwargs):
+    def forward(self, wavelets, **kwargs):
+        return self._apply(wavelets, **kwargs)
+
+    def adjoint(self, d_wavelets, wavelets, **kwargs):
+        return self._apply(d_wavelets, **kwargs)
+
+    def _apply(self, wavelets, **kwargs):
         time = wavelets.time
 
         f_min = self.f_min*time.step / 0.750 if self.f_min is not None else 0

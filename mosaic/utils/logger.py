@@ -170,7 +170,7 @@ class LoggerManager:
         self._log_level = 'info'
         self._log_location = None
 
-    def set_local(self):
+    def set_local(self, format='remote'):
         """
         Set up local loggers.
 
@@ -184,7 +184,10 @@ class LoggerManager:
         sys.stderr = self._stderr
 
         handler = logging.StreamHandler(self._stdout)
-        handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
+        if format == 'interactive':
+            handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
+        else:
+            handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
         logger.propagate = False
@@ -208,7 +211,7 @@ class LoggerManager:
             format='%(message)s',
         )
 
-    def set_remote(self, runtime_id='monitor'):
+    def set_remote(self, runtime_id='monitor', format='remote'):
         """
         Set up remote loggers.
 
@@ -236,7 +239,10 @@ class LoggerManager:
         sys.stderr = self._error_logger
 
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
+        if format == 'interactive':
+            handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
+        else:
+            handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
         logger.propagate = False

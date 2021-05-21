@@ -5,7 +5,7 @@ Optimisation
 
 .. toctree::
 
-    optimisation
-    variables
-    functionals
+    optimisation_loop
+    loss
+    optimisers
     pipelines

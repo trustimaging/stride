@@ -2,11 +2,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-import mosaic
-
 from stride import *
-from utils import analytical_3d
+from stride.problem import *
 from stride.utils import wavelets
+
+from utils import analytical_3d
 
 
 async def main(runtime):
@@ -34,7 +34,7 @@ async def main(runtime):
                       space=space, time=time)
 
     # Create medium
-    vp = ScalarField('vp', grid=problem.grid)
+    vp = ScalarField(name='vp', grid=problem.grid)
     vp.fill(1500.)
 
     problem.medium.add(vp)
@@ -63,11 +63,18 @@ async def main(runtime):
     shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,
                                                    time.num, time.step)
 
+    # Create the PDE
+    pde = physics.IsoAcousticDevito.remote(space=space, time=time)
+
     # Run
-    await problem.forward(dump=False, drp=True, kernel='OT4')
+    shot.observed.deallocate()
+    sub_problem = problem.sub_problem(shot.id)
+    shot_wavelets = sub_problem.shot.wavelets
+
+    traces = await pde(shot_wavelets, vp, problem=sub_problem, kernel='OT4').result()
 
     # Check consistency with analytical solution
-    data_stride = shot.observed.data.copy()
+    data_stride = traces.data.copy()
     data_analytic = analytical_3d(space, time, shot, 1500.)
 
     data_stride /= np.max(np.abs(data_stride))

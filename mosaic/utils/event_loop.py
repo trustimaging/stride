@@ -11,7 +11,7 @@ import mosaic
 from .utils import set_main_thread
 
 
-__all__ = ['EventLoop', 'Future', 'gather']
+__all__ = ['EventLoop', 'Future', 'async_property', 'gather']
 
 
 class Future:
@@ -250,7 +250,7 @@ class EventLoop:
     def __del__(self):
         self.stop()
 
-    def run(self, coro, args=(), kwargs=None, wait=False):
+    def run(self, coro, *args, **kwargs):
         """
         Schedule a function in the event loop from synchronous code.
 
@@ -264,8 +264,6 @@ class EventLoop:
             Set of arguments for the function.
         kwargs : optional
             Set of keyword arguments for the function.
-        wait : bool, optional
-            Whether or not to wait for the call to end, defaults to False.
 
         Returns
         -------
@@ -286,7 +284,7 @@ class EventLoop:
         future = self._loop.create_task(coro(*args, **kwargs))
         return future
 
-    def run_in_executor(self, callback, args=(), kwargs=None):
+    def run_in_executor(self, callback, *args, **kwargs):
         """
         Run function in a thread executor.
 
@@ -328,7 +326,7 @@ class EventLoop:
         """
         return asyncio.wrap_future(future, loop=self._loop)
 
-    def timeout(self, coro, timeout, args=(), kwargs=None):
+    def timeout(self, coro, timeout, *args, **kwargs):
         """
         Run function after a certain ``timeout`` in seconds.
 
@@ -352,14 +350,14 @@ class EventLoop:
 
         async def _timeout():
             await asyncio.sleep(timeout)
-            await self.run(coro, args=args, kwargs=kwargs)
+            await self.run(coro, *args, **kwargs)
 
         future = asyncio.run_coroutine_threadsafe(_timeout(), self._loop)
         self._recurring_tasks.add(future)
 
         return future
 
-    def interval(self, coro, interval, args=(), kwargs=None):
+    def interval(self, coro, interval, *args, **kwargs):
         """
         Run function every ``interval`` in seconds, starting after ``interval`` seconds.
 
@@ -384,7 +382,7 @@ class EventLoop:
         async def _interval():
             while not self._stop.is_set():
                 await asyncio.sleep(interval)
-                await self.run(coro, args=args, kwargs=kwargs)
+                await self.run(coro, *args, **kwargs)
 
         future = asyncio.run_coroutine_threadsafe(_interval(), self._loop)
         self._recurring_tasks.add(future)
@@ -400,6 +398,44 @@ class EventLoop:
 
         """
         self._loop.call_soon_threadsafe(set_main_thread)
+
+
+class AwaitableOnly:
+    __slots__ = ['_coro']
+
+    def __init__(self, coro):
+        object.__setattr__(self, '_coro', coro)
+
+    def __repr__(self):
+        return f'<AwaitableOnly "{self._coro.__qualname__}">'
+
+    def __await__(self):
+        return self._coro().__await__()
+
+
+class async_property:
+    def __init__(self, func, field_name=None):
+        self._func = func
+        self.field_name = field_name or func.__name__
+        functools.update_wrapper(self, func)
+
+    def __set_name__(self, cls, name):
+        self.field_name = name
+
+    def __get__(self, instance, cls):
+        if instance is None:
+            return self
+        return self.awaitable_only(instance)
+
+    def get_loader(self, instance):
+        @functools.wraps(self._func)
+        async def get_value():
+            return await self._func(instance)
+
+        return get_value
+
+    def awaitable_only(self, instance):
+        return AwaitableOnly(self.get_loader(instance))
 
 
 def gather(tasks):

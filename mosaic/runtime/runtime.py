@@ -2,11 +2,14 @@
 import gc
 import zmq
 import zmq.asyncio
+import asyncio
+import contextlib
 import weakref
 
 import mosaic
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
+from ..core import Task
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -205,6 +208,51 @@ class Runtime(BaseRPC):
         if wait is True:
             self._comms.wait()
 
+    async def barrier(self, timeout=None):
+        """
+        Wait until all pending tasks are done. If no timeout is
+        provided, the barrier will wait indefinitely.
+
+        Parameters
+        ----------
+        timeout : float, optional
+
+        Returns
+        -------
+
+        """
+        monitor = self.get_monitor()
+        await monitor.barrier(timeout=timeout, reply=True)
+
+    def async_for(self, *iterables, **kwargs):
+
+        async def _async_for(func):
+            worker_queue = asyncio.Queue()
+            for worker in self._workers.values():
+                await worker_queue.put(worker)
+
+            async def call(*iters):
+                async with self._exclusive_proxy(worker_queue) as _worker:
+                    res = await func(_worker, *iters)
+
+                return res
+
+            tasks = [call(*each) for each in zip(*iterables)]
+            gather = await asyncio.gather(*tasks)
+            await self.barrier()
+
+            return gather
+
+        return _async_for
+
+    @contextlib.asynccontextmanager
+    async def _exclusive_proxy(self, queue):
+        proxy = await queue.get()
+
+        yield proxy
+
+        await queue.put(proxy)
+
     @property
     def address(self):
         """
@@ -349,6 +397,19 @@ class Runtime(BaseRPC):
         else:
             return self._node
 
+    def get_nodes(self):
+        """
+        Access all node runtimes.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+
+        """
+        return self._nodes
+
     def get_worker(self, uid=None):
         """
         Access specific worker runtime.
@@ -366,6 +427,19 @@ class Runtime(BaseRPC):
 
         else:
             return self._worker
+
+    def get_workers(self):
+        """
+        Access all worker runtimes.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+
+        """
+        return self._workers
 
     def proxy_from_uid(self, uid, proxy=None):
         """
@@ -586,7 +660,7 @@ class Runtime(BaseRPC):
 
         """
         if self._comms is not None:
-            self._loop.run(self._comms.stop, args=(sender_id,))
+            self._loop.run(self._comms.stop, sender_id)
 
         if self._loop is not None:
             self._loop._stop.set()
@@ -607,6 +681,7 @@ class Runtime(BaseRPC):
         """
         obj_type = obj.type
         obj_uid = obj.uid
+
         obj_store = getattr(self, '_' + obj_type)
 
         if obj_uid not in obj_store.keys():
@@ -672,6 +747,157 @@ class Runtime(BaseRPC):
         result = method(*cmd.args, **cmd.kwargs)
 
         return result
+
+    def inc_ref(self, sender_id, uid, type):
+        """
+        Increase reference count for a resident object.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        uid : str
+            UID of the object being referenced.
+        type : str
+            Type of the object being referenced.
+
+        Returns
+        -------
+
+        """
+        self.logger.debug('Increased ref count for object %s' % uid)
+
+        obj_type = type
+        obj_uid = uid
+        obj_store = getattr(self, '_' + obj_type)
+
+        if obj_uid not in obj_store.keys():
+            raise KeyError('Runtime %s does not own object %s of type %s' % (self.uid, obj_uid, obj_type))
+
+        obj = obj_store[obj_uid]
+        obj.inc_ref()
+        obj.register_proxy(uid=sender_id)
+
+    def dec_ref(self, sender_id, uid, type):
+        """
+        Decrease reference count for a resident object.
+
+        If reference count decreases below 1, deregister the object.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        uid : str
+            UID of the object being referenced.
+        type : str
+            Type of the object being referenced.
+
+        Returns
+        -------
+
+        """
+        self.logger.debug('Decreased ref count for object %s' % uid)
+
+        obj_type = type
+        obj_uid = uid
+        obj_store = getattr(self, '_' + obj_type)
+
+        if obj_uid not in obj_store.keys():
+            raise KeyError('Runtime %s does not own object %s of type %s' % (self.uid, obj_uid, obj_type))
+
+        obj = obj_store[obj_uid]
+        obj.dec_ref()
+        obj.deregister_proxy(uid=sender_id)
+
+    # Tessera and task management methods
+
+    async def init_tessera(self, sender_id, cls, uid, args, **kwargs):
+        """
+        Create tessera in this worker.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        cls : type
+            Class of the tessera.
+        uid : str
+            UID of the new tessera.
+        args : tuple, optional
+            Arguments for the initialisation of the tessera.
+        kwargs : optional
+            Keyword arguments for the initialisation of the tessera.
+
+        Returns
+        -------
+
+        """
+        tessera = cls.local(*args, uid=uid, **kwargs)
+        tessera.register_proxy(sender_id)
+
+        return tessera._cls_attr_names
+
+    async def init_task(self, sender_id, task, uid):
+        """
+        Create new task for a tessera in this worker.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        task : dict
+            Task configuration.
+        uid : str
+            UID of the new task.
+
+        Returns
+        -------
+
+        """
+        obj_uid = task['tessera_id']
+        obj_store = self._tessera
+        tessera = obj_store[obj_uid]
+
+        task = Task(uid, sender_id, tessera,
+                    task['method'], *task['args'], **task['kwargs'])
+
+        tessera.queue_task((sender_id, task))
+        await task.state_changed('pending')
+
+    async def tessera_state_changed(self, tessera):
+        """
+        Notify change in tessera state.
+
+        Parameters
+        ----------
+        tessera : Tessera
+
+        Returns
+        -------
+
+        """
+        monitor = self.get_monitor()
+        await monitor.tessera_state_changed(uid=tessera.uid,
+                                            state=tessera.state)
+
+    async def task_state_changed(self, task, elapsed=None):
+        """
+        Notify change in task state.
+
+        Parameters
+        ----------
+        task : Task
+        elapsed : float, optional
+
+        Returns
+        -------
+
+        """
+        monitor = self.get_monitor()
+        await monitor.task_state_changed(uid=task.uid,
+                                         state=task.state,
+                                         elapsed=elapsed)
 
 
 class RuntimeProxy(BaseRPC):
@@ -748,7 +974,6 @@ class RuntimeProxy(BaseRPC):
 
         except AttributeError:
             def remote_method(**kwargs):
-                wait = kwargs.pop('wait', False)
                 reply = kwargs.pop('reply', False)
                 as_async = kwargs.pop('as_async', True)
 
@@ -764,9 +989,6 @@ class RuntimeProxy(BaseRPC):
 
                 if as_async is True:
                     send_method += '_async'
-
-                else:
-                    kwargs['wait'] = wait
 
                 send_method = getattr(self._comms, send_method)
                 return send_method(self.uid, **kwargs)

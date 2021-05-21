@@ -1,5 +1,5 @@
 
-__version__ = '1.0'
+__version__ = '1.1'
 
 import asyncio
 
@@ -120,7 +120,7 @@ def init(runtime_type='head', runtime_indices=(),
                        'monitor, node and worker')
 
     loop = _runtime.get_event_loop(asyncio_loop=asyncio_loop)
-    result = loop.run(_runtime.init, kwargs=runtime_config, wait=True)
+    result = loop.run(_runtime.init, **runtime_config)
 
     if wait is True:
         try:
@@ -185,7 +185,7 @@ def stop():
     loop = _runtime.get_event_loop()
 
     try:
-        loop.run(_runtime.stop, args=(), kwargs={}, wait=True)
+        loop.run(_runtime.stop)
 
     finally:
         loop.stop()
@@ -216,7 +216,7 @@ def run(main, *args, **kwargs):
     loop = _runtime.get_event_loop()
 
     try:
-        loop.run(main, args=(_runtime,), kwargs={}, wait=True)
+        loop.run(main, _runtime)
 
     finally:
         stop()
@@ -258,7 +258,7 @@ async def interactive(switch, *args, **kwargs):
         loop = _runtime.get_event_loop()
 
         try:
-            await loop.run(_runtime.stop, args=(), kwargs={})
+            await loop.run(_runtime.stop)
 
         finally:
             clear_runtime()
