@@ -1,16 +1,16 @@
 
+import mosaic
+
 from .pipeline import Pipeline
 
 
-__all__ = ['ProcessWavelets', 'ProcessWavefield', 'ProcessTraces',
-           'ProcessAdjointSource', 'ProcessLocalGradient', 'ProcessGlobalGradient',
-           'ProcessModelIteration', 'ProcessModelBlock']
+__all__ = ['ProcessWavelets', 'ProcessTraces',
+           'ProcessGlobalGradient', 'ProcessModelIteration']
 
-# TODO Some of these pipelines should be different for variables
-# TODO A more flexible and intuitive way of configuring pipelines is needed
 # TODO Default configuration of pipelines should be better defined
 
 
+@mosaic.tessera
 class ProcessWavelets(Pipeline):
     """
     Default pipeline to process wavelets before running the forward problem.
@@ -21,23 +21,14 @@ class ProcessWavelets(Pipeline):
 
     """
 
-    def __init__(self, steps=None, **kwargs):
+    def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
         steps.append('filter_wavelets')
 
-        super().__init__(steps, **kwargs)
+        super().__init__(steps, no_grad=no_grad, **kwargs)
 
 
-class ProcessWavefield(Pipeline):
-    """
-    Default pipeline to process the wavefield after running the forward problem.
-
-    **Default steps:**
-
-    """
-    pass
-
-
+@mosaic.tessera
 class ProcessTraces(Pipeline):
     """
     Default pipeline to process modelled and observed before running the functional.
@@ -49,41 +40,15 @@ class ProcessTraces(Pipeline):
 
     """
 
-    def __init__(self, steps=None, **kwargs):
+    def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
         steps.append('filter_traces')
         steps.append('norm_per_shot')
 
-        super().__init__(steps, **kwargs)
+        super().__init__(steps, no_grad=no_grad, **kwargs)
 
 
-class ProcessAdjointSource(Pipeline):
-    """
-    Default pipeline to process adjoint source before running the adjoint problem.
-
-    **Default steps:**
-
-    - ``filter_traces``
-
-    """
-
-    def __init__(self, steps=None, **kwargs):
-        steps = steps or []
-        steps.append('filter_traces')
-
-        super().__init__(steps, **kwargs)
-
-
-class ProcessLocalGradient(Pipeline):
-    """
-    Default pipeline to process the gradient locally before returning it.
-
-    **Default steps:**
-
-    """
-    pass
-
-
+@mosaic.tessera
 class ProcessGlobalGradient(Pipeline):
     """
     Default pipeline to process the global gradient before updating the variable.
@@ -96,15 +61,16 @@ class ProcessGlobalGradient(Pipeline):
 
     """
 
-    def __init__(self, steps=None, **kwargs):
+    def __init__(self, steps=None, no_grad=True, **kwargs):
         steps = steps or []
         steps.append('mask')
         steps.append('smooth_field')
         steps.append('norm_field')
 
-        super().__init__(steps, **kwargs)
+        super().__init__(steps, no_grad=no_grad, **kwargs)
 
 
+@mosaic.tessera
 class ProcessModelIteration(Pipeline):
     """
     Default pipeline to process the model after each iteration.
@@ -115,18 +81,8 @@ class ProcessModelIteration(Pipeline):
 
     """
 
-    def __init__(self, steps=None, **kwargs):
+    def __init__(self, steps=None, no_grad=True, **kwargs):
         steps = steps or []
         steps.append('clip')
 
-        super().__init__(steps, **kwargs)
-
-
-class ProcessModelBlock(Pipeline):
-    """
-    Default pipeline to process the model after each block.
-
-    **Default steps:**
-
-    """
-    pass
+        super().__init__(steps, no_grad=no_grad, **kwargs)

@@ -19,6 +19,11 @@ Tessera
     :undoc-members:
     :show-inheritance:
 
+.. autoclass:: mosaic.core.tessera.ParameterMixin
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 .. autoclass:: mosaic.core.tessera.MonitoredTessera
     :members:
     :undoc-members:

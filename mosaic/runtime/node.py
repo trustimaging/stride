@@ -126,10 +126,10 @@ class Node(Runtime):
         self.logger = LoggerManager()
 
         if self.mode == 'local':
-            self.logger.set_local()
+            self.logger.set_local(format=self.mode)
         else:
             runtime_id = 'head' if self.mode == 'interactive' else 'monitor'
-            self.logger.set_remote(runtime_id=runtime_id)
+            self.logger.set_remote(runtime_id=runtime_id, format=self.mode)
 
     def resource_monitor(self):
         """

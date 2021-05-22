@@ -1,8 +1,6 @@
 
 import numpy as np
 
-import mosaic
-
 from stride import *
 
 
@@ -31,7 +29,8 @@ async def main(runtime):
                       space=space, time=time)
 
     # Create medium
-    vp = ScalarField('vp', grid=problem.grid)
+    vp = ScalarField.parameter(name='vp',
+                               grid=problem.grid, needs_grad=True)
     vp.fill(1500.)
 
     problem.medium.add(vp)
@@ -59,30 +58,37 @@ async def main(runtime):
     # Plot
     problem.plot()
 
-    # Create optimisation variable
-    optimisation = Optimisation()
+    # Create the PDE
+    pde = IsoAcousticDevito.remote(grid=problem.grid, len=runtime.num_workers)
 
-    optim_vp = Vp('vp', grid=problem.grid)
-    optim_vp.extended_data[:] = vp.extended_data[:]
+    # Create loss
+    loss = L2DistanceLoss.remote(len=runtime.num_workers)
 
     # Create optimiser
     step_size = 10
-    optimiser = GradientDescent(optim_vp, step=step_size)
+    process_grad = ProcessGlobalGradient()
+    process_model = ProcessModelIteration(min=1400., max=1700.)
 
-    optimisation.add(optim_vp, optimiser)
+    optimiser = GradientDescent(vp, step_size=step_size,
+                                process_grad=process_grad,
+                                process_model=process_model)
 
     # Run optimisation
+    optimisation_loop = OptimisationLoop()
+
     max_freqs = [0.3e6, 0.4e6, 0.5e6, 0.6e6]
 
-    for freq, block in zip(max_freqs, optimisation.blocks(4)):
-        block.config(num_iterations=8,
-                     f_min=0.05e6, f_max=freq,
-                     min=1400., max=1700.,
-                     select_shots={'num': 16, 'randomly': True})
+    num_blocks = 4
+    num_iters = 8
 
-        await optimisation.run(block, problem)
+    for block, freq in optimisation_loop.blocks(num_blocks, max_freqs):
+        await adjoint(problem, pde, loss,
+                      optimisation_loop, optimiser, vp,
+                      num_iters=num_iters,
+                      select_shots=dict(num=16, randomly=True),
+                      f_min=0.05e6, f_max=freq)
 
-    optim_vp.plot()
+    vp.plot()
 
 if __name__ == '__main__':
     mosaic.run(main)

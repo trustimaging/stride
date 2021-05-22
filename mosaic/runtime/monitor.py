@@ -1,5 +1,6 @@
 
 import os
+import time
 import pprint
 import asyncio
 import subprocess as cmd_subprocess
@@ -148,9 +149,9 @@ class Monitor(Runtime):
         self.logger = LoggerManager()
 
         if self.mode == 'interactive':
-            self.logger.set_remote(runtime_id='head')
+            self.logger.set_remote(runtime_id='head', format=self.mode)
         else:
-            self.logger.set_local()
+            self.logger.set_local(format=self.mode)
 
     def update_monitored_node(self, sender_id, monitored_node):
         """
@@ -306,3 +307,34 @@ class Monitor(Runtime):
             await asyncio.sleep(0.1)
 
         return self._monitor_strategy.select_worker(sender_id)
+
+    async def barrier(self, sender_id, timeout=None):
+        """
+        Wait until all pending tasks are done. If no timeout is
+        provided, the barrier will wait indefinitely.
+
+        Parameters
+        ----------
+        timeout : float, optional
+
+        Returns
+        -------
+
+        """
+        pending_tasks = []
+        for task in self._monitored_tasks.values():
+            if task.state in ['done', 'failed', 'collected']:
+                continue
+
+            pending_tasks.append(task)
+
+        tic = time.time()
+        while pending_tasks:
+            await asyncio.sleep(0.01)
+
+            for task in pending_tasks:
+                if task.state in ['done', 'failed', 'collected']:
+                    pending_tasks.remove(task)
+
+            if timeout is not None and (time.time() - tic) > timeout:
+                break

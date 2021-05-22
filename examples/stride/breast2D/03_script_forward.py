@@ -1,6 +1,4 @@
 
-import mosaic
-
 from stride import *
 from stride.utils import fetch, wavelets
 
@@ -30,7 +28,7 @@ async def main(runtime):
                       space=space, time=time)
 
     # Create medium
-    vp = ScalarField('vp', grid=problem.grid)
+    vp = ScalarField(name='vp', grid=problem.grid)
     fetch('anastasio2D', dest='data/anastasio2D-TrueModel.h5')
     vp.load('data/anastasio2D-TrueModel.h5')
 
@@ -57,8 +55,11 @@ async def main(runtime):
     # Plot
     problem.plot()
 
+    # Create the PDE
+    pde = IsoAcousticDevito.remote(grid=problem.grid, len=runtime.num_workers)
+
     # Run
-    await problem.forward()
+    await forward(problem, pde, vp)
 
 
 if __name__ == '__main__':

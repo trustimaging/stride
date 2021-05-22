@@ -50,15 +50,15 @@ async def main(runtime):
     array = np.zeros((1024, 1024, 1), dtype=np.float32)
 
     # These objects will be created remotely
-    solver_1 = await Solver1.remote(array)
-    solver_2 = await Solver2.remote()
+    solver_1 = Solver1.remote(array)
+    solver_2 = Solver2.remote()
 
     # These will run in parallel
     # The calls will return immediately by creating a remote
     # task
     start = time.time()
-    task_1 = await solver_1.solve(array)
-    task_2 = await solver_2.solve(array)
+    task_1 = solver_1.solve(array)
+    task_2 = solver_2.solve(array)
 
     # Do some other work
 
@@ -78,8 +78,8 @@ async def main(runtime):
     # These will wait for each other because
     # their results depend on each other
     start = time.time()
-    task_1 = await solver_1.solve(array)
-    task_2 = await solver_2.solve(task_1)
+    task_1 = solver_1.solve(array)
+    task_2 = solver_2.solve(task_1)
 
     # Do some other work
 
@@ -90,8 +90,8 @@ async def main(runtime):
 
     # These will also wait for each other
     start = time.time()
-    task_1 = await solver_1.solve_more()
-    task_2 = await solver_2.solve_more(task_1.outputs.done)
+    task_1 = solver_1.solve_more()
+    task_2 = solver_2.solve_more(task_1.outputs.done)
 
     # Do some other work
 

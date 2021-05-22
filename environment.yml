@@ -33,5 +33,5 @@ dependencies:
   - wxPython
   - zlib
   - pip:
-      - devito
+      - devito>=4.4
       - python-daemon

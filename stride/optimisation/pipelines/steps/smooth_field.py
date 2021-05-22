@@ -1,10 +1,10 @@
 
 import scipy.ndimage
 
-from ..pipeline import PipelineStep
+from ....core import Operator
 
 
-class SmoothField(PipelineStep):
+class SmoothField(Operator):
     """
     Apply Gaussian smoothing to a StructuredData object.
 
@@ -16,10 +16,15 @@ class SmoothField(PipelineStep):
     """
 
     def __init__(self, **kwargs):
+        super().__init__(*kwargs)
+
         self.sigma = kwargs.pop('sigma', 0.25)
 
-    def apply(self, field, **kwargs):
+    def forward(self, field, **kwargs):
         field.extended_data[:] = scipy.ndimage.gaussian_filter(field.extended_data,
                                                                sigma=self.sigma, mode='nearest')
 
         return field
+
+    def adjoint(self, d_field, field, **kwargs):
+        raise NotImplementedError('No adjoint implemented for step %s' % self.__class__.__name__)

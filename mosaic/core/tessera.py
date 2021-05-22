@@ -3,6 +3,8 @@ import sys
 import uuid
 import tblib
 import asyncio
+import inspect
+import functools
 import contextlib
 import cloudpickle
 from cached_property import cached_property
@@ -10,9 +12,31 @@ from cached_property import cached_property
 import mosaic
 from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, MonitoredBase
+from ..utils.event_loop import AwaitableOnly
 
 
 __all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'MonitoredTessera', 'tessera']
+
+
+def _extract_methods(cls, exclude):
+    methods = inspect.getmembers(cls, predicate=inspect.isfunction)
+    cls_methods = [method for method in methods if not method[0].startswith('__')
+                   and method[0] not in exclude]
+    cls_magic_methods = [method for method in methods if method[0].startswith('__')
+                         and method[0] not in exclude]
+
+    cls_method_names = [method[0] for method in cls_methods]
+    cls_magic_method_names = [method[0] for method in cls_magic_methods]
+
+    return cls_methods, cls_magic_methods, cls_method_names, cls_magic_method_names
+
+
+def _extract_attrs(cls, exclude):
+    attrs = inspect.getmembers(cls, predicate=lambda x: not inspect.isfunction(x) and not inspect.ismethod(x))
+    cls_attrs = [attr for attr in attrs if attr[0] not in exclude]
+    cls_attrs_names = [attr[0] for attr in cls_attrs]
+
+    return cls_attrs, cls_attrs_names
 
 
 class Tessera(RemoteBase):
@@ -46,14 +70,40 @@ class Tessera(RemoteBase):
         kwargs = self._fill_config(**kwargs)
 
         self._state = 'init'
+        self._is_parameter = kwargs.pop('parameter', False)
         self._task_queue = asyncio.Queue()
         self._task_lock = asyncio.Lock()
 
         self._cls = cls
+        self._obj = None
+
+        self._cls_methods = []
+        self._cls_magic_methods = []
+        self._cls_method_names = []
+        self._cls_magic_method_names = []
+        self._cls_attrs = []
+
         self._init_cls(*args, **kwargs)
+        self._set_cls()
 
         self.runtime.register(self)
-        self.listen(wait=False)
+        self.listen()
+
+    def _set_cls(self):
+        obj = self._obj
+        exclude = dir(self)
+
+        cls_methods, cls_magic_methods, \
+            cls_method_names, cls_magic_method_names = _extract_methods(obj, exclude)
+        cls_attrs, cls_attr_names = _extract_attrs(obj, exclude)
+
+        self._cls_methods = cls_methods
+        self._cls_magic_methods = cls_magic_methods
+        self._cls_attrs = cls_attrs
+
+        self._cls_method_names = cls_method_names
+        self._cls_magic_method_names = cls_magic_method_names
+        self._cls_attr_names = cls_attr_names
 
     @cached_property
     def remote_runtime(self):
@@ -63,9 +113,22 @@ class Tessera(RemoteBase):
         """
         return {self.proxy(each) for each in list(self._proxies)}
 
+    @classmethod
+    def remote_cls(cls):
+        """
+        Class of the remote.
+
+        """
+        return TesseraProxy
+
+    @property
+    def is_parameter(self):
+        return self._is_parameter
+
     def _init_cls(self, *args, **kwargs):
         try:
             self._obj = self._cls(*args, **kwargs)
+            setattr(self._obj, '_tessera', self)
 
         except Exception:
             self.retries += 1
@@ -79,6 +142,37 @@ class Tessera(RemoteBase):
                                                           self.retries, self.max_retries))
 
                 return self._init_cls(*args, **kwargs)
+
+    def get_attr(self, item):
+        """
+        Access attributes from the underlying object.
+
+        Parameters
+        ----------
+        item : str
+            Name of the attribute.
+
+        Returns
+        -------
+
+        """
+        return getattr(self._obj, item)
+
+    def set_attr(self, item, value):
+        """
+        Set attributes on the underlying object.
+
+        Parameters
+        ----------
+        item : str
+            Name of the attribute.
+        value : object
+
+        Returns
+        -------
+
+        """
+        return setattr(self._obj, item, value)
 
     def queue_task(self, task):
         """
@@ -94,14 +188,12 @@ class Tessera(RemoteBase):
         """
         self._task_queue.put_nowait(task)
 
-    def listen(self, wait=False):
+    def listen(self):
         """
         Start the listening loop that consumes tasks.
 
         Parameters
         ----------
-        wait : bool, optional
-            Whether or not to wait for the loop end, defaults to False.
 
         Returns
         -------
@@ -110,7 +202,7 @@ class Tessera(RemoteBase):
         if self._state != 'init':
             return
 
-        self.loop.run(self.listen_async, wait=wait)
+        self.loop.run(self.listen_async)
 
     async def listen_async(self):
         """
@@ -176,9 +268,16 @@ class Tessera(RemoteBase):
         """
         async with self._task_lock:
             async with self.send_exception(sender_id, method, task):
-                future = self.loop.run_in_executor(method,
-                                                   args=task.args_value(),
-                                                   kwargs=task.kwargs_value())
+                if inspect.iscoroutinefunction(method):
+                    future = self.loop.run(method,
+                                           *task.args_value(),
+                                           **task.kwargs_value())
+
+                else:
+                    future = self.loop.run_in_executor(method,
+                                                       *task.args_value(),
+                                                       **task.kwargs_value())
+
                 result = await future
                 # TODO Dodgy
                 await asyncio.sleep(0.1)
@@ -242,9 +341,94 @@ class Tessera(RemoteBase):
         self._state = state
         await self.runtime.tessera_state_changed(self)
 
+    _serialisation_attrs = RemoteBase._serialisation_attrs + ['_cls_attr_names']
+
+    def _serialisation_helper(self):
+        state = super()._serialisation_helper()
+        state['_cls'] = PickleClass(self._cls)
+        state['_runtime_id'] = mosaic.runtime().uid
+
+        return state
+
     def __del__(self):
         self.logger.debug('Garbage collected object %s' % self)
-        self.loop.run(self.state_changed, args=('collected',))
+        self.loop.run(self.state_changed, 'collected')
+
+
+class ParameterMixin:
+    """
+    A parameter is a Python object that, when moved across different runtimes
+    in the mosaic network, will retain a reference to its original, root object.
+
+    This reference means that changes to a local object can be propagated to
+    the root object using ``obj.method(..., propagate=True)``.
+
+    It also means that attributes of the root object can be changed using
+    ``obj.set('attr', value)``. The latest value of an attribute can be pulled
+    from the root object by doing ``await obj.get('attr')``.
+
+    Objects of class Parameter should not be instantiated directly by the user
+    and the ``@mosaic.tessera`` decorator should be used instead.
+
+    """
+
+    @property
+    def has_tessera(self):
+        return hasattr(self, '_tessera') \
+               and self._tessera is not None \
+               and isinstance(self._tessera, (Tessera, TesseraProxy))
+
+    async def get(self, item):
+        if self.has_tessera:
+            value = await self._tessera.get_attr(item)
+            super().__setattr__(item, value)
+
+        return super().__getattribute__(item)
+
+    def set(self, item, value):
+        if self.has_tessera:
+            self._tessera.set_attr(item, value)
+
+        super().__setattr__(item, value)
+
+    def __getattribute__(self, item):
+        member = super().__getattribute__(item)
+
+        has_tessera = False
+        try:
+            tess = super().__getattribute__('_tessera')
+            has_tessera = tess is not None and isinstance(tess, (Tessera, TesseraProxy))
+        except AttributeError:
+            pass
+
+        if has_tessera:
+            if inspect.iscoroutine(member) or inspect.iscoroutinefunction(member):
+                @functools.wraps(member)
+                async def remote_method(*args, **kwargs):
+                    propagate = kwargs.pop('propagate', False)
+                    if propagate:
+                        await tess[item](*args, **kwargs)
+
+                    return await member(*args, **kwargs)
+
+                return remote_method
+
+            elif inspect.isfunction(member) or inspect.ismethod(member):
+                @functools.wraps(member)
+                def remote_method(*args, **kwargs):
+                    propagate = kwargs.pop('propagate', False)
+                    if propagate:
+                        tess[item](*args, **kwargs)
+
+                    return member(*args, **kwargs)
+
+                return remote_method
+
+        return member
+
+    def __del__(self):
+        if self.has_tessera and isinstance(self._tessera, Tessera):
+            self._tessera.dec_ref()
 
 
 class TesseraProxy(ProxyBase):
@@ -272,11 +456,43 @@ class TesseraProxy(ProxyBase):
         super().__init__(*args, **kwargs)
 
         self._cls = PickleClass(cls)
-        self._runtime_id = None
+
+        runtime = kwargs.pop('runtime', None)
+        self._runtime_id = runtime.uid if hasattr(runtime, 'uid') else runtime
 
         self._uid = '%s-%s-%s' % ('tess',
                                   self._cls.__name__.lower(),
                                   uuid.uuid4().hex)
+
+        self._cls_attr_names = None
+        self._set_cls()
+
+        self._state = 'pending'
+
+    def _set_cls(self):
+        if self.__class__.__name__ == '_TesseraProxy':
+            return
+
+        cls = self._cls.cls
+        exclude = dir(self)
+        cls_methods, cls_magic_methods, \
+            cls_method_names, cls_magic_method_names = _extract_methods(cls, exclude)
+
+        for method in cls_methods:
+            method_getter = self._get_method_getter(method[0])
+            method_getter = functools.wraps(method[1])(method_getter)
+
+            setattr(self, method[0], method_getter)
+
+        __dict__ = {}
+        for method in cls_magic_methods:
+            method_getter = self._get_magic_method_getter(method[0])
+            method_getter = functools.wraps(method[1])(method_getter)
+
+            __dict__[method[0]] = method_getter
+
+        _TesseraProxy = type('_TesseraProxy', (TesseraProxy,), __dict__)
+        self.__class__ = _TesseraProxy
 
     async def init(self, *args, **kwargs):
         """
@@ -285,16 +501,18 @@ class TesseraProxy(ProxyBase):
         """
         kwargs = self._fill_config(**kwargs)
 
-        runtime = kwargs.pop('runtime', None)
-        self._runtime_id = await self.select_worker(runtime)
+        self._runtime_id = await self.select_worker(self._runtime_id)
 
         self._state = 'pending'
         await self.monitor.init_tessera(uid=self._uid,
                                         runtime_id=self._runtime_id)
 
         self.runtime.register(self)
-        await self.remote_runtime.init_tessera(cls=self._cls, uid=self._uid, args=args,
-                                               reply=True, **kwargs)
+        cls_attrs = await self.remote_runtime.init_tessera(cls=self._cls,
+                                                           uid=self._uid, args=args,
+                                                           reply=True, **kwargs)
+        self._cls_attr_names = cls_attrs
+
         self._state = 'listening'
 
     @property
@@ -314,7 +532,29 @@ class TesseraProxy(ProxyBase):
         return self.proxy(self._runtime_id)
 
     @classmethod
+    def remote_cls(cls):
+        """
+        Class of the remote.
+
+        """
+        return Tessera
+
+    @classmethod
     async def select_worker(cls, runtime=None):
+        """
+        Select an available worker.
+
+        Parameters
+        ----------
+        runtime : str or Runtime, optional
+            If a valid runtime is given, this will be selected as the target worker.
+
+        Returns
+        -------
+        str
+            UID of the target worker.
+
+        """
         if hasattr(runtime, 'uid'):
             runtime = runtime.uid
 
@@ -324,30 +564,109 @@ class TesseraProxy(ProxyBase):
 
         return runtime
 
+    def get_attr(self, item):
+        """
+        Get at attribute from the remote tessera.
+
+        Parameters
+        ----------
+        item : str
+
+        Returns
+        -------
+        AwaitableOnly
+
+        """
+        return self._get_remote_attr(item)
+
+    def set_attr(self, item, value):
+        """
+        Set an attribute on the remote tessera.
+
+        Parameters
+        ----------
+        item : str
+        value : object
+
+        Returns
+        -------
+
+        """
+        return self._get_remote_method('set_attr')(item, value)
+
+    async def _init_task(self, task_proxy, *args, **kwargs):
+        await self._init_future
+
+        for arg in args:
+            if hasattr(arg, 'init_future'):
+                await arg.init_future
+
+        for arg in kwargs.values():
+            if hasattr(arg, 'init_future'):
+                await arg.init_future
+
+        return await task_proxy.__init_async__()
+
+    def _get_remote_method(self, item):
+        def remote_method(*args, **kwargs):
+            task_proxy = TaskProxy(self, item, *args, **kwargs)
+
+            loop = mosaic.get_event_loop()
+            loop.run(self._init_task, task_proxy, *args, **kwargs)
+
+            return task_proxy
+
+        return remote_method
+
+    def _get_remote_attr(self, item):
+        async def remote_attr():
+            await self._init_future
+            attr = await self.cmd_recv_async(method='get_attr', item=item)
+
+            return attr
+
+        return AwaitableOnly(remote_attr)
+
+    def _get_method_getter(self, method):
+        def method_getter(*args, **kwargs):
+            return self._get_remote_method(method)(*args, **kwargs)
+
+        return method_getter
+
+    def _get_magic_method_getter(self, method):
+        def method_getter(_self, *args, **kwargs):
+            return self._get_remote_method(method)(*args, **kwargs)
+
+        return method_getter
+
     def __getattribute__(self, item):
         try:
             return super().__getattribute__(item)
 
         except AttributeError:
-
-            if not hasattr(self._cls, item):
-                raise AttributeError('Class %s does not have method %s' % (self._cls.__name__, item))
-
-            if not callable(getattr(self._cls, item)):
-                raise ValueError('Method %s of class %s is not callable' % (item, self._cls.__name__))
-
-            async def remote_method(*args, **kwargs):
-                task_proxy = TaskProxy(self, item, *args, **kwargs)
-                await task_proxy.init()
-
-                return task_proxy
-
-            return remote_method
+            if self._cls_attr_names is None or item in self._cls_attr_names:
+                return self._get_remote_attr(item)
+            else:
+                raise AttributeError('Class %s or TesseraProxy has no attribute %s' %
+                                     (self._cls.cls.__class__.__name__, item))
 
     def __getitem__(self, item):
         return self.__getattribute__(item)
 
-    _serialisation_attrs = ProxyBase._serialisation_attrs + ['_cls', '_runtime_id']
+    def __await__(self):
+        yield from self._init_future.__await__()
+        return self
+
+    _serialisation_attrs = ProxyBase._serialisation_attrs + ['_cls',
+                                                             '_runtime_id',
+                                                             '_cls_attr_names']
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        instance = super()._deserialisation_helper(state)
+        instance._set_cls()
+
+        return instance
 
 
 class ArrayProxy(CMDBase):
@@ -379,18 +698,26 @@ class ArrayProxy(CMDBase):
 
         self._cls = PickleClass(cls)
         self._len = kwargs.pop('len', 1)
-
-        self._state = 'pending'
+        self._cls_attr_names = None
 
         self._proxies = []
         self._runtime_id = []
-        for _ in range(self._len):
-            proxy = TesseraProxy(cls, *args, **kwargs)
-            self._proxies.append(proxy)
 
         self._uid = '%s-%s-%s' % ('array',
                                   self._cls.__name__.lower(),
                                   uuid.uuid4().hex)
+
+        available_workers = [uid for uid in mosaic.get_workers().keys()]
+
+        for index in range(self._len):
+            worker = available_workers[index % len(available_workers)]
+            proxy = TesseraProxy(cls, *args, runtime=worker, **kwargs)
+
+            self._proxies.append(proxy)
+
+        self._set_cls()
+
+        self._state = 'pending'
 
     async def init(self, *args, **kwargs):
         """
@@ -398,12 +725,38 @@ class ArrayProxy(CMDBase):
 
         """
         for proxy in self._proxies:
-            await proxy.init(*args, **kwargs)
+            await proxy.__init_async__(*args, **kwargs)
             self._runtime_id.append(proxy.runtime_id)
+            self._cls_attr_names = proxy._cls_attr_names
 
         self.runtime.register(self)
 
         self._state = 'listening'
+
+    def _set_cls(self):
+        if self.__class__.__name__ == '_TesseraProxy':
+            return
+
+        cls = self._cls.cls
+        exclude = dir(self)
+        cls_methods, cls_magic_methods, \
+            cls_method_names, cls_magic_method_names = _extract_methods(cls, exclude)
+
+        for method in cls_methods:
+            method_getter = self._get_method_getter(method[0])
+            method_getter = functools.wraps(method[1])(method_getter)
+
+            setattr(self, method[0], method_getter)
+
+        __dict__ = {}
+        for method in cls_magic_methods:
+            method_getter = self._get_method_getter(method[0])
+            method_getter = functools.wraps(method[1])(method_getter)
+
+            __dict__[method[0]] = method_getter
+
+        _ArrayProxy = type('_ArrayProxy', (ArrayProxy,), __dict__)
+        self.__class__ = _ArrayProxy
 
     @property
     def runtime_id(self):
@@ -432,111 +785,89 @@ class ArrayProxy(CMDBase):
     def _remotes(self):
         return self.remote_runtime
 
-    async def _map_tasks(self, fun, elements, *args, **kwargs):
-        proxy_queue = asyncio.Queue()
-        for proxy in self._proxies:
-            await proxy_queue.put(proxy)
-
-        async def call(_element):
-            async with self._proxy(proxy_queue) as _proxy:
-                res = await fun(_element, _proxy, *args, **kwargs)
-
-            return res
-
-        tasks = [call(element) for element in elements]
-
-        return tasks
-
-    @contextlib.asynccontextmanager
-    async def _proxy(self, proxy_queue):
-        proxy = await proxy_queue.get()
-
-        yield proxy
-
-        await proxy_queue.put(proxy)
-
-    async def map(self, fun, elements, *args, **kwargs):
+    def get_attr(self, item):
         """
-        Map a function to an iterable, distributed across the proxies
-        of the proxy array.
-
-        The function is given control over a certain proxy for as long as
-        it takes to be executed. Once all mappings have completed, the
-        results are returned together
+        Get at attribute from the remote tessera.
 
         Parameters
         ----------
-        fun : callable
-            Function to execute
-        elements : iterable
-            Iterable to map.
-        args : tuple, optional
-            Arguments to the function.
-        kwargs : optional
-            Keyword arguments to the function.
+        item : str
 
         Returns
         -------
-        list
-            Results of the mapping.
+        AwaitableOnly
 
         """
-        tasks = await self._map_tasks(fun, elements, *args, **kwargs)
+        attrs = [each._get_remote_attr(item) for each in self._proxies]
+        return asyncio.gather(*attrs)
 
-        return await asyncio.gather(*tasks)
-
-    async def map_as_completed(self, fun, elements, *args, **kwargs):
+    def set_attr(self, item, value):
         """
-        Generator which maps a function to an iterable,
-        distributed across the proxies of the proxy array.
-
-        The function is given control over a certain proxy for as long as
-        it takes to be executed. Once a function is completed, the result
-        to that function is yielded immediately.
+        Set an attribute on the remote tessera.
 
         Parameters
         ----------
-        fun : callable
-            Function to execute
-        elements : iterable
-            Iterable to map.
-        args : tuple, optional
-            Arguments to the function.
-        kwargs : optional
-            Keyword arguments to the function.
+        item : str
+        value : object
 
         Returns
         -------
-        object
-            Result of each execution as they are completed.
 
         """
-        tasks = await self._map_tasks(fun, elements, *args, **kwargs)
+        return self._get_remote_method('set_attr')(item, value)
 
-        for task in asyncio.as_completed(tasks):
-            res = await task
-            yield res
+    def _get_remote_method(self, item):
+        # TODO There should be an equivalent Task array proxy
+        def remote_method(*args, **kwargs):
+            runtime = kwargs.pop('runtime', None)
+            runtime = runtime.uid if hasattr(runtime, 'uid') else runtime
+
+            if runtime is None:
+                task_proxies = []
+                for proxy in self._proxies:
+                    task_proxies.append(proxy[item](*args, **kwargs))
+
+            else:
+                task_proxies = None
+                for proxy in self._proxies:
+                    if proxy.runtime_id == runtime:
+                        task_proxies = proxy[item](*args, **kwargs)
+                        break
+
+                if task_proxies is None:
+                    raise RuntimeError('Runtime %s is no contained in the ArrayProxy' % runtime)
+
+            return task_proxies
+
+        return remote_method
+
+    def _get_remote_attr(self, item):
+        async def remote_attr():
+            await self._init_future
+
+            attrs = [each.cmd_recv_async(method='get_attr', item=item) for each in self._proxies]
+
+            return await asyncio.gather(*attrs)
+
+        return AwaitableOnly(remote_attr)
+
+    @staticmethod
+    def _get_method_getter(method):
+        def method_getter(_self, *args, **kwargs):
+            return _self._get_remote_method(method)(*args, **kwargs)
+
+        return method_getter
 
     def __getattribute__(self, item):
         try:
             return super().__getattribute__(item)
 
         except AttributeError:
-
-            if not hasattr(self._cls, item):
-                raise AttributeError('Class %s does not have method %s' % (self._cls.__name__, item))
-
-            if not callable(getattr(self._cls, item)):
-                raise ValueError('Method %s of class %s is not callable' % (item, self._cls.__name__))
-
-            async def remote_method(*args, **kwargs):
-                tasks = []
-                for proxy in self._proxies:
-                    tasks.append(proxy[item](*args, **kwargs))
-
-                return await asyncio.gather(*tasks)
-
-            return remote_method
+            if self._cls_attr_names is None or item in self._cls_attr_names:
+                return self._get_remote_attr(item)
+            else:
+                raise AttributeError('Class %s or ArrayProxy has no attribute %s' %
+                                     (self._cls.cls.__class__.__name__, item))
 
     def __getitem__(self, item):
         return self._proxies[item]
@@ -548,7 +879,11 @@ class ArrayProxy(CMDBase):
                (self.__class__.__name__, id(self),
                 self.uid, runtime_id, self._state)
 
-    _serialisation_attrs = CMDBase._serialisation_attrs + []
+    _serialisation_attrs = CMDBase._serialisation_attrs + ['_cls',
+                                                           '_proxies',
+                                                           '_runtime_id',
+                                                           '_cls_attr_names',
+                                                           '_len']
 
 
 class MonitoredTessera(MonitoredBase):
@@ -607,8 +942,10 @@ def tessera(*args, **cmd_config):
     Decorator that transforms a standard class into a tessera-capable class.
 
     The resulting class can still be instantiated as usual ``Klass(...)``, which
-    will generate a standard local instance, or onto the mosaic runtime ``await Klass.remote(...)``,
+    will generate a standard local instance, or onto the mosaic runtime ``Klass.remote(...)``,
     which will instantiate the class in a remote endpoint and return a proxy to the user.
+
+    A mosaic Parameter can also be instantiated by using ``Klass.parameter(...)``.
 
     TODO - Better explanations and more examples.
 
@@ -635,10 +972,10 @@ def tessera(*args, **cmd_config):
     >>> local_instance = Klass(10)
     >>>
     >>> # but also a remote instance by invoking remote.
-    >>> remote_proxy = await Klass.remote(10)
+    >>> remote_proxy = Klass.remote(10)
     >>>
     >>> # The resulting proxy can be used to call the instance methods,
-    >>> task = await remote_proxy.add(5)
+    >>> task = remote_proxy.add(5)
     >>> # which will return immediately.
     >>>
     >>> # We can do some work while the remote method is executed
@@ -651,31 +988,56 @@ def tessera(*args, **cmd_config):
 
     """
 
+    @functools.wraps(tessera)
     def tessera_wrapper(cls):
 
         @classmethod
-        async def remote(_, *args, **kwargs):
+        def remote(_, *args, **kwargs):
             kwargs.update(cmd_config)
 
             array_len = kwargs.pop('len', None)
 
             if array_len is None:
                 proxy = TesseraProxy(cls, *args, **kwargs)
-                await proxy.init(*args, **kwargs)
 
             else:
                 proxy = ArrayProxy(cls, *args, len=array_len, **kwargs)
-                await proxy.init(*args, **kwargs)
+
+            loop = mosaic.get_event_loop()
+            loop.run(proxy.__init_async__, *args, **kwargs)
 
             return proxy
 
         @classmethod
-        def tessera(_, *args, **kwargs):
+        def local(_, *args, uid=None, **kwargs):
+            if uid is None:
+                uid = '%s-%s-%s' % ('tess',
+                                    cls.__name__.lower(),
+                                    uuid.uuid4().hex)
+
             kwargs.update(cmd_config)
-            return Tessera(cls, *args, **kwargs)
+            return Tessera(cls, uid, *args, **kwargs)
+
+        @classmethod
+        def parameter(_, *args, uid=None, **kwargs):
+            if uid is None:
+                uid = '%s-%s-%s' % ('tess',
+                                    cls.__name__.lower(),
+                                    uuid.uuid4().hex)
+
+            kwargs.update(cmd_config)
+            tess = Tessera(cls, uid, *args, parameter=True, **kwargs)
+            tess.inc_ref()
+            param = tess._obj
+
+            _Parameter = type('_%s' % param.__class__.__name__, (ParameterMixin, param.__class__), {})
+            param.__class__ = _Parameter
+
+            return param
 
         cls.remote = remote
-        cls.tessera = tessera
+        cls.local = local
+        cls.parameter = parameter
         cls.select_worker = TesseraProxy.select_worker
 
         method_list = [func for func in dir(Base) if not func.startswith("__")]

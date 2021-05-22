@@ -516,7 +516,7 @@ class OutboundConnection(Connection):
 
         if self._heartbeat_attempts == 0:
             await self._comms.disconnect(self.uid, self.uid, notify=True)
-            await self._loop.run(self._runtime.disconnect, args=(self.uid, self.uid))
+            await self._loop.run(self._runtime.disconnect, self.uid, self.uid)
             return
 
         interval = self._heartbeat_interval * self._heartbeat_max_attempts/self._heartbeat_attempts
@@ -972,9 +972,7 @@ class CommsManager:
         For arguments and return values check ``Comms.send_async``.
 
         """
-        wait = kwargs.pop('wait', True)
-
-        return self._loop.run(self.send_async, args=args, kwargs=kwargs, wait=wait)
+        return self._loop.run(self.send_async, *args, **kwargs)
 
     def cmd(self, *args, **kwargs):
         """
@@ -983,9 +981,7 @@ class CommsManager:
         For arguments and return values check ``Comms.cmd_async``.
 
         """
-        wait = kwargs.pop('wait', True)
-
-        return self._loop.run(self.cmd_async, args=args, kwargs=kwargs, wait=wait)
+        return self._loop.run(self.cmd_async, *args, **kwargs)
 
     def recv(self, **kwargs):
         """
@@ -994,9 +990,7 @@ class CommsManager:
         For arguments and return values check ``Comms.recv_async``.
 
         """
-        wait = kwargs.pop('wait', True)
-
-        return self._loop.run(self.recv_async, wait=wait)
+        return self._loop.run(self.recv_async)
 
     def send_recv(self, *args, **kwargs):
         """
@@ -1008,8 +1002,7 @@ class CommsManager:
         wait = kwargs.pop('wait', True)
         kwargs['reply'] = True
 
-        future = self._loop.run(self.send_async, args=args, kwargs=kwargs,
-                                wait=True)
+        future = self._loop.run(self.send_async, *args, **kwargs)
 
         if wait is True:
             return future.result()
@@ -1027,8 +1020,7 @@ class CommsManager:
         wait = kwargs.pop('wait', True)
         kwargs['reply'] = True
 
-        future = self._loop.run(self.cmd_async, args=args, kwargs=kwargs,
-                                wait=True)
+        future = self._loop.run(self.cmd_async, *args, **kwargs)
 
         if wait is True:
             return future.result()
@@ -1169,16 +1161,16 @@ class CommsManager:
                 msg.kwargs['cmd'] = msg.cmd
 
             future = self._loop.run(call,
-                                          args=(sender_id, method, msg.reply),
-                                          kwargs=msg.kwargs)
+                                    sender_id, method, msg.reply,
+                                    **msg.kwargs)
 
             if comms_method is not False:
                 await future
 
         if comms_method is not False and msg.method in self._comms_methods:
             self._loop.run(call,
-                                 args=(sender_id, comms_method, False),
-                                 kwargs=msg.kwargs)
+                           sender_id, comms_method, False,
+                           **msg.kwargs)
 
     async def call(self, sender_id, method, reply, **kwargs):
         """
@@ -1204,7 +1196,7 @@ class CommsManager:
 
         args = (sender_id,)
 
-        await self._loop.run(method, args=args, kwargs=kwargs)
+        await self._loop.run(method, *args, **kwargs)
 
     async def call_safe(self, sender_id, method, reply, **kwargs):
         """
@@ -1232,7 +1224,7 @@ class CommsManager:
         args = (sender_id,)
 
         async with self.send_exception(sender_id):
-            future = self._loop.run(method, args=args, kwargs=kwargs)
+            future = self._loop.run(method, *args, **kwargs)
 
             if future is None:
                 return
@@ -1528,7 +1520,7 @@ class CommsManager:
                 break
 
         await self.shake(sender_id, **response.kwargs)
-        await self._loop.run(self._runtime.shake, args=(sender_id,), kwargs=response.kwargs)
+        await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
 
         self._send_socket[uid].shake()
 

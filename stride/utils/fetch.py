@@ -13,13 +13,7 @@ known_assets = {
 }
 
 
-try:
-    from stride_private.utils.fetch import known_assets
-except ImportError:
-    pass
-
-
-def fetch(origin, dest, token=None):
+def fetch(origin, dest, token=None, assets=None):
     """
     Fetch asset from GitHub repository. The asset is only fetched once.
 
@@ -31,6 +25,7 @@ def fetch(origin, dest, token=None):
         Path to save file.
     token : str, optional
         Access token to fetch the access if it lives in a private repo.
+    assets : dict, optional
 
     Returns
     -------
@@ -43,8 +38,9 @@ def fetch(origin, dest, token=None):
     if not os.path.exists(folder):
         os.makedirs(folder)
 
-    if origin in known_assets:
-        origin = known_assets[origin]
+    assets = assets or known_assets
+    if origin in assets:
+        origin = assets[origin]
 
     if token is not None:
         cmd = 'curl -LJ# -H "Authorization: token %s" -H ' \

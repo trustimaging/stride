@@ -1,10 +1,10 @@
-
+tuple,
 import numpy as np
 
-from ..pipeline import PipelineStep
+from ....core import Operator
 
 
-class NormPerShot(PipelineStep):
+class NormPerShot(Operator):
     """
     Normalised a series of time traces to the maximum value of the set.
 
@@ -14,13 +14,16 @@ class NormPerShot(PipelineStep):
     """
 
     def __init__(self, **kwargs):
-        pass
+        super().__init__(**kwargs)
 
-    def apply(self, modelled, observed, **kwargs):
+    def forward(self, modelled, observed, **kwargs):
         modelled = self._apply(modelled, **kwargs)
         observed = self._apply(observed, **kwargs)
 
         return modelled, observed
+
+    def adjoint(self, d_modelled, d_observed, modelled, observed, **kwargs):
+        return d_modelled, d_observed
 
     def _apply(self, traces, **kwargs):
         norm_value = 0.

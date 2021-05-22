@@ -1,10 +1,10 @@
 
 import numpy as np
 
-from ..pipeline import PipelineStep
+from ....core import Operator
 
 
-class NormField(PipelineStep):
+class NormField(Operator):
     """
     Normalise a StructuredData object between -1 and +1.
 
@@ -14,10 +14,15 @@ class NormField(PipelineStep):
     """
 
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
         self.norm_value = None
 
-    def apply(self, field, **kwargs):
+    def forward(self, field, **kwargs):
         self.norm_value = np.max(np.abs(field.extended_data)) + 1e-31
         field.extended_data[:] /= self.norm_value
 
         return field
+
+    def adjoint(self, d_field, field, **kwargs):
+        raise NotImplementedError('No adjoint implemented for step %s' % self.__class__.__name__)

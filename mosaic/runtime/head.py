@@ -116,4 +116,4 @@ class Head(Runtime):
 
         """
         self.logger = LoggerManager()
-        self.logger.set_local()
+        self.logger.set_local(format=self.mode)

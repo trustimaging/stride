@@ -1,10 +1,10 @@
 
 from stride.utils import filters
 
-from ..pipeline import PipelineStep
+from ....core import Operator
 
 
-class FilterTraces(PipelineStep):
+class FilterTraces(Operator):
     """
     Filter a set of time traces.
 
@@ -18,15 +18,35 @@ class FilterTraces(PipelineStep):
     """
 
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
         self.f_min = kwargs.pop('f_min', None)
         self.f_max = kwargs.pop('f_max', None)
+        self._num_traces = None
 
-    def apply(self, *traces, **kwargs):
+    def forward(self, *traces, **kwargs):
+        self._num_traces = len(traces)
+
         filtered = []
         for each in traces:
             filtered.append(self._apply(each, **kwargs))
 
         if len(traces) > 1:
+            return tuple(filtered)
+
+        else:
+            return filtered[0]
+
+    def adjoint(self, *d_traces, **kwargs):
+        d_traces = d_traces[:self._num_traces]
+
+        filtered = []
+        for each in d_traces:
+            filtered.append(self._apply(each, **kwargs))
+
+        self._num_traces = None
+
+        if len(d_traces) > 1:
             return tuple(filtered)
 
         else:
