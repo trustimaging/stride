@@ -3,6 +3,7 @@ import gc
 import copy
 import numpy as np
 import scipy.ndimage
+import scipy.interpolate
 
 import mosaic
 
@@ -319,6 +320,21 @@ class StructuredData(Data):
 
         self._data.fill(value)
 
+    def pad(self, smooth=False):
+        """
+        Pad internal data to match the extended shape of the StructuredData.
+
+        Parameters
+        ----------
+        smooth : bool, optional
+            Whether or not to smooth the padding area, defaults to False
+
+        Returns
+        -------
+
+        """
+        self.extended_data[:] = self.pad_data(self.data, smooth=smooth)
+
     def pad_data(self, data, smooth=False):
         """
         Pad input data to match the extended shape of the StructuredData.
@@ -631,6 +647,59 @@ class ScalarField(StructuredData):
 
         """
         return self._time_dependent
+
+    def stagger(self, stagger, method='nearest'):
+        """
+        Resample the internal (non-padded) data given some spatial staggering.
+
+        Parameters
+        ----------
+        stagger : float or tuple of floats
+            Stagger in each dimension.
+        method : str, optional
+            Method used for resampling, ``linear`` or ``nearest``, defaults
+            to ``nearest``.
+
+        Returns
+        -------
+
+        """
+        self.data[:] = self.stagger_data(self.data, stagger, method=method)
+
+    def stagger_data(self, data, stagger, method='nearest'):
+        """
+        Resample the data given some spatial staggering.
+
+        Parameters
+        ----------
+        data : ndarray
+            Data to stagger.
+        stagger : float or tuple of floats
+            Stagger in each dimension.
+        method : str, optional
+            Method used for resampling, ``linear`` or ``nearest``, defaults
+            to ``nearest``.
+
+        Returns
+        -------
+        ndarray
+            Resampled data.
+
+        """
+        try:
+            iter(stagger)
+        except TypeError:
+            stagger = (stagger,) * self.space.dim
+
+        staggered_grid = [grid - h for grid, h in zip(self.space.grid, stagger)]
+        mesh = np.asarray([each.ravel() for each in np.meshgrid(*self.space.grid, indexing='ij')]).T
+
+        interp = scipy.interpolate.interpn(staggered_grid, data, mesh,
+                                           method=method,
+                                           bounds_error=False, fill_value=None)
+        interp = interp.reshape(self.space.shape)
+
+        return interp
 
     def plot(self, **kwargs):
         """

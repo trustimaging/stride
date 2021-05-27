@@ -122,6 +122,8 @@ def continuous_wave(centre_freq, n_samples, dt, ramp_length=4, phase=0):
         ramp_axis = np.linspace(0, np.pi, ramp_length_points, endpoint=True)
 
         ramp = (-np.cos(ramp_axis) + 1) * 0.5
-        signal[:ramp_length_points] *= ramp
+
+        if len(signal) > len(ramp):
+            signal[:ramp_length_points] *= ramp
 
     return signal
