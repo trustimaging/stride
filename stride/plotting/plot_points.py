@@ -22,7 +22,7 @@ try:
     ENABLED_3D_PLOTTING = True
 
 except ModuleNotFoundError:
-    ENABLED_3D_PLOTTING = True
+    ENABLED_3D_PLOTTING = False
 
 
 __all__ = ['plot_points', 'plot_points_2d', 'plot_points_3d']

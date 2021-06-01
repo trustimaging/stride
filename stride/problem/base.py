@@ -124,13 +124,13 @@ class Saved:
         -------
 
         """
+        kwargs['parameter'] = kwargs.get('parameter', self.name)
         if not h5.file_exists(*args, **kwargs):
             self.dump(*args, **kwargs)
             return
 
         description = self.__get_desc__()
 
-        kwargs['parameter'] = kwargs.get('parameter', self.name)
         with h5.HDF5(*args, **kwargs, mode='a') as file:
             file.append(description)
 
@@ -201,6 +201,7 @@ class GriddedSaved(Saved, Gridded):
         -------
 
         """
+        kwargs['parameter'] = kwargs.get('parameter', self.name)
         if not h5.file_exists(*args, **kwargs):
             self.dump(*args, **kwargs)
             return
@@ -210,7 +211,6 @@ class GriddedSaved(Saved, Gridded):
         description = self.__get_desc__()
         grid_description.update(description)
 
-        kwargs['parameter'] = kwargs.get('parameter', self.name)
         with h5.HDF5(*args, **kwargs, mode='a') as file:
             file.append(grid_description)
 

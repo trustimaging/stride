@@ -30,6 +30,9 @@ class Space:
     """
 
     def __init__(self, shape=None, spacing=None, extra=None, absorbing=None):
+        if isinstance(spacing, float):
+            spacing = (spacing,)*len(shape)
+
         self.dim = len(shape)
         self.shape = tuple(shape)
         self.spacing = tuple(spacing)

@@ -226,7 +226,7 @@ def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
         return None, payload
     if nbytes < min_size:
         return None, payload
-    if nbytes > 5e9:  # Too large, compression libraries often fail
+    if nbytes > 2e9:  # Too large, compression libraries often fail
         return None, payload
 
     min_size = int(min_size)

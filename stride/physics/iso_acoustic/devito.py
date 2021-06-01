@@ -255,7 +255,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_forward(self, *args, **kwargs):
+    async def run_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Run the state or forward problem.
 
@@ -276,8 +276,13 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
+        functions = dict(
+            src=self.dev_grid.vars.src,
+            rec=self.dev_grid.vars.rec,
+        )
+
         self.state_operator.run(dt=self.time.step,
-                                src=self.dev_grid.vars.src, rec=self.dev_grid.vars.rec,
+                                **functions,
                                 **kwargs.get('devito_args', {}))
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
@@ -406,7 +411,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
             if wavelets.needs_grad:
-                src_term = rec.interpolate(expr=p_a)
+                src_term = src.interpolate(expr=p_a)
             else:
                 src_term = []
 
@@ -414,7 +419,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             gradient_update = await self.prepare_grad(wavelets, vp, rho, alpha)
 
             # Compile the operator
-            self.adjoint_operator.set_operator(stencil + rec_term + gradient_update,
+            self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
                                                name='acoustic_iso_adjoint',
                                                **kwargs.get('devito_config', {}))
             self.adjoint_operator.compile()
@@ -458,7 +463,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_adjoint(self, *args, **kwargs):
+    async def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Run the adjoint problem.
 
@@ -481,9 +486,16 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
+        functions = dict(
+            rec=self.dev_grid.vars.rec,
+            p_saved=self.dev_grid.vars.p_saved,
+        )
+
+        if wavelets.needs_grad:
+            functions['src'] = self.dev_grid.vars.src
+
         self.adjoint_operator.run(dt=self.time.step,
-                                  src=self.dev_grid.vars.src, rec=self.dev_grid.vars.rec,
-                                  p_saved=self.dev_grid.vars.p_saved,
+                                  **functions,
                                   **kwargs.get('devito_args', {}))
 
     async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):

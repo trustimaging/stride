@@ -20,7 +20,7 @@ class FunctionalValue(Variable):
 
     """
 
-    def __init__(self, shot_id, fun_value, residuals, **kwargs):
+    def __init__(self, shot_id, fun_value, residuals=None, **kwargs):
         super().__init__(**kwargs)
 
         self.shot_id = shot_id
