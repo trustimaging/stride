@@ -574,7 +574,6 @@ class OperatorDevito:
             'opt': 'advanced',
             'platform': os.getenv('DEVITO_PLATFORM', None),
             'language': os.getenv('DEVITO_LANGUAGE', 'openmp'),
-            'compiler': os.getenv('DEVITO_COMPILER', None),
         }
 
         devito_config = kwargs.pop('op_config', {})
