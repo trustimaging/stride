@@ -96,9 +96,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         self._src_scale = 0.
         self._bandwidth = 0.
 
-        kwargs.pop('grid', None)
-
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
+
+        kwargs.pop('grid', None)
         self.state_operator = OperatorDevito(self.space_order, self.time_order,
                                              name='acoustic_iso_state',
                                              grid=self.dev_grid,
