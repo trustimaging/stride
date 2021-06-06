@@ -481,7 +481,9 @@ class OperatorDevito:
         Predefined GridDevito. A new one will be created unless specified.
     """
 
-    def __init__(self, *args, grid=None, **kwargs):
+    def __init__(self, *args, grid=None, name='kernel', **kwargs):
+        self.name = name
+
         self.devito_operator = None
         self.kwargs = {}
 
@@ -490,6 +492,7 @@ class OperatorDevito:
         else:
             self.grid = grid
 
+        # fix devito logging
         devito_logger = logging.getLogger('devito')
         devito.logger.logger = devito_logger
 
@@ -524,7 +527,30 @@ class OperatorDevito:
         if runtime.mode == 'local':
             devito_logger.propagate = False
 
-    def set_operator(self, op, name='kernel', **kwargs):
+        # global devito config
+        default_config = {
+            'autotuning': ['aggressive', 'runtime'],
+            'develop-mode': False,
+            'mpi': False,
+            'log-level': 'DEBUG',
+        }
+
+        compiler = os.getenv('DEVITO_COMPILER', None)
+        if compiler is not None:
+            default_config['compiler'] = compiler
+
+        devito_config = kwargs.pop('devito_config', {})
+        default_config.update(devito_config)
+
+        runtime = mosaic.runtime()
+        runtime.logger.info('Operator `%s` default configuration:' % self.name)
+
+        for key, value in default_config.items():
+            runtime.logger.info('\t * %s=%s' % (key, value))
+
+            devito.parameters.configuration[key] = value
+
+    def set_operator(self, op, **kwargs):
         """
         Set up a Devito operator from a list of operations.
 
@@ -541,23 +567,9 @@ class OperatorDevito:
         -------
 
         """
+
         default_config = {
-            'autotuning': ['aggressive', 'runtime'],
-            'develop-mode': False,
-            'mpi': False,
-            'log-level': 'DEBUG',
-        }
-
-        for key, value in default_config.items():
-            if key in kwargs:
-                value = kwargs[key]
-                default_config[key] = value
-                del kwargs[key]
-
-            devito.parameters.configuration[key] = value
-
-        default_kwargs = {
-            'name': name,
+            'name': self.name,
             'subs': self.grid.devito_grid.spacing_map,
             'opt': 'advanced',
             'platform': os.getenv('DEVITO_PLATFORM', None),
@@ -565,21 +577,19 @@ class OperatorDevito:
             'compiler': os.getenv('DEVITO_COMPILER', None),
         }
 
-        default_kwargs.update(kwargs)
+        devito_config = kwargs.pop('op_config', {})
+        default_config.update(devito_config)
 
         runtime = mosaic.runtime()
-        runtime.logger.info('Operator `%s` configuration:' % name)
+        runtime.logger.info('Operator `%s` instance configuration:' % self.name)
 
         for key, value in default_config.items():
-            runtime.logger.info('\t * %s=%s' % (key, value))
-
-        for key, value in default_kwargs.items():
             if key == 'name':
                 continue
 
             runtime.logger.info('\t * %s=%s' % (key, value))
 
-        self.devito_operator = devito.Operator(op, **default_kwargs)
+        self.devito_operator = devito.Operator(op, **default_config)
 
     def compile(self):
         """

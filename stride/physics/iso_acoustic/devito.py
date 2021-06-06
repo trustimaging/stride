@@ -97,8 +97,14 @@ class IsoAcousticDevito(ProblemTypeBase):
         self._bandwidth = 0.
 
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
-        self.state_operator = OperatorDevito(self.space_order, self.time_order, grid=self.dev_grid)
-        self.adjoint_operator = OperatorDevito(self.space_order, self.time_order, grid=self.dev_grid)
+        self.state_operator = OperatorDevito(self.space_order, self.time_order,
+                                             name='acoustic_iso_state',
+                                             grid=self.dev_grid,
+                                             **kwargs)
+        self.adjoint_operator = OperatorDevito(self.space_order, self.time_order,
+                                               name='acoustic_iso_adjoint',
+                                               grid=self.dev_grid,
+                                               **kwargs)
         self.boundary = None
 
     def clear_operators(self):
@@ -203,8 +209,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             # Compile the operator
             self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
-                                             name='acoustic_iso_state',
-                                             **kwargs.get('devito_config', {}))
+                                             **kwargs)
             self.state_operator.compile()
 
         else:
@@ -420,8 +425,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             # Compile the operator
             self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
-                                               name='acoustic_iso_adjoint',
-                                               **kwargs.get('devito_config', {}))
+                                               **kwargs)
             self.adjoint_operator.compile()
 
         else:
