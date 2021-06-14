@@ -150,12 +150,15 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                              optimisation_loop.num_blocks))
 
         if dump and block.restart and not optimisation_loop.started:
-            try:
-                optimiser.variable.load(path=problem.output_folder,
-                                        project_name=problem.name,
-                                        version=iteration.abs_id-1)
-            except OSError:
-                pass
+            if iteration.abs_id-1 >= 0:
+                try:
+                    optimiser.variable.load(path=problem.output_folder,
+                                            project_name=problem.name,
+                                            version=iteration.abs_id-1)
+                except OSError:
+                    raise OSError('Optimisation loop cannot be restarted,'
+                                  'variable version %d cannot be found.' %
+                                  iteration.abs_id-1)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
 

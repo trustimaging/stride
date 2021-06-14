@@ -37,7 +37,8 @@ def analytical_3d(space, time, shot, sos):
         tau = int(np.round(r / (sos * time.step)))
 
         signal = np.zeros_like(wavelet)
-        signal[tau:] = wavelet[:time.num - tau]
+        if time.num - tau > 0:
+            signal[tau:] = wavelet[:time.num - tau]
 
         analytic_traces[receiver.id, :] = signal
 

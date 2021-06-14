@@ -182,6 +182,7 @@ class EventLoop:
 
         self._stop = asyncio.Event()
 
+        self._futures = set()
         self._recurring_tasks = weakref.WeakSet()
 
     def get_event_loop(self):
@@ -282,6 +283,10 @@ class EventLoop:
             return self._loop.run_until_complete(coro(*args, **kwargs))
 
         future = self._loop.create_task(coro(*args, **kwargs))
+
+        self._futures.add(future)
+        future.add_done_callback(self._done_future_callback(future))
+
         return future
 
     def run_in_executor(self, callback, *args, **kwargs):
@@ -307,6 +312,9 @@ class EventLoop:
 
         callback = functools.partial(callback, *args, **kwargs)
         future = self._loop.run_in_executor(self._executor, callback)
+
+        self._futures.add(future)
+        future.add_done_callback(self._done_future_callback(future))
 
         return future
 
@@ -398,6 +406,12 @@ class EventLoop:
 
         """
         self._loop.call_soon_threadsafe(set_main_thread)
+
+    def _done_future_callback(self, future):
+        def _done_future(*args):
+            self._futures.remove(future)
+
+        return _done_future
 
 
 class AwaitableOnly:

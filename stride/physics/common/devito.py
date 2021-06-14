@@ -2,11 +2,14 @@
 import os
 import gc
 import devito
+import atexit
+import signal
 import logging
 import functools
 import itertools
 import numpy as np
 import scipy.special
+import pytools.prefork
 
 import mosaic
 from mosaic.types import Struct
@@ -14,7 +17,7 @@ from mosaic.types import Struct
 from ...problem.base import Gridded
 
 
-__all__ = ['OperatorDevito', 'GridDevito']
+__all__ = ['OperatorDevito', 'GridDevito', 'config_devito']
 
 
 class FullDomain(devito.SubDomain):
@@ -492,6 +495,103 @@ class OperatorDevito:
         else:
             self.grid = grid
 
+    def set_operator(self, op, **kwargs):
+        """
+        Set up a Devito operator from a list of operations.
+
+        Parameters
+        ----------
+        op : list
+            List of operations to be given to the devito.Operator instance.
+        name : str
+            Name to give to the operator, defaults to ``kernel``.
+        kwargs : optional
+            Configuration parameters to set for Devito overriding defaults.
+
+        Returns
+        -------
+
+        """
+
+        default_config = {
+            'name': self.name,
+            'subs': self.grid.devito_grid.spacing_map,
+            'opt': 'advanced',
+            'platform': os.getenv('DEVITO_PLATFORM', None),
+        }
+
+        devito_config = kwargs.pop('devito_config', {})
+        default_config.update(devito_config)
+
+        runtime = mosaic.runtime()
+        runtime.logger.info('Operator `%s` instance configuration:' % self.name)
+
+        for key, value in default_config.items():
+            if key == 'name':
+                continue
+
+            runtime.logger.info('\t * %s=%s' % (key, value))
+
+        self.devito_operator = devito.Operator(op, **default_config)
+
+    def compile(self):
+        """
+        Compile the operator.
+
+        Returns
+        -------
+
+        """
+        self.devito_operator.cfunction
+
+    def run(self, **kwargs):
+        """
+        Run the operator.
+
+        Returns
+        -------
+
+        """
+        devito_args = kwargs.pop('devito_args', {})
+
+        time = self.grid.time
+
+        kwargs['time_m'] = kwargs.get('time_m', 0)
+        kwargs['time_M'] = kwargs.get('time_M', time.extended_num - 1)
+
+        kwargs.update(devito_args)
+
+        self.devito_operator.apply(**kwargs)
+
+
+def config_devito(**kwargs):
+    # global devito config
+    default_config = {
+        'autotuning': ['aggressive', 'runtime'],
+        'develop-mode': False,
+        'mpi': False,
+        'log-level': 'DEBUG',
+    }
+
+    compiler = os.getenv('DEVITO_COMPILER', None)
+    if compiler is not None:
+        default_config['compiler'] = compiler
+
+    language = os.getenv('DEVITO_LANGUAGE', 'openmp')
+    if language is not None:
+        default_config['language'] = language
+
+    devito_config = kwargs.pop('devito_config', {})
+    default_config.update(devito_config)
+
+    runtime = mosaic.runtime()
+    runtime.logger.info('Default Devito configuration:')
+
+    for key, value in default_config.items():
+        runtime.logger.info('\t * %s=%s' % (key, value))
+
+        devito.parameters.configuration[key] = value
+
         # fix devito logging
         devito_logger = logging.getLogger('devito')
         devito.logger.logger = devito_logger
@@ -527,90 +627,19 @@ class OperatorDevito:
         if runtime.mode == 'local':
             devito_logger.propagate = False
 
-        # global devito config
-        default_config = {
-            'autotuning': ['aggressive', 'runtime'],
-            'develop-mode': False,
-            'mpi': False,
-            'log-level': 'DEBUG',
-        }
+    # pre-fork
+    pytools.prefork.enable_prefork()
 
-        compiler = os.getenv('DEVITO_COMPILER', None)
-        if compiler is not None:
-            default_config['compiler'] = compiler
 
-        devito_config = kwargs.pop('devito_config', {})
-        default_config.update(devito_config)
+def _close_prefork():
+    pytools.prefork.forker._quit()
 
-        runtime = mosaic.runtime()
-        runtime.logger.info('Operator `%s` default configuration:' % self.name)
 
-        for key, value in default_config.items():
-            runtime.logger.info('\t * %s=%s' % (key, value))
+def _close_prefork_atsignal(signum, frame):
+    pytools.prefork.forker._quit()
+    os._exit(-1)
 
-            devito.parameters.configuration[key] = value
 
-    def set_operator(self, op, **kwargs):
-        """
-        Set up a Devito operator from a list of operations.
-
-        Parameters
-        ----------
-        op : list
-            List of operations to be given to the devito.Operator instance.
-        name : str
-            Name to give to the operator, defaults to ``kernel``.
-        kwargs : optional
-            Configuration parameters to set for Devito overriding defaults.
-
-        Returns
-        -------
-
-        """
-
-        default_config = {
-            'name': self.name,
-            'subs': self.grid.devito_grid.spacing_map,
-            'opt': 'advanced',
-            'platform': os.getenv('DEVITO_PLATFORM', None),
-            'language': os.getenv('DEVITO_LANGUAGE', 'openmp'),
-        }
-
-        devito_config = kwargs.pop('op_config', {})
-        default_config.update(devito_config)
-
-        runtime = mosaic.runtime()
-        runtime.logger.info('Operator `%s` instance configuration:' % self.name)
-
-        for key, value in default_config.items():
-            if key == 'name':
-                continue
-
-            runtime.logger.info('\t * %s=%s' % (key, value))
-
-        self.devito_operator = devito.Operator(op, **default_config)
-
-    def compile(self):
-        """
-        Compile the operator.
-
-        Returns
-        -------
-
-        """
-        self.devito_operator.cfunction
-
-    def run(self, **kwargs):
-        """
-        Run the operator.
-
-        Returns
-        -------
-
-        """
-        time = self.grid.time
-
-        kwargs['time_m'] = kwargs.get('time_m', 0)
-        kwargs['time_M'] = kwargs.get('time_M', time.extended_num - 1)
-
-        self.devito_operator.apply(**kwargs)
+atexit.register(_close_prefork)
+signal.signal(signal.SIGINT, _close_prefork_atsignal)
+signal.signal(signal.SIGTERM, _close_prefork_atsignal)

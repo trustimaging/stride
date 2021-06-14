@@ -10,7 +10,7 @@ from mosaic.utils import camel_case
 
 from stride.utils import fft
 from stride.problem import ScalarField
-from ..common.devito import GridDevito, OperatorDevito
+from ..common.devito import GridDevito, OperatorDevito, config_devito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
 
@@ -95,6 +95,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         self._max_wavelet = 0.
         self._src_scale = 0.
         self._bandwidth = 0.
+
+        config_devito(**kwargs)
 
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
 
@@ -226,6 +228,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.rec.data_with_halo.fill(0.)
         self.dev_grid.vars.p.data_with_halo.fill(0.)
+        self.boundary.clear()
 
         if save_wavefield is True:
             self.dev_grid.vars.p_saved.data_with_halo.fill(0.)
@@ -290,7 +293,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
-                                **kwargs.get('devito_args', {}))
+                                **kwargs)
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -355,6 +358,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         traces = shot.observed.alike(name='modelled', data=traces_data)
 
         self.dev_grid.deallocate('p')
+        self.dev_grid.deallocate('laplacian')
         self.dev_grid.deallocate('src')
         self.dev_grid.deallocate('rec')
         self.dev_grid.deallocate('vp')
@@ -502,7 +506,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.adjoint_operator.run(dt=self.time.step,
                                   **functions,
-                                  **kwargs.get('devito_args', {}))
+                                  **kwargs)
 
     async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -533,6 +537,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.dev_grid.deallocate('p_saved')
         self.dev_grid.deallocate('p_a')
+        self.dev_grid.deallocate('laplacian')
+        self.dev_grid.deallocate('src')
+        self.dev_grid.deallocate('rec')
         self.dev_grid.deallocate('vp')
         self.dev_grid.deallocate('vp2')
         self.dev_grid.deallocate('inv_vp2')

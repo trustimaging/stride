@@ -20,7 +20,7 @@ class Space:
     ----------
     shape : tuple
         Shape of the inner domain.
-    spacing : tuple
+    spacing : tuple or float
         Axis-wise spacing of the grid, in metres.
     extra : tuple
         Amount of axis-wise extra space around the inner domain.
