@@ -33,13 +33,16 @@ class Space:
         if isinstance(spacing, float):
             spacing = (spacing,)*len(shape)
 
+        extra = extra or (0,)*len(shape)
+        absorbing = absorbing or (0,)*len(shape)
+
         self.dim = len(shape)
         self.shape = tuple(shape)
         self.spacing = tuple(spacing)
         self.extra = tuple(extra)
         self.absorbing = tuple(absorbing)
 
-        origin = tuple([0] * self.dim)
+        origin = (0,) * self.dim
         pml_origin = tuple([each_origin - each_spacing * each_extra for each_origin, each_spacing, each_extra in
                             zip(origin, spacing, extra)])
 

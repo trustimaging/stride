@@ -293,7 +293,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
-                                **kwargs)
+                                **kwargs.pop('devito_args', {}))
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -506,7 +506,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.adjoint_operator.run(dt=self.time.step,
                                   **functions,
-                                  **kwargs)
+                                  **kwargs.pop('devito_args', {}))
 
     async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """

@@ -20,6 +20,10 @@ from ...problem.base import Gridded
 __all__ = ['OperatorDevito', 'GridDevito', 'config_devito']
 
 
+# pre-fork
+pytools.prefork.enable_prefork()
+
+
 class FullDomain(devito.SubDomain):
 
     name = 'full_domain'
@@ -552,14 +556,10 @@ class OperatorDevito:
         -------
 
         """
-        devito_args = kwargs.pop('devito_args', {})
-
         time = self.grid.time
 
         kwargs['time_m'] = kwargs.get('time_m', 0)
         kwargs['time_M'] = kwargs.get('time_M', time.extended_num - 1)
-
-        kwargs.update(devito_args)
 
         self.devito_operator.apply(**kwargs)
 
@@ -592,51 +592,55 @@ def config_devito(**kwargs):
 
         devito.parameters.configuration[key] = value
 
-        # fix devito logging
-        devito_logger = logging.getLogger('devito')
-        devito.logger.logger = devito_logger
+    # fix devito logging
+    devito_logger = logging.getLogger('devito')
+    devito_logger.setLevel(logging.DEBUG)
+    devito.logger.logger = devito_logger
 
-        class RerouteFilter(logging.Filter):
+    class RerouteFilter(logging.Filter):
 
-            def __init__(self):
-                super().__init__()
+        def __init__(self):
+            super().__init__()
 
-            def filter(self, record):
-                _runtime = mosaic.runtime()
+        def filter(self, record):
+            _runtime = mosaic.runtime()
 
-                if record.levelno == devito.logger.PERF:
-                    _runtime.logger.info(record.msg)
+            if record.levelno == devito.logger.PERF:
+                _runtime.logger.info(record.msg)
 
-                elif record.levelno == logging.ERROR:
-                    _runtime.logger.error(record.msg)
+            elif record.levelno == logging.ERROR:
+                _runtime.logger.error(record.msg)
 
-                elif record.levelno == logging.WARNING:
-                    _runtime.logger.warning(record.msg)
+            elif record.levelno == logging.WARNING:
+                _runtime.logger.warning(record.msg)
 
-                elif record.levelno == logging.DEBUG:
-                    _runtime.logger.debug(record.msg)
+            elif record.levelno == logging.DEBUG:
+                _runtime.logger.debug(record.msg)
 
-                else:
-                    _runtime.logger.info(record.msg)
+            else:
+                _runtime.logger.info(record.msg)
 
-                return False
+            return False
 
-        devito_logger.addFilter(RerouteFilter())
+    devito_logger.addFilter(RerouteFilter())
 
-        runtime = mosaic.runtime()
-        if runtime.mode == 'local':
-            devito_logger.propagate = False
-
-    # pre-fork
-    pytools.prefork.enable_prefork()
+    runtime = mosaic.runtime()
+    if runtime.mode == 'local':
+        devito_logger.propagate = False
 
 
 def _close_prefork():
-    pytools.prefork.forker._quit()
+    try:
+        pytools.prefork.forker._quit()
+    except Exception:
+        pass
 
 
 def _close_prefork_atsignal(signum, frame):
-    pytools.prefork.forker._quit()
+    try:
+        pytools.prefork.forker._quit()
+    except Exception:
+        pass
     os._exit(-1)
 
 
