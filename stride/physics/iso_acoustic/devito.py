@@ -10,7 +10,7 @@ from mosaic.utils import camel_case
 
 from stride.utils import fft
 from stride.problem import ScalarField
-from ..common.devito import GridDevito, OperatorDevito
+from ..common.devito import GridDevito, OperatorDevito, config_devito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
 
@@ -43,11 +43,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium.
+            Compressional speed of sound fo the medium, in [m/s].
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous.
+            Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0.
+            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool or int, optional
@@ -96,9 +96,19 @@ class IsoAcousticDevito(ProblemTypeBase):
         self._src_scale = 0.
         self._bandwidth = 0.
 
+        config_devito(**kwargs)
+
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
-        self.state_operator = OperatorDevito(self.space_order, self.time_order, grid=self.dev_grid)
-        self.adjoint_operator = OperatorDevito(self.space_order, self.time_order, grid=self.dev_grid)
+
+        kwargs.pop('grid', None)
+        self.state_operator = OperatorDevito(self.space_order, self.time_order,
+                                             name='acoustic_iso_state',
+                                             grid=self.dev_grid,
+                                             **kwargs)
+        self.adjoint_operator = OperatorDevito(self.space_order, self.time_order,
+                                               name='acoustic_iso_adjoint',
+                                               grid=self.dev_grid,
+                                               **kwargs)
         self.boundary = None
 
     def clear_operators(self):
@@ -116,11 +126,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium.
+            Compressional speed of sound fo the medium, in [m/s].
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous.
+            Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0.
+            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool or int, optional
@@ -203,8 +213,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             # Compile the operator
             self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
-                                             name='acoustic_iso_state',
-                                             **kwargs.get('devito_config', {}))
+                                             **kwargs)
             self.state_operator.compile()
 
         else:
@@ -219,6 +228,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.rec.data_with_halo.fill(0.)
         self.dev_grid.vars.p.data_with_halo.fill(0.)
+        self.boundary.clear()
 
         if save_wavefield is True:
             self.dev_grid.vars.p_saved.data_with_halo.fill(0.)
@@ -243,20 +253,19 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set geometry and wavelet
         wavelets = wavelets.data
 
-        self._src_scale = 1
+        self._src_scale = 1000
         self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
 
         window = scipy.signal.get_window(('tukey', 0.01), self.time.num, False)
         window = window.reshape((self.time.num, 1))
 
         self.dev_grid.vars.src.data[:] = wavelets.T * self._src_scale / self._max_wavelet * window
-        # self.src_t.data[:] = wavelets[0, :] / self._max_wavelet
 
         if self.interpolation_type == 'linear':
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_forward(self, *args, **kwargs):
+    async def run_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Run the state or forward problem.
 
@@ -265,11 +274,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium.
+            Compressional speed of sound fo the medium, in [m/s].
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous.
+            Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0.
+            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -277,9 +286,14 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
+        functions = dict(
+            src=self.dev_grid.vars.src,
+            rec=self.dev_grid.vars.rec,
+        )
+
         self.state_operator.run(dt=self.time.step,
-                                src=self.dev_grid.vars.src, rec=self.dev_grid.vars.rec,
-                                **kwargs.get('devito_args', {}))
+                                **functions,
+                                **kwargs.pop('devito_args', {}))
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -290,11 +304,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium.
+            Compressional speed of sound fo the medium, in [m/s].
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous.
+            Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0.
+            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -344,6 +358,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         traces = shot.observed.alike(name='modelled', data=traces_data)
 
         self.dev_grid.deallocate('p')
+        self.dev_grid.deallocate('laplacian')
         self.dev_grid.deallocate('src')
         self.dev_grid.deallocate('rec')
         self.dev_grid.deallocate('vp')
@@ -369,11 +384,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium.
+            Compressional speed of sound fo the medium, in [m/s].
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous.
+            Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0.
+            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -390,6 +405,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         # If there's no previous operator, generate one
         if self.adjoint_operator.devito_operator is None:
             # Define variables
+            src = self.dev_grid.sparse_time_function('src', num=num_sources,
+                                                     coordinates=shot.source_coordinates,
+                                                     interpolation_type=self.interpolation_type)
             rec = self.dev_grid.sparse_time_function('rec', num=num_receivers,
                                                      coordinates=shot.receiver_coordinates,
                                                      interpolation_type=self.interpolation_type)
@@ -403,13 +421,17 @@ class IsoAcousticDevito(ProblemTypeBase):
             vp2 = self.dev_grid.vars.vp2
             rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
+            if wavelets.needs_grad:
+                src_term = src.interpolate(expr=p_a)
+            else:
+                src_term = []
+
             # Define gradient
             gradient_update = await self.prepare_grad(wavelets, vp, rho, alpha)
 
             # Compile the operator
-            self.adjoint_operator.set_operator(stencil + rec_term + gradient_update,
-                                               name='acoustic_iso_adjoint',
-                                               **kwargs.get('devito_config', {}))
+            self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
+                                               **kwargs)
             self.adjoint_operator.compile()
 
         else:
@@ -448,9 +470,10 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.rec.data[:] = adjoint_source.data.T * window
 
         if self.interpolation_type == 'linear':
+            self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_adjoint(self, *args, **kwargs):
+    async def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Run the adjoint problem.
 
@@ -461,11 +484,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium.
+            Compressional speed of sound fo the medium, in [m/s].
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous.
+            Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0.
+            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -473,10 +496,17 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
+        functions = dict(
+            rec=self.dev_grid.vars.rec,
+            p_saved=self.dev_grid.vars.p_saved,
+        )
+
+        if wavelets.needs_grad:
+            functions['src'] = self.dev_grid.vars.src
+
         self.adjoint_operator.run(dt=self.time.step,
-                                  rec=self.dev_grid.vars.rec,
-                                  p_saved=self.dev_grid.vars.p_saved,
-                                  **kwargs.get('devito_args', {}))
+                                  **functions,
+                                  **kwargs.pop('devito_args', {}))
 
     async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -489,11 +519,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium.
+            Compressional speed of sound fo the medium, in [m/s].
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous.
+            Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0.
+            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -507,6 +537,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.dev_grid.deallocate('p_saved')
         self.dev_grid.deallocate('p_a')
+        self.dev_grid.deallocate('laplacian')
+        self.dev_grid.deallocate('src')
+        self.dev_grid.deallocate('rec')
         self.dev_grid.deallocate('vp')
         self.dev_grid.deallocate('vp2')
         self.dev_grid.deallocate('inv_vp2')
@@ -876,9 +909,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         else:
             if self.drp:
-                return field.laplace + rho * devito.grad(buoy).dot(devito.grad(field))
+                return field.laplace + rho * devito.grad(buoy, shift=-0.5).dot(devito.grad(field, shift=-0.5))
             else:
-                return rho * devito.div(buoy * devito.grad(field, shift=0.5), shift=-0.5)
+                return rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
 
     def _saved(self, field, *kwargs):
         return field.dt2

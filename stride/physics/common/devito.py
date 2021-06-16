@@ -2,11 +2,14 @@
 import os
 import gc
 import devito
+import atexit
+import signal
 import logging
 import functools
 import itertools
 import numpy as np
 import scipy.special
+import pytools.prefork
 
 import mosaic
 from mosaic.types import Struct
@@ -14,7 +17,11 @@ from mosaic.types import Struct
 from ...problem.base import Gridded
 
 
-__all__ = ['OperatorDevito', 'GridDevito']
+__all__ = ['OperatorDevito', 'GridDevito', 'config_devito']
+
+
+# pre-fork
+pytools.prefork.enable_prefork()
 
 
 class FullDomain(devito.SubDomain):
@@ -481,7 +488,9 @@ class OperatorDevito:
         Predefined GridDevito. A new one will be created unless specified.
     """
 
-    def __init__(self, *args, grid=None, **kwargs):
+    def __init__(self, *args, grid=None, name='kernel', **kwargs):
+        self.name = name
+
         self.devito_operator = None
         self.kwargs = {}
 
@@ -490,41 +499,7 @@ class OperatorDevito:
         else:
             self.grid = grid
 
-        devito_logger = logging.getLogger('devito')
-        devito.logger.logger = devito_logger
-
-        class RerouteFilter(logging.Filter):
-
-            def __init__(self):
-                super().__init__()
-
-            def filter(self, record):
-                _runtime = mosaic.runtime()
-
-                if record.levelno == devito.logger.PERF:
-                    _runtime.logger.info(record.msg)
-
-                elif record.levelno == logging.ERROR:
-                    _runtime.logger.error(record.msg)
-
-                elif record.levelno == logging.WARNING:
-                    _runtime.logger.warning(record.msg)
-
-                elif record.levelno == logging.DEBUG:
-                    _runtime.logger.debug(record.msg)
-
-                else:
-                    _runtime.logger.info(record.msg)
-
-                return False
-
-        devito_logger.addFilter(RerouteFilter())
-
-        runtime = mosaic.runtime()
-        if runtime.mode == 'local':
-            devito_logger.propagate = False
-
-    def set_operator(self, op, name='kernel', **kwargs):
+    def set_operator(self, op, **kwargs):
         """
         Set up a Devito operator from a list of operations.
 
@@ -541,45 +516,27 @@ class OperatorDevito:
         -------
 
         """
+
         default_config = {
-            'autotuning': ['aggressive', 'runtime'],
-            'develop-mode': False,
-            'mpi': False,
-            'log-level': 'DEBUG',
-        }
-
-        for key, value in default_config.items():
-            if key in kwargs:
-                value = kwargs[key]
-                default_config[key] = value
-                del kwargs[key]
-
-            devito.parameters.configuration[key] = value
-
-        default_kwargs = {
-            'name': name,
+            'name': self.name,
             'subs': self.grid.devito_grid.spacing_map,
             'opt': 'advanced',
             'platform': os.getenv('DEVITO_PLATFORM', None),
-            'language': os.getenv('DEVITO_LANGUAGE', 'openmp'),
-            'compiler': os.getenv('DEVITO_COMPILER', None),
         }
 
-        default_kwargs.update(kwargs)
+        devito_config = kwargs.pop('devito_config', {})
+        default_config.update(devito_config)
 
         runtime = mosaic.runtime()
-        runtime.logger.info('Operator `%s` configuration:' % name)
+        runtime.logger.info('Operator `%s` instance configuration:' % self.name)
 
         for key, value in default_config.items():
-            runtime.logger.info('\t * %s=%s' % (key, value))
-
-        for key, value in default_kwargs.items():
             if key == 'name':
                 continue
 
             runtime.logger.info('\t * %s=%s' % (key, value))
 
-        self.devito_operator = devito.Operator(op, **default_kwargs)
+        self.devito_operator = devito.Operator(op, **default_config)
 
     def compile(self):
         """
@@ -605,3 +562,88 @@ class OperatorDevito:
         kwargs['time_M'] = kwargs.get('time_M', time.extended_num - 1)
 
         self.devito_operator.apply(**kwargs)
+
+
+def config_devito(**kwargs):
+    # global devito config
+    default_config = {
+        'autotuning': ['aggressive', 'runtime'],
+        'develop-mode': False,
+        'mpi': False,
+        'log-level': 'DEBUG',
+    }
+
+    compiler = os.getenv('DEVITO_COMPILER', None)
+    if compiler is not None:
+        default_config['compiler'] = compiler
+
+    language = os.getenv('DEVITO_LANGUAGE', 'openmp')
+    if language is not None:
+        default_config['language'] = language
+
+    devito_config = kwargs.pop('devito_config', {})
+    default_config.update(devito_config)
+
+    runtime = mosaic.runtime()
+    runtime.logger.info('Default Devito configuration:')
+
+    for key, value in default_config.items():
+        runtime.logger.info('\t * %s=%s' % (key, value))
+
+        devito.parameters.configuration[key] = value
+
+    # fix devito logging
+    devito_logger = logging.getLogger('devito')
+    devito_logger.setLevel(logging.DEBUG)
+    devito.logger.logger = devito_logger
+
+    class RerouteFilter(logging.Filter):
+
+        def __init__(self):
+            super().__init__()
+
+        def filter(self, record):
+            _runtime = mosaic.runtime()
+
+            if record.levelno == devito.logger.PERF:
+                _runtime.logger.info(record.msg)
+
+            elif record.levelno == logging.ERROR:
+                _runtime.logger.error(record.msg)
+
+            elif record.levelno == logging.WARNING:
+                _runtime.logger.warning(record.msg)
+
+            elif record.levelno == logging.DEBUG:
+                _runtime.logger.debug(record.msg)
+
+            else:
+                _runtime.logger.info(record.msg)
+
+            return False
+
+    devito_logger.addFilter(RerouteFilter())
+
+    runtime = mosaic.runtime()
+    if runtime.mode == 'local':
+        devito_logger.propagate = False
+
+
+def _close_prefork():
+    try:
+        pytools.prefork.forker._quit()
+    except Exception:
+        pass
+
+
+def _close_prefork_atsignal(signum, frame):
+    try:
+        pytools.prefork.forker._quit()
+    except Exception:
+        pass
+    os._exit(-1)
+
+
+atexit.register(_close_prefork)
+signal.signal(signal.SIGINT, _close_prefork_atsignal)
+signal.signal(signal.SIGTERM, _close_prefork_atsignal)

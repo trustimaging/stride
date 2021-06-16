@@ -131,6 +131,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     num_iters = kwargs.pop('num_iters', 1)
     select_shots = kwargs.pop('select_shots', {})
 
+    restart = kwargs.pop('restart', None)
+    restart_id = kwargs.pop('restart_id', -1)
+
     dump = kwargs.pop('dump', True)
 
     f_min = kwargs.pop('f_min', None)
@@ -140,11 +143,22 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
                                           len=runtime.num_workers)
 
-    for iteration in block.iterations(num_iters):
+    for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         runtime.logger.info('Starting iteration %d (out of %d), '
                             'block %d (out of %d)' %
                             (iteration.id, block.num_iterations, block.id,
                              optimisation_loop.num_blocks))
+
+        if dump and block.restart and not optimisation_loop.started:
+            if iteration.abs_id-1 >= 0:
+                try:
+                    optimiser.variable.load(path=problem.output_folder,
+                                            project_name=problem.name,
+                                            version=iteration.abs_id-1)
+                except OSError:
+                    raise OSError('Optimisation loop cannot be restarted,'
+                                  'variable version %d cannot be found.' %
+                                  iteration.abs_id-1)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
 
@@ -178,7 +192,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         await optimiser.step()
 
         if dump:
-            optimiser.variable.dump(path=problem.output_folder, project_name=problem.name)
+            optimiser.variable.dump(path=problem.output_folder,
+                                    project_name=problem.name,
+                                    version=iteration.abs_id)
 
         runtime.logger.info('Done iteration %d (out of %d), '
                             'block %d (out of %d) - Total loss %e' %

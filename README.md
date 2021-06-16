@@ -39,7 +39,7 @@ pip install -e .
 ## Running the examples
 
 The easiest way to start working with Stride is to open the Jupyter notebooks under ``examples/stride/breast2D`` 
-or ``examples/stride/breast2D``. 
+or ``examples/stride/breast3D``. 
 
 You can also execute the corresponding Python scrips from any terminal. To perform a forward run on the breast2D example:
 

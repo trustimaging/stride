@@ -399,7 +399,7 @@ class OutboundConnection(Connection):
     Parameters
     ----------
     uid : str
-        UID of the current runtime.
+        UID of the connected runtime.
     address : str
         IP address of the connection.
     port : int
@@ -481,8 +481,7 @@ class OutboundConnection(Connection):
         -------
 
         """
-        # if not self._runtime.is_monitor or not self.uid.startswith('node'):
-        if not self._runtime.is_monitor:
+        if not self._runtime.is_monitor or not self.uid.startswith('node'):
             return
 
         if self._heartbeat_timeout is not None:
@@ -777,7 +776,6 @@ class CommsManager:
 
         self._listen_future = None
         self._reply_futures = weakref.WeakValueDictionary()
-        self._reply_futures = dict()
 
         self._state = 'disconnected'
 

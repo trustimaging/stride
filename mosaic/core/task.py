@@ -470,6 +470,14 @@ class TaskProxy(ProxyBase):
         """
         return Task
 
+    @property
+    def done(self):
+        """
+        Access to TaskDone of this task.
+
+        """
+        return self.outputs.done
+
     def set_done(self):
         """
         Set task as done.

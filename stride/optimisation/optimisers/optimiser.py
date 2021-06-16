@@ -28,6 +28,9 @@ class LocalOptimiser(ABC):
     """
 
     def __init__(self, variable, **kwargs):
+        if not hasattr(variable, 'needs_grad') or not variable.needs_grad:
+            raise ValueError('To be optimised, a variable needs to be set with "needs_grad=True"')
+
         self.variable = variable
         self._process_grad = kwargs.pop('process_grad', noop)
         self._process_model = kwargs.pop('process_model', noop)

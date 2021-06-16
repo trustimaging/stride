@@ -11,24 +11,25 @@ dependencies:
   - cython
   - flake8
   - gputil
-  - h5py>=3.1
-  - matplotlib==3.1
-  - numpy>=1.19
-  - notebook
+  - h5py>=3.2
+  - matplotlib>=3.4
+  - numpy>=1.20
+  - notebook>=6.4
   - pickle5
   - pip
-  - pre-commit
+  - pre-commit>=2.13
   - psutil
   - pyflakes
   - pytest
   - pytest-cov
-  - pyyaml
+  - pyyaml>=5.4
   - pytest-runner
-  - pyzmq>=20.0
+  - pyzmq>=22.1
   - scikit-image
   - scipy>=1.6
   - sphinx
   - sphinx_rtd_theme
+  - tornado>=6.1
   - traitsui
   - wxPython
   - zlib
