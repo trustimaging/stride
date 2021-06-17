@@ -61,9 +61,6 @@ class Shot(ProblemBase):
         else:
             geometry = kwargs.pop('geometry', None)
 
-        if geometry is None:
-            raise ValueError('A Shot has be defined with respect to a Geometry')
-
         self._geometry = geometry
         self._acquisitions = None
 
@@ -362,9 +359,6 @@ class Acquisitions(ProblemBase):
             geometry = problem.geometry
         else:
             geometry = kwargs.pop('geometry', None)
-
-        if geometry is None:
-            raise ValueError('An Acquisition has be defined with respect to a Geometry')
 
         self._geometry = geometry
         self._shots = OrderedDict()

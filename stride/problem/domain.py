@@ -289,7 +289,7 @@ class Grid:
     slow_time : SlowTime
     """
 
-    def __init__(self, space, time, slow_time):
+    def __init__(self, space=None, time=None, slow_time=None):
         self.space = space
         self.time = time
         self.slow_time = slow_time

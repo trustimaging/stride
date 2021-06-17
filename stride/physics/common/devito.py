@@ -20,10 +20,6 @@ from ...problem.base import Gridded
 __all__ = ['OperatorDevito', 'GridDevito', 'config_devito']
 
 
-# pre-fork
-pytools.prefork.enable_prefork()
-
-
 class FullDomain(devito.SubDomain):
 
     name = 'full_domain'
@@ -627,6 +623,9 @@ def config_devito(**kwargs):
     runtime = mosaic.runtime()
     if runtime.mode == 'local':
         devito_logger.propagate = False
+
+    # pre-fork
+    pytools.prefork.enable_prefork()
 
 
 def _close_prefork():
