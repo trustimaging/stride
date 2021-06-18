@@ -2,14 +2,11 @@
 import os
 import gc
 import devito
-import atexit
-import signal
 import logging
 import functools
 import itertools
 import numpy as np
 import scipy.special
-import pytools.prefork
 
 import mosaic
 from mosaic.types import Struct
@@ -623,26 +620,3 @@ def config_devito(**kwargs):
     runtime = mosaic.runtime()
     if runtime.mode == 'local':
         devito_logger.propagate = False
-
-    # pre-fork
-    pytools.prefork.enable_prefork()
-
-
-def _close_prefork():
-    try:
-        pytools.prefork.forker._quit()
-    except Exception:
-        pass
-
-
-def _close_prefork_atsignal(signum, frame):
-    try:
-        pytools.prefork.forker._quit()
-    except Exception:
-        pass
-    os._exit(-1)
-
-
-atexit.register(_close_prefork)
-signal.signal(signal.SIGINT, _close_prefork_atsignal)
-signal.signal(signal.SIGTERM, _close_prefork_atsignal)
