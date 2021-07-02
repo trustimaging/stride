@@ -765,7 +765,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         f_max *= 4
         dt_max = 1 / f_max
 
-        undersampling = min(max(2, int(dt_max / dt)), 10) if preferred_undersampling is None else preferred_undersampling
+        undersampling = min(max(4, int(dt_max / dt)), 10) if preferred_undersampling is None else preferred_undersampling
 
         if self.undersampling_factor != undersampling:
             recompile = True
@@ -799,10 +799,12 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         if self.kernel == 'OT2':
             laplacian_term = self._diff_op(laplacian_update,
+                                           vp_fun, vp2_fun, inv_vp2_fun,
                                            rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
                                            **kwargs)
         else:
             laplacian_term = self._diff_op(laplacian,
+                                           vp_fun, vp2_fun, inv_vp2_fun,
                                            rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
                                            **kwargs)
 
@@ -821,16 +823,13 @@ class IsoAcousticDevito(ProblemTypeBase):
         if alpha_fun is not None:
             if self.attenuation_power == 0:
                 u = field
-                u_dt = u.dt if direction == 'forward' else u.dt.T
-
-                attenuation_term = 2*alpha_fun/vp_fun * u_dt
             elif self.attenuation_power == 2:
                 u = -field.laplace
-                u_dt = u.dt if direction == 'forward' else u.dt.T
-
-                attenuation_term = 2*alpha_fun*vp_fun * u_dt
             else:
                 raise ValueError('The "attenuation_exponent" can only take values (0, 2).')
+
+            u_dt = u.dt if direction == 'forward' else u.dt.T
+            attenuation_term = -2 * alpha_fun * vp_fun**(self.attenuation_power - 1) * u_dt
         else:
             attenuation_term = 0
 
@@ -842,8 +841,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Define PDE and update rule
         # TODO The only way to make the PML work is to use OT2 in the boundary,
         #      a PML formulation including the extra term is needed for this.
-        eq_interior = devito.solve(inv_vp2_fun*field.dt2 - laplacian_term + attenuation_term, u_next)
-        eq_boundary = devito.solve(inv_vp2_fun*field.dt2 - laplacian_term + attenuation_term + boundary_term, u_next)
+        eq_interior = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term, u_next)
+        eq_boundary = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term + vp2_fun*boundary_term, u_next)
 
         # Time-stepping stencil
         stencils = []
@@ -894,24 +893,26 @@ class IsoAcousticDevito(ProblemTypeBase):
             bi_harmonic = 0
 
         else:
-            bi_harmonic = self.time.step**2/12 * vp2*self._diff_op(field, **kwargs)
+            bi_harmonic = self.time.step**2/12 * self._diff_op(field,
+                                                               vp, vp2, inv_vp2,
+                                                               **kwargs)
 
         laplacian_update = field + bi_harmonic
 
         return laplacian_update
 
-    def _diff_op(self, field, **kwargs):
+    def _diff_op(self, field, vp, vp2, inv_vp2, **kwargs):
         rho = kwargs.pop('rho', None)
         buoy = kwargs.pop('buoy', None)
 
         if buoy is None:
-            return field.laplace
+            return vp2 * field.laplace
 
         else:
             if self.drp:
-                return field.laplace + rho * devito.grad(buoy, shift=-0.5).dot(devito.grad(field, shift=-0.5))
+                return vp2 * (field.laplace + rho * devito.grad(buoy, shift=-0.5).dot(devito.grad(field, shift=-0.5)))
             else:
-                return rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
+                return vp2 * rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
 
     def _saved(self, field, *kwargs):
         return field.dt2

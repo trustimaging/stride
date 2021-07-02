@@ -120,20 +120,31 @@ class Problem(Gridded):
 
         """
         kwargs['plot'] = False
+        plot_medium = kwargs.pop('medium', True)
+        plot_geometry = kwargs.pop('geometry', True)
+        plot_acquisitions = kwargs.pop('acquisitions', True)
 
         # Medium
-        medium_axes = self.medium.plot(**kwargs)
+        medium_axes = [None]
+
+        if plot_medium:
+            medium_axes = self.medium.plot(**kwargs)
 
         # Geometry
-        geometry_axes = []
-        for axis in medium_axes:
-            geometry_axes.append(self.geometry.plot(axis=axis, title=None, **kwargs))
+        geometry_axes = medium_axes
+
+        if plot_geometry:
+            geometry_axes = []
+
+            for axis in medium_axes:
+                geometry_axes.append(self.geometry.plot(axis=axis, title=None, **kwargs))
 
         plotting.show(geometry_axes)
 
         # Acquisitions
-        acquisitions_axes = self.acquisitions.plot()
-        plotting.show(acquisitions_axes)
+        if plot_acquisitions:
+            acquisitions_axes = self.acquisitions.plot()
+            plotting.show(acquisitions_axes)
 
     def sub_problem(self, shot_id):
         """
