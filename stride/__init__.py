@@ -3,6 +3,39 @@
 __version__ = '1.1'
 
 
+import os
+import signal
+import warnings
+from pytools import prefork
+
+
+# pre-fork before importing anything else
+prefork_fork = prefork._fork_server
+
+
+def _fork_server(sock):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        prefork_fork(sock)
+
+
+prefork._fork_server = _fork_server
+prefork.enable_prefork()
+
+
+def _close_prefork_atsignal(signum, frame):
+    try:
+        prefork.forker._quit()
+    except AttributeError:
+        pass
+
+    os._exit(-1)
+
+
+signal.signal(signal.SIGINT, _close_prefork_atsignal)
+signal.signal(signal.SIGTERM, _close_prefork_atsignal)
+
+
 import mosaic
 
 from .problem import *
