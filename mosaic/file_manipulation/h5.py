@@ -48,6 +48,7 @@ def write(name, obj, group):
     elif isinstance(obj, list) and len(obj) > 0 and isinstance(obj[0], dict):
         sub_group = group.create_group(name)
         sub_group.attrs['is_array'] = True
+        sub_group.attrs['len'] = len(obj)
 
         for index in range(len(obj)):
             sub_group_name = '%s_%08d' % (name, index)
@@ -62,6 +63,7 @@ def append(name, obj, group):
         if name != '/':
             if name not in group:
                 sub_group = group.create_group(name)
+                sub_group.attrs['is_array'] = False
 
             else:
                 sub_group = group[name]
@@ -69,7 +71,6 @@ def append(name, obj, group):
             sub_group = group
             sub_group.attrs['protocol'] = _protocol_version
             sub_group.attrs['datetime'] = str(datetime.now())
-        sub_group.attrs['is_array'] = False
 
         for key, value in obj.items():
             append(key, value, sub_group)
@@ -87,18 +88,25 @@ def append(name, obj, group):
             append(sub_group_name, obj[index], sub_group)
 
     else:
-        _write_dataset(name, obj, group)
+        if name not in group:
+            _write_dataset(name, obj, group)
 
 
 def _write_dataset(name, obj, group):
     if name in group:
         return group[name]
 
+    is_bytes = False
+    if isinstance(obj, bytes):
+        is_bytes = True
+        obj = np.void(obj)
+
     dataset = group.create_dataset(name, data=obj)
     dataset.attrs['is_ndarray'] = isinstance(obj, np.ndarray)
     dataset.attrs['is_list'] = isinstance(obj, list)
     dataset.attrs['is_tuple'] = isinstance(obj, tuple)
     dataset.attrs['is_str'] = isinstance(obj, str)
+    dataset.attrs['is_bytes'] = is_bytes
 
     if isinstance(obj, list) and len(obj):
         flat_obj = np.asarray(obj).flatten().tolist()
@@ -126,7 +134,12 @@ def read(obj, lazy=True):
 
 
 def _read_dataset(obj, lazy=True):
-    if obj.attrs['is_ndarray']:
+    if 'is_bytes' in obj.attrs and obj.attrs['is_bytes']:
+        obj = obj[()].tobytes()
+
+        return obj
+
+    elif obj.attrs['is_ndarray']:
 
         def load():
             return obj[()]
@@ -328,3 +341,58 @@ def file_exists(*args, **kwargs):
     filename = _abs_filename(filename, path)
 
     return os.path.exists(filename)
+
+
+def rm(*args, **kwargs):
+    """
+    Remove file.
+
+    The file will have the form
+    ``<project_name>-<parameter in camelcase><extension>`` for version 0 and
+    ``<project_name>-<parameter in camelcase>-<version with width of 5><extension>`` for higher versions.
+
+    Parameters
+    ----------
+    project_name : str
+        Name of the project, the prefix that all files of the project will have.
+    parameter : str
+        Parameter that determines which specific type of file to look for.
+    version : int
+        Integer version of the file, starting at 0.
+    extension : str, optional
+        File extension, defaults to ``.h5``.
+    folder : str, optional
+        Location of the file in the filesystem, defaults to the current folder.
+
+    Returns
+    -------
+
+    """
+
+    if len(args) > 0:
+        filename = args[0]
+    else:
+        filename = kwargs.pop('filename', None)
+
+    path = kwargs.pop('path', None) or os.getcwd()
+
+    if filename is None:
+        project_name = kwargs.pop('project_name', None)
+        parameter = kwargs.pop('parameter', None)
+
+        if project_name is None or parameter is None:
+            raise RuntimeError('Either filename or project_name and parameter are needed to generate a filename')
+
+        file_parameter = camel_case(parameter)
+        version = kwargs.pop('version', None)
+        extension = kwargs.pop('extension', '.h5')
+
+        if version > 0:
+            filename = _abs_filename('%s-%s-%05d%s' % (project_name, file_parameter, version, extension), path)
+
+        else:
+            filename = _abs_filename('%s-%s%s' % (project_name, file_parameter, extension), path)
+
+    filename = _abs_filename(filename, path)
+
+    os.remove(filename)

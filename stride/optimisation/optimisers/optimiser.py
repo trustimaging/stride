@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 __all__ = ['LocalOptimiser']
 
 
-async def noop(*args, **kwargs):
-    return args
+async def noop(arg, *args, **kwargs):
+    return arg
 
 
 class LocalOptimiser(ABC):
@@ -59,6 +59,38 @@ class LocalOptimiser(ABC):
         -------
         Variable
             Updated variable.
+
+        """
+        pass
+
+    @abstractmethod
+    def guess_step(self, **kwargs):
+        """
+        Apply the optimiser, but keep original value of the variable
+        for full update later.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method.
+
+        Returns
+        -------
+        Variable
+            Updated variable.
+
+        """
+        pass
+
+    @abstractmethod
+    def restore_guess(self):
+        """
+        Restore the original value of the variable after a guess step.
+
+        Returns
+        -------
+        Variable
+            Original variable.
 
         """
         pass

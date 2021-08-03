@@ -191,6 +191,9 @@ def byte_sample(b, size, n):
     if type(b) is memoryview:
         b = memoryview(np.asarray(b).ravel())
 
+    if type(b) is np.ndarray:
+        b = b.reshape(-1)
+
     starts = [random.randint(0, len(b) - size) for j in range(n)]
     ends = []
     for i, start in enumerate(starts[:-1]):
@@ -217,7 +220,7 @@ def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
     if isinstance(payload, pickle5.PickleBuffer):
         payload = memoryview(payload)
 
-    if type(payload) is memoryview:
+    if type(payload) is memoryview or hasattr(payload, 'nbytes'):
         nbytes = payload.nbytes
     else:
         nbytes = len(payload)

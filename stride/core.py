@@ -1,8 +1,10 @@
 
+import uuid
 import inspect
 from abc import abstractmethod
 from collections import OrderedDict
 
+import mosaic
 from mosaic.core.base import CMDBase
 from mosaic.core import TaskProxy, TaskOutput, TaskDone
 
@@ -88,7 +90,7 @@ class Node:
     """
 
     def __init__(self, op, method, idx=0, nxt=None):
-        self.op_name = op.name
+        self.op_name = op.uname
         self.method = method
         self.idx = idx
         self.next = nxt or []
@@ -267,7 +269,22 @@ class Variable:
     def __init__(self, *args, **kwargs):
         cls = self.__class__
         name = kwargs.pop('name', None)
-        self.name = name or '%s_%d' % (cls.__name__.lower(), cls._count)
+        self._init_name = name
+
+        runtime = mosaic.runtime()
+        runtime = runtime.uid if runtime else 'head'
+
+        uname = '%s:%s_%d' % (runtime,
+                              cls.__name__.lower(),
+                              cls._count)
+
+        self.name = name or uname
+
+        uid = uuid.uuid5(uuid.NAMESPACE_OID, uname).hex
+        self.uname = '%s-%d-%s' % (name or cls.__name__.lower(),
+                                   cls._count,
+                                   uid)
+
         cls._count += 1
 
         self.grad = None
@@ -298,6 +315,7 @@ class Variable:
         # no need to run graph
         if self.prev_op is None:
             await self.__call_adjoint__(grad, **kwargs)
+            self.graph = Graph()
             return
 
         prev = dict()
@@ -339,6 +357,25 @@ class Variable:
         self.graph = Graph()
         self.prev_op = None
 
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph.
+
+        Returns
+        -------
+        Variable
+            Detached variable.
+
+        """
+        kwargs['name'] = kwargs.pop('name', self._init_name)
+        kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+
+        if hasattr(self, 'has_tessera') and self.has_tessera:
+            return self.__class__.parameter(*args, **kwargs)
+        else:
+            return self.__class__(*args, **kwargs)
+
     def clear_grad(self):
         """
         Clear the gradient buffer of the variable.
@@ -375,7 +412,7 @@ class Variable:
         -------
 
         """
-        if grad is None or not self.needs_grad:
+        if grad is None or not self.needs_grad or self.grad is None:
             return
 
         self.grad += grad
@@ -418,11 +455,24 @@ class Operator:
     def __init__(self, *args, **kwargs):
         cls = self.__class__
         name = kwargs.pop('name', None)
-        self.name = name or '%s_%d' % (cls.__name__.lower(), cls._count)
+
+        runtime = mosaic.runtime()
+        runtime = runtime.uid if runtime else 'head'
+
+        uname = '%s:%s_%d' % (runtime,
+                              cls.__name__.lower(),
+                              cls._count)
+
+        self.name = name or uname
+
+        uid = uuid.uuid5(uuid.NAMESPACE_OID, uname).hex
+        self.uname = '%s-%d-%s' % (name or cls.__name__.lower(),
+                                   cls._count,
+                                   uid)
+
         cls._count += 1
 
         self.inputs = None
-        self.outputs = None
 
     @abstractmethod
     async def forward(self, *args, **kwargs):
@@ -521,7 +571,7 @@ class Operator:
         self.inputs = (args, kwargs)
 
         # call forward
-        if inspect.iscoroutinefunction(self.adjoint):
+        if inspect.iscoroutinefunction(self.forward):
             outputs = await self.forward(*args, **kwargs)
         else:
             outputs = self.forward(*args, **kwargs)
@@ -536,8 +586,6 @@ class Operator:
                 output.prev_op = prev_op
 
             output.needs_grad = needs_grad
-
-        self.outputs = outputs
 
         outputs = outputs if len(outputs) > 1 else outputs[0]
 
@@ -571,7 +619,6 @@ class Operator:
 
         # clean up
         self.inputs = None
-        self.outputs = None
 
         return input_grads
 

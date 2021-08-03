@@ -74,7 +74,7 @@ class Transducer(ABC, GriddedSaved):
         """
         return self
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'type': self.type,

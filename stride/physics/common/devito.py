@@ -180,6 +180,8 @@ class GridDevito(Gridded):
         Default space order of the discretisation for functions of the grid.
     time_order : int
         Default time order of the discretisation for functions of the grid.
+    time_dim : Time, optional
+        Time dimension on which to step. or ``False`` if no time dependency.
     grid : Grid, optional
         Existing grid, if not provided one will be created. Either a grid or
         space, time and slow_time need to be provided.
@@ -189,7 +191,7 @@ class GridDevito(Gridded):
 
     """
 
-    def __init__(self, space_order, time_order, **kwargs):
+    def __init__(self, space_order, time_order, time_dim=None, **kwargs):
         super().__init__(**kwargs)
 
         self.vars = Struct()
@@ -197,6 +199,8 @@ class GridDevito(Gridded):
 
         self.space_order = space_order
         self.time_order = time_order
+
+        self.time_dim = time_dim if time_dim is not None else self.time
 
         space = self.space
         extra = space.absorbing
@@ -232,71 +236,6 @@ class GridDevito(Gridded):
                                                    self.pml + self.pml_left + self.pml_right +
                                                    self.pml_centres + self.pml_corners,
                                        dtype=np.float32)
-
-    @_cached
-    def sparse_time_function(self, name, num=1, space_order=None, time_order=None,
-                             coordinates=None, interpolation_type='linear', **kwargs):
-        """
-        Create a Devito SparseTimeFunction with parameters provided.
-
-        Parameters
-        ----------
-        name : str
-            Name of the function.
-        num : int, optional
-            Number of points in the function, defaults to 1.
-        space_order : int, optional
-            Space order of the discretisation, defaults to the grid space order.
-        time_order : int, optional
-            Time order of the discretisation, defaults to the grid time order.
-        coordinates : ndarray, optional
-            Spatial coordinates of the sparse points (num points, dimensions), only
-            needed when interpolation is not linear.
-        interpolation_type : str, optional
-            Type of interpolation to perform (``linear`` or ``hicks``), defaults
-            to ``linear``, computationally more efficient but less accurate.
-        kwargs
-            Additional arguments for the Devito constructor.
-
-        Returns
-        -------
-        devito.SparseTimeFunction
-            Generated function.
-
-        """
-        space_order = space_order or self.space_order
-        time_order = time_order or self.time_order
-
-        # Define variables
-        p_dim = devito.Dimension(name='p_%s' % name)
-
-        sparse_kwargs = dict(name=name,
-                             grid=self.devito_grid,
-                             dimensions=(self.devito_grid.time_dim, p_dim),
-                             npoint=num,
-                             nt=self.time.extended_num,
-                             space_order=space_order,
-                             time_order=time_order,
-                             dtype=np.float32)
-        sparse_kwargs.update(kwargs)
-
-        if interpolation_type == 'linear':
-            fun = devito.SparseTimeFunction(**sparse_kwargs)
-
-        elif interpolation_type == 'hicks':
-            r = sparse_kwargs.pop('r', 7)
-
-            reference_gridpoints, coefficients = self._calculate_hicks(coordinates)
-
-            fun = devito.PrecomputedSparseTimeFunction(r=r,
-                                                       gridpoints=reference_gridpoints,
-                                                       interpolation_coeffs=coefficients,
-                                                       **sparse_kwargs)
-
-        else:
-            raise ValueError('Only "linear" and "hicks" interpolations are allowed.')
-
-        return fun
 
     @_cached
     def function(self, name, space_order=None, **kwargs):
@@ -390,7 +329,7 @@ class GridDevito(Gridded):
                                                  parent=self.devito_grid.time_dim,
                                                  factor=factor)
 
-        buffer_size = (self.time.extended_num + factor - 1) // factor
+        buffer_size = (self.time.extended_num + factor - 1) // factor + factor
 
         return self.time_function(name,
                                   space_order=space_order,
@@ -399,7 +338,132 @@ class GridDevito(Gridded):
                                   save=buffer_size,
                                   **kwargs)
 
-    def deallocate(self, name):
+    @_cached
+    def sparse_time_function(self, name, num=1, space_order=None, time_order=None,
+                             coordinates=None, interpolation_type='linear', **kwargs):
+        """
+        Create a Devito SparseTimeFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        num : int, optional
+            Number of points in the function, defaults to 1.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        time_order : int, optional
+            Time order of the discretisation, defaults to the grid time order.
+        coordinates : ndarray, optional
+            Spatial coordinates of the sparse points (num points, dimensions), only
+            needed when interpolation is not linear.
+        interpolation_type : str, optional
+            Type of interpolation to perform (``linear`` or ``hicks``), defaults
+            to ``linear``, computationally more efficient but less accurate.
+        kwargs
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.SparseTimeFunction
+            Generated function.
+
+        """
+        space_order = space_order or self.space_order
+        time_order = time_order or self.time_order
+
+        # Define variables
+        p_dim = devito.Dimension(name='p_%s' % name)
+
+        sparse_kwargs = dict(name=name,
+                             grid=self.devito_grid,
+                             dimensions=(self.devito_grid.time_dim, p_dim),
+                             npoint=num,
+                             nt=self.time.extended_num,
+                             space_order=space_order,
+                             time_order=time_order,
+                             dtype=np.float32)
+        sparse_kwargs.update(kwargs)
+
+        if interpolation_type == 'linear':
+            fun = devito.SparseTimeFunction(**sparse_kwargs)
+
+        elif interpolation_type == 'hicks':
+            r = sparse_kwargs.pop('r', 7)
+
+            reference_gridpoints, coefficients = self._calculate_hicks(coordinates)
+
+            fun = devito.PrecomputedSparseTimeFunction(r=r,
+                                                       gridpoints=reference_gridpoints,
+                                                       interpolation_coeffs=coefficients,
+                                                       **sparse_kwargs)
+
+        else:
+            raise ValueError('Only "linear" and "hicks" interpolations are allowed.')
+
+        return fun
+
+    @_cached
+    def sparse_function(self, name, num=1, space_order=None,
+                        coordinates=None, interpolation_type='linear', **kwargs):
+        """
+        Create a Devito SparseFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        num : int, optional
+            Number of points in the function, defaults to 1.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        coordinates : ndarray, optional
+            Spatial coordinates of the sparse points (num points, dimensions), only
+            needed when interpolation is not linear.
+        interpolation_type : str, optional
+            Type of interpolation to perform (``linear`` or ``hicks``), defaults
+            to ``linear``, computationally more efficient but less accurate.
+        kwargs
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.SparseTimeFunction
+            Generated function.
+
+        """
+        space_order = space_order or self.space_order
+
+        # Define variables
+        p_dim = devito.Dimension(name='p_%s' % name)
+
+        sparse_kwargs = dict(name=name,
+                             grid=self.devito_grid,
+                             dimensions=(p_dim,),
+                             npoint=num,
+                             space_order=space_order,
+                             dtype=np.float32)
+        sparse_kwargs.update(kwargs)
+
+        if interpolation_type == 'linear':
+            fun = devito.SparseFunction(**sparse_kwargs)
+
+        elif interpolation_type == 'hicks':
+            r = sparse_kwargs.pop('r', 7)
+
+            reference_gridpoints, coefficients = self._calculate_hicks(coordinates)
+
+            fun = devito.PrecomputedSparseFunction(r=r,
+                                                   gridpoints=reference_gridpoints,
+                                                   interpolation_coeffs=coefficients,
+                                                   **sparse_kwargs)
+
+        else:
+            raise ValueError('Only "linear" and "hicks" interpolations are allowed.')
+
+        return fun
+
+    def deallocate(self, name, collect=False):
         """
         Remove internal references to data buffers, if ``name`` is cached.
 
@@ -407,6 +471,8 @@ class GridDevito(Gridded):
         ----------
         name : str
             Name of the function.
+        collect : bool, optional
+            Whether to garbage collect after deallocate, defaults to ``False``.
 
         Returns
         -------
@@ -415,7 +481,9 @@ class GridDevito(Gridded):
         if name in self.vars:
             del self.vars[name]._data
             self.vars[name]._data = None
-            gc.collect()
+
+            if collect:
+                gc.collect()
 
     def with_halo(self, data):
         """
@@ -549,12 +617,23 @@ class OperatorDevito:
         -------
 
         """
-        time = self.grid.time
 
-        kwargs['time_m'] = kwargs.get('time_m', 0)
-        kwargs['time_M'] = kwargs.get('time_M', time.extended_num - 1)
+        default_kwargs = dict()
 
-        self.devito_operator.apply(**kwargs)
+        for arg in self.devito_operator.parameters:
+            if arg.name in self.grid.vars:
+                default_kwargs[arg.name] = self.grid.vars[arg.name]
+
+        default_kwargs.update(kwargs)
+
+        if self.grid.time_dim:
+            time = self.grid.time_dim
+
+            default_kwargs['dt'] = default_kwargs.get('dt', time.step)
+            default_kwargs['time_m'] = default_kwargs.get('time_m', 1)
+            default_kwargs['time_M'] = default_kwargs.get('time_M', time.extended_num - 1)
+
+        self.devito_operator.apply(**default_kwargs)
 
 
 def config_devito(**kwargs):

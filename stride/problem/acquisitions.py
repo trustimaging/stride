@@ -12,11 +12,51 @@ try:
 except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
+from mosaic.file_manipulation import h5
+
 from .data import Traces
 from .base import ProblemBase
 
 
-__all__ = ['Shot', 'Acquisitions']
+__all__ = ['Shot', 'Sequence', 'Acquisitions']
+
+
+def _select_slice(selection, init_ids,
+                  start=None, end=None, num=None, every=1, randomly=False):
+
+    if not len(selection):
+        sel_slice = slice(start or 0, end)
+        item_ids = init_ids
+        item_ids.sort()
+        item_ids = item_ids[sel_slice]
+
+        if randomly is True:
+            selection = np.random.permutation(item_ids).tolist()
+
+        else:
+            num_groups = int(np.ceil(len(item_ids) / num))
+
+            selection = []
+
+            for group_index in range(num_groups):
+
+                group = []
+                num_remaining = len(item_ids)
+
+                start_index = group_index if every > 1 else 0
+                for index in range(start_index, num_remaining, every):
+                    group.append(item_ids[index])
+
+                    if len(group) == num or not len(item_ids):
+                        break
+
+                selection += group
+                item_ids = item_ids if every > 1 else list(set(item_ids) - set(group))
+
+    next_slice = selection[:num]
+    selection = selection[num:]
+
+    return next_slice, selection
 
 
 class Shot(ProblemBase):
@@ -55,6 +95,8 @@ class Shot(ProblemBase):
             raise ValueError('The shot needs a positive ID')
 
         self.id = id
+        self.start = None
+        self.sequence_id = None
 
         if problem is not None:
             geometry = problem.geometry
@@ -63,6 +105,7 @@ class Shot(ProblemBase):
 
         self._geometry = geometry
         self._acquisitions = None
+        self._sequence = None
 
         self._sources = OrderedDict()
         self._receivers = OrderedDict()
@@ -204,6 +247,9 @@ class Shot(ProblemBase):
         if self.observed is not None:
             shot.observed = self.observed
 
+        shot.start = self.start
+        shot.sequence_id = self.sequence_id
+
         return shot
 
     def plot(self, **kwargs):
@@ -280,9 +326,20 @@ class Shot(ProblemBase):
         kwargs['parameter'] = 'acquisitions'
         kwargs['version'] = kwargs.get('version', 0)
 
-        self._acquisitions.append(*args, **kwargs)
+        if h5.file_exists(*args, **kwargs):
+            description = {
+                'shots': {
+                    'shots_%08d' % self.id: self.__get_desc__(**kwargs)
+                }
+            }
 
-    def __get_desc__(self):
+            with h5.HDF5(*args, **kwargs, mode='a') as file:
+                file.append(description)
+
+        else:
+            self._acquisitions.dump(*args, **kwargs)
+
+    def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'num_sources': self.num_sources,
@@ -325,6 +382,212 @@ class Shot(ProblemBase):
             self.observed.__set_desc__(description.observed)
 
 
+class Sequence(ProblemBase):
+    """
+    A Sequence represents a set of shots that are fired at different times, defined
+    with respect to a slow time axis.
+
+    Parameters
+    ----------
+    id : int
+        Identifier assigned to this sequence.
+    name : str
+        Optional name for the sequence.
+    problem : Problem
+        Problem to which the Sequence belongs.
+    geometry : Geometry
+        Geometry referenced by the source/receiver transducer locations of the shots.
+    acquisitions : Acquisitions
+        Acquisitions to which the sequence belongs.
+    grid : Grid or any of Space or Time
+        Grid on which the Acquisitions is defined
+
+    """
+
+    def __init__(self, id, name=None, problem=None, **kwargs):
+        name = name or 'shot_%05d' % id
+        super().__init__(name=name, problem=problem, **kwargs)
+
+        if id < 0:
+            raise ValueError('The shot needs a positive ID')
+
+        self.id = id
+
+        if problem is not None:
+            geometry = problem.geometry
+        else:
+            geometry = kwargs.pop('geometry', None)
+
+        if problem is not None:
+            acquisitions = problem.acquisitions
+        else:
+            acquisitions = kwargs.pop('acquisitions', None)
+
+        self._geometry = geometry
+        self._acquisitions = acquisitions
+        self._shots = OrderedDict()
+        self._shot_selection = []
+
+    @property
+    def shots(self):
+        """
+        Get all shots in the Sequence as a list.
+
+        """
+        return list(self._shots.values())
+
+    @property
+    def shot_ids(self):
+        """
+        Get all shot IDs in the Sequence as a list.
+
+        """
+        return [each.id for each in self._shots.values()]
+
+    @property
+    def shot_starts(self):
+        """
+        Get all starts of shots in the Sequence as a list.
+
+        """
+        return list(self._shots.keys())
+
+    @property
+    def num_shots(self):
+        """
+        Get number of shots in the Sequence.
+
+        """
+        return len(self.shot_starts)
+
+    def add(self, start, item):
+        """
+        Add a new shot to the Sequence.
+
+        Parameters
+        ----------
+        start : int
+            Start time step of the shot in the Sequence.
+        item : Shot
+            Shot to be added to the Sequence.
+
+        Returns
+        -------
+
+        """
+        if start in self._shots.keys():
+            raise ValueError('Shot with ID "%d" starting at time step "%d" '
+                             'already exists in the Sequence' % (item.id, start))
+
+        self._shots[start] = item
+        item._sequence = self
+        item.start = start
+        item.sequence_id = self.id
+
+    def get(self, start):
+        """
+        Get a shot from the Acquisitions with a known start time.
+
+        Parameters
+        ----------
+        start : int
+            Start time step of the shot in the Sequence.
+
+        Returns
+        -------
+        Shot
+            Found Shot.
+
+        """
+        if isinstance(start, (np.int32, np.int64)):
+            start = int(start)
+
+        if not isinstance(start, int) or start < 0:
+            raise ValueError('Shot start tines have to be positive integer numbers')
+
+        return self._shots[start]
+
+    def set(self, start, item):
+        """
+        Change an existing shot in the Sequence.
+
+        Parameters
+        ----------
+        start : int
+            Start time step of the shot in the Sequence.
+        item : Shot
+            Shot to be modified in the Acquisitions.
+
+        Returns
+        -------
+
+        """
+        if start not in self._shots.keys():
+            raise ValueError('Shot with ID "%d" starting at time step "%d" '
+                             'does not exists in the Sequence' % (item.id, start))
+
+        self._shots[start] = item
+
+    def select_shot_ids(self, start=None, end=None, num=None, every=1, randomly=False):
+        """
+        Select a number of shots according to the rules given in the arguments to the method.
+
+        For every call to this method a new group of shots will be selected according to
+        those rules until all shots have been selected. At that point, the selection will
+        start again.
+
+        Parameters
+        ----------
+        start : int, optional
+            Start of the slice, defaults to the first time step.
+        end : int, optional
+            End of the slice, defaults to the last time step.
+        num : int, optional
+            Number of shots to select every time the method is called.
+        every : int, optional
+            How many shots to skip in the selection, defaults to 1, which means taking all shots
+            subsequently.
+        randomly : bool, optional
+            Whether to select the shots at random at in order, defaults to False.
+
+        Returns
+        -------
+        list
+            List with selected shots.
+
+        """
+
+        next_slice, selection = _select_slice(self._shot_selection, self.shot_starts,
+                                              start=start, end=end, num=num, every=every,
+                                              randomly=randomly)
+        self._shot_selection = selection
+
+        return next_slice
+
+    def __get_desc__(self, **kwargs):
+        description = {
+            'id': self.id,
+            'num_shots': self.num_shots,
+            'shots': [],
+        }
+
+        for start, shot in self._shots.items():
+            description['shots'].append({
+                'start': start,
+                'id': shot.id
+            })
+
+        return description
+
+    def __set_desc__(self, description):
+        self.id = description.id
+
+        for shot_desc in description.shots:
+            if shot_desc.start not in self._shots:
+                shot = self._acquisitions.get(shot_desc.id)
+                self.add(shot_desc.start, shot)
+
+
 class Acquisitions(ProblemBase):
     """
     Acquisitions establish a series of shots that will be or have been fired to generate data.
@@ -362,7 +625,9 @@ class Acquisitions(ProblemBase):
 
         self._geometry = geometry
         self._shots = OrderedDict()
+        self._sequences = OrderedDict()
         self._shot_selection = []
+        self._sequence_selection = []
 
     @property
     def shots(self):
@@ -373,6 +638,14 @@ class Acquisitions(ProblemBase):
         return list(self._shots.values())
 
     @property
+    def sequences(self):
+        """
+        Get all sequences in the Acquisitions as a list.
+
+        """
+        return list(self._sequences.values())
+
+    @property
     def shot_ids(self):
         """
         Get all IDs of shots in the Acquisitions as a list.
@@ -381,12 +654,28 @@ class Acquisitions(ProblemBase):
         return list(self._shots.keys())
 
     @property
+    def sequence_ids(self):
+        """
+        Get all IDs of sequences in the Acquisitions as a list.
+
+        """
+        return list(self._sequences.keys())
+
+    @property
     def num_shots(self):
         """
         Get number of shots in the Acquisitions.
 
         """
         return len(self.shot_ids)
+
+    @property
+    def num_sequences(self):
+        """
+        Get number of sequences in the Acquisitions.
+
+        """
+        return len(self.sequence_ids)
 
     @property
     def num_sources_per_shot(self):
@@ -451,6 +740,25 @@ class Acquisitions(ProblemBase):
         self._shots[item.id] = item
         item._acquisitions = self
 
+    def add_sequence(self, item):
+        """
+        Add a new sequence to the Acquisitions.
+
+        Parameters
+        ----------
+        item : Sequence
+            Sequence to be added to the Acquisitions.
+
+        Returns
+        -------
+
+        """
+        if item.id in self._sequences.keys():
+            raise ValueError('Sequence with ID "%d" already exists in the Acquisitions' % item.id)
+
+        self._sequences[item.id] = item
+        item._acquisitions = self
+
     def get(self, id):
         """
         Get a shot from the Acquisitions with a known id.
@@ -474,6 +782,29 @@ class Acquisitions(ProblemBase):
 
         return self._shots[id]
 
+    def get_sequence(self, id):
+        """
+        Get a sequence from the Acquisitions with a known id.
+
+        Parameters
+        ----------
+        id : int
+            Identifier of the shot.
+
+        Returns
+        -------
+        Sequence
+            Found Sequence.
+
+        """
+        if isinstance(id, (np.int32, np.int64)):
+            id = int(id)
+
+        if not isinstance(id, int) or id < 0:
+            raise ValueError('Sequence IDs have to be positive integer numbers')
+
+        return self._sequences[id]
+
     def set(self, item):
         """
         Change an existing shot in the Acquisitions.
@@ -491,6 +822,24 @@ class Acquisitions(ProblemBase):
             raise ValueError('Shot with ID "%d" does not exist in the Acquisitions' % item.id)
 
         self._shots[item.id] = item
+
+    def set_sequence(self, item):
+        """
+        Change an existing sequence in the Acquisitions.
+
+        Parameters
+        ----------
+        item : Sequence
+            Sequence to be modified in the Acquisitions.
+
+        Returns
+        -------
+
+        """
+        if item.id not in self._sequences.keys():
+            raise ValueError('Sequence with ID "%d" does not exist in the Acquisitions' % item.id)
+
+        self._sequences[item.id] = item
 
     def select_shot_ids(self, start=None, end=None, num=None, every=1, randomly=False):
         """
@@ -520,37 +869,45 @@ class Acquisitions(ProblemBase):
             List with selected shots.
 
         """
-        if not len(self._shot_selection):
-            ids_slice = slice(start or 0, end)
-            shot_ids = self.shot_ids
-            shot_ids.sort()
-            shot_ids = shot_ids[ids_slice]
+        next_slice, selection = _select_slice(self._shot_selection, self.shot_ids,
+                                              start=start, end=end, num=num, every=every,
+                                              randomly=randomly)
+        self._shot_selection = selection
 
-            if randomly is True:
-                self._shot_selection = np.random.permutation(shot_ids).tolist()
+        return next_slice
 
-            else:
-                num_groups = int(np.ceil(len(shot_ids) / num))
+    def select_sequence_ids(self, start=None, end=None, num=None, every=1, randomly=False):
+        """
+        Select a number of sequences according to the rules given in the arguments to the method.
 
-                self._shot_selection = []
+        For every call to this method a new group of sequences will be selected according to
+        those rules until all shots have been selected. At that point, the selection will
+        start again.
 
-                for group_index in range(num_groups):
+        Parameters
+        ----------
+        start : int, optional
+            Start of the slice, defaults to the first id.
+        end : int, optional
+            End of the slice, defaults to the last id.
+        num : int, optional
+            Number of shots to select every time the method is called.
+        every : int, optional
+            How many shots to skip in the selection, defaults to 1, which means taking all shots
+            subsequently.
+        randomly : bool, optional
+            Whether to select the shots at random at in order, defaults to False.
 
-                    group = []
-                    num_remaining = len(shot_ids)
+        Returns
+        -------
+        list
+            List with selected sequences.
 
-                    start_index = group_index if every > 1 else 0
-                    for index in range(start_index, num_remaining, every):
-                        group.append(shot_ids[index])
-
-                        if len(group) == num or not len(shot_ids):
-                            break
-
-                    self._shot_selection += group
-                    shot_ids = shot_ids if every > 1 else list(set(shot_ids)-set(group))
-
-        next_slice = self._shot_selection[:num]
-        self._shot_selection = self._shot_selection[num:]
+        """
+        next_slice, selection = _select_slice(self._sequence_selection, self.sequence_ids,
+                                              start=start, end=end, num=num, every=every,
+                                              randomly=randomly)
+        self._sequence_selection = selection
 
         return next_slice
 
@@ -697,14 +1054,18 @@ class Acquisitions(ProblemBase):
 
         return sub_acquisitions
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'num_shots': self.num_shots,
             'shots': [],
+            'sequences': [],
         }
 
         for shot in self.shots:
             description['shots'].append(shot.__get_desc__())
+
+        for sequence in self.sequences:
+            description['sequences'].append(sequence.__get_desc__())
 
         return description
 
@@ -718,3 +1079,14 @@ class Acquisitions(ProblemBase):
 
             shot = self.get(shot_desc.id)
             shot.__set_desc__(shot_desc)
+
+        if 'sequences' in description:
+            for seq_desc in description.sequences:
+                if seq_desc.id not in self._sequences:
+                    sequence = Sequence(seq_desc.id,
+                                        geometry=self._geometry,
+                                        problem=self.problem, grid=self.grid)
+                    self.add_sequence(sequence)
+
+                sequence = self.get_sequence(seq_desc.id)
+                sequence.__set_desc__(seq_desc)

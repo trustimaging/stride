@@ -4,6 +4,7 @@ import uuid
 import tblib
 import asyncio
 import inspect
+import weakref
 import functools
 import contextlib
 import cloudpickle
@@ -70,7 +71,7 @@ class Tessera(RemoteBase):
         kwargs = self._fill_config(**kwargs)
 
         self._state = 'init'
-        self._is_parameter = kwargs.pop('parameter', False)
+        self._is_parameter = False
         self._task_queue = asyncio.Queue()
         self._task_lock = asyncio.Lock()
 
@@ -90,7 +91,7 @@ class Tessera(RemoteBase):
         self.listen()
 
     def _set_cls(self):
-        obj = self._obj
+        obj = self.obj
         exclude = dir(self)
 
         cls_methods, cls_magic_methods, \
@@ -122,6 +123,17 @@ class Tessera(RemoteBase):
         return TesseraProxy
 
     @property
+    def obj(self):
+        """
+        Internal object.
+
+        """
+        if self.is_parameter:
+            return self._obj()
+        else:
+            return self._obj
+
+    @property
     def is_parameter(self):
         return self._is_parameter
 
@@ -143,6 +155,22 @@ class Tessera(RemoteBase):
 
                 return self._init_cls(*args, **kwargs)
 
+    def make_parameter(self):
+        """
+        Transform the tessera into a parameter and return the object.
+
+        Returns
+        -------
+        object
+
+        """
+        self._is_parameter = True
+
+        obj = self._obj
+        self._obj = weakref.ref(obj, self._dec_parameter_ref())
+
+        return obj
+
     def get_attr(self, item):
         """
         Access attributes from the underlying object.
@@ -156,7 +184,7 @@ class Tessera(RemoteBase):
         -------
 
         """
-        return getattr(self._obj, item)
+        return getattr(self.obj, item)
 
     def set_attr(self, item, value):
         """
@@ -172,7 +200,7 @@ class Tessera(RemoteBase):
         -------
 
         """
-        return setattr(self._obj, item, value)
+        return setattr(self.obj, item, value)
 
     def queue_task(self, task):
         """
@@ -219,6 +247,9 @@ class Tessera(RemoteBase):
             await self.state_changed('listening')
 
             sender_id, task = await self._task_queue.get()
+            # Make sure that the loop does not keep implicit references to the task until the
+            # next task arrives in the queue
+            self._task_queue.task_done()
 
             if type(task) is str and task == 'stop':
                 break
@@ -227,26 +258,24 @@ class Tessera(RemoteBase):
             future = await task.prepare_args()
             await future
 
-            method = getattr(self._obj, task.method, False)
+            method = getattr(self.obj, task.method, False)
 
             async with self.send_exception(task=task):
                 if method is False:
-                    raise AttributeError('Class %s does not have method %s' % (self._obj.__class__.__name__,
+                    raise AttributeError('Class %s does not have method %s' % (self.obj.__class__.__name__,
                                                                                task.method))
 
                 if not callable(method):
                     raise ValueError('Method %s of class %s is not callable' % (task.method,
-                                                                                self._obj.__class__.__name__))
+                                                                                self.obj.__class__.__name__))
 
             await asyncio.sleep(0)
             await self.state_changed('running')
             await task.state_changed('running')
             await self.call_safe(sender_id, method, task)
 
-            # Make sure that the loop does not keep implicit references to the task until the
-            # next task arrives in the queue
-            self._task_queue.task_done()
             del task
+            del method
 
     async def call_safe(self, sender_id, method, task):
         """
@@ -340,6 +369,12 @@ class Tessera(RemoteBase):
         """
         self._state = state
         await self.runtime.tessera_state_changed(self)
+
+    def _dec_parameter_ref(self):
+        def _dec_ref(*args):
+            self.dec_ref()
+
+        return _dec_ref
 
     _serialisation_attrs = RemoteBase._serialisation_attrs + ['_cls_attr_names']
 
@@ -500,6 +535,7 @@ class TesseraProxy(ProxyBase):
 
         """
         kwargs = self._fill_config(**kwargs)
+        kwargs.pop('runtime', None)
 
         self._runtime_id = await self.select_worker(self._runtime_id)
 
@@ -592,9 +628,11 @@ class TesseraProxy(ProxyBase):
         -------
 
         """
-        return self._get_remote_method('set_attr')(item, value)
+        return self._set_remote_attr(item, value)
 
     async def _init_task(self, task_proxy, *args, **kwargs):
+        kwargs.pop('runtime', None)
+
         await self._init_future
 
         for arg in args:
@@ -626,6 +664,13 @@ class TesseraProxy(ProxyBase):
             return attr
 
         return AwaitableOnly(remote_attr)
+
+    def _set_remote_attr(self, item, value):
+        async def remote_attr():
+            await self._init_future
+            await self.cmd_recv_async(method='set_attr', item=item, value=value)
+
+        return remote_attr()
 
     def _get_method_getter(self, method):
         def method_getter(*args, **kwargs):
@@ -1030,9 +1075,8 @@ def tessera(*args, **cmd_config):
                                     uuid.uuid4().hex)
 
             kwargs.update(cmd_config)
-            tess = Tessera(cls, uid, *args, parameter=True, **kwargs)
-            tess.inc_ref()
-            param = tess._obj
+            tess = Tessera(cls, uid, *args, **kwargs)
+            param = tess.make_parameter()
 
             _Parameter = type('_%s' % param.__class__.__name__, (ParameterMixin, param.__class__), {})
             param.__class__ = _Parameter

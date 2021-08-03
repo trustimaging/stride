@@ -47,7 +47,10 @@ def plot_trace(*args, axis=None, colour='black', line_style='solid', title=None,
     if axis is None:
         figure, axis = plt.subplots(1, 1)
 
-    im = axis.plot(*args, c=colour, linestyle=line_style, **kwargs)
+    default_kwargs = dict(c=colour, linestyle=line_style)
+    default_kwargs.update(kwargs)
+
+    im = axis.plot(*args, **default_kwargs)
 
     if title is not None:
         axis.set_title(title)
@@ -133,7 +136,10 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
 
     time_axis = np.broadcast_to(np.reshape(time_axis, (time_axis.shape[0], 1)), signal_shifted.shape)
 
-    axis.plot(signal_shifted, time_axis, c=colour, linestyle=line_style, **kwargs)
+    default_kwargs = dict(c=colour, linestyle=line_style)
+    default_kwargs.update(kwargs)
+
+    axis.plot(signal_shifted, time_axis, **default_kwargs)
     axis.set_ylim(time_axis[-1, 0], time_axis[0, 0])
 
     axis.set_xlabel('trace')

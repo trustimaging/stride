@@ -38,6 +38,7 @@ signal.signal(signal.SIGTERM, _close_prefork_atsignal)
 
 import mosaic
 
+from .core import *
 from .problem import *
 from .physics import *
 from .optimisation import *

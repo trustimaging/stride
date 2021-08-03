@@ -43,21 +43,9 @@ class Pipeline:
         """
         next_args = args
 
-        needs_grad = dict()
-        if self._no_grad:
-            for arg in args:
-                if hasattr(arg, 'needs_grad'):
-                    needs_grad[arg.name] = arg.needs_grad
-                    arg.needs_grad = False
-
         for step in self._steps:
             next_args = await step(*next_args, **kwargs)
             next_args = (next_args,) if len(args) == 1 else next_args
-
-        if self._no_grad:
-            for arg in next_args:
-                if hasattr(arg, 'needs_grad'):
-                    arg.needs_grad = needs_grad[arg.name]
 
         if len(args) == 1:
             return next_args[0]

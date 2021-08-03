@@ -35,6 +35,7 @@ class ProcessTraces(Pipeline):
 
     **Default steps:**
 
+    - ``mute_traces``
     - ``filter_traces``
     - ``norm_per_shot``
 
@@ -42,6 +43,7 @@ class ProcessTraces(Pipeline):
 
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
+        steps.append('mute_traces')
         steps.append('filter_traces')
         steps.append('norm_per_shot')
 

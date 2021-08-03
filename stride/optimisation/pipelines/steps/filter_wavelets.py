@@ -35,16 +35,20 @@ class FilterWavelets(Operator):
         f_min = self.f_min*time.step / 0.750 if self.f_min is not None else 0
         f_max = self.f_max*time.step / 0.750 if self.f_max is not None else 0
 
+        out_wavelets = wavelets.alike(name='filtered_%s' % wavelets.name)
+
         if self.f_min is None and self.f_max is not None:
             filtered = filters.lowpass_filter_fir(wavelets.extended_data, f_max)
-            wavelets.extended_data[:] = filtered
 
         elif self.f_min is not None and self.f_max is None:
             filtered = filters.highpass_filter_fir(wavelets.extended_data, f_min)
-            wavelets.extended_data[:] = filtered
 
         elif self.f_min is not None and self.f_max is not None:
             filtered = filters.bandpass_filter_fir(wavelets.extended_data, f_min, f_max)
-            wavelets.extended_data[:] = filtered
 
-        return wavelets
+        else:
+            filtered = wavelets.extended_data
+
+        out_wavelets.extended_data[:] = filtered
+
+        return out_wavelets

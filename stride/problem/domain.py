@@ -230,21 +230,11 @@ class Time:
         self.extended_stop = stop
         self.extended_num = num
 
-    def extend(self, freq):
-        if not isinstance(freq, float):
-            self.extended_start = self.start
-            self.extended_stop = self.stop
-            self.extended_num = self.num
-            self.extra = 0
-
-            return
-
-        extra = int((1/self.step)/freq * 0.75)
-
+    def extend(self, extra):
         self.extra = extra
-        self.extended_start = self.start - (self.extra - 1)*self.step
-        self.extended_stop = self.stop + (self.extra - 1)*self.step
-        self.extended_num = self.num + 2*self.extra
+        self.extended_start = self.start - (self.extra[0] - 1)*self.step
+        self.extended_stop = self.stop + (self.extra[1] - 1)*self.step
+        self.extended_num = self.num + self.extra[0] + self.extra[1]
 
     def resample(self):
         raise NotImplementedError('Resampling has not been implemented yet')
@@ -274,8 +264,67 @@ class Time:
         return np.linspace(self.extended_start, self.extended_stop, self.extended_num, endpoint=True, dtype=np.float32)
 
 
-class SlowTime:
-    pass
+class SlowTime(Time):
+    """
+    This defines the slow temporal grid over which the problem is defined
+
+    A time grid is fully defined by either the frequency freq or the step size step
+    and at leas one of its arguments: start, stop or num.
+
+    The time grid can be extended with a certain amount of padding, generating an
+    inner domain and an extended domain, similar to that seen in the Space.
+
+    Parameters
+    ----------
+    freq : float, optional
+        Sampling frequency of the axis, in Hz.
+    start : float, optional
+        Point at which time starts, in seconds.
+    step : float, optional
+        Step between time points, in seconds.
+    num : int, optional
+        Number of time points in the grid.
+    stop : float, optional
+        Point at which time ends, in seconds.
+
+    """
+
+    def __init__(self, freq=None, start=None, step=None, num=None, stop=None):
+        try:
+            if step is None:
+                step = 1/freq
+            else:
+                freq = 1/step
+
+        except:
+            raise ValueError('Either freq or step has to be defined')
+
+        try:
+            if start is None and stop is None:
+                start = 0.
+
+            if start is None:
+                start = stop - step*(num - 1)
+            elif step is None:
+                step = (stop - start)/(num - 1)
+            elif num is None:
+                num = int(np.ceil((stop - start)/step + 1))
+                stop = step*(num - 1) + start
+            elif stop is None:
+                stop = start + step*(num - 1)
+
+        except:
+            raise ValueError('Three of args start, step, num and stop may be set')
+
+        if not isinstance(num, int):
+            raise TypeError('"input" argument must be of type int')
+
+        self.freq = freq
+
+        super().__init__(start=start, step=step, num=num, stop=stop)
+
+    def resample(self):
+        raise NotImplementedError('Resampling has not been implemented yet')
 
 
 class Grid:

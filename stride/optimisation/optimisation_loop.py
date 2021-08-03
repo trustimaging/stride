@@ -55,7 +55,7 @@ class Iteration:
         """
         self._fun[fun.shot_id] = fun
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'abs_id': self.abs_id,
@@ -211,7 +211,7 @@ class Block:
             self._optimisation_loop.started = True
             self._optimisation_loop.dump()
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'num_iterations': self._num_iterations,
@@ -430,7 +430,7 @@ class OptimisationLoop(Saved):
         except AttributeError:
             pass
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'running_id': self.running_id,
             'num_blocks': self._num_blocks,

@@ -1,5 +1,9 @@
 
 import os
+import glob
+import atexit
+import shutil
+import tempfile
 import devito
 from devito.types import Buffer
 import numpy as np
@@ -9,7 +13,7 @@ import mosaic
 from mosaic.utils import camel_case
 
 from stride.utils import fft
-from stride.problem import ScalarField
+from stride.problem import StructuredData
 from ..common.devito import GridDevito, OperatorDevito, config_devito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
@@ -111,6 +115,8 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                **kwargs)
         self.boundary = None
 
+        self._cache_folder = None
+
     def clear_operators(self):
         self.state_operator.devito_operator = None
         self.adjoint_operator.devito_operator = None
@@ -162,6 +168,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
+        runtime = mosaic.runtime()
         problem = kwargs.get('problem')
         shot = problem.shot
 
@@ -212,9 +219,14 @@ class IsoAcousticDevito(ProblemTypeBase):
                 update_saved = []
 
             # Compile the operator
-            self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
-                                             **kwargs)
-            self.state_operator.compile()
+            cached_operator = kwargs.pop('cached_operator', None)
+
+            if cached_operator is not None:
+                self.state_operator.devito_operator = cached_operator
+            else:
+                self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
+                                                 **kwargs)
+                self.state_operator.compile()
 
         else:
             # If the source/receiver size has changed, then create new functions for them
@@ -240,11 +252,15 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.inv_vp2.data_with_halo[:] = 1 / vp_with_halo**2
 
         if rho is not None:
+            runtime.logger.info('(ShotID %d) Using inhomogeneous density' % problem.shot_id)
+
             rho_with_halo = self.dev_grid.with_halo(rho.extended_data)
             self.dev_grid.vars.rho.data_with_halo[:] = rho_with_halo
             self.dev_grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
         if alpha is not None:
+            runtime.logger.info('(ShotID %d) Using attenuation with power %d' % (problem.shot_id, self.attenuation_power))
+
             db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
 
             alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_to_neper
@@ -290,6 +306,9 @@ class IsoAcousticDevito(ProblemTypeBase):
             src=self.dev_grid.vars.src,
             rec=self.dev_grid.vars.rec,
         )
+
+        if 'p_saved' in self.dev_grid.vars:
+            functions['p_saved'] = self.dev_grid.vars.p_saved
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
@@ -342,13 +361,40 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             wavefield_data *= self._max_wavelet / self._src_scale
 
-            self.wavefield = ScalarField(name='p_dt2',
-                                         data=wavefield_data,
-                                         shape=wavefield_data.shape)
+            self.wavefield = StructuredData(name='p',
+                                            data=wavefield_data,
+                                            shape=wavefield_data.shape)
 
             if os.environ.get('STRIDE_DUMP_WAVEFIELD', None) == 'yes':
                 self.wavefield.dump(path=problem.output_folder,
                                     project_name=problem.name)
+
+            cache_forward = kwargs.pop('cache_forward', False)
+            cache_location = kwargs.pop('cache_location', os.getcwd())
+            if cache_forward:
+                prev_cache = glob.glob(os.path.join(cache_location, 'stride-*'))
+                if len(prev_cache):
+                    self._cache_folder = prev_cache[0]
+
+                if self._cache_folder is None:
+                    self._cache_folder = tempfile.mkdtemp(prefix='stride-', dir=cache_location)
+
+                    def _rm_tmpdir():
+                        shutil.rmtree(self._cache_folder, ignore_errors=True)
+
+                    atexit.register(_rm_tmpdir)
+
+                try:
+                    self.wavefield.dump(path=self._cache_folder,
+                                        version=shot.id,
+                                        project_name=problem.name)
+
+                    self.dev_grid.deallocate('p_saved')
+                    del self.wavefield
+                    self.wavefield = None
+                except:
+                    shutil.rmtree(self._cache_folder, ignore_errors=True)
+                    raise
 
         else:
             self.wavefield = None
@@ -357,6 +403,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         traces_data *= self._max_wavelet / self._src_scale
         traces = shot.observed.alike(name='modelled', data=traces_data)
 
+        self.boundary.deallocate()
         self.dev_grid.deallocate('p')
         self.dev_grid.deallocate('laplacian')
         self.dev_grid.deallocate('src')
@@ -366,8 +413,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.deallocate('inv_vp2')
         self.dev_grid.deallocate('rho')
         self.dev_grid.deallocate('buoy')
-        self.dev_grid.deallocate('alpha')
-        self.boundary.deallocate()
+        self.dev_grid.deallocate('alpha', collect=True)
 
         return traces
 
@@ -430,9 +476,14 @@ class IsoAcousticDevito(ProblemTypeBase):
             gradient_update = await self.prepare_grad(wavelets, vp, rho, alpha)
 
             # Compile the operator
-            self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
-                                               **kwargs)
-            self.adjoint_operator.compile()
+            cached_operator = kwargs.pop('cached_operator', None)
+
+            if cached_operator is not None:
+                self.adjoint_operator.devito_operator = cached_operator
+            else:
+                self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
+                                                   **kwargs)
+                self.adjoint_operator.compile()
 
         else:
             # If the receiver size has changed, then create new functions for it
@@ -445,6 +496,23 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.p_a.data_with_halo.fill(0.)
         self.boundary.clear()
         await self.init_grad(wavelets, vp, rho, alpha)
+
+        # Set wavefield if necessary
+        cache_forward = kwargs.pop('cache_forward', False)
+        if cache_forward:
+            wavefield = StructuredData(name='p')
+
+            wavefield.load(path=self._cache_folder,
+                           version=shot.id,
+                           project_name=problem.name)
+
+            self.dev_grid.vars.p_saved.data_with_halo[:] = wavefield.data
+
+            wavefield.rm(path=self._cache_folder,
+                         version=shot.id,
+                         project_name=problem.name)
+
+            del wavefield
 
         # Set medium parameters
         vp_with_halo = self.dev_grid.with_halo(vp.extended_data)
@@ -535,6 +603,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         """
         self.wavefield = None
 
+        self.boundary.deallocate()
         self.dev_grid.deallocate('p_saved')
         self.dev_grid.deallocate('p_a')
         self.dev_grid.deallocate('laplacian')
@@ -545,8 +614,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.deallocate('inv_vp2')
         self.dev_grid.deallocate('rho')
         self.dev_grid.deallocate('buoy')
-        self.dev_grid.deallocate('alpha')
-        self.boundary.deallocate()
+        self.dev_grid.deallocate('alpha', collect=True)
 
         return await self.get_grad(wavelets, vp, rho, alpha)
 
@@ -571,10 +639,10 @@ class IsoAcousticDevito(ProblemTypeBase):
         p_a = self.dev_grid.vars.p_a
 
         grad = self.dev_grid.function('grad_vp')
-        grad_update = devito.Inc(grad, -p * p_a)
+        grad_update = devito.Inc(grad, -p.dt2 * p_a)
 
         prec = self.dev_grid.function('prec_vp')
-        prec_update = devito.Inc(prec, +p * p)
+        prec_update = devito.Inc(prec, +p.dt2 * p.dt2)
 
         return grad_update, prec_update
 
@@ -627,7 +695,87 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.deallocate('prec_vp')
 
         grad = vp.alike(name='vp_grad', data=variable_grad)
-        grad.prec = variable_prec
+        grad.prec = vp.alike(name='vp_prec', data=variable_prec)
+
+        return grad
+
+    async def prepare_grad_rho(self, rho, **kwargs):
+        """
+        Prepare the problem type to calculate the gradients wrt rho.
+
+        Parameters
+        ----------
+        rho : ScalarField
+            Density variable to calculate the gradient.
+
+        Returns
+        -------
+        tuple
+            Tuple of gradient and preconditioner updates.
+
+        """
+        p = self.dev_grid.vars.p_saved
+        p_a = self.dev_grid.vars.p_a
+        buoy = self.dev_grid.vars.buoy
+
+        grad_term = - devito.grad(buoy, shift=-0.5).dot(devito.grad(p, shift=-0.5)) \
+                    - buoy * p.laplace
+
+        grad = self.dev_grid.function('grad_rho')
+        grad_update = devito.Inc(grad, grad_term * p_a)
+
+        prec = self.dev_grid.function('prec_rho')
+        prec_update = devito.Inc(prec, grad_term * grad_term)
+
+        return grad_update, prec_update
+
+    async def init_grad_rho(self, rho, **kwargs):
+        """
+        Initialise buffers in the problem type to calculate the gradients wrt rho.
+
+        Parameters
+        ----------
+        rho : ScalarField
+            Density variable to calculate the gradient.
+
+        Returns
+        -------
+
+        """
+        grad = self.dev_grid.function('grad_rho')
+        grad.data_with_halo.fill(0.)
+
+        prec = self.dev_grid.function('prec_rho')
+        prec.data_with_halo.fill(0.)
+
+    async def get_grad_rho(self, rho, **kwargs):
+        """
+        Retrieve the gradients calculated wrt to rho.
+
+        The variable is updated inplace.
+
+        Parameters
+        ----------
+        rho : ScalarField
+            Density variable to calculate the gradient.
+
+        Returns
+        -------
+        ScalarField
+            Gradient wrt Density.
+
+        """
+        variable_grad = self.dev_grid.vars.grad_rho
+        variable_grad = np.asarray(variable_grad.data, dtype=np.float32)
+
+        variable_prec = self.dev_grid.vars.prec_rho
+        variable_prec = np.asarray(variable_prec.data, dtype=np.float32)
+
+        self.dev_grid.deallocate('grad_rho')
+        self.dev_grid.deallocate('prec_rho')
+
+        grad = rho.alike(name='rho_grad', data=variable_grad)
+        grad.prec = rho.alike(name='rho_prec', data=variable_prec)
 
         return grad
 
@@ -915,7 +1063,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 return vp2 * rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
 
     def _saved(self, field, *kwargs):
-        return field.dt2
+        return field
 
     def _symbolic_coefficients(self, *functions):
         raise NotImplementedError('DRP weights are not implemented in this version of stride')
