@@ -62,6 +62,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         boundary_type : str, optional
             Type of boundary for the wave equation (``sponge_boundary_2`` or
             ``complex_frequency_shift_PML_2``), defaults to ``sponge_boundary_2``.
+            Note that ``complex_frequency_shift_PML_2`` boundaries have lower OT4 stability
+            limit than other boundaries.
         interpolation_type : str, optional
             Type of source/receiver interpolation (``linear`` or ``hicks``), defaults
             to ``linear``.
@@ -890,8 +892,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         elif dt <= dt_max_OT4:
             runtime.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
-                                'above OT2 limit (%.3f \u03BCs)'
-                                % (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
+                                'above OT2 limit (%.3f \u03BCs) and below OT4 limit (%.3f \u03BCs)'
+                                % (problem.shot_id, dt / 1e-6, crossing_factor,
+                                   dt_max_OT2 / 1e-6, dt_max_OT4 / 1e-6))
 
             selected_kernel = 'OT4'
 
@@ -982,13 +985,12 @@ class IsoAcousticDevito(ProblemTypeBase):
             attenuation_term = 0
 
         # Set up the boundary
-        boundary_term, eq_before, eq_after = self.boundary.apply(field, vp.extended_data,
+        boundary_field = laplacian if self.kernel != 'OT2' and 'PML' in self.boundary_type else field
+        boundary_term, eq_before, eq_after = self.boundary.apply(boundary_field, vp.extended_data,
                                                                  direction=direction, subs=subs,
                                                                  f_centre=self._bandwidth[1])
 
         # Define PDE and update rule
-        # TODO The only way to make the PML work is to use OT2 in the boundary,
-        #      a PML formulation including the extra term is needed for this.
         eq_interior = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term, u_next)
         eq_boundary = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term + vp2_fun*boundary_term, u_next)
 
