@@ -28,9 +28,8 @@ class GradientDescent(LocalOptimiser):
         super().__init__(variable, **kwargs)
 
         self.step_size = kwargs.pop('step_size', 1.)
-        self.saved_variable = None
 
-    async def step(self, step_size=None, **kwargs):
+    async def step(self, step_size=None, direction=None, **kwargs):
         """
         Apply the optimiser.
 
@@ -38,6 +37,8 @@ class GradientDescent(LocalOptimiser):
         ----------
         step_size : float, optional
             Step size to use for this application, defaults to instance step.
+        direction : Data, optional
+            Direction to use for the step, defaults to variable gradient.
         kwargs
             Extra parameters to be used by the method.
 
@@ -48,22 +49,24 @@ class GradientDescent(LocalOptimiser):
 
         """
         step_size = step_size or self.step_size
-        grad = self.variable.process_grad(**kwargs)
-        grad = await self._process_grad(grad)
 
-        min_grad = np.min(grad.extended_data)
-        max_grad = np.max(grad.extended_data)
+        if direction is None:
+            grad = self.variable.process_grad(**kwargs)
+            direction = await self._process_grad(grad)
+
+        min_dir = np.min(direction.extended_data)
+        max_dir = np.max(direction.extended_data)
 
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
         runtime = mosaic.runtime()
-        runtime.logger.info('Updating variable %s, gradient in range [%e, %e]' %
-                            (self.variable.name, min_grad, max_grad))
+        runtime.logger.info('Updating variable %s, direction in range [%e, %e]' %
+                            (self.variable.name, min_dir, max_dir))
         runtime.logger.info('\t variable range before update [%e, %e]' %
                             (min_var, max_var))
 
-        self.variable -= step_size*grad
+        self.variable -= step_size*direction
         self.variable = await self._process_model(self.variable)
 
         min_var = np.min(self.variable.extended_data)
@@ -71,43 +74,5 @@ class GradientDescent(LocalOptimiser):
 
         runtime.logger.info('\t variable range after update [%e, %e]' %
                             (min_var, max_var))
-
-        return self.variable
-
-    async def guess_step(self, step_size=None, **kwargs):
-        """
-        Apply the optimiser, but keep original value of the variable
-        for full update later.
-
-        Parameters
-        ----------
-        step_size : float, optional
-            Step size to use for this application, defaults to instance step.
-        kwargs
-            Extra parameters to be used by the method.
-
-        Returns
-        -------
-        Variable
-            Updated variable.
-
-        """
-        self.saved_variable = self.variable.copy()
-        variable = await self.step(clear_grad=False)
-
-        return variable
-
-    def restore_guess(self):
-        """
-        Restore the original value of the variable after a guess step.
-
-        Returns
-        -------
-        Variable
-            Original variable.
-
-        """
-        self.variable.extended_data[:] = self.saved_variable.extended_data[:]
-        self.saved_variable = None
 
         return self.variable

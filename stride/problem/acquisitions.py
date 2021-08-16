@@ -983,7 +983,7 @@ class Acquisitions(ProblemBase):
         -------
 
         """
-        if not self.get(0).wavelets.allocated:
+        if not self.num_shots or not self.get(0).wavelets.allocated:
             return None
 
         kwargs['plot'] = False
@@ -1011,7 +1011,7 @@ class Acquisitions(ProblemBase):
         -------
 
         """
-        if not self.get(0).observed.allocated:
+        if not self.num_shots or not self.get(0).observed.allocated:
             return None
 
         kwargs['plot'] = False

@@ -5,7 +5,6 @@ import atexit
 import shutil
 import tempfile
 import devito
-from devito.types import Buffer
 import numpy as np
 import scipy.signal
 
@@ -141,11 +140,15 @@ class IsoAcousticDevito(ProblemTypeBase):
             Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
-        save_wavefield : bool or int, optional
+        save_wavefield : bool, optional
             Whether or not to solve the forward wavefield, defaults to True when
-            a gradient is expected, and to False otherwise. An integer number N can
-            also be provided, in which case the last N timesteps of the wavefield
-            will be saved.
+            a gradient is expected, and to False otherwise.
+        save_bounds : tuple of int, optional
+            If saving the wavefield, specify the ``(min timestep, max timestep)``
+            where the wavefield should be saved
+        save_undersampling : int, optional
+            Amount of undersampling in time when saving the forward wavefield. If not given,
+            it is calculated given the bandwidth.
         boundary_type : str, optional
             Type of boundary for the wave equation (``sponge_boundary_2`` or
             ``complex_frequency_shift_PML_2``), defaults to ``sponge_boundary_2``.
@@ -161,9 +164,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         kernel : str, optional
             Type of time kernel to use (``OT2`` for 2nd order in time or ``OT4`` for 4th
             order in time). If not given, it is automatically decided given the time spacing.
-        undersampling : int, optional
-            Amount of undersampling in time when saving the forward wavefield. If not given,
-            it is calculated given the bandwidth.
 
 
         Returns
@@ -189,8 +189,6 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
-            save = Buffer(save_wavefield) if type(save_wavefield) is int else None
-
             # Define variables
             src = self.dev_grid.sparse_time_function('src', num=num_sources,
                                                      coordinates=shot.source_coordinates,
@@ -199,7 +197,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                      coordinates=shot.receiver_coordinates,
                                                      interpolation_type=self.interpolation_type)
 
-            p = self.dev_grid.time_function('p', coefficients='symbolic' if self.drp else 'standard', save=save)
+            p = self.dev_grid.time_function('p', coefficients='symbolic' if self.drp else 'standard')
 
             # Create stencil
             stencil = self._stencil(p, wavelets, vp, rho=rho, alpha=alpha, direction='forward')
@@ -214,6 +212,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             # Define the saving of the wavefield
             if save_wavefield is True:
                 p_saved = self.dev_grid.undersampled_time_function('p_saved',
+                                                                   bounds=kwargs.pop('save_bounds', None),
                                                                    factor=self.undersampling_factor)
                 update_saved = [devito.Eq(p_saved, self._saved(p))]
 
@@ -351,11 +350,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 save_wavefield |= alpha.needs_grad
 
         if save_wavefield:
-            if save_wavefield is True:
-                wavefield_data = np.asarray(self.dev_grid.vars.p_saved.data_with_halo, dtype=np.float32)
-
-            else:
-                wavefield_data = np.asarray(self.dev_grid.vars.p.data, dtype=np.float32)
+            wavefield_data = np.asarray(self.dev_grid.vars.p_saved.data_with_halo, dtype=np.float32)
 
             wavefield_slice = kwargs.pop('wavefield_slice', None)
             if wavefield_slice is not None:
@@ -816,7 +811,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.drp = drp
 
         preferred_kernel = kwargs.get('kernel', None)
-        preferred_undersampling = kwargs.get('undersampling', None)
+        preferred_undersampling = kwargs.get('save_undersampling', None)
 
         self._check_conditions(wavelets, vp, rho, alpha,
                                preferred_kernel, preferred_undersampling,

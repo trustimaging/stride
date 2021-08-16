@@ -2,6 +2,7 @@
 import os
 import gc
 import devito
+import sympy
 import logging
 import functools
 import itertools
@@ -302,7 +303,71 @@ class GridDevito(Gridded):
         return fun
 
     @_cached
-    def undersampled_time_function(self, name, factor, space_order=None, time_order=None, **kwargs):
+    def vector_function(self, name, space_order=None, **kwargs):
+        """
+        Create a Devito VectorFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        kwargs
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.VectorFunction
+            Generated function.
+
+        """
+        space_order = space_order or self.space_order
+
+        fun = devito.VectorFunction(name=name,
+                                    grid=self.devito_grid,
+                                    space_order=space_order,
+                                    dtype=np.float32,
+                                    **kwargs)
+
+        return fun
+
+    @_cached
+    def vector_time_function(self, name, space_order=None, time_order=None, **kwargs):
+        """
+        Create a Devito VectorTimeFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        time_order : int, optional
+            Time order of the discretisation, defaults to the grid time order.
+        kwargs
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.VectorTimeFunction
+            Generated function.
+
+        """
+        space_order = space_order or self.space_order
+        time_order = time_order or self.time_order
+
+        fun = devito.VectorTimeFunction(name=name,
+                                        grid=self.devito_grid,
+                                        time_order=time_order,
+                                        space_order=space_order,
+                                        dtype=np.float32,
+                                        **kwargs)
+
+        return fun
+
+    @_cached
+    def undersampled_time_function(self, name, factor, bounds=None, space_order=None, time_order=None, **kwargs):
         """
         Create an undersampled version of a Devito function with parameters provided.
 
@@ -310,8 +375,10 @@ class GridDevito(Gridded):
         ----------
         name : str
             Name of the function.
-        factor : int,=
+        factor : int
             Undersampling factor.
+        bounds : tuple, optional
+            Timestep bounds in which the function is sampled, defaults to all timesteps.
         space_order : int, optional
             Space order of the discretisation, defaults to the grid space order.
         time_order : int, optional
@@ -325,18 +392,30 @@ class GridDevito(Gridded):
             Generated function.
 
         """
+        bounds = bounds or (0, self.time.extended_num-1)
+
+        time_dim = self.devito_grid.time_dim
+
+        condition = sympy.And(devito.Ge(time_dim, bounds[0]),
+                              devito.Le(time_dim, bounds[1]))
+
         time_under = devito.ConditionalDimension('time_under',
-                                                 parent=self.devito_grid.time_dim,
-                                                 factor=factor)
+                                                 parent=time_dim,
+                                                 factor=factor,
+                                                 condition=condition)
 
-        buffer_size = (self.time.extended_num + factor - 1) // factor + factor
+        buffer_size = (bounds[1] - bounds[0] + factor) // factor + 1
 
-        return self.time_function(name,
-                                  space_order=space_order,
-                                  time_order=time_order,
-                                  time_dim=time_under,
-                                  save=buffer_size,
-                                  **kwargs)
+        fun = self.time_function(name,
+                                 space_order=space_order,
+                                 time_order=time_order,
+                                 time_dim=time_under,
+                                 save=buffer_size,
+                                 **kwargs)
+
+        space_dims = fun.dimensions[1:]
+
+        return fun.func(time_under - int(bounds[0] // factor), *space_dims)
 
     @_cached
     def sparse_time_function(self, name, num=1, space_order=None, time_order=None,
@@ -479,13 +558,18 @@ class GridDevito(Gridded):
 
         """
         if name in self.vars:
-            del self.vars[name]._data
-            self.vars[name]._data = None
+            if hasattr(self.vars[name], 'is_VectorValued') and self.vars[name].is_VectorValued:
+                for dim in range(self.space.dim):
+                    del self.vars[name][dim]._data
+                    self.vars[name][dim]._data = None
+            else:
+                del self.vars[name]._data
+                self.vars[name]._data = None
 
             if collect:
                 gc.collect()
 
-    def with_halo(self, data):
+    def with_halo(self, data, value=None, time_dependent=False, is_vector=False):
         """
         Pad ndarray with appropriate halo given the grid space order.
 
@@ -493,6 +577,14 @@ class GridDevito(Gridded):
         ----------
         data : ndarray
             Array to pad
+        value : float, optional
+            Value used for the filling, defaults to edge value.
+        time_dependent : bool, optional
+            Whether the array should be considered time dependent,
+            defaults to ``False``.
+        is_vector : bool, optional
+            Whether the array should be considered a vector field,
+            defaults to ``False``.
 
         Returns
         -------
@@ -503,7 +595,16 @@ class GridDevito(Gridded):
         pad_widths = [[self.space_order, self.space_order]
                       for _ in self.space.shape]
 
-        return np.pad(data, pad_widths, mode='edge')
+        if time_dependent:
+            pad_widths.insert(0, [0, 0])
+
+        if is_vector:
+            pad_widths.insert(0, [0, 0])
+
+        if value is None:
+            return np.pad(data, pad_widths, mode='edge')
+        else:
+            return np.pad(data, pad_widths, mode='constant', constant_values=value)
 
     def _calculate_hicks(self, coordinates):
         space = self.space

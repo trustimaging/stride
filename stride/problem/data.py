@@ -1015,6 +1015,13 @@ class VectorField(ScalarField):
         """
         return self._dim
 
+    def _plot(self, data, **kwargs):
+        title = kwargs.pop('title', self.name)
+
+        axis = plotting.plot_vector_field(data, title=title, **kwargs)
+
+        return axis
+
     def __get_desc__(self, **kwargs):
         description = super().__get_desc__(**kwargs)
         description['dim'] = self._dim

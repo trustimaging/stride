@@ -37,7 +37,7 @@ class LocalOptimiser(ABC):
 
     def clear_grad(self):
         """
-        Clear the internal gradient buffers of the varible.
+        Clear the internal gradient buffers of the variable.
 
         Returns
         -------
@@ -59,38 +59,6 @@ class LocalOptimiser(ABC):
         -------
         Variable
             Updated variable.
-
-        """
-        pass
-
-    @abstractmethod
-    def guess_step(self, **kwargs):
-        """
-        Apply the optimiser, but keep original value of the variable
-        for full update later.
-
-        Parameters
-        ----------
-        kwargs
-            Extra parameters to be used by the method.
-
-        Returns
-        -------
-        Variable
-            Updated variable.
-
-        """
-        pass
-
-    @abstractmethod
-    def restore_guess(self):
-        """
-        Restore the original value of the variable after a guess step.
-
-        Returns
-        -------
-        Variable
-            Original variable.
 
         """
         pass

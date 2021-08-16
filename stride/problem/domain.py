@@ -126,7 +126,7 @@ class Space:
 
         """
         grid = self.grid
-        return np.meshgrid(*grid)
+        return np.meshgrid(*grid, indexing='ij')
 
     @property
     def extended_mesh(self):
@@ -136,7 +136,7 @@ class Space:
 
         """
         grid = self.extended_grid
-        return np.meshgrid(*grid)
+        return np.meshgrid(*grid, indexing='ij')
 
     @property
     def indices(self):
