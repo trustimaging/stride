@@ -25,7 +25,7 @@ class MuteTraces(Operator):
 
         out_traces.extended_data[:] = data
 
-        return out_traces, observed
+        return out_traces, observed.copy()
 
     def adjoint(self, d_modelled, d_observed, modelled, observed, **kwargs):
         return d_modelled, d_observed

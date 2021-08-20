@@ -249,7 +249,10 @@ class HDF5:
             else:
                 filename = _abs_filename('%s-%s%s' % (project_name, file_parameter, extension), path)
 
-        self._filename = _abs_filename(filename, path)
+        else:
+            filename = _abs_filename(filename, path)
+
+        self._filename = filename
         self._file = h5py.File(self._filename, self._mode)
 
     @property

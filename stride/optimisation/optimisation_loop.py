@@ -75,7 +75,7 @@ class Iteration:
         self.abs_id = description.abs_id
 
         for fun_desc in description.functional_values:
-            fun = FunctionalValue(fun_desc.shot_id, fun_desc.fun_value)
+            fun = FunctionalValue(fun_desc.fun_value, fun_desc.shot_id)
             self._fun[fun.shot_id] = fun
 
 

@@ -18,6 +18,7 @@ try:
         raise ModuleNotFoundError
 
     import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
 
     ENABLED_2D_PLOTTING = True
 
@@ -91,6 +92,12 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
     if axis is None:
         figure, axis = plt.subplots(1, 1)
 
+    slice = kwargs.pop('slice', None)
+    if slice is not None:
+        field = field[slice]
+        origin = None
+        limit = None
+
     if origin is None or limit is None:
         start = (0, 0)
         stop = field.shape[1:]
@@ -98,13 +105,15 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
         start = origin
         stop = limit
 
-    undersampling = 10
+    undersampling = 2
 
-    x = np.linspace(start[0], stop[0], field.shape[1] // undersampling)
-    y = np.linspace(start[1], stop[1], field.shape[2] // undersampling)
+    x = np.linspace(start[0], stop[0], field.shape[1], endpoint=True)
+    y = np.linspace(start[1], stop[1], field.shape[2], endpoint=True)
+    x = x[::undersampling]
+    y = y[::undersampling]
     x, y = np.meshgrid(x, y)
 
-    mag = np.sqrt(field[0] ** 2 + field[1] ** 2).T
+    mag = np.sqrt(field[0].astype(np.float64) ** 2 + field[1].astype(np.float64) ** 2).T
     undersampled_mag = mag[::undersampling, ::undersampling]
 
     u = [field[0, ::undersampling, ::undersampling].T,
@@ -122,15 +131,17 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
             line[-1] = 1.
             cmap_values.append(line)
 
-    from matplotlib.colors import ListedColormap
     cmap = ListedColormap(cmap_values, name=cmap_name)
 
     default_kwargs = dict(cmap=cmap,
                           vmin=data_range[0], vmax=data_range[1],
                           aspect='equal',
                           origin='lower',
-                          extent=[origin[0], limit[0], origin[1], limit[1]],
                           interpolation='bicubic')
+
+    if origin is not None and limit is not None:
+        default_kwargs['extent'] = [origin[0], limit[0], origin[1], limit[1]]
+
     default_kwargs.update(kwargs)
     im_1 = axis.imshow(mag, **default_kwargs)
 

@@ -308,7 +308,7 @@ class StructuredData(Data):
         grad = self.grad
         prec = grad.prec
 
-        prec += prec_scale * np.max(prec.data) + 1e-31
+        prec += prec_scale * np.max(prec) + 1e-31
         grad /= prec
 
         if clear_grad:
@@ -443,6 +443,8 @@ class StructuredData(Data):
 
         if res.grad is not None and other.grad is not None:
             res.grad = getattr(res.grad, op)(other.grad)
+        elif other.grad is not None:
+            res.grad = other.grad
 
     @staticmethod
     def _op_prec(res, other, op):
@@ -451,6 +453,8 @@ class StructuredData(Data):
 
         if res.prec is not None and other.prec is not None:
             res.prec = getattr(res.prec, op)(other.prec)
+        elif other.prec is not None:
+            res.prec = other.prec
 
     def __add__(self, other):
         res, other_data = self._prepare_op(other)
@@ -660,27 +664,31 @@ class ScalarField(StructuredData):
         self._slow_time_dependent = slow_time_dependent
 
         if self.space is not None and self._shape is None:
-            shape = ()
-            extended_shape = ()
-            inner = ()
+            self._init_shape()
 
-            if self._time_dependent:
-                shape += (self.time.num,)
-                extended_shape += (self.time.extended_num,)
-                inner += (self.time.inner,)
+    def _init_shape(self, fill_shape=True):
+        shape = ()
+        extended_shape = ()
+        inner = ()
 
-            if self._slow_time_dependent:
-                shape += (self.slow_time.num,)
-                extended_shape += (self.slow_time.extended_num,)
-                inner += (self.slow_time.inner,)
+        if self._time_dependent:
+            shape += (self.time.num,)
+            extended_shape += (self.time.extended_num,)
+            inner += (self.time.inner,)
 
-            shape += self.space.shape
-            extended_shape += self.space.extended_shape
-            inner += self.space.inner
+        if self._slow_time_dependent:
+            shape += (self.slow_time.num,)
+            extended_shape += (self.slow_time.extended_num,)
+            inner += (self.slow_time.inner,)
 
+        shape += self.space.shape
+        extended_shape += self.space.extended_shape
+        inner += self.space.inner
+
+        if fill_shape:
             self._shape = shape
-            self._extended_shape = extended_shape
-            self._inner = inner
+        self._extended_shape = extended_shape
+        self._inner = inner
 
     def alike(self, *args, **kwargs):
         """
@@ -782,6 +790,76 @@ class ScalarField(StructuredData):
                                            method=method,
                                            bounds_error=False, fill_value=None)
         interp = interp.reshape(self.space.shape)
+
+        return interp
+
+    def resample(self, space=None, order=3, prefilter=True, **kwargs):
+        """
+        Resample the internal (non-padded) data given some new space object.
+
+        Parameters
+        ----------
+        space : Space
+            New space.
+        order : int, optional
+            Order of the interplation, default is 3.
+        prefilter : bool, optional
+            Determines if the input array is prefiltered
+            before interpolation. The default is ``True``.
+
+        Returns
+        -------
+
+        """
+
+        if self.time_dependent or self.slow_time_dependent:
+            data = self.data
+
+            interp = []
+            for t in range(data.shape[0]):
+                interp.append(self.resample_data(data[t], space,
+                                                 order=order,
+                                                 prefilter=prefilter))
+
+            interp = np.stack(interp, axis=0)
+
+        else:
+            interp = self.resample_data(self.data, space,
+                                        order=order,
+                                        prefilter=prefilter)
+
+        self.grid.space = space
+        self._init_shape()
+        self._data = self.pad_data(interp)
+
+    def resample_data(self, data, space, order=3, prefilter=True):
+        """
+        Resample the data given some new space object.
+
+        Parameters
+        ----------
+        data : ndarray
+            Data to stagger.
+        space : Space
+            New space.
+        order : int, optional
+            Order of the interplation, default is 3.
+        prefilter : bool, optional
+            Determines if the input array is prefiltered
+            before interpolation. The default is ``True``.
+
+        Returns
+        -------
+        ndarray
+            Resampled data.
+
+        """
+
+        resampling_factor = [dx_old/dx_new
+                             for dx_old, dx_new in zip(self.space.spacing, space.spacing)]
+
+        interp = scipy.ndimage.zoom(data, resampling_factor,
+                                    order=order, prefilter=prefilter)
 
         return interp
 
@@ -891,32 +969,13 @@ class ScalarField(StructuredData):
         return description
 
     def __set_desc__(self, description):
-        # TODO Not entirely convinved by this solution
-        # super().__set_desc__(description)
-
         self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
         self._slow_time_dependent = description.get('slow_time_dependent', False)
 
-        # TODO and this should not be repeated
         if self.space is not None:
-            extended_shape = ()
-            inner = ()
-
-            if self._time_dependent:
-                extended_shape += (self.time.extended_num,)
-                inner += (self.time.inner,)
-
-            if self._slow_time_dependent:
-                extended_shape += (self.slow_time.extended_num,)
-                inner += (self.slow_time.inner,)
-
-            extended_shape += self.space.extended_shape
-            inner += self.space.inner
-
-            self._extended_shape = extended_shape
-            self._inner = inner
+            self._init_shape(fill_shape=False)
 
         data = description.data
         if hasattr(data, 'load'):
@@ -964,16 +1023,40 @@ class VectorField(ScalarField):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        dim = kwargs.pop('dim', None)
 
-        dim = kwargs.pop('dim', False)
+        if 'space' in kwargs and dim is None:
+            dim = kwargs['space'].dim
+        elif 'grid' in kwargs and dim is None:
+            dim = kwargs['grid'].space.dim
+
         self._dim = dim
 
-        if self.space is not None and self._shape is not None:
-            self._dim = dim or self.space.dim
-            self._shape = (self._dim,) + self._shape
-            self._extended_shape = (self._dim,) + self._extended_shape
-            self._inner = (slice(0, None),) + self._inner
+        super().__init__(**kwargs)
+
+    def _init_shape(self, fill_shape=True):
+        shape = (self._dim,)
+        extended_shape = (self._dim,)
+        inner = (slice(0, None),)
+
+        if self._time_dependent:
+            shape += (self.time.num,)
+            extended_shape += (self.time.extended_num,)
+            inner += (self.time.inner,)
+
+        if self._slow_time_dependent:
+            shape += (self.slow_time.num,)
+            extended_shape += (self.slow_time.extended_num,)
+            inner += (self.slow_time.inner,)
+
+        shape += self.space.shape
+        extended_shape += self.space.extended_shape
+        inner += self.space.inner
+
+        if fill_shape:
+            self._shape = shape
+        self._extended_shape = extended_shape
+        self._inner = inner
 
     def alike(self, *args, **kwargs):
         """
@@ -1015,6 +1098,36 @@ class VectorField(ScalarField):
         """
         return self._dim
 
+    def plot_dims(self, **kwargs):
+        """
+        Plot separated dimensions of the field.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+
+        """
+        axes = kwargs.pop('axes', None)
+        plot = kwargs.pop('plot', True)
+        origin = kwargs.pop('origin', self.space.origin)
+        limit = kwargs.pop('limit', self.space.limit)
+
+        if axes is None:
+            figure, axes = plt.subplots(1, self.dim)
+
+        for dim in range(self.dim):
+            title = kwargs.pop('title', '%s_%d' % (self.name, dim))
+
+            super()._plot(self.data[dim], origin=origin, limit=limit,
+                          title=title, axis=axes[dim], **kwargs)
+
+        if plot is True:
+            plotting.show(axes)
+
+        return axes
+
     def _plot(self, data, **kwargs):
         title = kwargs.pop('title', self.name)
 
@@ -1029,9 +1142,25 @@ class VectorField(ScalarField):
         return description
 
     def __set_desc__(self, description):
-        super().__set_desc__(description)
-
+        self._shape = description.shape
+        self._dtype = np.dtype(description.dtype)
+        self._time_dependent = description.time_dependent
+        self._slow_time_dependent = description.get('slow_time_dependent', False)
         self._dim = description.dim
+
+        if self.space is not None:
+            self._init_shape(fill_shape=False)
+
+        data = description.data
+        if hasattr(data, 'load'):
+            data = data.load()
+
+        compression = description.get('compression', None)
+        if compression:
+            data = decompress(compression, data)
+            data = np.frombuffer(data, self.dtype).reshape(self.shape)
+
+        self.extended_data[:] = self.pad_data(data)
 
 
 @mosaic.tessera

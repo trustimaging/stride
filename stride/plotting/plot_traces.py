@@ -150,7 +150,7 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
 
     trace_axis = [str(each) for each in trace_axis]
 
-    axis.set_xticks(shift[::2])
+    axis.set_xticks(shift.flatten()[::2])
     axis.set_xticklabels(trace_axis[::2])
 
     if title is not None:

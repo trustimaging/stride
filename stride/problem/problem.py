@@ -130,6 +130,8 @@ class Problem(Gridded):
         if plot_medium:
             medium_axes = self.medium.plot(**kwargs)
 
+        medium_axes = medium_axes if len(medium_axes) else [None]
+
         # Geometry
         geometry_axes = medium_axes
 

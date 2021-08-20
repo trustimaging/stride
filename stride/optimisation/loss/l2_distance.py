@@ -32,7 +32,7 @@ class L2DistanceLoss(Operator):
         self.residual = residual
 
         fun_data = 0.5 * np.sum(residual.data ** 2)
-        fun = FunctionalValue(problem.shot_id, fun_data, residual)
+        fun = FunctionalValue(fun_data, problem.shot_id, residual)
 
         return fun
 

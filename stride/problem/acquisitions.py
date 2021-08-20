@@ -56,6 +56,8 @@ def _select_slice(selection, init_ids,
     next_slice = selection[:num]
     selection = selection[num:]
 
+    next_slice.sort()
+
     return next_slice, selection
 
 

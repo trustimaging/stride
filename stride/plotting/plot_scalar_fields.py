@@ -92,12 +92,19 @@ def plot_scalar_field_2d(field, data_range=(None, None), origin=None, limit=None
     if axis is None:
         figure, axis = plt.subplots(1, 1)
 
+    slice = kwargs.pop('slice', None)
+    if slice is not None:
+        field = field[slice]
+
     default_kwargs = dict(cmap=palette,
                           vmin=data_range[0], vmax=data_range[1],
                           aspect='equal',
                           origin='lower',
-                          extent=[origin[0], limit[0], origin[1], limit[1]],
                           interpolation='bicubic')
+
+    if slice is None:
+        default_kwargs['extent'] = [origin[0], limit[0], origin[1], limit[1]]
+
     default_kwargs.update(kwargs)
 
     im = axis.imshow(field.T, **default_kwargs)

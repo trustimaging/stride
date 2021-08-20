@@ -396,8 +396,9 @@ class GridDevito(Gridded):
 
         time_dim = self.devito_grid.time_dim
 
-        condition = sympy.And(devito.Ge(time_dim, bounds[0]),
-                              devito.Le(time_dim, bounds[1]))
+        condition = sympy.And(devito.symbolics.CondEq(time_dim % factor, 0),
+                              devito.Ge(time_dim, bounds[0]),
+                              devito.Le(time_dim, bounds[1]),)
 
         time_under = devito.ConditionalDimension('time_under',
                                                  parent=time_dim,

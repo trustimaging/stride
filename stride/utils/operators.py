@@ -5,7 +5,28 @@ from ..core import Operator
 from ..problem import StructuredData
 
 
-__all__ = ['Concatenate']
+__all__ = ['Add', 'Mul', 'Concatenate']
+
+
+class Add(Operator):
+
+    def forward(self, a, b, **kwargs):
+        return a + b
+
+    def adjoint(self, d_sum, a, b, **kwargs):
+        return d_sum, d_sum
+
+
+class Mul(Operator):
+
+    def forward(self, a, b, **kwargs):
+        return a * b
+
+    def adjoint(self, d_mul, a, b, **kwargs):
+        d_a = d_mul * b
+        d_b = a * d_mul
+
+        return d_a, d_b
 
 
 class Concatenate(Operator):

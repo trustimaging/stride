@@ -303,6 +303,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
+        import warnings
+        warnings.filterwarnings('error', category=np.VisibleDeprecationWarning)
+
         functions = dict(
             src=self.dev_grid.vars.src,
             rec=self.dev_grid.vars.rec,
@@ -861,12 +864,12 @@ class IsoAcousticDevito(ProblemTypeBase):
         h_max = wavelength / ppw_max
 
         if h > h_max:
-            runtime.logger.warn('(ShotID %d) Spatial grid spacing (%.3f mm | %d PPW) is '
-                                'higher than dispersion limit (%.3f mm | %d PPW)' %
+            runtime.logger.warn('(ShotID %d) Spatial grid spacing (%.3f mm | %.3f PPW) is '
+                                'higher than dispersion limit (%.3f mm | %.3f PPW)' %
                                 (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
         else:
-            runtime.logger.info('(ShotID %d) Spatial grid spacing (%.3f mm | %d PPW) is '
-                                'below dispersion limit (%.3f mm | %d PPW)' %
+            runtime.logger.info('(ShotID %d) Spatial grid spacing (%.3f mm | %.3f PPW) is '
+                                'below dispersion limit (%.3f mm | %.3f PPW)' %
                                 (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
 
         # Check for instability
