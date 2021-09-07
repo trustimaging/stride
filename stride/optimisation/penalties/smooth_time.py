@@ -56,7 +56,7 @@ class SmoothTime(Operator):
         variable_data = variable.extended_data
 
         grad_data = np.gradient(variable_data, dt,
-                                axis=axis, edge_order=2)
+                                axis=axis, edge_order=1)*dt
         grad = variable.alike(name='derivative', data=grad_data)
 
         return grad

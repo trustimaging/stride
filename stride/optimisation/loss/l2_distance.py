@@ -28,7 +28,7 @@ class L2DistanceLoss(Operator):
         problem = kwargs.pop('problem', None)
 
         residual_data = modelled.data-observed.data
-        residual = modelled.alike(name='residual', data=residual_data)
+        residual = observed.alike(name='residual', data=residual_data)
         self.residual = residual
 
         fun_data = 0.5 * np.sum(residual.data ** 2)

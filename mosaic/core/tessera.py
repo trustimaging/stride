@@ -413,6 +413,14 @@ class ParameterMixin:
                and self._tessera is not None \
                and isinstance(self._tessera, (Tessera, TesseraProxy))
 
+    @property
+    def is_tessera(self):
+        return self.has_tessera and isinstance(self._tessera, Tessera)
+
+    @property
+    def is_proxy(self):
+        return self.has_tessera and isinstance(self._tessera, TesseraProxy)
+
     async def get(self, item):
         if self.has_tessera:
             value = await self._tessera.get_attr(item)

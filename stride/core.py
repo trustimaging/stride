@@ -95,8 +95,10 @@ class Node:
         self.idx = idx
         self.next = nxt or []
 
-        if hasattr(op, '_tessera'):
+        if hasattr(op, '_tessera') and \
+                (not hasattr(op, 'has_tessera') or not op.has_tessera):
             op = getattr(op, '_tessera')
+
         self.op = op
 
     @property
@@ -331,7 +333,7 @@ class Variable:
 
             # call adjoint method
             method = getattr(node.op, node.method)
-            if hasattr(node.op, 'has_tessera') and node.op.has_tessera:
+            if hasattr(node.op, 'has_tessera') and node.op.has_tessera and node.op.is_proxy:
                 ret = await method(*output_grads, propagate=True, **kwargs)
             else:
                 ret = await method(*output_grads, **kwargs)
@@ -384,6 +386,27 @@ class Variable:
         else:
             return self.__class__(*args, **kwargs)
 
+    def copy(self, *args, **kwargs):
+        """
+        Create a variable that shares its characteristics with this object.
+
+        The same parameters as those given to ``__init__`` are valid here. Otherwise the
+        new object will be configured to be like this one.
+
+        Returns
+        -------
+        Variable
+            Copied variable.
+
+        """
+        kwargs['name'] = kwargs.pop('name', self._init_name)
+        kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+
+        if hasattr(self, 'has_tessera') and self.has_tessera:
+            return self.__class__.parameter(*args, **kwargs)
+        else:
+            return self.__class__(*args, **kwargs)
+
     def clear_grad(self):
         """
         Clear the gradient buffer of the variable.
@@ -423,7 +446,7 @@ class Variable:
         if grad is None or not self.needs_grad or self.grad is None:
             return
 
-        self.grad += grad
+        self.grad = await _maybe_sum(self.grad, grad)
 
     def __repr__(self):
         return self.name
@@ -435,7 +458,7 @@ class Operator:
     construct an adjoint graph that can then be executed in an adjoint run
     to calculate necessary gradients.
 
-    Parameters
+    Parameters0
     ----------
     name : str, optional
         Name of the varible, defaults to automatic name.

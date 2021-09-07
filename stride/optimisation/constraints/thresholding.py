@@ -80,7 +80,7 @@ class Thresholding(Constraint):
 
         with np.errstate(divide='ignore'):
             # divide by zero okay as np.inf values get clipped, so ignore warning.
-            thresholded = (1 - value / magnitude)
+            thresholded = (1 - value / (magnitude + 1e-31))
             thresholded.clip(min=0, max=None, out=thresholded)
             thresholded = data * thresholded
 
@@ -97,7 +97,7 @@ class Thresholding(Constraint):
 
         with np.errstate(divide='ignore'):
             # divide by zero okay as np.inf values get clipped, so ignore warning.
-            thresholded = (1 - value ** 2 / magnitude ** 2)
+            thresholded = (1 - value ** 2 / (magnitude ** 2 + 1e-31))
             thresholded.clip(min=0, max=None, out=thresholded)
             thresholded = data * thresholded
 

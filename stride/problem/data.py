@@ -1,6 +1,5 @@
 
 import gc
-import copy
 import functools
 import numpy as np
 import scipy.ndimage
@@ -171,7 +170,7 @@ class StructuredData(Data):
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
 
-        return self.__class__(*args, **kwargs)
+        return super().copy(*args, **kwargs)
 
     def detach(self, *args, **kwargs):
         """
@@ -193,7 +192,7 @@ class StructuredData(Data):
 
         return super().detach(*args, **kwargs)
 
-    def copy(self):
+    def copy(self, **kwargs):
         """
         Create a deep copy of the data object.
 
@@ -203,7 +202,17 @@ class StructuredData(Data):
             Newly created StructuredData.
 
         """
-        return copy.deepcopy(self)
+        cpy = self.alike(name=self._init_name, **kwargs)
+        cpy.extended_data[:] = self.extended_data
+        cpy.needs_grad = self.needs_grad
+
+        if self.grad is not None:
+            cpy.grad = self.grad.copy()
+
+            if self.grad.prec is not None:
+                cpy.grad.prec = self.grad.prec.copy()
+
+        return cpy
 
     @property
     def data(self):
@@ -286,7 +295,17 @@ class StructuredData(Data):
         self.grad.fill(0.)
         self.grad.prec.fill(0.)
 
-    def process_grad(self, prec_scale=1e-6, clear_grad=True):
+    def release_grad(self):
+        """
+        Release the internal buffers for the gradient and preconditioner.
+
+        Returns
+        -------
+
+        """
+        self.grad = None
+
+    def process_grad(self, prec_scale=1e-6, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
@@ -294,9 +313,6 @@ class StructuredData(Data):
         ----------
         prec_scale : float, optional
             Condition scaling for the preconditioner.
-        clear_grad : bool, optional
-            If ``True``, release references to the gradient after
-            finishing. Defaults to ``True``.
 
         Returns
         -------
@@ -307,12 +323,13 @@ class StructuredData(Data):
 
         grad = self.grad
         prec = grad.prec
+        max_prec = np.max(np.abs(prec.data))
 
-        prec += prec_scale * np.max(prec) + 1e-31
-        grad /= prec
+        if max_prec > 1e-31:
+            prec += prec_scale * max_prec + 1e-31
+            grad /= prec
 
-        if clear_grad:
-            self.grad = None
+        self.grad = grad
 
         return grad
 

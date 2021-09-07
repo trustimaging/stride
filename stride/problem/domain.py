@@ -73,8 +73,21 @@ class Space:
         """
         return self.extended_limit
 
-    def resample(self):
-        raise NotImplementedError('Resampling has not been implemented yet')
+    def resample(self, spacing, extra=None, absorbing=None):
+        if isinstance(spacing, float):
+            spacing = (spacing,)*self.dim
+
+        shape = tuple((np.array(self.size) / np.array(spacing) + 1).astype(int))
+
+        if extra is None:
+            extra = tuple((np.array(self.spacing) * (np.array(self.extra) - 1) /
+                           np.array(spacing) + 1).astype(int))
+
+        if absorbing is None:
+            absorbing = tuple((np.array(self.spacing) * (np.array(self.absorbing) - 1) /
+                               np.array(spacing) + 1).astype(int))
+
+        return Space(shape=shape, spacing=spacing, extra=extra, absorbing=absorbing)
 
     @property
     def inner(self):

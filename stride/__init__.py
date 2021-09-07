@@ -42,6 +42,7 @@ from .core import *
 from .problem import *
 from .physics import *
 from .optimisation import *
+from .utils.operators import *
 
 
 async def forward(problem, pde, *args, **kwargs):

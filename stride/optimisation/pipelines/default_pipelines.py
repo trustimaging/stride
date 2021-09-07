@@ -45,7 +45,14 @@ class ProcessTraces(Pipeline):
         steps = steps or []
         steps.append('mute_traces')
         steps.append('filter_traces')
-        steps.append('norm_per_shot')
+
+        norm_per_shot = kwargs.pop('norm_per_shot', True)
+        norm_per_trace = kwargs.pop('norm_per_trace', False)
+
+        if norm_per_shot:
+            steps.append('norm_per_shot')
+        elif norm_per_trace:
+            steps.append('norm_per_trace')
 
         super().__init__(steps, no_grad=no_grad, **kwargs)
 

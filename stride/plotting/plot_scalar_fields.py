@@ -109,7 +109,7 @@ def plot_scalar_field_2d(field, data_range=(None, None), origin=None, limit=None
 
     im = axis.imshow(field.T, **default_kwargs)
 
-    if origin is None or limit is None:
+    if origin is None or limit is None or slice is not None:
         axis.set_xlabel('x')
         axis.set_ylabel('y')
 

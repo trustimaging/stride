@@ -1,4 +1,5 @@
 
+import numpy as np
 from skimage.restoration import denoise_tv_chambolle
 
 from .constraint import Constraint
@@ -29,6 +30,7 @@ class ChambolleTV(Constraint):
         self.weight = kwargs.pop('weight', 0.1)
         self.max_iter = kwargs.pop('max_iter', 200)
         self.tol = kwargs.pop('tol', 2e-4)
+        self.axis = kwargs.pop('axis', None)
 
     def project(self, variable, axis=None, **kwargs):
         """
@@ -57,6 +59,8 @@ class ChambolleTV(Constraint):
         output = variable.copy()
         variable_data = output.extended_data
 
+        axis = axis or self.axis
+
         if axis is not None:
             for i in range(variable_data.shape[axis]):
                 slice_i = [slice(0, None) for _ in variable_data.shape]
@@ -77,7 +81,13 @@ class ChambolleTV(Constraint):
         max_iter = kwargs.pop('max_iter', self.max_iter)
         tol = kwargs.pop('tol', self.tol)
 
+        norm_before = np.sqrt(np.sum(variable_data**2)) + 1e-31
+
         variable_data = denoise_tv_chambolle(variable_data, weight,
                                              eps=tol, n_iter_max=max_iter)
+
+        norm_after = np.sqrt(np.sum(variable_data ** 2)) + 1e-31
+
+        variable_data *= norm_before/norm_after
 
         return variable_data

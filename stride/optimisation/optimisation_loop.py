@@ -123,6 +123,14 @@ class Block:
         """
         return self._current_iteration
 
+    @property
+    def fun_value(self):
+        """
+        Functional value for this block across all iterations.
+
+        """
+        return sum([each.fun_value for each in self._iterations.values()])
+
     def clear(self):
         """
         Clear the block.

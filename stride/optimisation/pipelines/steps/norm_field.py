@@ -20,7 +20,9 @@ class NormField(Operator):
         self.norm_value = None
 
     def forward(self, field, **kwargs):
-        if self.norm_value is None or not self.global_norm:
+        global_norm = kwargs.pop('global_norm', self.global_norm)
+
+        if self.norm_value is None or not global_norm:
             self.norm_value = np.max(np.abs(field.extended_data)) + 1e-31
 
         out_field = field.alike(name='normed_%s' % field.name)

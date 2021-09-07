@@ -805,7 +805,7 @@ class Runtime(BaseRPC):
         obj_store = getattr(self, '_' + obj_type)
 
         if obj_uid not in obj_store.keys():
-            self.logger.warning('Runtime %s does not own object %s of type %s' % (self.uid, obj_uid, obj_type))
+            # self.logger.warning('Runtime %s does not own object %s of type %s' % (self.uid, obj_uid, obj_type))
             return
 
         obj = obj_store[obj_uid]

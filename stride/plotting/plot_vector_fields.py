@@ -79,6 +79,10 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
         Figure title, defaults to empty title.
     add_colourbar : bool, optional
         Whether to add colourbar to plot, defaults to ``True``.
+    undersampling : int, optional
+        Undersampling of the quiver field, defaults to 1.
+    equal_arrows : bool, optional
+        Whether to make all arrows the same length.
 
     Returns
     -------
@@ -105,7 +109,8 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
         start = origin
         stop = limit
 
-    undersampling = 2
+    undersampling = kwargs.pop('undersampling', 1)
+    equal_arrows = kwargs.pop('equal_arrows', False)
 
     x = np.linspace(start[0], stop[0], field.shape[1], endpoint=True)
     y = np.linspace(start[1], stop[1], field.shape[2], endpoint=True)
@@ -115,12 +120,17 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
 
     mag = np.sqrt(field[0].astype(np.float64) ** 2 + field[1].astype(np.float64) ** 2).T
     undersampled_mag = mag[::undersampling, ::undersampling]
+    max_mag = np.max(undersampled_mag)
 
     u = [field[0, ::undersampling, ::undersampling].T,
          field[1, ::undersampling, ::undersampling].T]
 
-    u[0] = undersampling * u[0] / (undersampled_mag + 1e-31)
-    u[1] = undersampling * u[1] / (undersampled_mag + 1e-31)
+    if equal_arrows:
+        u[0] = undersampling * u[0] / (undersampled_mag + 1e-31)
+        u[1] = undersampling * u[1] / (undersampled_mag + 1e-31)
+    else:
+        u[0] = undersampling * u[0] / (max_mag + 1e-31)
+        u[1] = undersampling * u[1] / (max_mag + 1e-31)
 
     cmap_name = 'Rainbow_Blended_Black'
     cmap_filename = os.path.join(os.path.dirname(__file__), 'cmaps/' + cmap_name + '.txt')

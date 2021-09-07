@@ -71,7 +71,7 @@ class Dykstra:
             for p in range(num_constraints):
                 # Update iterate
                 prev_x = x.copy()
-                x = self.constraints[p].project(prev_x - y[p])
+                x = self.constraints[p].project(prev_x - y[p], **kwargs)
 
                 # Update increment
                 prev_y = y[p].copy()
@@ -85,7 +85,7 @@ class Dykstra:
                 continue
 
             # Check stopping criteria
-            loss_delta = abs(loss[it] - loss[it-1]) / loss[it]
+            loss_delta = abs(loss[it] - loss[it-1]) / (loss[it] + 1e-31)
             if loss_delta < tol:
                 break
 

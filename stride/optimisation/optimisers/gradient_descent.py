@@ -50,9 +50,19 @@ class GradientDescent(LocalOptimiser):
         """
         step_size = step_size or self.step_size
 
+        runtime = mosaic.runtime()
+        runtime.logger.info('Updating variable %s,' % self.variable.name)
+
         if direction is None:
             grad = self.variable.process_grad(**kwargs)
-            direction = await self._process_grad(grad)
+
+            min_dir = np.min(grad.extended_data)
+            max_dir = np.max(grad.extended_data)
+
+            runtime.logger.info('\t direction before processing in range [%e, %e]' %
+                                (min_dir, max_dir))
+
+            direction = await self._process_grad(grad, **kwargs)
 
         min_dir = np.min(direction.extended_data)
         max_dir = np.max(direction.extended_data)
@@ -60,19 +70,20 @@ class GradientDescent(LocalOptimiser):
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
-        runtime = mosaic.runtime()
-        runtime.logger.info('Updating variable %s, direction in range [%e, %e]' %
-                            (self.variable.name, min_dir, max_dir))
+        runtime.logger.info('\t direction after processing in range [%e, %e]' %
+                            (min_dir, max_dir))
         runtime.logger.info('\t variable range before update [%e, %e]' %
                             (min_var, max_var))
 
         self.variable -= step_size*direction
-        self.variable = await self._process_model(self.variable)
+        self.variable = await self._process_model(self.variable, **kwargs)
 
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
         runtime.logger.info('\t variable range after update [%e, %e]' %
                             (min_var, max_var))
+
+        self.variable.release_grad()
 
         return self.variable

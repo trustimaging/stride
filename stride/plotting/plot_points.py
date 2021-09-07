@@ -28,7 +28,8 @@ except ModuleNotFoundError:
 __all__ = ['plot_points', 'plot_points_2d', 'plot_points_3d']
 
 
-def plot_points_2d(coordinates, axis=None, colour='red', size=15, title=None, **kwargs):
+def plot_points_2d(coordinates, axis=None, colour='red', size=15, title=None,
+                   origin=None, limit=None, **kwargs):
     """
     Utility function to plot 2D scattered points using matplotlib.
 
@@ -42,6 +43,10 @@ def plot_points_2d(coordinates, axis=None, colour='red', size=15, title=None, **
         Colour to apply to the points, defaults to red.
     size : float
         Size of the plotted points, defaults to 15.
+    origin : tuple, optional
+        Origin of the axes of the plot.
+    limit : tuple, optional
+        Extent of the axes of the plot.
     title : str, optional
         Figure title, defaults to empty title.
 
@@ -67,6 +72,10 @@ def plot_points_2d(coordinates, axis=None, colour='red', size=15, title=None, **
 
     im = axis.scatter(coordinates[:, 0]/space_scale, coordinates[:, 1]/space_scale,
                       **default_kwargs)
+
+    if origin is not None and limit is not None:
+        axis.set_xlim([origin[0]/space_scale, limit[0]/space_scale])
+        axis.set_ylim([origin[1]/space_scale, limit[1]/space_scale])
 
     if title is not None:
         axis.set_title(title)
