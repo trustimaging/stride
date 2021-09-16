@@ -6,49 +6,54 @@ import matplotlib.lines as lines
 from stride import *
 from stride.utils import wavelets
 
-from utils import analytical_2d
-
 
 async def main(runtime):
     # Create the grid
-    shape = (500, 500)
-    extra = (50, 50)
-    absorbing = (40, 40)
-    spacing = (0.5e-3, 0.5e-3)
+    extent = (120e-3, 70e-3) # [m]
+    spacing = (0.5e-3, 0.5e-3)  # [m]
+
+    shape = tuple([int(each_extent / each_spacing) + 1 for each_extent, each_spacing in zip(extent, spacing)])  # [grid_points]
+    extra = (50, 50) # boundary [grid_points]
+    absorbing = (40, 40) # absorbing boundary [grid_points]
 
     space = Space(shape=shape,
                   extra=extra,
                   absorbing=absorbing,
                   spacing=spacing)
 
-    start = 0.
-    step = 0.08e-6
-    num = 2500
+    start = 0.  # [s], start = 0.
+    step = 7.855e-8  # [s], step = 0.08e-6
+    end = 1.e-04 # [s]
+    num = int(end/step)+1 # [time_points], num = 2500
 
     time = Time(start=start,
                 step=step,
                 num=num)
 
     # Create problem
-    problem = Problem(name='test2D',
+    problem = Problem(name='test2D_elastic',
                       space=space, time=time)
 
     # Create medium
-    vp = ScalarField(name='vp', grid=problem.grid)
-    vp.fill(1500.)
+    density = 1000  # ??[g / cm^3]
+    vs = 1000  # [m / s]
+    vp = 1500  # [m / s]
 
-    rho = ScalarField(name='rho', grid=problem.grid)
-    rho.fill(1000.)
+    lam = ScalarField(name='lam', grid=problem.grid)
+    lam.fill(density * (vp ** 2 - 2. * vs ** 2))
 
-    alpha = ScalarField(name='alpha', grid=problem.grid)
-    alpha.fill(0.)
+    mu = ScalarField(name='mu', grid=problem.grid)
+    mu.fill(density * vs ** 2)
 
-    problem.medium.add(vp)
-    problem.medium.add(rho)
-    problem.medium.add(alpha)
+    byn = ScalarField(name='byn', grid=problem.grid)
+    byn.fill(1 / density)
+
+    problem.medium.add(lam)
+    problem.medium.add(mu)
+    problem.medium.add(byn)
 
     # Create transducers
-    problem.transducers.default()
+    problem.transducers.default()  ## should I change this?
 
     # Create geometry
     num_locations = 120
@@ -65,14 +70,14 @@ async def main(runtime):
     problem.acquisitions.add(shot)
 
     # Create wavelets
-    f_centre = 0.50e6
+    f_centre = 0.30e6 # [MHz]
     n_cycles = 3
 
     shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,
                                                    time.num, time.step)
 
     # Create the PDE
-    pde = IsoAcousticDevito.remote(space=space, time=time)
+    pde = IsoElasticDevito.remote(space=space, time=time)
 
     # Set up test cases
     cases = {
