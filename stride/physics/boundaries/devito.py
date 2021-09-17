@@ -49,7 +49,8 @@ class ComplexFrequencyShiftPML2(Boundary):
     def apply(self, field, velocity, direction='forward', **kwargs):
         space = self._grid.space
 
-        reflection_coefficient = kwargs.pop('reflection_coefficient', 1e-10)
+        reflection_coefficient = 10**(-(np.log10(max(*space.absorbing)) - 1)/np.log10(2) - 3)
+        reflection_coefficient = kwargs.pop('reflection_coefficient', reflection_coefficient)
         f_centre = kwargs.pop('f_centre')
         subs = kwargs.pop('subs', None)
 

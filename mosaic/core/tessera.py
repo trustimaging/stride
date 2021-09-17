@@ -879,6 +879,10 @@ class ArrayProxy(CMDBase):
                (self.__class__.__name__, id(self),
                 self.uid, runtime_id, self._state)
 
+    def __await__(self):
+        yield from self._init_future.__await__()
+        return self
+
     _serialisation_attrs = CMDBase._serialisation_attrs + ['_cls',
                                                            '_proxies',
                                                            '_runtime_id',

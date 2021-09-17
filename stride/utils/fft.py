@@ -39,7 +39,7 @@ def magnitude_spectrum(signal, dt, db=True):
     signal_fft = np.abs(signal_fft)
 
     if db is True:
-        signal_fft = 20 * np.log10(signal_fft / (np.max(signal_fft) + 1e-31))
+        signal_fft = 20 * np.log10((signal_fft + 1e-31) / (np.max(signal_fft) + 1e-31))
 
     return freqs, signal_fft
 

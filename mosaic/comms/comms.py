@@ -776,7 +776,6 @@ class CommsManager:
 
         self._listen_future = None
         self._reply_futures = weakref.WeakValueDictionary()
-        self._reply_futures = dict()
 
         self._state = 'disconnected'
 

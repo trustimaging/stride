@@ -139,9 +139,6 @@ class Geometry(ProblemBase):
         else:
             transducers = kwargs.pop('transducers', None)
 
-        if transducers is None:
-            raise ValueError('A Geometry has be defined with respect to a set of Transducers')
-
         self._locations = OrderedDict()
         self._transducers = transducers
 

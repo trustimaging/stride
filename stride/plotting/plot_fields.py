@@ -14,6 +14,7 @@ try:
     from traitsui.api import View, Item, HGroup, Group
 
     from tvtk.api import tvtk
+    from tvtk.util import ctf
     from tvtk.pyface.scene import Scene
 
     from mayavi import mlab
@@ -108,6 +109,21 @@ if ENABLED_3D_PLOTTING:
                                             figure=self.scene3d.mayavi_scene,
                                             colormap=self.colourmap,
                                             vmin=self.data_range[0], vmax=self.data_range[1])
+
+            vmin = self.data_range[0] or self.data.min()
+            vmax = self.data_range[1] or self.data.max()
+
+            volume = mlab.pipeline.volume(self.data_source,
+                                          figure=self.scene3d.mayavi_scene,
+                                          vmin=self.data_range[0], vmax=vmax)
+
+            otf = ctf.PiecewiseFunction()
+
+            otf.add_point(vmin, 0.0)
+            otf.add_point(vmax, 0.025)
+
+            volume._otf = otf
+            volume._volume_property.set_scalar_opacity(otf)
 
             try:
                 self.scene3d.mlab.view(40, 50)
