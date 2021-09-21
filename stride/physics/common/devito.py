@@ -363,6 +363,74 @@ class GridDevito(Gridded):
         return fun
 
     @_cached
+    def vector_time_function(self, name, space_order=None, time_order=None, **kwargs):
+        """
+        Create a Devito VectorTimeFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        time_order : int, optional
+            Time order of the discretisation, defaults to the grid time order.
+        kwargs
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.TimeFunction
+            Generated function.
+
+        """
+        space_order = space_order or self.space_order
+        time_order = time_order or self.time_order
+
+        fun = devito.VectorTimeFunction(name=name,
+                                  grid=self.devito_grid,
+                                  time_order=time_order,
+                                  space_order=space_order,
+                                  dtype=np.float32,
+                                  **kwargs)
+
+        return fun
+
+    @_cached
+    def tensor_time_function(self, name, space_order=None, time_order=None, **kwargs):
+        """
+        Create a Devito TensorTimeFunction with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        space_order : int, optional
+            Space order of the discretisation, defaults to the grid space order.
+        time_order : int, optional
+            Time order of the discretisation, defaults to the grid time order.
+        kwargs
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.TimeFunction
+            Generated function.
+
+        """
+        space_order = space_order or self.space_order
+        time_order = time_order or self.time_order
+
+        fun = devito.TensorTimeFunction(name=name,
+                                  grid=self.devito_grid,
+                                  time_order=time_order,
+                                  space_order=space_order,
+                                  dtype=np.float32,
+                                  **kwargs)
+
+        return fun
+
+    @_cached
     def undersampled_time_function(self, name, factor, space_order=None, time_order=None, **kwargs):
         """
         Create an undersampled version of a Devito function with parameters provided.

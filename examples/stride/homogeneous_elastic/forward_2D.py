@@ -6,6 +6,7 @@ import matplotlib.lines as lines
 from stride import *
 from stride.utils import wavelets
 
+import IPython.terminal.debugger as ipdb
 
 async def main(runtime):
     # Create the grid
@@ -20,44 +21,44 @@ async def main(runtime):
                   extra=extra,
                   absorbing=absorbing,
                   spacing=spacing)
+    print('Space complete')
 
     start = 0.  # [s], start = 0.
     step = 7.855e-8  # [s], step = 0.08e-6
     end = 1.e-04 # [s]
-    num = int(end/step)+1 # [time_points], num = 2500
+    # num = int(end/step)+1 # [time_points], num = 2500
 
     time = Time(start=start,
                 step=step,
-                num=num)
+                stop=end)
+    print('Time complete')
 
     # Create problem
     problem = Problem(name='test2D_elastic',
                       space=space, time=time)
+    print('Problem complete')
 
     # Create medium
-    density = 1000  # ??[g / cm^3]
-    vs = 1000  # [m / s]
-    vp = 1500  # [m / s]
+    vp = ScalarField(name='vp', grid=problem.grid)
+    vp.fill(1500.)  # [m / s]
 
-    lam = ScalarField(name='lam', grid=problem.grid)
-    lam.fill(density * (vp ** 2 - 2. * vs ** 2))
+    vs = ScalarField(name='vs', grid=problem.grid)
+    vs.fill(1000.)  # [m / s]
 
-    mu = ScalarField(name='mu', grid=problem.grid)
-    mu.fill(density * vs ** 2)
+    rho = ScalarField(name='rho', grid=problem.grid)
+    rho.fill(1000.) # [g / cm^3]
 
-    byn = ScalarField(name='byn', grid=problem.grid)
-    byn.fill(1 / density)
-
-    problem.medium.add(lam)
-    problem.medium.add(mu)
-    problem.medium.add(byn)
+    problem.medium.add(vp)
+    problem.medium.add(vs)
+    problem.medium.add(rho)
+    print('Media complete')
 
     # Create transducers
-    problem.transducers.default()  ## should I change this?
+    problem.transducers.default()  # This generates a single transducer, that's a point source and recevier
 
     # Create geometry
-    num_locations = 120
-    problem.geometry.default('elliptical', num_locations)
+    problem.geometry.add(id = 0, transducer = problem.transducers.get(0), coordinates=np.array(extent) / 2)  # [m]
+    print('Geometry complete')
 
     # Create acquisitions
     source = problem.geometry.locations[0]
@@ -75,31 +76,17 @@ async def main(runtime):
 
     shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,
                                                    time.num, time.step)
+    print('Shots complete')
 
     # Create the PDE
     pde = IsoElasticDevito.remote(space=space, time=time)
 
     # Set up test cases
     cases = {
-        'OT2': {'kernel': 'OT2', 'colour': 'r', 'line_style': '--'},
-        'OT2-hicks': {'kernel': 'OT2', 'interpolation_type': 'hicks', 'colour': 'b', 'line_style': '--'},
-        'OT2-PML': {'kernel': 'OT2', 'boundary_type': 'complex_frequency_shift_PML_2', 'colour': 'y', 'line_style': '--'},
-        'OT4': {'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
-        'OT4-hicks': {'kernel': 'OT4', 'interpolation_type': 'hicks', 'colour': 'b', 'line_style': '-.'},
-        'OT4-rho': {'rho': rho, 'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
-        'OT4-alpha-0': {'alpha': alpha, 'attenuation_power': 0, 'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
-        'OT4-alpha-2': {'alpha': alpha, 'attenuation_power': 2, 'kernel': 'OT4', 'colour': 'r', 'line_style': '-.'},
-        'OT4-rho-alpha-0': {'rho': rho, 'alpha': alpha, 'attenuation_power': 0, 'kernel': 'OT4', 'colour': 'r',
-                            'line_style': '-.'},
+        'default': {'colour': 'r', 'line_style': '--'},
     }
 
     # Run
-    data_analytic = analytical_2d(space, time, shot, 1500.)
-    data_analytic /= np.max(np.abs(data_analytic))
-
-    shot.observed.data[:] = data_analytic
-    _, axis = shot.observed.plot(plot=False, colour='k', skip=5)
-
     results = {}
     legends = {}
     for case, config in cases.items():
@@ -110,16 +97,14 @@ async def main(runtime):
         sub_problem = problem.sub_problem(shot.id)
         shot_wavelets = sub_problem.shot.wavelets
 
+        # ipdb.set_trace()
         await pde.clear_operators()
-        traces = await pde(shot_wavelets, vp, problem=sub_problem, **config).result()
+        print('Operators cleared')
+        traces = await pde(shot_wavelets, vp, vs, rho, problem=sub_problem, **config).result()
 
         # Check consistency with analytical solution
         data_stride = traces.data.copy()
         data_stride /= np.max(np.abs(data_stride))
-        error = np.sqrt(np.sum((data_stride - data_analytic)**2)/data_analytic.shape[0])
-
-        # Show results
-        results[case] = error
 
         shot.observed.data[:] = data_stride
         _, axis = shot.observed.plot(plot=False, axis=axis, skip=5,

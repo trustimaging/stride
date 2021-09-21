@@ -10,7 +10,7 @@ from mosaic.utils import camel_case
 
 from stride.utils import fft
 from stride.problem import ScalarField
-from ..common.devito import GridDevito, OperatorDevito
+from ..common.devito import GridDevito, OperatorDevito, config_devito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
 
@@ -41,11 +41,11 @@ class IsoElasticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            !!!!!!!!!!!!!!!!!!!!!!!.
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous, in [kg/m^3].
+            !!!!!!!!!!!!!!!!!!!!!!!.
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            !!!!!!!!!!!!!!!!!!!!!!!.
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool or int, optional
@@ -81,7 +81,7 @@ class IsoElasticDevito(ProblemTypeBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.kernel = 'OT4'
+        self.kernel = 'OT2'
         self.drp = False
         self.undersampling_factor = 4
         self.boundary_type = 'sponge_boundary_2'
@@ -94,18 +94,21 @@ class IsoElasticDevito(ProblemTypeBase):
         self._src_scale = 0.
         self._bandwidth = 0.
 
+        config_devito(**kwargs)
+
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
 
         kwargs.pop('grid', None)
         self.state_operator = OperatorDevito(self.space_order, self.time_order,
-                                             name='acoustic_iso_state',
+                                             name='elastic_iso_state',
                                              grid=self.dev_grid,
                                              **kwargs)
         self.adjoint_operator = OperatorDevito(self.space_order, self.time_order,
-                                               name='acoustic_iso_adjoint',
+                                               name='elastic_iso_adjoint',
                                                grid=self.dev_grid,
                                                **kwargs)
         self.boundary = None
+
 
     def clear_operators(self):
         self.state_operator.devito_operator = None
@@ -113,7 +116,7 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # forward
 
-    async def before_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
+    async def before_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
 
@@ -122,11 +125,11 @@ class IsoElasticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous, in [kg/m^3].
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool or int, optional
@@ -161,54 +164,51 @@ class IsoElasticDevito(ProblemTypeBase):
         problem = kwargs.get('problem')
         shot = problem.shot
 
-        self._check_problem(wavelets, vp, rho=rho, alpha=alpha, **kwargs)
-
         num_sources = shot.num_sources
         num_receivers = shot.num_receivers
 
-        save_wavefield = kwargs.get('save_wavefield', False) # In acoustic case we have three parameters which need gradients, not needed yet
-        if save_wavefield is False:
-            save_wavefield = vp.needs_grad
-            if rho is not None:
-                save_wavefield |= rho.needs_grad
-            if alpha is not None:
-                save_wavefield |= alpha.needs_grad
-
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
-            save = Buffer(save_wavefield) if type(save_wavefield) is int else None
 
-            # Define variables, each devito container has a method in the dev_grid object
-            src = self.dev_grid.sparse_time_function('src', num=num_sources, # Set the sources
+            # Define variables
+            src = self.dev_grid.sparse_time_function('src', num=num_sources,
                                                      coordinates=shot.source_coordinates,
                                                      interpolation_type=self.interpolation_type)
-            rec = self.dev_grid.sparse_time_function('rec', num=num_receivers, # Set the receivers
+            rec = self.dev_grid.sparse_time_function('rec', num=num_receivers,
                                                      coordinates=shot.receiver_coordinates,
                                                      interpolation_type=self.interpolation_type)
 
-            p = self.dev_grid.time_function('p', coefficients='symbolic' if self.drp else 'standard', save=save) # what is this?
-
+            s = self.time.step
             # Create stencil
-            stencil = self._stencil(p, wavelets, vp, rho=rho, alpha=alpha, direction='forward') # the stencil contains the sympy expression that devito will solve
+            # save_wavefield = kwargs.get('save_wavefield', False)
+            # save = Buffer(save_wavefield) if type(save_wavefield) is int else None
+            vel = self.dev_grid.vector_time_function('vel')
+            tau = self.dev_grid.tensor_time_function('tau')
 
             # Define the source injection function to generate the corresponding code
             # pressure_to_mass_acc = time.step / (vp * space.spacing**3)
             # solve_p_dt = time.step**2 * vp**2
-            vp2 = self.dev_grid.vars.vp2
-            src_term = src.inject(field=p.forward, expr=src * self.time.step**2 * vp2) # this is designed to match the source injection from k-wave
-            rec_term = rec.interpolate(expr=p)
+            src_xx = src.inject(field=tau.forward[0, 0], expr=s * src)
+            src_zz = src.inject(field=tau.forward[1, 1], expr=s * src)
 
-            # Define the saving of the wavefield
-            if save_wavefield is True:
-                p_saved = self.dev_grid.undersampled_time_function('p_saved',
-                                                                   factor=self.undersampling_factor)
-                update_saved = [devito.Eq(p_saved, self._saved(p))]
-
-            else:
-                update_saved = []
+            # Set up parameters as functions
+            lam_fun = self.dev_grid.function('lam_fun')
+            mu_fun = self.dev_grid.function('mu_fun')
+            byn_fun = self.dev_grid.function('byn_fun')
+            # devito.Function(name='lam_fun', grid=self.dev_grid.devito_grid, space_order=self.dev_grid.space_order, parameter=True)
+            # devito.Function(name='mu_fun', grid=self.dev_grid.devito_grid, space_order=self.dev_grid.space_order, parameter=True)
+            # devito.Function(name='byn_fun', grid=self.dev_grid.devito_grid, space_order=self.dev_grid.space_order, parameter=True)
 
             # Compile the operator
-            self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
+            # velocity (first derivative vel w.r.t. time, first order euler method), s: time_spacing
+            u_v = devito.Eq(vel.forward, vel + s * byn_fun * devito.div(tau),
+                                      grid=self.dev_grid,
+                                      coefficients=None)
+
+            # stress (first derivative tau w.r.t. time, first order euler method)
+            u_tau = devito.Eq(tau.forward, (tau + s * (lam_fun * devito.diag(devito.div(vel.forward)) + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T))))
+
+            self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz,
                                              **kwargs)
             self.state_operator.compile()
 
@@ -223,27 +223,26 @@ class IsoElasticDevito(ProblemTypeBase):
         # Clear all buffers
         self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.rec.data_with_halo.fill(0.)
-        self.dev_grid.vars.p.data_with_halo.fill(0.)
-
-        if save_wavefield is True:
-            self.dev_grid.vars.p_saved.data_with_halo.fill(0.)
+        self.dev_grid.vars.vel[0].data_with_halo.fill(0.)
+        self.dev_grid.vars.vel[1].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[0,0].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[0,1].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[1,0].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[1,1].data_with_halo.fill(0.)
+        # self.boundary.clear()
 
         # Set medium parameters
         vp_with_halo = self.dev_grid.with_halo(vp.extended_data)
-        self.dev_grid.vars.vp.data_with_halo[:] = vp_with_halo
-        self.dev_grid.vars.vp2.data_with_halo[:] = vp_with_halo**2
-        self.dev_grid.vars.inv_vp2.data_with_halo[:] = 1 / vp_with_halo**2
+        vs_with_halo = self.dev_grid.with_halo(vs.extended_data)
+        rho_with_halo = self.dev_grid.with_halo(rho.extended_data)
 
-        if rho is not None:
-            rho_with_halo = self.dev_grid.with_halo(rho.extended_data)
-            self.dev_grid.vars.rho.data_with_halo[:] = rho_with_halo
-            self.dev_grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
+        lam_with_halo = rho_with_halo * (vp_with_halo ** 2 - 2. * vs_with_halo ** 2)
+        mu_with_halo = self.dev_grid.with_halo(rho_with_halo * vs_with_halo ** 2)
+        byn_with_halo = self.dev_grid.with_halo(1 / rho_with_halo)
 
-        if alpha is not None:
-            db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
-
-            alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_to_neper
-            self.dev_grid.vars.alpha.data_with_halo[:] = alpha_with_halo
+        self.dev_grid.vars.lam_fun.data_with_halo[:] = lam_with_halo
+        self.dev_grid.vars.mu_fun.data_with_halo[:] = mu_with_halo
+        self.dev_grid.vars.byn_fun.data_with_halo[:] = byn_with_halo
 
         # Set geometry and wavelet
         wavelets = wavelets.data
@@ -283,12 +282,14 @@ class IsoElasticDevito(ProblemTypeBase):
         """
         functions = dict(
             src=self.dev_grid.vars.src,
-            rec=self.dev_grid.vars.rec,
-        )
+            )
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
-                                **kwargs.get('devito_args', {}))
+                                **kwargs.pop('devito_args', {}))
+        print('########################')
+        print('complete')
+        print('########################')
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -299,11 +300,11 @@ class IsoElasticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous, in [kg/m^3].
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -313,191 +314,50 @@ class IsoElasticDevito(ProblemTypeBase):
             Time traces produced by the state run.
 
         """
-        problem = kwargs.pop('problem')
-        shot = problem.shot
-
-        save_wavefield = kwargs.get('save_wavefield', False)
-        if save_wavefield is False:
-            save_wavefield = vp.needs_grad
-            if rho is not None:
-                save_wavefield |= rho.needs_grad
-            if alpha is not None:
-                save_wavefield |= alpha.needs_grad
-
-        if save_wavefield:
-            if save_wavefield is True:
-                wavefield_data = np.asarray(self.dev_grid.vars.p_saved.data_with_halo, dtype=np.float32)
-
-            else:
-                wavefield_data = np.asarray(self.dev_grid.vars.p.data, dtype=np.float32)
-
-            wavefield_slice = kwargs.pop('wavefield_slice', None)
-            if wavefield_slice is not None:
-                wavefield_data = wavefield_data[wavefield_slice]
-
-            wavefield_data *= self._max_wavelet / self._src_scale
-
-            self.wavefield = ScalarField(name='p_dt2',
-                                         data=wavefield_data,
-                                         shape=wavefield_data.shape)
-
-            if os.environ.get('STRIDE_DUMP_WAVEFIELD', None) == 'yes':
-                self.wavefield.dump(path=problem.output_folder,
-                                    project_name=problem.name)
-
-        else:
-            self.wavefield = None
-
-        traces_data = np.asarray(self.dev_grid.vars.rec.data, dtype=np.float32).T
-        traces_data *= self._max_wavelet / self._src_scale
-        traces = shot.observed.alike(name='modelled', data=traces_data)
-
-        self.dev_grid.deallocate('p')
-        self.dev_grid.deallocate('src')
-        self.dev_grid.deallocate('rec')
-        self.dev_grid.deallocate('vp')
-        self.dev_grid.deallocate('vp2')
-        self.dev_grid.deallocate('inv_vp2')
-        self.dev_grid.deallocate('rho')
-        self.dev_grid.deallocate('buoy')
-        self.dev_grid.deallocate('alpha')
-        self.boundary.deallocate()
-
-        return traces
+        pass
 
     # adjoint
 
     async def before_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
-
-        Parameters
-        ----------
-        adjoint_source : Traces
-            Adjoint source.
-        wavelets : Traces
-            Source wavelets.
-        vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
-        rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous, in [kg/m^3].
-        alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
-        problem : Problem
-            Sub-problem being solved by the PDE.
-
-        Returns
-        -------
-
+        Not implemented
         """
         pass
 
     async def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
-        Run the adjoint problem.
-
-        Parameters
-        ----------
-        adjoint_source : Traces
-            Adjoint source.
-        wavelets : Traces
-            Source wavelets.
-        vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
-        rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous, in [kg/m^3].
-        alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
-        problem : Problem
-            Sub-problem being solved by the PDE.
-
-        Returns
-        -------
-
+        Not implemented
         """
         pass
 
-    async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    async def after_adjoint(self, **kwargs):
         """
-        Clean up after the adjoint run and retrieve the time gradients (if needed).
-
-        Parameters
-        ----------
-        adjoint_source : Traces
-            Adjoint source.
-        wavelets : Traces
-            Source wavelets.
-        vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
-        rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous, in [kg/m^3].
-        alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
-        problem : Problem
-            Sub-problem being solved by the PDE.
-
-        Returns
-        -------
-        tuple of gradients
-            Tuple with the gradients of the variables that need them
-
+        Not implemented
         """
         pass
     # gradients
 
-    async def prepare_grad_vp(self, vp, **kwargs):
+    async def prepare_grad_vp(self, **kwargs):
         """
-        Prepare the problem type to calculate the gradients wrt Vp.
-
-        Parameters
-        ----------
-        vp : ScalarField
-            Vp variable to calculate the gradient.
-
-        Returns
-        -------
-        tuple
-            Tuple of gradient and preconditioner updates.
-
+        Not implemented
         """
         pass
 
-    async def init_grad_vp(self, vp, **kwargs):
+    async def init_grad_vp(self, **kwargs):
         """
-        Initialise buffers in the problem type to calculate the gradients wrt Vp.
-
-        Parameters
-        ----------
-        vp : ScalarField
-            Vp variable to calculate the gradient.
-
-        Returns
-        -------
-
+        Not implemented
         """
         pass
 
-    async def get_grad_vp(self, vp, **kwargs):
+    async def get_grad_vp(self, **kwargs):
         """
-        Retrieve the gradients calculated wrt to the input.
-
-        The variable is updated inplace.
-
-        Parameters
-        ----------
-        vp : ScalarField
-            Vp variable to calculate the gradient.
-
-        Returns
-        -------
-        ScalarField
-            Gradient wrt Vp.
-
+        Not implemented
         """
         pass
 
     # utils
 
-    def _check_problem(self, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def _check_problem(self, wavelets, vp, vs, density, **kwargs):
         problem = kwargs.get('problem')
 
         recompile = False
@@ -532,7 +392,7 @@ class IsoElasticDevito(ProblemTypeBase):
         preferred_kernel = kwargs.get('kernel', None)
         preferred_undersampling = kwargs.get('undersampling', None)
 
-        self._check_conditions(wavelets, vp, rho, alpha,
+        self._check_conditions(wavelets, vp, vs, density,
                                preferred_kernel, preferred_undersampling,
                                **kwargs)
 
@@ -545,7 +405,7 @@ class IsoElasticDevito(ProblemTypeBase):
         runtime.logger.info('(ShotID %d) Selected time stepping scheme %s' %
                             (problem.shot_id, self.kernel,))
 
-    def _check_conditions(self, wavelets, vp, rho=None, alpha=None,
+    def _check_conditions(self, wavelets, vp, vs, density,
                           preferred_kernel=None, preferred_undersampling=None, **kwargs):
         runtime = mosaic.runtime()
 
@@ -644,138 +504,17 @@ class IsoElasticDevito(ProblemTypeBase):
             self.state_operator.operator = None
             self.adjoint_operator.operator = None
 
-    def _stencil(self, field, wavelets, vp, rho=None, alpha=None, direction='forward', **kwargs):
-        # Prepare medium functions
-        vp_fun, vp2_fun, inv_vp2_fun, rho_fun, buoy_fun, alpha_fun = self._medium_functions(vp, rho, alpha, **kwargs)
-
-        # Forward or backward
-        forward = direction == 'forward'
-
-        # Define time step to be updated
-        u_next = field.forward if forward else field.backward
-
-        # Get the spatial FD
-        laplacian = self.dev_grid.function('laplacian',
-                                           coefficients='symbolic' if self.drp else 'standard')
-        laplacian_update = self._laplacian(field, laplacian, vp_fun, vp2_fun, inv_vp2_fun,
-                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
-                                           **kwargs)
-
-        if self.kernel == 'OT2':
-            laplacian_term = self._diff_op(laplacian_update,
-                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
-                                           **kwargs)
-        else:
-            laplacian_term = self._diff_op(laplacian,
-                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
-                                           **kwargs)
-
-        # Get the subs
-        if self.drp:
-            extra_functions = ()
-            if rho_fun is not None:
-                extra_functions = (rho_fun, buoy_fun)
-
-            subs = self._symbolic_coefficients(field, laplacian, vp_fun, vp2_fun, inv_vp2_fun,
-                                               *extra_functions)
-        else:
-            subs = None
-
-        # Get the attenuation term
-        if alpha_fun is not None:
-            if self.attenuation_power == 0:
-                u = field
-                u_dt = u.dt if direction == 'forward' else u.dt.T
-
-                attenuation_term = 2*alpha_fun/vp_fun * u_dt
-            elif self.attenuation_power == 2:
-                u = -field.laplace
-                u_dt = u.dt if direction == 'forward' else u.dt.T
-
-                attenuation_term = 2*alpha_fun*vp_fun * u_dt
-            else:
-                raise ValueError('The "attenuation_exponent" can only take values (0, 2).')
-        else:
-            attenuation_term = 0
-
-        # Set up the boundary
-        boundary_term, eq_before, eq_after = self.boundary.apply(field, vp.extended_data,
-                                                                 direction=direction, subs=subs,
-                                                                 f_centre=self._bandwidth[1])
-
-        # Define PDE and update rule
-        # TODO The only way to make the PML work is to use OT2 in the boundary,
-        #      a PML formulation including the extra term is needed for this.
-        eq_interior = devito.solve(inv_vp2_fun*field.dt2 - laplacian_term + attenuation_term, u_next)
-        eq_boundary = devito.solve(inv_vp2_fun*field.dt2 - laplacian_term + attenuation_term + boundary_term, u_next)
-
-        # Time-stepping stencil
-        stencils = []
-
-        if self.kernel != 'OT2':
-            stencil_laplacian = devito.Eq(laplacian, laplacian_update,
-                                          subdomain=self.dev_grid.full,
-                                          coefficients=subs)
-            stencils.append(stencil_laplacian)
-
-        stencil_interior = devito.Eq(u_next, eq_interior,
-                                     subdomain=self.dev_grid.interior,
-                                     coefficients=subs)
-        stencils.append(stencil_interior)
-
-        stencil_boundary = [devito.Eq(u_next, eq_boundary,
-                                      subdomain=dom,
-                                      coefficients=subs) for dom in self.dev_grid.pml]
-        stencils += stencil_boundary
-
-        return eq_before + stencils + eq_after
-
     def _medium_functions(self, vp, rho=None, alpha=None, **kwargs):
         _kwargs = dict(coefficients='symbolic' if self.drp else 'standard')
 
-        vp_fun = self.dev_grid.function('vp', **_kwargs)
-        vp2_fun = self.dev_grid.function('vp2', **_kwargs)
-        inv_vp2_fun = self.dev_grid.function('inv_vp2', **_kwargs)
+        v_fun = devito.VectorTimeFunction(name='v', grid=self.grid, space_order=self.space_order)
+        tau_fun = devito.TensorTimeFunction(name='t', grid=self.grid, space_order=self.space_order)
 
-        if rho is not None:
-            rho_fun = self.dev_grid.function('rho', **_kwargs)
-            buoy_fun = self.dev_grid.function('buoy', **_kwargs)
-        else:
-            rho_fun = buoy_fun = None
+        # vp_fun = self.dev_grid.function('vp', **_kwargs)
+        # vp2_fun = self.dev_grid.function('vp2', **_kwargs)
+        # inv_vp2_fun = self.dev_grid.function('inv_vp2', **_kwargs)
 
-        if alpha is not None:
-            alpha_fun = self.dev_grid.function('alpha', **_kwargs)
-        else:
-            alpha_fun = None
-
-        return vp_fun, vp2_fun, inv_vp2_fun, rho_fun, buoy_fun, alpha_fun
-
-    def _laplacian(self, field, laplacian, vp, vp2, inv_vp2, **kwargs):
-        if self.kernel not in ['OT2', 'OT4']:
-            raise ValueError("Unrecognized kernel")
-
-        if self.kernel == 'OT2':
-            bi_harmonic = 0
-
-        else:
-            bi_harmonic = self.time.step**2/12 * vp2*self._diff_op(field, **kwargs)
-
-        laplacian_update = field + bi_harmonic
-
-        return laplacian_update
-
-    def _diff_op(self, field, **kwargs):
-        rho = kwargs.pop('rho', None)
-        buoy = kwargs.pop('buoy', None)
-
-        if buoy is None:
-            return field.laplace
-
-        else:
-            if self.drp:
-                return field.laplace + rho * devito.grad(buoy, shift=-0.5).dot(devito.grad(field, shift=-0.5))
-            else:
-                return rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
+        return v_fun, tau_fun
 
     def _saved(self, field, *kwargs):
         return field.dt2
