@@ -10,7 +10,7 @@ from mosaic.utils import camel_case
 
 from stride.utils import fft
 from stride.problem import ScalarField
-from ..common.devito import GridDevito, OperatorDevito, config_devito
+from ..common.devito import GridDevito, OperatorDevito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
 
@@ -94,7 +94,7 @@ class IsoElasticDevito(ProblemTypeBase):
         self._src_scale = 0.
         self._bandwidth = 0.
 
-        config_devito(**kwargs)
+        # config_devito(**kwargs)
 
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
 
@@ -185,9 +185,26 @@ class IsoElasticDevito(ProblemTypeBase):
             vel = self.dev_grid.vector_time_function('vel')
             tau = self.dev_grid.tensor_time_function('tau')
 
-            # Define the source injection function to generate the corresponding code
-            # pressure_to_mass_acc = time.step / (vp * space.spacing**3)
-            # solve_p_dt = time.step**2 * vp**2
+            # Absorbing boundaries
+            damp = devito.Function(name="damp", grid=self.dev_grid.devito_grid)
+            eqs = [devito.Eq(damp, 1.0)]
+            padsizes = [self.space.absorbing for _ in range(self.dev_grid.devito_grid.dim)]
+            for (nbl, nbr), d in zip(padsizes, damp.dimensions):
+                dampcoeff = 0.2763102111592855*self.space.spacing[0]
+                # left
+                dim_l = devito.SubDimension.left(name='abc_%s_l' % d.name, parent=d, thickness=nbl)
+                pos = devito.Abs((nbl - (dim_l - d.symbolic_min) + 1) / float(nbl))
+                val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
+                eqs += [devito.Inc(damp.subs({d: dim_l}), val / d.spacing)]
+                # right
+                dampcoeff = 0.2763102111592855*self.space.spacing[0]
+                dim_r = devito.SubDimension.right(name='abc_%s_r' % d.name, parent=d, thickness=nbr)
+                pos = devito.Abs((nbr - (d.symbolic_max - dim_r) + 1) / float(nbr))
+                val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
+                eqs += [devito.Inc(damp.subs({d: dim_r}), val / d.spacing)]
+            devito.Operator(eqs, name='initdamp')()
+
+            # Define the source injection function using a pressure disturbance
             src_xx = src.inject(field=tau.forward[0, 0], expr=s * src)
             src_zz = src.inject(field=tau.forward[1, 1], expr=s * src)
 
@@ -201,12 +218,14 @@ class IsoElasticDevito(ProblemTypeBase):
 
             # Compile the operator
             # velocity (first derivative vel w.r.t. time, first order euler method), s: time_spacing
-            u_v = devito.Eq(vel.forward, vel + s * byn_fun * devito.div(tau),
-                                      grid=self.dev_grid,
-                                      coefficients=None)
+            u_v = devito.Eq(vel.forward,
+                            damp*(vel + s * byn_fun * devito.div(tau)),
+                            grid=self.dev_grid,
+                            coefficients=None)
 
             # stress (first derivative tau w.r.t. time, first order euler method)
-            u_tau = devito.Eq(tau.forward, (tau + s * (lam_fun * devito.diag(devito.div(vel.forward)) + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T))))
+            u_tau = devito.Eq(tau.forward,
+                              damp*(tau + s * (lam_fun * devito.diag(devito.div(vel.forward)) + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T))))
 
             self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz,
                                              **kwargs)
