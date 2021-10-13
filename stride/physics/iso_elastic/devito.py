@@ -174,7 +174,7 @@ class IsoElasticDevito(ProblemTypeBase):
             src = self.dev_grid.sparse_time_function('src', num=num_sources,
                                                      coordinates=shot.source_coordinates,
                                                      interpolation_type=self.interpolation_type)
-            rec = self.dev_grid.sparse_time_function('rec', num=num_receivers,
+            rec_tau = self.dev_grid.sparse_time_function('rec_tau', num=num_receivers,
                                                      coordinates=shot.receiver_coordinates,
                                                      interpolation_type=self.interpolation_type)
 
@@ -208,6 +208,10 @@ class IsoElasticDevito(ProblemTypeBase):
             src_xx = src.inject(field=tau.forward[0, 0], expr=s * src)
             src_zz = src.inject(field=tau.forward[1, 1], expr=s * src)
 
+            rec_term = rec_tau.interpolate(expr=tau[0, 0] + tau[1, 1])
+            # rec_term += rec_v1.interpolate(expr=v[1])  # Placeholder for vel_x receiver
+            # rec_term += rec_v2.interpolate(expr=v[0])  # Placeholder for vel_y receiver
+
             # Set up parameters as functions
             lam_fun = self.dev_grid.function('lam_fun')
             mu_fun = self.dev_grid.function('mu_fun')
@@ -227,7 +231,7 @@ class IsoElasticDevito(ProblemTypeBase):
             u_tau = devito.Eq(tau.forward,
                               damp*(tau + s * (lam_fun * devito.diag(devito.div(vel.forward)) + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T))))
 
-            self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz,
+            self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz + rec_term,
                                              **kwargs)
             self.state_operator.compile()
 
@@ -236,12 +240,12 @@ class IsoElasticDevito(ProblemTypeBase):
             if num_sources != self.dev_grid.vars.src.npoint:
                 self.dev_grid.sparse_time_function('src', num=num_sources, cached=False)
 
-            if num_receivers != self.dev_grid.vars.rec.npoint:
+            if num_receivers != self.dev_grid.vars.rec_tau.npoint:
                 self.dev_grid.sparse_time_function('rec', num=num_receivers, cached=False)
 
         # Clear all buffers
         self.dev_grid.vars.src.data_with_halo.fill(0.)
-        self.dev_grid.vars.rec.data_with_halo.fill(0.)
+        self.dev_grid.vars.rec_tau.data_with_halo.fill(0.)
         self.dev_grid.vars.vel[0].data_with_halo.fill(0.)
         self.dev_grid.vars.vel[1].data_with_halo.fill(0.)
         self.dev_grid.vars.tau[0,0].data_with_halo.fill(0.)
@@ -276,7 +280,7 @@ class IsoElasticDevito(ProblemTypeBase):
 
         if self.interpolation_type == 'linear':
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
-            self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
+            self.dev_grid.vars.rec_tau.coordinates.data[:] = shot.receiver_coordinates
 
     async def run_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -306,9 +310,6 @@ class IsoElasticDevito(ProblemTypeBase):
         self.state_operator.run(dt=self.time.step,
                                 **functions,
                                 **kwargs.pop('devito_args', {}))
-        print('########################')
-        print('complete')
-        print('########################')
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -333,7 +334,28 @@ class IsoElasticDevito(ProblemTypeBase):
             Time traces produced by the state run.
 
         """
-        pass
+        problem = kwargs.pop('problem')
+        shot = problem.shot
+
+        self.wavefield = None
+
+        traces_data = np.asarray(self.dev_grid.vars.rec_tau.data, dtype=np.float32).T
+        traces_data *= self._max_wavelet / self._src_scale
+        traces = shot.observed.alike(name='modelled', data=traces_data)
+
+        self.dev_grid.deallocate('p')
+        self.dev_grid.deallocate('laplacian')
+        self.dev_grid.deallocate('src')
+        self.dev_grid.deallocate('rec')
+        self.dev_grid.deallocate('vp')
+        self.dev_grid.deallocate('vp2')
+        self.dev_grid.deallocate('inv_vp2')
+        self.dev_grid.deallocate('rho')
+        self.dev_grid.deallocate('buoy')
+        self.dev_grid.deallocate('alpha')
+        # self.boundary.deallocate()
+
+        return traces
 
     # adjoint
 
