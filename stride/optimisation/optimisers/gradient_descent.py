@@ -76,7 +76,9 @@ class GradientDescent(LocalOptimiser):
                             (min_var, max_var))
 
         self.variable -= step_size*direction
-        self.variable = await self._process_model(self.variable, **kwargs)
+
+        processed_variable = await self._process_model(self.variable, **kwargs)
+        self.variable.extended_data[:] = processed_variable.extended_data[:]
 
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)

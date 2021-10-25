@@ -2,6 +2,7 @@
 from mosaic.utils import camel_case
 
 from . import steps as steps_module
+from ...core import no_grad
 
 
 __all__ = ['Pipeline']
@@ -44,7 +45,11 @@ class Pipeline:
         next_args = args
 
         for step in self._steps:
-            next_args = await step(*next_args, **kwargs)
+            if self._no_grad:
+                with no_grad(*next_args, **kwargs):
+                    next_args = await step(*next_args, **kwargs)
+            else:
+                next_args = await step(*next_args, **kwargs)
             next_args = (next_args,) if len(args) == 1 else next_args
 
         if len(args) == 1:
