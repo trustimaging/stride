@@ -146,7 +146,9 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
     axis.set_ylabel('time')
 
     if trace_axis is None:
-        trace_axis = np.linspace(0, num_traces-1, num_traces, endpoint=False)
+        trace_axis = np.linspace(0, num_traces-1, num_under_traces, endpoint=True)
+    else:
+        trace_axis = trace_axis[::skip]
 
     trace_axis = [str(each) for each in trace_axis]
 
