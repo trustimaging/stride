@@ -50,7 +50,7 @@ class InteriorDomain(devito.SubDomain):
 class PMLSide(devito.SubDomain):
 
     def __init__(self, space_order, extra, dim, side):
-        self.dim = dim
+        self.dim_i = dim
         self.side = side
         self.name = 'pml_side_' + side + str(dim)
 
@@ -61,7 +61,7 @@ class PMLSide(devito.SubDomain):
 
     def define(self, dimensions):
         domain = {dimension: dimension for dimension in dimensions}
-        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+        domain[dimensions[self.dim_i]] = (self.side, self.extra[self.dim])
 
         return domain
 
@@ -69,7 +69,7 @@ class PMLSide(devito.SubDomain):
 class PMLCentre(devito.SubDomain):
 
     def __init__(self, space_order, extra, dim, side):
-        self.dim = dim
+        self.dim_i = dim
         self.side = side
         self.name = 'pml_centre_' + side + str(dim)
 
@@ -81,7 +81,7 @@ class PMLCentre(devito.SubDomain):
     def define(self, dimensions):
         domain = {dimension: ('middle', extra, extra)
                   for dimension, extra in zip(dimensions, self.extra)}
-        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+        domain[dimensions[self.dim_i]] = (self.side, self.extra[self.dim_i])
 
         return domain
 
@@ -107,7 +107,7 @@ class PMLCorner(devito.SubDomain):
 class PMLPartial(devito.SubDomain):
 
     def __init__(self, space_order, extra, dim, side):
-        self.dim = dim
+        self.dim_i = dim
         self.side = side
         self.name = 'pml_partial_' + side + str(dim)
 
@@ -124,7 +124,7 @@ class PMLPartial(devito.SubDomain):
         if len(dimensions) > 2:
             domain[dimensions[1]] = dimensions[1]
 
-        domain[dimensions[self.dim]] = (self.side, self.extra[self.dim])
+        domain[dimensions[self.dim_i]] = (self.side, self.extra[self.dim_i])
 
         return domain
 
