@@ -35,6 +35,7 @@ class ProcessTraces(Pipeline):
 
     **Default steps:**
 
+    - ``mute_traces``
     - ``filter_traces``
     - ``norm_per_shot``
 
@@ -42,8 +43,16 @@ class ProcessTraces(Pipeline):
 
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
+        steps.append('mute_traces')
         steps.append('filter_traces')
-        steps.append('norm_per_shot')
+
+        norm_per_shot = kwargs.pop('norm_per_shot', True)
+        norm_per_trace = kwargs.pop('norm_per_trace', False)
+
+        if norm_per_shot:
+            steps.append('norm_per_shot')
+        elif norm_per_trace:
+            steps.append('norm_per_trace')
 
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
@@ -65,7 +74,11 @@ class ProcessGlobalGradient(Pipeline):
         steps = steps or []
         steps.append('mask')
         steps.append('smooth_field')
-        steps.append('norm_field')
+
+        norm = kwargs.pop('norm', True)
+
+        if norm:
+            steps.append('norm_field')
 
         super().__init__(steps, no_grad=no_grad, **kwargs)
 

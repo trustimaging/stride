@@ -353,7 +353,9 @@ class Task(RemoteBase):
     async def _check_ready(self):
         if not len(self._args_pending) and not len(self._kwargs_pending):
             await self.state_changed('ready')
-            self._ready_future.set_result(True)
+
+            if not self._ready_future.done():
+                self._ready_future.set_result(True)
 
     async def state_changed(self, state):
         """
@@ -410,7 +412,7 @@ class TaskProxy(ProxyBase):
         self._state = 'pending'
         self._result = None
         self._done_future = Future()
-        self.outputs = TaskOutputGenerator(self)
+        self._outputs = None
 
     async def init(self):
         """
@@ -477,6 +479,17 @@ class TaskProxy(ProxyBase):
 
         """
         return self.outputs.done
+
+    @property
+    def outputs(self):
+        """
+        Access individual outputs of the task.
+
+        """
+        if self._outputs is None:
+            self._outputs = TaskOutputGenerator(self)
+
+        return self._outputs
 
     def set_done(self):
         """
@@ -620,11 +633,11 @@ class TaskOutputGenerator:
         self._generated_outputs = weakref.WeakValueDictionary()
 
     def __repr__(self):
-        runtime_id = self._task_proxy().runtime_id
+        runtime_id = self._task_proxy.runtime_id
 
         return "<%s object at %s, uid=%s, runtime=%s, state=%s>" % \
                (self.__class__.__name__, id(self),
-                self._task_proxy().uid, runtime_id, self._task_proxy.state)
+                self._task_proxy.uid, runtime_id, self._task_proxy.state)
 
     def __getattribute__(self, item):
         try:

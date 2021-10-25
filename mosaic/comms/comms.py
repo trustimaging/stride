@@ -1641,6 +1641,5 @@ class CommsManager:
 
         self.disconnect_send()
         self.disconnect_recv()
-        self._zmq_context.term()
 
         self._state = 'disconnected'

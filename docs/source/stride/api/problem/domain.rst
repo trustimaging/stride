@@ -11,3 +11,8 @@ Domain
     :members:
     :undoc-members:
     :show-inheritance:
+
+.. autoclass:: stride.problem.domain.SlowTime
+    :members:
+    :undoc-members:
+    :show-inheritance:

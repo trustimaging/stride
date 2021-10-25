@@ -195,7 +195,7 @@ class Transducers(ProblemBase):
 
         return sub_transducers
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'num_transducers': self.num_transducers,
             'transducers': [],

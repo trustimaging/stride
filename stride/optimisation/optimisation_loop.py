@@ -32,6 +32,7 @@ class Iteration:
         self._block = block
         self._optimisation_loop = opt_loop
         self._fun = OrderedDict()
+        self._step_fun = OrderedDict()
 
     @property
     def fun_value(self):
@@ -40,6 +41,15 @@ class Iteration:
 
         """
         return sum([each.fun_value for each in self._fun.values()])
+
+    @property
+    def step_fun_value(self):
+        """
+        Functional value for this iteration across all shots
+        after step.
+
+        """
+        return sum([each.fun_value for each in self._step_fun.values()])
 
     def add_fun(self, fun):
         """
@@ -55,7 +65,21 @@ class Iteration:
         """
         self._fun[fun.shot_id] = fun
 
-    def __get_desc__(self):
+    def add_step_fun(self, fun):
+        """
+        Add a functional value, after step, for a particular shot to the iteration.
+
+        Parameters
+        ----------
+        fun : FunctionalValue
+
+        Returns
+        -------
+
+        """
+        self._step_fun[fun.shot_id] = fun
+
+    def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'abs_id': self.abs_id,
@@ -75,7 +99,7 @@ class Iteration:
         self.abs_id = description.abs_id
 
         for fun_desc in description.functional_values:
-            fun = FunctionalValue(fun_desc.shot_id, fun_desc.fun_value)
+            fun = FunctionalValue(fun_desc.fun_value, fun_desc.shot_id)
             self._fun[fun.shot_id] = fun
 
 
@@ -122,6 +146,14 @@ class Block:
 
         """
         return self._current_iteration
+
+    @property
+    def fun_value(self):
+        """
+        Functional value for this block across all iterations.
+
+        """
+        return sum([each.fun_value for each in self._iterations.values()])
 
     def clear(self):
         """
@@ -211,7 +243,7 @@ class Block:
             self._optimisation_loop.started = True
             self._optimisation_loop.dump()
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'num_iterations': self._num_iterations,
@@ -430,7 +462,7 @@ class OptimisationLoop(Saved):
         except AttributeError:
             pass
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'running_id': self.running_id,
             'num_blocks': self._num_blocks,

@@ -1,11 +1,21 @@
 
 import gc
-import copy
+import functools
 import numpy as np
 import scipy.ndimage
 import scipy.interpolate
 
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import Slider
+
+    ENABLED_2D_PLOTTING = True
+
+except ModuleNotFoundError:
+    ENABLED_2D_PLOTTING = False
+
 import mosaic
+from mosaic.comms.compression import maybe_compress, decompress
 
 from .base import GriddedSaved
 from ..core import Variable
@@ -115,6 +125,10 @@ class StructuredData(Data):
         inner = kwargs.pop('inner', None)
         dtype = kwargs.pop('dtype', np.float32)
 
+        data = kwargs.pop('data', None)
+        if data is not None:
+            shape = shape or data.shape
+
         if shape is not None:
             extended_shape = extended_shape or shape
 
@@ -130,7 +144,6 @@ class StructuredData(Data):
         self._dtype = dtype
 
         self._data = None
-        data = kwargs.pop('data', None)
 
         if data is not None:
             self._data = self.pad_data(data)
@@ -157,9 +170,49 @@ class StructuredData(Data):
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
 
-        return self.__class__(*args, **kwargs)
+        return super().copy(*args, **kwargs)
 
-    def copy(self):
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph.
+
+        Returns
+        -------
+        StructuredData
+            Detached variable.
+
+        """
+        kwargs['shape'] = kwargs.pop('shape', self.shape)
+        kwargs['extended_shape'] = kwargs.pop('extended_shape', self.extended_shape)
+        kwargs['inner'] = kwargs.pop('inner', self.inner)
+        kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
+        kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['data'] = kwargs.pop('data', self._data)
+
+        return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        StructuredData
+            Detached variable.
+
+        """
+        kwargs['shape'] = kwargs.pop('shape', self.shape)
+        kwargs['extended_shape'] = kwargs.pop('extended_shape', self.extended_shape)
+        kwargs['inner'] = kwargs.pop('inner', self.inner)
+        kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
+        kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['data'] = kwargs.pop('data', self._data)
+
+        return super().as_parameter(*args, **kwargs)
+
+    def copy(self, **kwargs):
         """
         Create a deep copy of the data object.
 
@@ -169,7 +222,17 @@ class StructuredData(Data):
             Newly created StructuredData.
 
         """
-        return copy.deepcopy(self)
+        cpy = self.alike(name=self._init_name, **kwargs)
+        cpy.extended_data[:] = self.extended_data
+        cpy.needs_grad = self.needs_grad
+
+        if self.grad is not None:
+            cpy.grad = self.grad.copy()
+
+        if self.prec is not None:
+            cpy.prec = self.prec.copy()
+
+        return cpy
 
     @property
     def data(self):
@@ -252,7 +315,17 @@ class StructuredData(Data):
         self.grad.fill(0.)
         self.grad.prec.fill(0.)
 
-    def process_grad(self, prec_scale=1e-6):
+    def release_grad(self):
+        """
+        Release the internal buffers for the gradient and preconditioner.
+
+        Returns
+        -------
+
+        """
+        self.grad = None
+
+    def process_grad(self, prec_scale=1e-6, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
@@ -271,10 +344,14 @@ class StructuredData(Data):
         grad = self.grad
         prec = grad.prec
 
-        prec += prec_scale * np.max(prec.data) + 1e-31
-        grad /= prec
+        if prec is not None:
+            max_prec = np.max(np.abs(prec.data))
 
-        self.grad = None
+            if max_prec > 1e-31:
+                prec += prec_scale * max_prec + 1e-31
+                grad /= prec
+
+        self.grad = grad
 
         return grad
 
@@ -405,6 +482,8 @@ class StructuredData(Data):
 
         if res.grad is not None and other.grad is not None:
             res.grad = getattr(res.grad, op)(other.grad)
+        elif other.grad is not None:
+            res.grad = other.grad
 
     @staticmethod
     def _op_prec(res, other, op):
@@ -413,6 +492,8 @@ class StructuredData(Data):
 
         if res.prec is not None and other.prec is not None:
             res.prec = getattr(res.prec, op)(other.prec)
+        elif other.prec is not None:
+            res.prec = other.prec
 
     def __add__(self, other):
         res, other_data = self._prepare_op(other)
@@ -527,9 +608,14 @@ class StructuredData(Data):
     __rtruediv__ = __truediv__
     __rfloordiv__ = __floordiv__
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         if self._data is None:
             self.allocate()
+
+        compression = False
+        data = self.data
+        if kwargs.pop('maybe_compress', False):
+            compression, data = maybe_compress(data)
 
         inner = []
         for each in self._inner:
@@ -544,7 +630,8 @@ class StructuredData(Data):
             'extended_shape': self._extended_shape,
             'inner': inner,
             'dtype': str(np.dtype(self._dtype)),
-            'data': self.data,
+            'data': data,
+            'compression': compression if compression is not None else False
         }
 
         return description
@@ -568,6 +655,11 @@ class StructuredData(Data):
         if hasattr(data, 'load'):
             data = data.load()
 
+        compression = description.get('compression', None)
+        if compression:
+            data = decompress(compression, data)
+            data = np.frombuffer(data, self.dtype).reshape(self.shape)
+
         self.extended_data[:] = self.pad_data(data)
 
 
@@ -586,6 +678,8 @@ class ScalarField(StructuredData):
         Name of the data.
     time_dependent : bool, optional
         Whether or not the field is time-dependent, defaults to False.
+    slow_time_dependent : bool, optional
+        Whether or not the field is slow-time dependent, defaults to False.
     shape : tuple, optional
         Shape of the inner domain of the data.
     extended_shape : tuple, optional
@@ -601,27 +695,44 @@ class ScalarField(StructuredData):
     """
 
     def __init__(self, **kwargs):
+        data = kwargs.pop('data', None)
+
         super().__init__(**kwargs)
 
         time_dependent = kwargs.pop('time_dependent', False)
+        slow_time_dependent = kwargs.pop('slow_time_dependent', False)
         self._time_dependent = time_dependent
+        self._slow_time_dependent = slow_time_dependent
 
         if self.space is not None and self._shape is None:
-            shape = ()
-            extended_shape = ()
-            inner = ()
-            if self._time_dependent:
-                shape += (self.time.num,)
-                extended_shape += (self.time.extended_num,)
-                inner += (self.time.inner,)
+            self._init_shape()
 
-            shape += self.space.shape
-            extended_shape += self.space.extended_shape
-            inner += self.space.inner
+        if data is not None:
+            self._data = self.pad_data(data)
 
+    def _init_shape(self, fill_shape=True):
+        shape = ()
+        extended_shape = ()
+        inner = ()
+
+        if self._time_dependent:
+            shape += (self.time.num,)
+            extended_shape += (self.time.extended_num,)
+            inner += (self.time.inner,)
+
+        if self._slow_time_dependent:
+            shape += (self.slow_time.num,)
+            extended_shape += (self.slow_time.extended_num,)
+            inner += (self.slow_time.inner,)
+
+        shape += self.space.shape
+        extended_shape += self.space.extended_shape
+        inner += self.space.inner
+
+        if fill_shape:
             self._shape = shape
-            self._extended_shape = extended_shape
-            self._inner = inner
+        self._extended_shape = extended_shape
+        self._inner = inner
 
     def alike(self, *args, **kwargs):
         """
@@ -637,8 +748,41 @@ class ScalarField(StructuredData):
 
         """
         kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().alike(*args, **kwargs)
+
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph.
+
+        Returns
+        -------
+        ScalarField
+            Detached variable.
+
+        """
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
+
+        return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        ScalarField
+            Detached variable.
+
+        """
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
+
+        return super().as_parameter(*args, **kwargs)
 
     @property
     def time_dependent(self):
@@ -647,6 +791,14 @@ class ScalarField(StructuredData):
 
         """
         return self._time_dependent
+
+    @property
+    def slow_time_dependent(self):
+        """
+        Whether or not the field is slow-time dependent.
+
+        """
+        return self._slow_time_dependent
 
     def stagger(self, stagger, method='nearest'):
         """
@@ -701,6 +853,76 @@ class ScalarField(StructuredData):
 
         return interp
 
+    def resample(self, space=None, order=3, prefilter=True, **kwargs):
+        """
+        Resample the internal (non-padded) data given some new space object.
+
+        Parameters
+        ----------
+        space : Space
+            New space.
+        order : int, optional
+            Order of the interplation, default is 3.
+        prefilter : bool, optional
+            Determines if the input array is prefiltered
+            before interpolation. The default is ``True``.
+
+        Returns
+        -------
+
+        """
+
+        if self.time_dependent or self.slow_time_dependent:
+            data = self.data
+
+            interp = []
+            for t in range(data.shape[0]):
+                interp.append(self.resample_data(data[t], space,
+                                                 order=order,
+                                                 prefilter=prefilter))
+
+            interp = np.stack(interp, axis=0)
+
+        else:
+            interp = self.resample_data(self.data, space,
+                                        order=order,
+                                        prefilter=prefilter)
+
+        self.grid.space = space
+        self._init_shape()
+        self._data = self.pad_data(interp)
+
+    def resample_data(self, data, space, order=3, prefilter=True):
+        """
+        Resample the data given some new space object.
+
+        Parameters
+        ----------
+        data : ndarray
+            Data to stagger.
+        space : Space
+            New space.
+        order : int, optional
+            Order of the interplation, default is 3.
+        prefilter : bool, optional
+            Determines if the input array is prefiltered
+            before interpolation. The default is ``True``.
+
+        Returns
+        -------
+        ndarray
+            Resampled data.
+
+        """
+
+        resampling_factor = [dx_old/dx_new
+                             for dx_old, dx_new in zip(self.space.spacing, space.spacing)]
+
+        interp = scipy.ndimage.zoom(data, resampling_factor,
+                                    order=order, prefilter=prefilter)
+
+        return interp
+
     def plot(self, **kwargs):
         """
         Plot the inner domain of the field.
@@ -716,12 +938,29 @@ class ScalarField(StructuredData):
             Axes on which the plotting is done.
 
         """
-        title = kwargs.pop('title', self.name)
         plot = kwargs.pop('plot', True)
+        origin = kwargs.pop('origin', self.space.origin)
+        limit = kwargs.pop('limit', self.space.limit)
 
-        axis = plotting.plot_scalar_field(self.data, title=title,
-                                          origin=self.space.origin, limit=self.space.limit,
-                                          **kwargs)
+        if self.slow_time_dependent and self.space.dim == 2:
+            def update(figure, axis, step):
+                if len(axis.images):
+                    axis.images[-1].colorbar.remove()
+                axis.clear()
+
+                self._plot(self.data[int(step)], origin=origin, limit=limit, axis=axis,
+                           **kwargs)
+                axis.set_title(axis.get_title() + ' - slow time step %d' % step)
+
+                figure.canvas.draw_idle()
+
+            axis = self._plot_time(update)
+
+        elif self.slow_time_dependent:
+            axis = self._plot(self.data[0], origin=origin, limit=limit, **kwargs)
+
+        else:
+            axis = self._plot(self.data, origin=origin, limit=limit, **kwargs)
 
         if plot is True:
             plotting.show(axis)
@@ -743,52 +982,69 @@ class ScalarField(StructuredData):
             Axes on which the plotting is done.
 
         """
-        title = kwargs.pop('title', self.name)
         plot = kwargs.pop('plot', True)
+        origin = kwargs.pop('origin', self.space.pml_origin)
+        limit = kwargs.pop('limit', self.space.extended_limit)
 
-        axis = plotting.plot_scalar_field(self.extended_data, title=title,
-                                          origin=self.space.pml_origin, limit=self.space.extended_limit,
-                                          **kwargs)
+        axis = self._plot(self.extended_data, origin=origin, limit=limit, **kwargs)
 
         if plot is True:
             plotting.show(axis)
 
         return axis
 
-    def __get_desc__(self):
-        description = super().__get_desc__()
+    def _plot(self, data, **kwargs):
+        title = kwargs.pop('title', self.name)
+
+        axis = plotting.plot_scalar_field(data, title=title, **kwargs)
+
+        return axis
+
+    def _plot_time(self, update):
+        if not ENABLED_2D_PLOTTING:
+            return None
+
+        figure, axis = plt.subplots(1, 1)
+        plt.subplots_adjust(bottom=0.25)
+        axis.margins(x=0)
+
+        ax_shot = plt.axes([0.15, 0.1, 0.7, 0.03])
+        slider = Slider(ax_shot, 'time',
+                        0, self.slow_time.num-1,
+                        valinit=0, valstep=1)
+
+        update = functools.partial(update, figure, axis)
+        update(0)
+
+        slider.on_changed(update)
+        axis.slider = slider
+
+        return axis
+
+    def __get_desc__(self, **kwargs):
+        description = super().__get_desc__(**kwargs)
         description['time_dependent'] = self._time_dependent
+        description['slow_time_dependent'] = self._slow_time_dependent
 
         return description
 
     def __set_desc__(self, description):
-        # TODO Not entirely convinved by this solution
-        # super().__set_desc__(description)
-
-        # TODO and this should not be repeated
-        if self.space is not None and self._shape is None:
-            shape = ()
-            extended_shape = ()
-            inner = ()
-            if self._time_dependent:
-                shape += (self.time.num,)
-                extended_shape += (self.time.extended_num,)
-                inner += (self.time.inner,)
-
-            shape += self.space.shape
-            extended_shape += self.space.extended_shape
-            inner += self.space.inner
-
-            self._shape = shape
-            self._extended_shape = extended_shape
-            self._inner = inner
-
+        self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
+        self._slow_time_dependent = description.get('slow_time_dependent', False)
+
+        if self.space is not None:
+            self._init_shape(fill_shape=False)
 
         data = description.data
         if hasattr(data, 'load'):
             data = data.load()
+
+        compression = description.get('compression', None)
+        if compression:
+            data = decompress(compression, data)
+            data = np.frombuffer(data, self.dtype).reshape(self.shape)
 
         self.extended_data[:] = self.pad_data(data)
 
@@ -810,6 +1066,8 @@ class VectorField(ScalarField):
         Number of dimensions for the vector field, defaults to the spatial dimensions.
     time_dependent : bool, optional
         Whether or not the field is time-dependent, defaults to False.
+    slow_time_dependent : bool, optional
+        Whether or not the field is slow-time dependent, defaults to False.
     shape : tuple, optional
         Shape of the inner domain of the data.
     extended_shape : tuple, optional
@@ -825,16 +1083,44 @@ class VectorField(ScalarField):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        dim = kwargs.pop('dim', None)
 
-        dim = kwargs.pop('dim', False)
+        if 'space' in kwargs and dim is None:
+            dim = kwargs['space'].dim
+        elif 'grid' in kwargs and dim is None:
+            dim = kwargs['grid'].space.dim
+
         self._dim = dim
 
-        if self.space is not None and self._shape is not None:
-            self._dim = dim or self.space.dim
-            self._shape = (self._dim,) + self._shape
-            self._extended_shape = (self._dim,) + self._extended_shape
-            self._inner = (slice(0, None),) + self._inner
+        super().__init__(**kwargs)
+
+    def _init_shape(self, fill_shape=True):
+        shape = ()
+        extended_shape = ()
+        inner = ()
+
+        if self._time_dependent:
+            shape += (self.time.num,)
+            extended_shape += (self.time.extended_num,)
+            inner += (self.time.inner,)
+
+        if self._slow_time_dependent:
+            shape += (self.slow_time.num,)
+            extended_shape += (self.slow_time.extended_num,)
+            inner += (self.slow_time.inner,)
+
+        shape += (self._dim,)
+        extended_shape += (self._dim,)
+        inner += (slice(0, None),)
+
+        shape += self.space.shape
+        extended_shape += self.space.extended_shape
+        inner += self.space.inner
+
+        if fill_shape:
+            self._shape = shape
+        self._extended_shape = extended_shape
+        self._inner = inner
 
     def alike(self, *args, **kwargs):
         """
@@ -853,6 +1139,36 @@ class VectorField(ScalarField):
 
         return super().alike(*args, **kwargs)
 
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph.
+
+        Returns
+        -------
+        VectorField
+            Detached variable.
+
+        """
+        kwargs['dim'] = kwargs.pop('dim', self.dim)
+
+        return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        VectorField
+            Detached variable.
+
+        """
+        kwargs['dim'] = kwargs.pop('dim', self.dim)
+
+        return super().as_parameter(*args, **kwargs)
+
     @property
     def dim(self):
         """
@@ -861,16 +1177,69 @@ class VectorField(ScalarField):
         """
         return self._dim
 
-    def __get_desc__(self):
-        description = super().__get_desc__()
+    def plot_dims(self, **kwargs):
+        """
+        Plot separated dimensions of the field.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+
+        """
+        axes = kwargs.pop('axes', None)
+        plot = kwargs.pop('plot', True)
+        origin = kwargs.pop('origin', self.space.origin)
+        limit = kwargs.pop('limit', self.space.limit)
+
+        if axes is None:
+            figure, axes = plt.subplots(1, self.dim)
+
+        for dim in range(self.dim):
+            title = kwargs.pop('title', '%s_%d' % (self.name, dim))
+
+            super()._plot(self.data[dim], origin=origin, limit=limit,
+                          title=title, axis=axes[dim], **kwargs)
+
+        if plot is True:
+            plotting.show(axes)
+
+        return axes
+
+    def _plot(self, data, **kwargs):
+        title = kwargs.pop('title', self.name)
+
+        axis = plotting.plot_vector_field(data, title=title, **kwargs)
+
+        return axis
+
+    def __get_desc__(self, **kwargs):
+        description = super().__get_desc__(**kwargs)
         description['dim'] = self._dim
 
         return description
 
     def __set_desc__(self, description):
-        super().__set_desc__(description)
-
+        self._shape = description.shape
+        self._dtype = np.dtype(description.dtype)
+        self._time_dependent = description.time_dependent
+        self._slow_time_dependent = description.get('slow_time_dependent', False)
         self._dim = description.dim
+
+        if self.space is not None:
+            self._init_shape(fill_shape=False)
+
+        data = description.data
+        if hasattr(data, 'load'):
+            data = data.load()
+
+        compression = description.get('compression', None)
+        if compression:
+            data = decompress(compression, data)
+            data = np.frombuffer(data, self.dtype).reshape(self.shape)
+
+        self.extended_data[:] = self.pad_data(data)
 
 
 @mosaic.tessera
@@ -932,6 +1301,36 @@ class Traces(StructuredData):
         kwargs['transducer_ids'] = kwargs.pop('transducer_ids', self.transducer_ids)
 
         return super().alike(*args, **kwargs)
+
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph.
+
+        Returns
+        -------
+        Traces
+            Detached variable.
+
+        """
+        kwargs['transducer_ids'] = kwargs.pop('transducer_ids', self.transducer_ids)
+
+        return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        Traces
+            Detached variable.
+
+        """
+        kwargs['transducer_ids'] = kwargs.pop('transducer_ids', self.transducer_ids)
+
+        return super().as_parameter(*args, **kwargs)
 
     @property
     def transducer_ids(self):
@@ -1048,8 +1447,8 @@ class Traces(StructuredData):
 
         return axis
 
-    def __get_desc__(self):
-        description = super().__get_desc__()
+    def __get_desc__(self, **kwargs):
+        description = super().__get_desc__(**kwargs)
         description['num_transducers'] = self.num_transducers
         description['transducer_ids'] = self._transducer_ids
 

@@ -7,6 +7,11 @@ Acquisitions
     :undoc-members:
     :show-inheritance:
 
+.. autoclass:: stride.problem.acquisitions.Sequence
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 .. autoclass:: stride.problem.acquisitions.Acquisitions
     :members:
     :undoc-members:

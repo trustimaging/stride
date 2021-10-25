@@ -15,7 +15,7 @@ class L2DistanceLoss(Operator):
     """
     L2-Norm of the difference between observed and modelled data:
 
-    f = ||modelled - observed||^2
+    f = 1/2 ||modelled - observed||^2
 
     """
 
@@ -28,11 +28,11 @@ class L2DistanceLoss(Operator):
         problem = kwargs.pop('problem', None)
 
         residual_data = modelled.data-observed.data
-        residual = modelled.alike(name='residual', data=residual_data)
+        residual = observed.alike(name='residual', data=residual_data)
         self.residual = residual
 
-        fun_data = np.sum(residual.data ** 2)
-        fun = FunctionalValue(problem.shot_id, fun_data, residual)
+        fun_data = 0.5 * np.sum(residual.data ** 2)
+        fun = FunctionalValue(fun_data, problem.shot_id, residual)
 
         return fun
 

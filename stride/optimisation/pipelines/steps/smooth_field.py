@@ -21,10 +21,12 @@ class SmoothField(Operator):
         self.sigma = kwargs.pop('sigma', 0.25)
 
     def forward(self, field, **kwargs):
-        field.extended_data[:] = scipy.ndimage.gaussian_filter(field.extended_data,
-                                                               sigma=self.sigma, mode='nearest')
+        out_field = field.alike(name='smoothed_%s' % field.name)
 
-        return field
+        out_field.extended_data[:] = scipy.ndimage.gaussian_filter(field.extended_data,
+                                                                   sigma=self.sigma, mode='nearest')
+
+        return out_field
 
     def adjoint(self, d_field, field, **kwargs):
         raise NotImplementedError('No adjoint implemented for step %s' % self.__class__.__name__)

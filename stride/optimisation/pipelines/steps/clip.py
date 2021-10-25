@@ -24,11 +24,14 @@ class Clip(Operator):
         self.max = kwargs.pop('max', None)
 
     def forward(self, field, **kwargs):
-        if self.min is not None or self.max is not None:
-            field.extended_data[:] = np.clip(field.extended_data,
-                                             self.min, self.max)
+        out_field = field.alike(name='clipped_%s' % field.name)
+        out_field.extended_data[:] = field.extended_data
 
-        return field
+        if self.min is not None or self.max is not None:
+            out_field.extended_data[:] = np.clip(field.extended_data,
+                                                 self.min, self.max)
+
+        return out_field
 
     def adjoint(self, d_field, field, **kwargs):
         raise NotImplementedError('No adjoint implemented for step %s' % self.__class__.__name__)
