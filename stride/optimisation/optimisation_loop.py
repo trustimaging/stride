@@ -32,6 +32,7 @@ class Iteration:
         self._block = block
         self._optimisation_loop = opt_loop
         self._fun = OrderedDict()
+        self._step_fun = OrderedDict()
 
     @property
     def fun_value(self):
@@ -40,6 +41,15 @@ class Iteration:
 
         """
         return sum([each.fun_value for each in self._fun.values()])
+
+    @property
+    def step_fun_value(self):
+        """
+        Functional value for this iteration across all shots
+        after step.
+
+        """
+        return sum([each.fun_value for each in self._step_fun.values()])
 
     def add_fun(self, fun):
         """
@@ -54,6 +64,20 @@ class Iteration:
 
         """
         self._fun[fun.shot_id] = fun
+
+    def add_step_fun(self, fun):
+        """
+        Add a functional value, after step, for a particular shot to the iteration.
+
+        Parameters
+        ----------
+        fun : FunctionalValue
+
+        Returns
+        -------
+
+        """
+        self._step_fun[fun.shot_id] = fun
 
     def __get_desc__(self, **kwargs):
         description = {

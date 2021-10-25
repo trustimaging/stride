@@ -168,6 +168,8 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
                           headaxislength=hl,
                           headlength=hl,)
     default_kwargs.update(kwargs)
+    default_kwargs.pop('vmax', None)
+    default_kwargs.pop('vmin', None)
     im_2 = axis.quiver(x, y, u[0], u[1], **default_kwargs)
 
     if origin is None or limit is None:

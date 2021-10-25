@@ -19,12 +19,6 @@ async def _maybe_sum(a, b):
     if isinstance(b, TaskOutput):
         b = await b.result()
 
-    if isinstance(a, tuple):
-        a = await a.result()
-
-    if isinstance(b, tuple):
-        b = await b.result()
-
     if b is None:
         return a
 
@@ -382,9 +376,41 @@ class Variable:
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
 
         if hasattr(self, 'has_tessera') and self.has_tessera:
-            return self.__class__.parameter(*args, **kwargs)
+            cpy = self.__class__.parameter(*args, **kwargs)
         else:
-            return self.__class__(*args, **kwargs)
+            cpy = self.__class__(*args, **kwargs)
+
+        if self.grad is not None:
+            cpy.grad = self.grad.copy()
+
+        if self.prec is not None:
+            cpy.prec = self.prec.copy()
+
+        return cpy
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        Variable
+            Detached variable.
+
+        """
+        kwargs['name'] = kwargs.pop('name', self._init_name)
+        kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+
+        cpy = self.__class__.parameter(*args, **kwargs)
+
+        if self.grad is not None:
+            cpy.grad = self.grad.copy()
+
+        if self.prec is not None:
+            cpy.prec = self.prec.copy()
+
+        return cpy
 
     def copy(self, *args, **kwargs):
         """

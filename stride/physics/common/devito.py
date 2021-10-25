@@ -680,12 +680,28 @@ class OperatorDevito:
 
         """
 
-        default_config = {
-            'name': self.name,
-            'subs': self.grid.devito_grid.spacing_map,
-            'opt': 'advanced',
-            'platform': os.getenv('DEVITO_PLATFORM', None),
-        }
+        platform = kwargs.pop('platform', None)
+
+        if platform is None:
+            default_config = {
+                'name': self.name,
+                'subs': self.grid.devito_grid.spacing_map,
+                'opt': 'advanced',
+                'platform': os.getenv('DEVITO_PLATFORM', None),
+            }
+
+        elif platform == 'nvidia-acc':
+            default_config = {
+                'name': self.name,
+                'subs': self.grid.devito_grid.spacing_map,
+                'opt': 'advanced',
+                'compiler': 'pgcc',
+                'language': 'openacc',
+                'platform': 'nvidiaX',
+            }
+
+        else:
+            raise ValueError('Unrecognised platform %s' % platform)
 
         devito_config = kwargs.pop('devito_config', {})
         default_config.update(devito_config)

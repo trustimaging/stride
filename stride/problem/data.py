@@ -192,6 +192,26 @@ class StructuredData(Data):
 
         return super().detach(*args, **kwargs)
 
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        StructuredData
+            Detached variable.
+
+        """
+        kwargs['shape'] = kwargs.pop('shape', self.shape)
+        kwargs['extended_shape'] = kwargs.pop('extended_shape', self.extended_shape)
+        kwargs['inner'] = kwargs.pop('inner', self.inner)
+        kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
+        kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['data'] = kwargs.pop('data', self._data)
+
+        return super().as_parameter(*args, **kwargs)
+
     def copy(self, **kwargs):
         """
         Create a deep copy of the data object.
@@ -209,8 +229,8 @@ class StructuredData(Data):
         if self.grad is not None:
             cpy.grad = self.grad.copy()
 
-            if self.grad.prec is not None:
-                cpy.grad.prec = self.grad.prec.copy()
+        if self.prec is not None:
+            cpy.prec = self.prec.copy()
 
         return cpy
 
@@ -323,11 +343,13 @@ class StructuredData(Data):
 
         grad = self.grad
         prec = grad.prec
-        max_prec = np.max(np.abs(prec.data))
 
-        if max_prec > 1e-31:
-            prec += prec_scale * max_prec + 1e-31
-            grad /= prec
+        if prec is not None:
+            max_prec = np.max(np.abs(prec.data))
+
+            if max_prec > 1e-31:
+                prec += prec_scale * max_prec + 1e-31
+                grad /= prec
 
         self.grad = grad
 
@@ -673,6 +695,8 @@ class ScalarField(StructuredData):
     """
 
     def __init__(self, **kwargs):
+        data = kwargs.pop('data', None)
+
         super().__init__(**kwargs)
 
         time_dependent = kwargs.pop('time_dependent', False)
@@ -682,6 +706,9 @@ class ScalarField(StructuredData):
 
         if self.space is not None and self._shape is None:
             self._init_shape()
+
+        if data is not None:
+            self._data = self.pad_data(data)
 
     def _init_shape(self, fill_shape=True):
         shape = ()
@@ -740,6 +767,22 @@ class ScalarField(StructuredData):
         kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        ScalarField
+            Detached variable.
+
+        """
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
+
+        return super().as_parameter(*args, **kwargs)
 
     @property
     def time_dependent(self):
@@ -1052,9 +1095,9 @@ class VectorField(ScalarField):
         super().__init__(**kwargs)
 
     def _init_shape(self, fill_shape=True):
-        shape = (self._dim,)
-        extended_shape = (self._dim,)
-        inner = (slice(0, None),)
+        shape = ()
+        extended_shape = ()
+        inner = ()
 
         if self._time_dependent:
             shape += (self.time.num,)
@@ -1065,6 +1108,10 @@ class VectorField(ScalarField):
             shape += (self.slow_time.num,)
             extended_shape += (self.slow_time.extended_num,)
             inner += (self.slow_time.inner,)
+
+        shape += (self._dim,)
+        extended_shape += (self._dim,)
+        inner += (slice(0, None),)
 
         shape += self.space.shape
         extended_shape += self.space.extended_shape
@@ -1106,6 +1153,21 @@ class VectorField(ScalarField):
         kwargs['dim'] = kwargs.pop('dim', self.dim)
 
         return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        VectorField
+            Detached variable.
+
+        """
+        kwargs['dim'] = kwargs.pop('dim', self.dim)
+
+        return super().as_parameter(*args, **kwargs)
 
     @property
     def dim(self):
@@ -1254,6 +1316,21 @@ class Traces(StructuredData):
         kwargs['transducer_ids'] = kwargs.pop('transducer_ids', self.transducer_ids)
 
         return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        Traces
+            Detached variable.
+
+        """
+        kwargs['transducer_ids'] = kwargs.pop('transducer_ids', self.transducer_ids)
+
+        return super().as_parameter(*args, **kwargs)
 
     @property
     def transducer_ids(self):

@@ -386,8 +386,11 @@ class Tessera(RemoteBase):
         return state
 
     def __del__(self):
-        self.logger.debug('Garbage collected object %s' % self)
-        self.loop.run(self.state_changed, 'collected')
+        try:
+            self.logger.debug('Garbage collected object %s' % self)
+            self.loop.run(self.state_changed, 'collected')
+        except AttributeError:
+            pass
 
 
 class ParameterMixin:

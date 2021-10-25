@@ -616,7 +616,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.deallocate('buoy')
         self.dev_grid.deallocate('alpha', collect=True)
 
-        return await self.get_grad(wavelets, vp, rho, alpha)
+        return await self.get_grad(wavelets, vp, rho, alpha, **kwargs)
 
     # gradients
 

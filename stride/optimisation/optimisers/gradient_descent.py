@@ -48,7 +48,7 @@ class GradientDescent(LocalOptimiser):
             Updated variable.
 
         """
-        step_size = step_size or self.step_size
+        step_size = self.step_size if step_size is None else step_size
 
         runtime = mosaic.runtime()
         runtime.logger.info('Updating variable %s,' % self.variable.name)

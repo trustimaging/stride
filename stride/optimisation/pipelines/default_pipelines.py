@@ -74,7 +74,11 @@ class ProcessGlobalGradient(Pipeline):
         steps = steps or []
         steps.append('mask')
         steps.append('smooth_field')
-        steps.append('norm_field')
+
+        norm = kwargs.pop('norm', True)
+
+        if norm:
+            steps.append('norm_field')
 
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
