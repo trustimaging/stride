@@ -5,7 +5,7 @@
 # Stride - A (somewhat) general optimisation framework for medical ultrasound tomography
 
 [![Build Status](https://github.com/trustimaging/stride/workflows/CI/badge.svg)](https://github.com/trustimaging/stride/actions?query=workflow%3ACI)
-[![Documentation Status](https://readthedocs.org/projects/strideimaging/badge/?version=latest)](https://strideimaging.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/stridecodes/badge/?version=latest)](https://stridecodes.readthedocs.io/en/latest/?badge=latest)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/trustimaging/stride/HEAD)
 
 
@@ -16,7 +16,7 @@ can run seamlessly on a Jupyter notebook, a multi-node CPU cluster or a DGX stat
 Stride provides end-to-end definition of the imaging process using state-of-the-art reconstruction algorithms, 
 and the flexibility to (re)define every step of the optimisation.
 
-- [Documentation](https://strideimaging.readthedocs.io/)
+- [Documentation](https://stridecodes.readthedocs.io/)
 
 
 ## Quickstart
@@ -74,7 +74,7 @@ You can also open our interactive Jupyter notebooks in the public [binder](https
 
 ## Documentation
 
-The documentation for Stride is available online [here](https://strideimaging.readthedocs.io/).
+The documentation for Stride is available online [here](https://stridecodes.readthedocs.io/).
 
 You can also build and access the documentation by running:
 
