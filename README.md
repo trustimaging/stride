@@ -110,8 +110,6 @@ mrun python 02_script_inverse.py
 
 You can also open our interactive Jupyter notebooks in the public [binder](https://mybinder.org/v2/gh/trustimaging/stride/HEAD).
 
-
-
 ## Additional packages
 
 To access the 3D visualisation capabilities, we also recommend installing MayaVi:
