@@ -25,7 +25,7 @@ async def main(runtime):
 
     start = 0.  # [s], start = 0.
     step = 7.855e-8  # [s], step = 0.08e-6
-    end = 1.e-04 # [s]
+    end = 1.e-04/2 # [s]
     # num = int(end/step)+1 # [time_points], num = 2500
 
     time = Time(start=start,
@@ -107,7 +107,7 @@ async def main(runtime):
         data_stride /= np.max(np.abs(data_stride))
 
         shot.observed.data[:] = data_stride
-        _, axis = shot.observed.plot(plot=False, axis=axis, skip=5,
+        _, axis = shot.observed.plot(plot=False, skip=5,
                                      colour=config['colour'], line_style=config['line_style'])
         legends[case] = lines.Line2D([0, 1], [1, 0], color=config['colour'], linestyle=config['line_style'])
 

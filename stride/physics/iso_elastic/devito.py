@@ -190,14 +190,14 @@ class IsoElasticDevito(ProblemTypeBase):
             eqs = [devito.Eq(damp, 1.0)]
             padsizes = [self.space.absorbing for _ in range(self.dev_grid.devito_grid.dim)]
             for (nbl, nbr), d in zip(padsizes, damp.dimensions):
-                dampcoeff = 0.2763102111592855*self.space.spacing[0]
+                dampcoeff = 0.008635*self.space.spacing[0] # 0.2763102111592855 (water_example)
                 # left
                 dim_l = devito.SubDimension.left(name='abc_%s_l' % d.name, parent=d, thickness=nbl)
                 pos = devito.Abs((nbl - (dim_l - d.symbolic_min) + 1) / float(nbl))
                 val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
                 eqs += [devito.Inc(damp.subs({d: dim_l}), val / d.spacing)]
                 # right
-                dampcoeff = 0.2763102111592855*self.space.spacing[0]
+                dampcoeff = 0.008635*self.space.spacing[0] # 0.2763102111592855 (water_example)
                 dim_r = devito.SubDimension.right(name='abc_%s_r' % d.name, parent=d, thickness=nbr)
                 pos = devito.Abs((nbr - (d.symbolic_max - dim_r) + 1) / float(nbr))
                 val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
