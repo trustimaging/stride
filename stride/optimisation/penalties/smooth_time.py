@@ -3,7 +3,8 @@ import numpy as np
 
 import mosaic
 
-from ...core import Operator, Scalar
+from ...core import Operator
+from ...problem import Scalar
 
 
 __all__ = ['SmoothTime']
@@ -29,7 +30,8 @@ class SmoothTime(Operator):
         self.residual = grad
 
         fun_data = 0.5 * np.sum(grad.extended_data ** 2)
-        fun = Scalar(fun_data)
+        fun = Scalar()
+        fun.data[:] = fun_data
 
         return fun
 

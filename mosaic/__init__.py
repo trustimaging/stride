@@ -7,7 +7,7 @@ from .core import tessera
 from .runtime import Head, Monitor, Node, Worker
 from .utils.subprocess import subprocess
 from .utils import logger as mlogger
-from .utils import gather
+from .utils import gather, default_logger
 from .file_manipulation import yaml, h5
 
 
@@ -170,6 +170,22 @@ def runtime():
     global _runtime
 
     return _runtime
+
+
+def logger():
+    """
+    Access the runtime logger.
+
+    Returns
+    -------
+
+    """
+    global _runtime
+
+    if _runtime is not None:
+        return _runtime.logger
+    else:
+        return default_logger
 
 
 def stop():

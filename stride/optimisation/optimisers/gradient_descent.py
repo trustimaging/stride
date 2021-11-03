@@ -50,8 +50,8 @@ class GradientDescent(LocalOptimiser):
         """
         step_size = self.step_size if step_size is None else step_size
 
-        runtime = mosaic.runtime()
-        runtime.logger.info('Updating variable %s,' % self.variable.name)
+        logger = mosaic.logger()
+        logger.info('Updating variable %s,' % self.variable.name)
 
         if direction is None:
             grad = self.variable.process_grad(**kwargs)
@@ -59,8 +59,8 @@ class GradientDescent(LocalOptimiser):
             min_dir = np.min(grad.extended_data)
             max_dir = np.max(grad.extended_data)
 
-            runtime.logger.info('\t direction before processing in range [%e, %e]' %
-                                (min_dir, max_dir))
+            logger.info('\t direction before processing in range [%e, %e]' %
+                        (min_dir, max_dir))
 
             direction = await self._process_grad(grad, **kwargs)
 
@@ -70,10 +70,10 @@ class GradientDescent(LocalOptimiser):
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
-        runtime.logger.info('\t direction after processing in range [%e, %e]' %
-                            (min_dir, max_dir))
-        runtime.logger.info('\t variable range before update [%e, %e]' %
-                            (min_var, max_var))
+        logger.info('\t direction after processing in range [%e, %e]' %
+                    (min_dir, max_dir))
+        logger.info('\t variable range before update [%e, %e]' %
+                    (min_var, max_var))
 
         self.variable -= step_size*direction
 
@@ -83,8 +83,8 @@ class GradientDescent(LocalOptimiser):
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
-        runtime.logger.info('\t variable range after update [%e, %e]' %
-                            (min_var, max_var))
+        logger.info('\t variable range after update [%e, %e]' %
+                    (min_var, max_var))
 
         self.variable.release_grad()
 

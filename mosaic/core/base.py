@@ -44,7 +44,10 @@ class Base:
 
     @property
     def logger(self):
-        return self.runtime.logger
+        if self.runtime:
+            return self.runtime.logger
+        else:
+            return mosaic.logger()
 
 
 class CMDBase(Base):

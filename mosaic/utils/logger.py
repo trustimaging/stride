@@ -6,7 +6,7 @@ from cached_property import cached_property
 import mosaic
 
 
-__all__ = ['LoggerManager', 'clear_logger']
+__all__ = ['LoggerManager', 'clear_logger', 'default_logger']
 
 
 log_level = 'info'
@@ -58,7 +58,10 @@ class LocalLogger(LoggerBase):
 
     def write(self, buf, uid=None):
         if uid is None:
-            uid = self.runtime.uid
+            if self.runtime is not None:
+                uid = self.runtime.uid
+            else:
+                uid = ''
         uid = uid.upper()
 
         temp_linebuf = self._linebuf + buf
@@ -170,6 +173,42 @@ class LoggerManager:
         self._log_level = 'info'
         self._log_location = None
 
+    def set_default(self, format='interactive'):
+        """
+        Set up default loggers.
+
+        Returns
+        -------
+
+        """
+        self._log_location = 'local'
+
+        sys.stdout = self._stdout
+        sys.stderr = self._stderr
+
+        handler = logging.StreamHandler(self._stdout)
+        handler.setFormatter(CustomFormatter('%(message)s'))
+
+        logger = logging.getLogger('mosaic')
+        logger.propagate = False
+        if logger.hasHandlers():
+            logger.handlers.clear()
+
+        logger.addHandler(handler)
+
+        self._info_logger = LocalLogger(logger, log_level=_local_log_levels['info'])
+        self._debug_logger = LocalLogger(logger, log_level=_local_log_levels['debug'])
+        self._error_logger = LocalLogger(logger, log_level=_local_log_levels['error'])
+        self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
+
+        sys.stdout.flush()
+
+        logging.basicConfig(
+            stream=self._info_logger,
+            level=_local_log_levels[log_level],
+            format='%(message)s',
+        )
+
     def set_local(self, format='remote'):
         """
         Set up local loggers.
@@ -202,8 +241,6 @@ class LoggerManager:
         self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
 
         sys.stdout.flush()
-        # sys.stdout = self._info_logger
-        # sys.stderr = self._error_logger
 
         logging.basicConfig(
             # stream=self._info_logger,
@@ -400,3 +437,7 @@ def clear_logger():
 
     sys.stdout = _stdout
     sys.stderr = _stderr
+
+
+default_logger = LoggerManager()
+default_logger.set_default()

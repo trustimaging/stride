@@ -3,7 +3,8 @@ import numpy as np
 
 import mosaic
 
-from ...core import Operator, Scalar
+from ...core import Operator
+from ...problem import Scalar
 
 
 __all__ = ['Smooth']
@@ -23,7 +24,8 @@ class Smooth(Operator):
 
     async def forward(self, variable, **kwargs):
         fun_data = 0.5 * np.sum(variable.extended_data ** 2)
-        fun = Scalar(fun_data)
+        fun = Scalar()
+        fun.data[:] = fun_data
 
         return fun
 

@@ -37,7 +37,7 @@ setup(
     author_email='c.cueto@imperial.ac.uk',
     license='',
     python_requires=">=3.7",
-    packages=find_packages(exclude=['docs', 'tests', 'examples']),
+    packages=find_packages(exclude=['docs', 'tests']),
     package_data={},
     include_package_data=True,
     install_requires=requirements,

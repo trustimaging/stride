@@ -706,14 +706,14 @@ class OperatorDevito:
         devito_config = kwargs.pop('devito_config', {})
         default_config.update(devito_config)
 
-        runtime = mosaic.runtime()
-        runtime.logger.info('Operator `%s` instance configuration:' % self.name)
+        logger = mosaic.logger()
+        logger.info('Operator `%s` instance configuration:' % self.name)
 
         for key, value in default_config.items():
             if key == 'name':
                 continue
 
-            runtime.logger.info('\t * %s=%s' % (key, value))
+            logger.info('\t * %s=%s' % (key, value))
 
         self.devito_operator = devito.Operator(op, **default_config)
 
@@ -774,11 +774,11 @@ def config_devito(**kwargs):
     devito_config = kwargs.pop('devito_config', {})
     default_config.update(devito_config)
 
-    runtime = mosaic.runtime()
-    runtime.logger.info('Default Devito configuration:')
+    logger = mosaic.logger()
+    logger.info('Default Devito configuration:')
 
     for key, value in default_config.items():
-        runtime.logger.info('\t * %s=%s' % (key, value))
+        logger.info('\t * %s=%s' % (key, value))
 
         devito.parameters.configuration[key] = value
 
@@ -793,27 +793,27 @@ def config_devito(**kwargs):
             super().__init__()
 
         def filter(self, record):
-            _runtime = mosaic.runtime()
+            _logger = mosaic.logger()
 
             if record.levelno == devito.logger.PERF:
-                _runtime.logger.info(record.msg)
+                _logger.info(record.msg)
 
             elif record.levelno == logging.ERROR:
-                _runtime.logger.error(record.msg)
+                _logger.error(record.msg)
 
             elif record.levelno == logging.WARNING:
-                _runtime.logger.warning(record.msg)
+                _logger.warning(record.msg)
 
             elif record.levelno == logging.DEBUG:
-                _runtime.logger.debug(record.msg)
+                _logger.debug(record.msg)
 
             else:
-                _runtime.logger.info(record.msg)
+                _logger.info(record.msg)
 
             return False
 
     devito_logger.addFilter(RerouteFilter())
 
     runtime = mosaic.runtime()
-    if runtime.mode == 'local':
+    if runtime is not None and runtime.mode == 'local':
         devito_logger.propagate = False
