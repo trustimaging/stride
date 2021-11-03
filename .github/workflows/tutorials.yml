@@ -1,4 +1,4 @@
-name: CI
+name: Tutorials
 
 on:
   # Trigger the workflow on push or pull request,
@@ -61,6 +61,6 @@ jobs:
     - name: Tutorials
       shell: bash -l {0}
       run: |
-        cd stride
-        py.test -p no:python --nbval-lax examples/tutorials/
-        mrun -nw 1 -nth 2 python examples/tutorials/07_script_running.py
+        cd stride/examples/tutorials/
+        py.test -p no:python --nbval-lax
+        mrun -nw 1 -nth 2 python 07_script_running.py
