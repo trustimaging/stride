@@ -71,6 +71,7 @@ async def forward(problem, pde, *args, **kwargs):
     -------
 
     """
+    logger = mosaic.logger()
     runtime = mosaic.runtime()
 
     dump = kwargs.pop('dump', True)
@@ -87,7 +88,7 @@ async def forward(problem, pde, *args, **kwargs):
     if shot_ids is None:
         shot_ids = problem.acquisitions.remaining_shot_ids
         if not len(shot_ids):
-            runtime.logger.warning('No need to run forward, observed already exists')
+            logger.warning('No need to run forward, observed already exists')
             return
 
     if not isinstance(shot_ids, list):
@@ -95,8 +96,8 @@ async def forward(problem, pde, *args, **kwargs):
 
     @runtime.async_for(shot_ids)
     async def loop(worker, shot_id):
-        runtime.logger.info('\n')
-        runtime.logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
+        logger.info('\n')
+        logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
@@ -104,7 +105,7 @@ async def forward(problem, pde, *args, **kwargs):
                            problem=sub_problem,
                            runtime=worker, **kwargs).result()
 
-        runtime.logger.info('Shot %d retrieved' % sub_problem.shot_id)
+        logger.info('Shot %d retrieved' % sub_problem.shot_id)
 
         shot = problem.acquisitions.get(shot_id)
         shot.observed.data[:] = traces.data
@@ -113,7 +114,7 @@ async def forward(problem, pde, *args, **kwargs):
             shot.append_observed(path=problem.output_folder,
                                  project_name=problem.name)
 
-            runtime.logger.info('Appended traces for shot %d to observed file' % sub_problem.shot_id)
+            logger.info('Appended traces for shot %d to observed file' % sub_problem.shot_id)
 
         if deallocate is True:
             shot.observed.deallocate()
@@ -160,6 +161,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     -------
 
     """
+    logger = mosaic.logger()
     runtime = mosaic.runtime()
 
     block = optimisation_loop.current_block
@@ -179,10 +181,10 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                           len=runtime.num_workers)
 
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
-        runtime.logger.info('Starting iteration %d (out of %d), '
-                            'block %d (out of %d)' %
-                            (iteration.id, block.num_iterations, block.id,
-                             optimisation_loop.num_blocks))
+        logger.info('Starting iteration %d (out of %d), '
+                    'block %d (out of %d)' %
+                    (iteration.id, block.num_iterations, block.id,
+                     optimisation_loop.num_blocks))
 
         if dump and block.restart and not optimisation_loop.started:
             if iteration.abs_id-1 >= 0:
@@ -201,8 +203,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         @runtime.async_for(shot_ids)
         async def loop(worker, shot_id):
-            runtime.logger.info('\n')
-            runtime.logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
+            logger.info('\n')
+            logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
 
             sub_problem = problem.sub_problem(shot_id)
             wavelets = sub_problem.shot.wavelets
@@ -216,11 +218,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                              problem=sub_problem, runtime=worker, **kwargs).result()
 
             iteration.add_fun(fun)
-            runtime.logger.info('Functional value for shot %d: %s' % (shot_id, fun))
+            logger.info('Functional value for shot %d: %s' % (shot_id, fun))
 
             await fun.adjoint(**kwargs)
 
-            runtime.logger.info('Retrieved gradient for shot %d' % sub_problem.shot_id)
+            logger.info('Retrieved gradient for shot %d' % sub_problem.shot_id)
 
         await loop
 
@@ -231,8 +233,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                     project_name=problem.name,
                                     version=iteration.abs_id)
 
-        runtime.logger.info('Done iteration %d (out of %d), '
-                            'block %d (out of %d) - Total loss %e' %
-                            (iteration.id, block.num_iterations, block.id,
-                             optimisation_loop.num_blocks, iteration.fun_value))
-        runtime.logger.info('====================================================================')
+        logger.info('Done iteration %d (out of %d), '
+                    'block %d (out of %d) - Total loss %e' %
+                    (iteration.id, block.num_iterations, block.id,
+                     optimisation_loop.num_blocks, iteration.fun_value))
+        logger.info('====================================================================')

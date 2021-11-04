@@ -9,7 +9,7 @@ from mosaic.core.base import CMDBase
 from mosaic.core import TaskProxy, TaskOutput, TaskDone
 
 
-__all__ = ['Variable', 'Operator', 'Scalar']
+__all__ = ['Variable', 'Operator']
 
 
 async def _maybe_sum(a, b):
@@ -264,7 +264,7 @@ class Variable:
 
     def __init__(self, *args, **kwargs):
         cls = self.__class__
-        name = kwargs.pop('name', None)
+        name = kwargs.pop('name', cls.__name__.lower())
         self._init_name = name
 
         runtime = mosaic.runtime()
@@ -306,7 +306,7 @@ class Variable:
 
         """
         # init grad
-        grad = grad or Scalar(1.0)
+        grad = grad or 1.0
 
         # no need to run graph
         if self.prev_op is None:
@@ -432,6 +432,13 @@ class Variable:
             return self.__class__.parameter(*args, **kwargs)
         else:
             return self.__class__(*args, **kwargs)
+
+    def alike(self, *args, **kwargs):
+        """
+        Alias for a copy.
+
+        """
+        return self.copy(*args, **kwargs)
 
     def clear_grad(self):
         """
@@ -695,86 +702,3 @@ class Operator:
 
     def __repr__(self):
         return self.name
-
-
-class Scalar(float, Variable):
-    """
-    Variable version of a Python float.
-
-    """
-
-    def __new__(cls, value, *args, **kwargs):
-        return float.__new__(cls, value)
-
-    def __init__(self, value, *args, **kwargs):
-        float.__init__(self)
-        Variable.__init__(self, *args, **kwargs)
-
-    def clear_grad(self):
-        self.grad = 0
-
-    def process_grad(self):
-        return self.grad
-
-    def __add__(self, other):
-        res = super().__add__(other)
-        res = Scalar(res)
-        res.needs_grad = self.needs_grad
-
-        return res
-
-    def __sub__(self, other):
-        res = super().__sub__(other)
-        res = Scalar(res)
-        res.needs_grad = self.needs_grad
-
-        return res
-
-    def __mul__(self, other):
-        res = super().__mul__(other)
-        res = Scalar(res)
-        res.needs_grad = self.needs_grad
-
-        return res
-
-    def __pow__(self, power, modulo=None):
-        res = super().__pow__(power)
-        res = Scalar(res)
-        res.needs_grad = self.needs_grad
-
-        return res
-
-    def __truediv__(self, other):
-        res = super().__truediv__(other)
-        res = Scalar(res)
-        res.needs_grad = self.needs_grad
-
-        return res
-
-    def __floordiv__(self, other):
-        res = super().__floordiv__(other)
-        res = Scalar(res)
-        res.needs_grad = self.needs_grad
-
-        return res
-
-    def __iadd__(self, other):
-        raise RuntimeError('Cannot operate in place with Scalar')
-
-    def __isub__(self, other):
-        raise RuntimeError('Cannot operate in place with Scalar')
-
-    def __imul__(self, other):
-        raise RuntimeError('Cannot operate in place with Scalar')
-
-    def __ipow__(self, power, modulo=None):
-        raise RuntimeError('Cannot operate in place with Scalar')
-
-    def __itruediv__(self, other):
-        raise RuntimeError('Cannot operate in place with Scalar')
-
-    def __ifloordiv__(self, other):
-        raise RuntimeError('Cannot operate in place with Scalar')
-
-    def __repr__(self):
-        return '%s(%s)' % (self.name, float.__repr__(self))

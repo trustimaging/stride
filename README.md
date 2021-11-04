@@ -1,8 +1,9 @@
 
+<div align="center">
+<img src="docs/source/_static/stride_logo.png" width="600" style="max-width:100%; margin:0 auto; display:block;" alt="logo"></img>
+</div>
 
-<img src="docs/source/_static/stride_logo.png" width="600" style="max-width:100%; margin:0 auto; display:block;">
-
-# Stride - A (somewhat) general optimisation framework for medical ultrasound tomography
+# Stride - A modelling and optimisation framework for medical ultrasound
 
 [![Build Status](https://github.com/trustimaging/stride/workflows/CI/badge.svg)](https://github.com/trustimaging/stride/actions?query=workflow%3ACI)
 [![Documentation Status](https://readthedocs.org/projects/stridecodes/badge/?version=latest)](https://stridecodes.readthedocs.io/en/latest/?badge=latest)
@@ -10,18 +11,53 @@
 
 
 
-Stride is an open-source library for medical ultrasound modelling and tomography. 
-It lets users easily prototype medical imaging algorithms with only a few lines of Python code that 
-can run seamlessly on a Jupyter notebook, a multi-node CPU cluster or a DGX station with production-grade performance. 
-Stride provides end-to-end definition of the imaging process using state-of-the-art reconstruction algorithms, 
-and the flexibility to (re)define every step of the optimisation.
+[Stride](https://www.stride.codes) is an open-source library for ultrasound modelling and tomography that provides flexibility and scalability 
+together with production-grade performance.
 
-- [Documentation](https://stridecodes.readthedocs.io/)
+[**Quickstart**](#quickstart)
+| [**Tutorials**](https://github.com/trustimaging/stride/tree/master/examples/tutorials)
+| [**Other examples**](#running-the-examples)
+| [**Additional packages**](#additional-packages)
+| [**GPU support**](#gpu-support)
+| [**Documentation**](https://stridecodes.readthedocs.io/en/latest/)
+
+
+## Key features
+
+#### High-performance modelling
+
+We provide high-performance, finite-difference, time-domain solvers for modelling ultrasound propagation in the human body, 
+including:
+
+- Variable speed of sound, density, and attenuation.
+- Off-grid sources and receivers.
+- A variety of absorbing boundary conditions.
+- Targeting both CPUs and GPUs with the same code.
+
+#### Intuitive inversion algorithms
+
+Stride also lets users easily prototype medical tomography algorithms with only a few lines of Python code by providing:
+ 
+- Composable, automatic gradient calculations. 
+- State-of-the-art reconstruction algorithms. 
+- The flexibility to (re)define every step of the optimisation.
+
+#### Flexibility
+
+Solvers in Stride are written in [Devito](https://www.devitoproject.org/), using math-like symbolic expressions. This means
+that anyone can easily add new physics to Stride, which will also run on both CPUs and GPUs.
+
+#### Scalability
+
+Stride can scale seamlessly from a Jupyter notebook in a local workstation, to a multi-node CPU cluster or a GPU cluster 
+with production-grade performance.
 
 
 ## Quickstart
 
-The recommended way to install Stride is through Anaconda's package manager (version >=4.9), which can be downloaded
+Jump right in using a Jupyter notebook directly in your browser, using [binder](https://mybinder.org/v2/gh/trustimaging/stride/HEAD).
+
+Otherwise, the recommended way to install Stride is through Anaconda's package manager (version >=4.9), which can be downloaded
 in [Anaconda](https://www.continuum.io/downloads) or [Miniconda](https://conda.io/miniconda.html).
 A Python version above 3.7 is recommended to run Stride.
 
@@ -38,20 +74,23 @@ pip install -e .
 
 ## Running the examples
 
-The easiest way to start working with Stride is to open the Jupyter notebooks under ``examples/stride/breast2D`` 
-or ``examples/stride/breast3D``. 
+The easiest way to start working with Stride is to open the Jupyter notebooks under 
+[examples/tutorials](https://github.com/trustimaging/stride/tree/master/examples/tutorials). 
 
-You can also execute the corresponding Python scrips from any terminal. To perform a forward run on the breast2D example:
+You can also check fully worked examples of breast imaging in 2D and 3D under 
+[examples/breast2D](https://github.com/trustimaging/stride/tree/master/examples/examples/breast2D) and 
+[examples/breast2D](https://github.com/trustimaging/stride/tree/master/examples/examples/breast3D).
+To perform a forward run on the breast2D example, you can execute from any terminal:
 
 ```sh
-cd examples/stride/breast2D
-mrun python 03_script_foward.py
+cd examples/examples/breast2D
+mrun python 01_script_foward.py
 ```
 
 You can control the number of workers and threads per worker by running:
 
 ```sh
-mrun -nw 2 -nth 5 python 03_script_foward.py
+mrun -nw 2 -nth 5 python 01_script_foward.py
 ```
 
 You can configure the devito solvers using environment variables. For example, to run the same code on a GPU with OpenACC you can:
@@ -60,32 +99,16 @@ You can configure the devito solvers using environment variables. For example, t
 export DEVITO_COMPILER=pgcc
 export DEVITO_LANGUAGE=openacc
 export DEVITO_PLATFORM=nvidiaX
-mrun -nw 1 -nth 5 python 03_script_foward.py
+mrun -nw 1 -nth 5 python 01_script_foward.py
 ```
 
-Once you've run anastasio2D forward, you can run the corresponding inverse problem by doing:
+Once you've run it forward, you can run the corresponding inverse problem by doing:
 
 ```sh
-mrun python 04_script_inverse.py
+mrun python 02_script_inverse.py
 ```
 
 You can also open our interactive Jupyter notebooks in the public [binder](https://mybinder.org/v2/gh/trustimaging/stride/HEAD).
-
-
-## Documentation
-
-The documentation for Stride is available online [here](https://stridecodes.readthedocs.io/).
-
-You can also build and access the documentation by running:
-
-```sh
-cd docs
-make html
-```
-
-and opening the generated ``build/index.html`` in your browser.
-
-
 
 ## Additional packages
 
@@ -103,6 +126,13 @@ conda install -c conda-forge notebook
 
 
 ## GPU support
+
+To run a solver using the GPU, simply add the option ``platform="nvidia-acc"``:
+
+```python
+pde = IsoAcousticDevito(...)
+await pde(..., platform="nvidia-acc")
+```
 
 The Devito library uses OpenACC to generate GPU code. The recommended way to access the necessary 
 compilers is to install the [NVIDIA HPC SDK](https://developer.nvidia.com/nvidia-hpc-sdk-downloads).
@@ -124,3 +154,31 @@ export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/compilers/lib/:$LD_
 export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/bin/:$PATH
 export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/lib/:$LD_LIBRARY_PATH
 ```
+
+## Citing Stride
+
+If you use Stride in your research, please cite our [paper](https://arxiv.org/abs/2110.03345):
+
+```
+@misc{cueto2021-stride,
+	title          =    { Stride: a flexible platform for high-performance ultrasound computed tomography  },
+	author         =    { Carlos Cueto and Oscar Bates and George Strong and Javier Cudeiro and Fabio Luporini
+				and Oscar Calderon Agudo and Gerard Gorman and Lluis Guasch and Meng-Xing Tang },
+	year           =    { 2021 },
+	eprint         =    { 2110.03345 },
+	archivePrefix  =    { arXiv },
+	primaryClass   =    { physics.med-ph },
+	url            =    { https://arxiv.org/abs/2110.03345 }
+}
+```
+
+
+## Contact us
+
+Join the [conversation](https://join.slack.com/t/stridecodes/shared_invite/zt-xr1dlqv7-Lesu9nFYOqF~AjA6VPUdhw) 
+to share your projects, contribute, and get your questions answered.
+
+
+## Documentation
+
+For details about the Stride API, check our [latest documentation](https://stridecodes.readthedocs.io/en/latest/).

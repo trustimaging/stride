@@ -1,4 +1,4 @@
-name: CI
+name: Tutorials
 
 on:
   # Trigger the workflow on push or pull request,
@@ -12,7 +12,7 @@ on:
 
 jobs:
   examples:
-    name: Examples
+    name: Tutorials
     runs-on: ubuntu-latest
 
     env:
@@ -58,15 +58,9 @@ jobs:
         pip uninstall -y devito
         pip install -e .
 
-    - name: Homogeneous examples
+    - name: Tutorials
       shell: bash -l {0}
       run: |
-        cd stride
-        mrun -nw 1 -nth 2 python examples/examples/homogeneous/forward_2D.py
-        mrun -nw 1 -nth 2 python examples/examples/homogeneous/forward_3D.py
-    - name: Breast 2D
-      shell: bash -l {0}
-      run: |
-        cd stride
-        mrun -nw 1 -nth 2 python examples/examples/breast2D/01_script_forward.py
-        mrun -nw 1 -nth 2 python examples/examples/breast2D/02_script_inverse.py
+        cd stride/examples/tutorials/
+        mrun -nw 1 -nth 2 python 07_script_running.py
+        py.test -p no:python --nbval-lax

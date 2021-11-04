@@ -806,7 +806,7 @@ class ArrayProxy(CMDBase):
 
         __dict__ = {}
         for method in cls_magic_methods:
-            method_getter = self._get_method_getter(method[0])
+            method_getter = self._get_magic_method_getter(method[0])
             method_getter = functools.wraps(method[1])(method_getter)
 
             __dict__[method[0]] = method_getter
@@ -854,8 +854,7 @@ class ArrayProxy(CMDBase):
         AwaitableOnly
 
         """
-        attrs = [each._get_remote_attr(item) for each in self._proxies]
-        return asyncio.gather(*attrs)
+        return self._get_remote_attr(item)
 
     def set_attr(self, item, value):
         """
@@ -870,7 +869,7 @@ class ArrayProxy(CMDBase):
         -------
 
         """
-        return self._get_remote_method('set_attr')(item, value)
+        return self._set_remote_attr(item, value)
 
     def _get_remote_method(self, item):
         # TODO There should be an equivalent Task array proxy
@@ -882,6 +881,8 @@ class ArrayProxy(CMDBase):
                 task_proxies = []
                 for proxy in self._proxies:
                     task_proxies.append(proxy[item](*args, **kwargs))
+
+                task_proxies = asyncio.gather(*task_proxies)
 
             else:
                 task_proxies = None
@@ -901,16 +902,33 @@ class ArrayProxy(CMDBase):
         async def remote_attr():
             await self._init_future
 
-            attrs = [each.cmd_recv_async(method='get_attr', item=item) for each in self._proxies]
+            attrs = [each.cmd_recv_async(method='get_attr', item=item)
+                     for each in self._proxies]
 
             return await asyncio.gather(*attrs)
 
         return AwaitableOnly(remote_attr)
 
-    @staticmethod
-    def _get_method_getter(method):
+    def _set_remote_attr(self, item, value):
+        async def remote_attr():
+            await self._init_future
+
+            attrs = [each.cmd_recv_async(method='set_attr', item=item, value=value)
+                     for each in self._proxies]
+
+            return await asyncio.gather(*attrs)
+
+        return remote_attr()
+
+    def _get_method_getter(self, method):
+        def method_getter(*args, **kwargs):
+            return self._get_remote_method(method)(*args, **kwargs)
+
+        return method_getter
+
+    def _get_magic_method_getter(self, method):
         def method_getter(_self, *args, **kwargs):
-            return _self._get_remote_method(method)(*args, **kwargs)
+            return self._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 

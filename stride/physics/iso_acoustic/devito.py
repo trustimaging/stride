@@ -53,19 +53,23 @@ class IsoAcousticDevito(ProblemTypeBase):
             Attenuation coefficient of the medium, defaults to 0, in [Np/m].
         problem : Problem
             Sub-problem being solved by the PDE.
-        save_wavefield : bool or int, optional
+        save_wavefield : bool, optional
             Whether or not to solve the forward wavefield, defaults to True when
-            a gradient is expected, and to False otherwise. An integer number N can
-            also be provided, in which case the last N timesteps of the wavefield
-            will be saved.
+            a gradient is expected, and to False otherwise.
+        save_bounds : tuple of int, optional
+            If saving the wavefield, specify the ``(min timestep, max timestep)``
+            where the wavefield should be saved
+        save_undersampling : int, optional
+            Amount of undersampling in time when saving the forward wavefield. If not given,
+            it is calculated given the bandwidth.
         boundary_type : str, optional
             Type of boundary for the wave equation (``sponge_boundary_2`` or
             ``complex_frequency_shift_PML_2``), defaults to ``sponge_boundary_2``.
             Note that ``complex_frequency_shift_PML_2`` boundaries have lower OT4 stability
             limit than other boundaries.
         interpolation_type : str, optional
-            Type of source/receiver interpolation (``linear`` or ``hicks``), defaults
-            to ``linear``.
+            Type of source/receiver interpolation (``linear`` for bi-/tri-linear or ``hicks`` for sinc
+            interpolation), defaults to ``linear``.
         attenuation_power : int, optional
             Power of the attenuation law if attenuation is given (``0`` or ``2``),
             defaults to ``0``.
@@ -75,9 +79,13 @@ class IsoAcousticDevito(ProblemTypeBase):
         kernel : str, optional
             Type of time kernel to use (``OT2`` for 2nd order in time or ``OT4`` for 4th
             order in time). If not given, it is automatically decided given the time spacing.
-        undersampling : int, optional
-            Amount of undersampling in time when saving the forward wavefield. If not given,
-            it is calculated given the bandwidth.
+        platform : str, optional
+            Platform on which to run the operator, ``None`` to run on the CPU or ``nvidia-acc`` to run on
+            the GPU with OpenACC. Defaults to ``None``.
+        devito_config : dict, optional
+            Additional keyword arguments to configure Devito before operator generation.
+        devito_args : dict, optional
+            Additional keyword arguments used when calling the generated operator.
 
 
     """
@@ -152,9 +160,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         boundary_type : str, optional
             Type of boundary for the wave equation (``sponge_boundary_2`` or
             ``complex_frequency_shift_PML_2``), defaults to ``sponge_boundary_2``.
+            Note that ``complex_frequency_shift_PML_2`` boundaries have lower OT4 stability
+            limit than other boundaries.
         interpolation_type : str, optional
-            Type of source/receiver interpolation (``linear`` or ``hicks``), defaults
-            to ``linear``.
+            Type of source/receiver interpolation (``linear`` for bi-/tri-linear or ``hicks`` for sinc
+            interpolation), defaults to ``linear``.
         attenuation_power : int, optional
             Power of the attenuation law if attenuation is given (``0`` or ``2``),
             defaults to ``0``.
@@ -164,13 +174,19 @@ class IsoAcousticDevito(ProblemTypeBase):
         kernel : str, optional
             Type of time kernel to use (``OT2`` for 2nd order in time or ``OT4`` for 4th
             order in time). If not given, it is automatically decided given the time spacing.
+        platform : str, optional
+            Platform on which to run the operator, ``None`` to run on the CPU or ``nvidia-acc`` to run on
+            the GPU with OpenACC. Defaults to ``None``.
+        devito_config : dict, optional
+            Additional keyword arguments to configure Devito before operator generation.
+        devito_args : dict, optional
+            Additional keyword arguments used when calling the generated operator.
 
 
         Returns
         -------
 
         """
-        runtime = mosaic.runtime()
         problem = kwargs.get('problem')
         shot = problem.shot
 
@@ -253,14 +269,14 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.inv_vp2.data_with_halo[:] = 1 / vp_with_halo**2
 
         if rho is not None:
-            runtime.logger.info('(ShotID %d) Using inhomogeneous density' % problem.shot_id)
+            self.logger.info('(ShotID %d) Using inhomogeneous density' % problem.shot_id)
 
             rho_with_halo = self.dev_grid.with_halo(rho.extended_data)
             self.dev_grid.vars.rho.data_with_halo[:] = rho_with_halo
             self.dev_grid.vars.buoy.data_with_halo[:] = 1 / rho_with_halo
 
         if alpha is not None:
-            runtime.logger.info('(ShotID %d) Using attenuation with power %d' % (problem.shot_id, self.attenuation_power))
+            self.logger.info('(ShotID %d) Using attenuation with power %d' % (problem.shot_id, self.attenuation_power))
 
             db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
 
@@ -825,14 +841,11 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.state_operator.devito_operator = None
             self.adjoint_operator.devito_operator = None
 
-        runtime = mosaic.runtime()
-        runtime.logger.info('(ShotID %d) Selected time stepping scheme %s' %
-                            (problem.shot_id, self.kernel,))
+        self.logger.info('(ShotID %d) Selected time stepping scheme %s' %
+                         (problem.shot_id, self.kernel,))
 
     def _check_conditions(self, wavelets, vp, rho=None, alpha=None,
                           preferred_kernel=None, preferred_undersampling=None, **kwargs):
-        runtime = mosaic.runtime()
-
         problem = kwargs.get('problem')
 
         # Get speed of sound bounds
@@ -845,15 +858,15 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self._bandwidth = (f_min, f_centre, f_max)
 
-        runtime.logger.info('(ShotID %d) Estimated bandwidth for the propagated '
-                            'wavelet %.3f-%.3f MHz' % (problem.shot_id, f_min / 1e6, f_max / 1e6))
+        self.logger.info('(ShotID %d) Estimated bandwidth for the propagated '
+                         'wavelet %.3f-%.3f MHz' % (problem.shot_id, f_min / 1e6, f_max / 1e6))
 
         # Check for dispersion
         if self.drp is True:
             self.drp = False
 
-            runtime.logger.warn('(ShotID %d) DRP weights are not implemented in this version of stride' %
-                                problem.shot_id)
+            self.logger.warn('(ShotID %d) DRP weights are not implemented in this version of stride' %
+                             problem.shot_id)
 
         h = max(*self.space.spacing)
 
@@ -864,13 +877,13 @@ class IsoAcousticDevito(ProblemTypeBase):
         h_max = wavelength / ppw_max
 
         if h > h_max:
-            runtime.logger.warn('(ShotID %d) Spatial grid spacing (%.3f mm | %.3f PPW) is '
-                                'higher than dispersion limit (%.3f mm | %.3f PPW)' %
-                                (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
+            self.logger.warn('(ShotID %d) Spatial grid spacing (%.3f mm | %.3f PPW) is '
+                             'higher than dispersion limit (%.3f mm | %.3f PPW)' %
+                             (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
         else:
-            runtime.logger.info('(ShotID %d) Spatial grid spacing (%.3f mm | %.3f PPW) is '
-                                'below dispersion limit (%.3f mm | %.3f PPW)' %
-                                (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
+            self.logger.info('(ShotID %d) Spatial grid spacing (%.3f mm | %.3f PPW) is '
+                             'below dispersion limit (%.3f mm | %.3f PPW)' %
+                             (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
 
         # Check for instability
         dt = self.time.step
@@ -882,24 +895,24 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         recompile = False
         if dt <= dt_max_OT2:
-            runtime.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
-                                'below OT2 limit (%.3f \u03BCs)' %
-                                (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
+            self.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
+                             'below OT2 limit (%.3f \u03BCs)' %
+                             (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
 
             selected_kernel = 'OT2'
 
         elif dt <= dt_max_OT4:
-            runtime.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
-                                'above OT2 limit (%.3f \u03BCs) and below OT4 limit (%.3f \u03BCs)'
-                                % (problem.shot_id, dt / 1e-6, crossing_factor,
-                                   dt_max_OT2 / 1e-6, dt_max_OT4 / 1e-6))
+            self.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
+                             'above OT2 limit (%.3f \u03BCs) and below OT4 limit (%.3f \u03BCs)'
+                             % (problem.shot_id, dt / 1e-6, crossing_factor,
+                                dt_max_OT2 / 1e-6, dt_max_OT4 / 1e-6))
 
             selected_kernel = 'OT4'
 
         else:
-            runtime.logger.warn('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
-                                'above OT4 limit (%.3f \u03BCs)'
-                                % (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT4 / 1e-6))
+            self.logger.warn('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
+                             'above OT4 limit (%.3f \u03BCs)'
+                             % (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT4 / 1e-6))
 
             selected_kernel = 'OT4'
 
@@ -921,8 +934,8 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.undersampling_factor = undersampling
 
-        runtime.logger.info('(ShotID %d) Selected undersampling level %d' %
-                            (problem.shot_id, undersampling,))
+        self.logger.info('(ShotID %d) Selected undersampling level %d' %
+                         (problem.shot_id, undersampling,))
 
         # Maybe recompile
         if recompile:

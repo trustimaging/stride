@@ -22,7 +22,7 @@ from ..core import Variable
 from .. import plotting
 
 
-__all__ = ['Data', 'StructuredData', 'ScalarField', 'VectorField', 'Traces']
+__all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces']
 
 
 @mosaic.tessera
@@ -661,6 +661,14 @@ class StructuredData(Data):
             data = np.frombuffer(data, self.dtype).reshape(self.shape)
 
         self.extended_data[:] = self.pad_data(data)
+
+
+@mosaic.tessera
+class Scalar(StructuredData):
+
+    def __init__(self, **kwargs):
+        kwargs['shape'] = (1,)
+        super().__init__(**kwargs)
 
 
 @mosaic.tessera

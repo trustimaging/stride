@@ -96,7 +96,7 @@ class Saved:
     """
 
     def __init__(self, **kwargs):
-        self.name = kwargs.pop('name')
+        self.name = kwargs.pop('name', self.__class__.__name__.lower())
 
     def dump(self, *args, **kwargs):
         """

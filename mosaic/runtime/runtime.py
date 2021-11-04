@@ -285,6 +285,22 @@ class Runtime(BaseRPC):
         """
         return len(self._workers.keys())
 
+    @property
+    def nodes(self):
+        """
+        Nodes on the network.
+
+        """
+        return list(self._nodes.values())
+
+    @property
+    def workers(self):
+        """
+        Workers on the network.
+
+        """
+        return list(self._workers.values())
+
     # Interfaces to global objects
 
     def set_logger(self):

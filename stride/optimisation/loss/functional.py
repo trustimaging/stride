@@ -1,5 +1,5 @@
 
-from ...core import Scalar
+from ...problem import Scalar
 
 
 __all__ = ['FunctionalValue']
@@ -21,7 +21,8 @@ class FunctionalValue(Scalar):
     """
 
     def __init__(self, fun_value, shot_id, residuals=None, **kwargs):
-        super().__init__(fun_value, **kwargs)
+        super().__init__(**kwargs)
+        self.data[:] = fun_value
 
         self.shot_id = shot_id
         self.fun_value = fun_value
