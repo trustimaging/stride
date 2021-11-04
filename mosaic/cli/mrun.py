@@ -76,8 +76,18 @@ def go(cmd=None, **kwargs):
         host_name = get_hostname()
 
         sge_nodes = clusters.sge.node_list(host_name)
+        pbs_nodes = clusters.pbs.node_list(host_name)
+
+        print(host_name)
+        print('--------')
+        print(pbs_nodes)
+
         if sge_nodes is not None:
             node_list = sge_nodes
+            num_nodes = len(node_list)
+
+        elif pbs_nodes is not None:
+            node_list = pbs_nodes
             num_nodes = len(node_list)
 
         else:

@@ -54,12 +54,6 @@ def submission_script(name, num_nodes, num_workers, num_threads, node_memory):
     """
 
     return f"""#!/bin/bash -l
-
-name={name}
-num_nodes={num_nodes}
-num_workers_per_node={num_workers}
-num_threads_per_worker={num_threads}
-
 #PBS -N {name}
 #PBS -l walltime=48:00:00
 #PBS -l select={num_nodes+1}:ncpus={num_threads*num_workers}:mpiprocs={num_workers}:ompthreads={num_threads}:mem={node_memory}GB
@@ -67,6 +61,11 @@ num_threads_per_worker={num_threads}
 #PBS -o out.log
 #PBS -e err.log
 #PBS -q <queue_name>
+
+name={name}
+num_nodes={num_nodes}
+num_workers_per_node={num_workers}
+num_threads_per_worker={num_threads}
 
 # load any modules before activating the conda env
 # for example:
@@ -84,6 +83,7 @@ export OMP_NUM_THREADS=$num_threads_per_worker
 # export DEVITO_COMPILER=icc
 
 # run our job
+cd $PBS_O_WORKDIR
 ls -l
 date
 mrun -n $num_nodes -nw $num_workers_per_node -nth $num_threads_per_worker python forward.py &> $name-output.log
