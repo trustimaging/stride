@@ -1,6 +1,6 @@
 
 <div align="center">
-<img src="docs/source/_static/stride_logo.png" width="600" style="max-width:100%; margin:0 auto; display:block;" alt="logo"></img>
+<img src="docs/source/_static/stride_logo.png" width="400" style="max-width:100%; margin:0 auto; display:block;" alt="logo"></img>
 </div>
 
 # Stride - A modelling and optimisation framework for medical ultrasound
