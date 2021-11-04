@@ -60,7 +60,7 @@ jobs:
 
     - name: Tutorials
       shell: bash -l {0}
+      # py.test -p no:python --nbval-lax
       run: |
         cd stride/examples/tutorials/
-        py.test -p no:python --nbval-lax
         mrun -nw 1 -nth 2 python 07_script_running.py

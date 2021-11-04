@@ -34,7 +34,7 @@ from stride.utils import wavelets
 async def main(runtime):
     # Create the grid
     space = Space(shape=(356, 385), extra=(50, 50), absorbing=(40, 40), spacing=0.5e-3)
-    time = Time(0.0e-6, 0.08e-6, 2500)
+    time = Time(start=0.0, step=0.08e-6, num=2500)
 
     grid = Grid(space, time)
 
