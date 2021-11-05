@@ -27,7 +27,7 @@ def node_list(host_name):
         lines = file.readlines()
 
         for line in lines:
-            line = line.split(' ')
+            line = line.strip().split(' ')
 
             if line[0] != host_name:
                 pbs_list.append(line[0])
