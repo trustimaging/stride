@@ -38,6 +38,7 @@ def validate_address(address, port=False):
     else:
         error_msg = 'Address and port combination %s:%d is not valid' % (address, port)
 
+    # Is it an IP address?
     try:
         socket.inet_pton(socket.AF_INET, address)
     except AttributeError:
@@ -45,8 +46,12 @@ def validate_address(address, port=False):
             socket.inet_aton(address)
         except socket.error:
             raise ValueError(error_msg)
-    except socket.error:
-        raise ValueError(error_msg)
+    except (OSError, socket.error):
+        # Could it be a hostname then?
+        try:
+            socket.gethostbyname(address)
+        except socket.gaierror:
+            raise ValueError(error_msg)
 
     if port is not False:
         if type(port) is not int or not 1024 <= port <= 65535:
@@ -285,25 +290,32 @@ class InboundConnection(Connection):
 
         """
         if self._address is None:
-            address, port = '8.8.8.8', '53'
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            # Try using a hostname first
+            self._address = get_hostname()
+
             try:
-                # This command will raise an exception if there is no internet
-                # connection.
-                s.connect((address, int(port)))
-                self._address = s.getsockname()[0]
-            except OSError as e:
-                self._address = '127.0.0.1'
-                # [Errno 101] Network is unreachable
-                if e.errno == errno.ENETUNREACH:
-                    try:
-                        # try get node ip address from host name
-                        host_name = get_hostname()
-                        self._address = socket.gethostbyname(host_name)
-                    except Exception:
-                        pass
-            finally:
-                s.close()
+                validate_address(self._address)
+            except ValueError:
+                # Try to find an IP address otherwise
+                address, port = '8.8.8.8', '53'
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    # This command will raise an exception if there is no internet
+                    # connection.
+                    s.connect((address, int(port)))
+                    self._address = s.getsockname()[0]
+                except OSError as e:
+                    self._address = '127.0.0.1'
+                    # [Errno 101] Network is unreachable
+                    if e.errno == errno.ENETUNREACH:
+                        try:
+                            # try get node ip address from host name
+                            host_name = get_hostname()
+                            self._address = socket.gethostbyname(host_name)
+                        except Exception:
+                            pass
+                finally:
+                    s.close()
 
         return self._address
 
