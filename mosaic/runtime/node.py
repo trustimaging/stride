@@ -142,7 +142,7 @@ class Node(Runtime):
         try:
             import GPUtil
             gpus = GPUtil.getGPUs()
-        except ImportError:
+        except (ImportError, ValueError):
             gpus = []
 
         cpu_load = 0.

@@ -1,6 +1,7 @@
 
 import os
 import time
+import psutil
 import pprint
 import asyncio
 import subprocess as cmd_subprocess
@@ -132,10 +133,11 @@ class Monitor(Runtime):
                    f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
                    f'--cluster --{log_level}"')
 
-            cmd_subprocess.Popen(cmd,
-                                 shell=True,
-                                 stdout=_stdout,
-                                 stderr=_stderr)
+            node_subprocess = cmd_subprocess.Popen(cmd,
+                                                   shell=True,
+                                                   stdout=_stdout,
+                                                   stderr=_stderr)
+            node_proxy.subprocess = node_subprocess
 
             self._nodes[node_proxy.uid] = node_proxy
             await self._comms.wait_for(node_proxy.uid)
@@ -290,6 +292,14 @@ class Monitor(Runtime):
 
             if hasattr(node.subprocess, 'stop_process'):
                 node.subprocess.join_process()
+
+            if isinstance(node.subprocess, cmd_subprocess.Popen):
+                ps_process = psutil.Process(node.subprocess.pid)
+
+                for child in ps_process.children(recursive=True):
+                    child.kill()
+
+                ps_process.kill()
 
         super().stop(sender_id)
 

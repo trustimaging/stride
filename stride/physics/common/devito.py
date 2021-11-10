@@ -61,7 +61,7 @@ class PMLSide(devito.SubDomain):
 
     def define(self, dimensions):
         domain = {dimension: dimension for dimension in dimensions}
-        domain[dimensions[self.dim_i]] = (self.side, self.extra[self.dim])
+        domain[dimensions[self.dim_i]] = (self.side, self.extra[self.dim_i])
 
         return domain
 
