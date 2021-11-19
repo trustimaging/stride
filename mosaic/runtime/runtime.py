@@ -10,6 +10,7 @@ import mosaic
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task
+from ..profile import profiler, global_profiler
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -192,6 +193,11 @@ class Runtime(BaseRPC):
         # Start listening
         self._comms.listen()
 
+        # Set up profiling
+        profile = kwargs.get('profile', False)
+        if profile:
+            self.set_profiler()
+
     def wait(self, wait=False):
         """
         Wait on the comms loop until done.
@@ -312,6 +318,16 @@ class Runtime(BaseRPC):
 
         """
         pass
+
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        self._loop.interval(self.send_profile, interval=5)
 
     def set_comms(self, address=None, port=None):
         """
@@ -675,11 +691,53 @@ class Runtime(BaseRPC):
         -------
 
         """
+        if profiler.tracing:
+            profiler.stop()
+
         if self._comms is not None:
             self._loop.run(self._comms.stop, sender_id)
 
         if self._loop is not None:
             self._loop._stop.set()
+
+    def recv_profile(self, sender_id, profiler_update):
+        """
+        Process a profiler update.
+
+        Parameters
+        ----------
+        sender_id : str
+        profiler_update : dict
+
+        Returns
+        -------
+
+        """
+        global_profiler.recv_profile(sender_id, profiler_update)
+
+    def request_profile(self, sender_id):
+        """
+        Return a profiler update.
+
+        Parameters
+        ----------
+        sender_id : str
+
+        Returns
+        -------
+
+        """
+        return global_profiler.get_profile()
+
+    async def send_profile(self):
+        """
+        Send profiler update to monitor.
+
+        Returns
+        -------
+
+        """
+        global_profiler.send_profile()
 
     # Command and task management methods
 
@@ -732,7 +790,7 @@ class Runtime(BaseRPC):
         obj = obj_store.pop(obj_uid, None)
 
         if hasattr(obj, 'queue_task'):
-            obj.queue_task((None, 'stop'))
+            obj.queue_task((None, 'stop', None))
 
         gc.collect()
 
@@ -880,7 +938,9 @@ class Runtime(BaseRPC):
         task = Task(uid, sender_id, tessera,
                     task['method'], *task['args'], **task['kwargs'])
 
-        tessera.queue_task((sender_id, task))
+        frame_info = profiler.frame_info()
+
+        tessera.queue_task((sender_id, task, frame_info))
         await task.state_changed('pending')
 
     async def tessera_state_changed(self, tessera):

@@ -1,5 +1,5 @@
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 
 import stride
 
@@ -43,10 +43,15 @@ setup(
     install_requires=requirements,
     extras_require={'extras': optional_requirements},
     dependency_links=links,
+    ext_modules=[
+        Extension('_profile',
+                  sources=['mosaic/profile/_profile.c'])
+    ],
     entry_points='''
         [console_scripts]
         mrun=mosaic.cli.mrun:go
         mscript=mosaic.cli.mscript:go
+        mprof=mosaic.cli.mprof:go
     ''',
     zip_safe=False,
     test_suite='tests'

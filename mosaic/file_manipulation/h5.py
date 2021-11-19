@@ -4,8 +4,8 @@ import h5py
 import numpy as np
 from datetime import datetime
 
-from mosaic.utils.change_case import camel_case
-from mosaic.types import Struct
+from ..utils.change_case import camel_case
+from ..types import Struct
 
 
 __all__ = ['HDF5', 'file_exists']
@@ -94,12 +94,17 @@ def append(name, obj, group):
 
 def _write_dataset(name, obj, group):
     if name in group:
-        return group[name]
+        return
 
     is_bytes = False
     if isinstance(obj, bytes):
         is_bytes = True
         obj = np.void(obj)
+
+    is_none = False
+    if obj is None:
+        is_none = True
+        obj = 'None'
 
     dataset = group.create_dataset(name, data=obj)
     dataset.attrs['is_ndarray'] = isinstance(obj, np.ndarray)
@@ -107,12 +112,11 @@ def _write_dataset(name, obj, group):
     dataset.attrs['is_tuple'] = isinstance(obj, tuple)
     dataset.attrs['is_str'] = isinstance(obj, str)
     dataset.attrs['is_bytes'] = is_bytes
+    dataset.attrs['is_none'] = is_none
 
     if isinstance(obj, list) and len(obj):
         flat_obj = np.asarray(obj).flatten().tolist()
         dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
-
-    return dataset
 
 
 def read(obj, lazy=True):
@@ -134,6 +138,9 @@ def read(obj, lazy=True):
 
 
 def _read_dataset(obj, lazy=True):
+    if 'is_none' in obj.attrs and obj.attrs['is_none']:
+        return None
+
     if 'is_bytes' in obj.attrs and obj.attrs['is_bytes']:
         obj = obj[()].tobytes()
 
@@ -253,7 +260,7 @@ class HDF5:
             filename = _abs_filename(filename, path)
 
         self._filename = filename
-        self._file = h5py.File(self._filename, self._mode)
+        self._file = h5py.File(self._filename, self._mode, libver='latest')
 
     @property
     def mode(self):

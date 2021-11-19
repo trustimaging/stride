@@ -4,6 +4,7 @@ import logging
 from cached_property import cached_property
 
 import mosaic
+from mosaic.profile import skip_profile
 
 
 __all__ = ['LoggerManager', 'clear_logger', 'default_logger']
@@ -314,6 +315,7 @@ class LoggerManager:
         logger = logging.getLogger('mosaic')
         logger.setLevel(_local_log_levels[level])
 
+    @skip_profile
     def info(self, buf, uid=None):
         """
         Log message with level ``info``.
@@ -338,6 +340,7 @@ class LoggerManager:
 
         self._info_logger.log(buf, uid=uid)
 
+    @skip_profile
     def debug(self, buf, uid=None):
         """
         Log message with level ``debug``.
@@ -362,6 +365,7 @@ class LoggerManager:
 
         self._debug_logger.log(buf, uid=uid)
 
+    @skip_profile
     def error(self, buf, uid=None):
         """
         Log message with level ``error``.
@@ -383,6 +387,7 @@ class LoggerManager:
 
         self._error_logger.log(buf, uid=uid)
 
+    @skip_profile
     def warning(self, buf, uid=None):
         """
         Log message with level ``warning``.
@@ -404,6 +409,7 @@ class LoggerManager:
 
         self._warn_logger.log(buf, uid=uid)
 
+    @skip_profile
     def warn(self, buf, uid=None):
         """
         Log message with level ``warning``.

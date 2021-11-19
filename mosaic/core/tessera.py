@@ -14,6 +14,7 @@ import mosaic
 from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, MonitoredBase
 from ..utils.event_loop import AwaitableOnly
+from ..profile import use_trace
 
 
 __all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'MonitoredTessera', 'tessera']
@@ -246,7 +247,7 @@ class Tessera(RemoteBase):
         while True:
             await self.state_changed('listening')
 
-            sender_id, task = await self._task_queue.get()
+            sender_id, task, frame_info = await self._task_queue.get()
             # Make sure that the loop does not keep implicit references to the task until the
             # next task arrives in the queue
             self._task_queue.task_done()
@@ -254,25 +255,26 @@ class Tessera(RemoteBase):
             if type(task) is str and task == 'stop':
                 break
 
-            await asyncio.sleep(0)
-            future = await task.prepare_args()
-            await future
+            with use_trace(*frame_info):
+                await asyncio.sleep(0)
+                future = await task.prepare_args()
+                await future
 
-            method = getattr(self.obj, task.method, False)
+                method = getattr(self.obj, task.method, False)
 
-            async with self.send_exception(task=task):
-                if method is False:
-                    raise AttributeError('Class %s does not have method %s' % (self.obj.__class__.__name__,
-                                                                               task.method))
+                async with self.send_exception(task=task):
+                    if method is False:
+                        raise AttributeError('Class %s does not have method %s' % (self.obj.__class__.__name__,
+                                                                                   task.method))
 
-                if not callable(method):
-                    raise ValueError('Method %s of class %s is not callable' % (task.method,
-                                                                                self.obj.__class__.__name__))
+                    if not callable(method):
+                        raise ValueError('Method %s of class %s is not callable' % (task.method,
+                                                                                    self.obj.__class__.__name__))
 
-            await asyncio.sleep(0)
-            await self.state_changed('running')
-            await task.state_changed('running')
-            await self.call_safe(sender_id, method, task)
+                await asyncio.sleep(0)
+                await self.state_changed('running')
+                await task.state_changed('running')
+                await self.call_safe(sender_id, method, task)
 
             del task
             del method

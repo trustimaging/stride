@@ -14,6 +14,7 @@ from ..core.tessera import MonitoredTessera
 from ..core.task import MonitoredTask
 from ..utils import subprocess
 from ..utils.logger import LoggerManager, _stdout, _stderr
+from ..profile import profiler, global_profiler
 
 
 __all__ = ['Monitor', 'monitor_strategies']
@@ -159,6 +160,16 @@ class Monitor(Runtime):
         else:
             self.logger.set_local(format=self.mode)
 
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        global_profiler.set_local()
+
     def update_monitored_node(self, sender_id, monitored_node):
         """
         Update inner record of node state.
@@ -287,6 +298,20 @@ class Monitor(Runtime):
         -------
 
         """
+        # Get final profile updates before closing
+        if profiler.tracing:
+            profiler.stop()
+
+            for node_id, node in self._nodes.items():
+                profiler_update = await node.request_profile(reply=True)
+                global_profiler.recv_profile(node_id, profiler_update)
+
+            for worker_id, worker in self._workers.items():
+                profiler_update = await worker.request_profile(reply=True)
+                global_profiler.recv_profile(worker_id, profiler_update)
+
+            global_profiler.append(filename=global_profiler.profiler.filename)
+
         for node_id, node in self._nodes.items():
             await node.stop()
 

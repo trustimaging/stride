@@ -11,6 +11,7 @@ import scipy.special
 
 import mosaic
 from mosaic.types import Struct
+from mosaic.profile import no_profiler, skip_profile
 
 from ...problem.base import Gridded
 
@@ -208,35 +209,36 @@ class GridDevito(Gridded):
 
         extended_extent = tuple(np.array(space.spacing) * (np.array(space.extended_shape) - 1))
 
-        self.full = FullDomain(space_order, extra)
-        self.interior = InteriorDomain(space_order, extra)
-        self.pml_left = tuple()
-        self.pml_right = tuple()
-        self.pml_centres = tuple()
-        self.pml_partials = tuple()
+        with no_profiler('create_grid', stop_trace=True):
+            self.full = FullDomain(space_order, extra)
+            self.interior = InteriorDomain(space_order, extra)
+            self.pml_left = tuple()
+            self.pml_right = tuple()
+            self.pml_centres = tuple()
+            self.pml_partials = tuple()
 
-        for dim in range(space.dim):
-            self.pml_left += (PMLSide(space_order, extra, dim, 'left'),)
-            self.pml_right += (PMLSide(space_order, extra, dim, 'right'),)
-            self.pml_centres += (PMLCentre(space_order, extra, dim, 'left'),
-                                 PMLCentre(space_order, extra, dim, 'right'))
-            self.pml_partials += (PMLPartial(space_order, extra, dim, 'left'),
-                                  PMLPartial(space_order, extra, dim, 'right'))
+            for dim in range(space.dim):
+                self.pml_left += (PMLSide(space_order, extra, dim, 'left'),)
+                self.pml_right += (PMLSide(space_order, extra, dim, 'right'),)
+                self.pml_centres += (PMLCentre(space_order, extra, dim, 'left'),
+                                     PMLCentre(space_order, extra, dim, 'right'))
+                self.pml_partials += (PMLPartial(space_order, extra, dim, 'left'),
+                                      PMLPartial(space_order, extra, dim, 'right'))
 
-        self.pml_corners = [PMLCorner(space_order, extra, *sides)
-                            for sides in itertools.product(['left', 'right'],
-                                                           repeat=space.dim)]
-        self.pml_corners = tuple(self.pml_corners)
+            self.pml_corners = [PMLCorner(space_order, extra, *sides)
+                                for sides in itertools.product(['left', 'right'],
+                                                               repeat=space.dim)]
+            self.pml_corners = tuple(self.pml_corners)
 
-        self.pml = self.pml_partials
+            self.pml = self.pml_partials
 
-        self.devito_grid = devito.Grid(extent=extended_extent,
-                                       shape=space.extended_shape,
-                                       origin=space.pml_origin,
-                                       subdomains=(self.full, self.interior,) +
-                                                   self.pml + self.pml_left + self.pml_right +
-                                                   self.pml_centres + self.pml_corners,
-                                       dtype=np.float32)
+            self.devito_grid = devito.Grid(extent=extended_extent,
+                                           shape=space.extended_shape,
+                                           origin=space.pml_origin,
+                                           subdomains=(self.full, self.interior,) +
+                                                       self.pml + self.pml_left + self.pml_right +
+                                                       self.pml_centres + self.pml_corners,
+                                           dtype=np.float32)
 
     @_cached
     def function(self, name, space_order=None, **kwargs):
@@ -715,7 +717,8 @@ class OperatorDevito:
 
             logger.info('\t * %s=%s' % (key, value))
 
-        self.devito_operator = devito.Operator(op, **default_config)
+        with no_profiler('devito_operator', stop_trace=True):
+            self.devito_operator = devito.Operator(op, **default_config)
 
     def compile(self):
         """
@@ -725,7 +728,8 @@ class OperatorDevito:
         -------
 
         """
-        self.devito_operator.cfunction
+        with no_profiler('devito_compile', stop_trace=True):
+            self.devito_operator.cfunction
 
     def run(self, **kwargs):
         """
@@ -751,7 +755,8 @@ class OperatorDevito:
             default_kwargs['time_m'] = default_kwargs.get('time_m', 1)
             default_kwargs['time_M'] = default_kwargs.get('time_M', time.extended_num - 1)
 
-        self.devito_operator.apply(**default_kwargs)
+        with no_profiler('devito_run', stop_trace=True):
+            self.devito_operator.apply(**default_kwargs)
 
 
 def config_devito(**kwargs):

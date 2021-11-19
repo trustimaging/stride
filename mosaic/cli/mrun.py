@@ -49,6 +49,9 @@ from ..utils.logger import _stdout, _stderr
               help='set log level to DEBUG')
 @click.option('--error', 'log_level', flag_value='error', show_default=True,
               help='set log level to ERROR')
+# profiling
+@click.option('--profile/--perf', default=False, required=False, show_default=True,
+              help='whether to profile the mosaic run')
 @click.version_option()
 def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
@@ -65,6 +68,7 @@ def go(cmd=None, **kwargs):
     num_workers = kwargs.get('nworkers', 1)
     num_threads = kwargs.get('nthreads', None)
     log_level = kwargs.get('log_level', 'info')
+    profile = kwargs.get('profile', False)
 
     # If not in local mode, find the node list
     node_list = None
@@ -100,6 +104,7 @@ def go(cmd=None, **kwargs):
         'num_threads': num_threads,
         'mode': 'local' if local is True else 'cluster',
         'log_level': log_level,
+        'profile': profile,
         'node_list': node_list,
     }
 
@@ -141,6 +146,8 @@ def go(cmd=None, **kwargs):
         file.write('UID=%s\n' % runtime_id)
         file.write('ADD=%s\n' % runtime_address)
         file.write('PRT=%s\n' % runtime_port)
+        file.write('[ARGS]\n')
+        file.write('profile=%s\n' % profile)
 
     def run_head():
         process = cmd_subprocess.run(cmd,

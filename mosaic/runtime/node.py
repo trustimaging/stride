@@ -8,6 +8,7 @@ from .runtime import Runtime, RuntimeProxy
 from ..utils import LoggerManager
 from ..utils import subprocess
 from ..utils.utils import memory_limit
+from ..profile import profiler, global_profiler
 
 
 __all__ = ['Node', 'MonitoredNode', 'MonitoredWorker', 'MonitoredGPU']
@@ -131,6 +132,17 @@ class Node(Runtime):
             runtime_id = 'head' if self.mode == 'interactive' else 'monitor'
             self.logger.set_remote(runtime_id=runtime_id, format=self.mode)
 
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        global_profiler.set_remote('monitor')
+        super().set_profiler()
+
     def resource_monitor(self):
         """
         Monitor reseources available for workers, and worker state.
@@ -214,6 +226,9 @@ class Node(Runtime):
         -------
 
         """
+        if profiler.tracing:
+            profiler.stop()
+
         for worker_id, worker in self._own_workers.items():
             await worker.stop()
             worker.subprocess.join_process()

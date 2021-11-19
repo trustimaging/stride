@@ -3,6 +3,7 @@ import datetime
 
 import mosaic
 from ..utils import Future
+from ..profile import skip_profile
 
 
 __all__ = ['RemoteBase', 'ProxyBase', 'MonitoredBase']
@@ -43,6 +44,7 @@ class Base:
         return mosaic.get_worker()
 
     @property
+    @skip_profile
     def logger(self):
         if self.runtime:
             return self.runtime.logger

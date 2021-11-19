@@ -1,7 +1,9 @@
 
 __version__ = '1.1'
 
+import os
 import asyncio
+import inspect
 
 from .core import tessera
 from .runtime import Head, Monitor, Node, Worker
@@ -9,6 +11,7 @@ from .utils.subprocess import subprocess
 from .utils import logger as mlogger
 from .utils import gather, default_logger
 from .file_manipulation import yaml, h5
+from .profile import profiler
 
 
 _runtime = None
@@ -26,7 +29,7 @@ def init(runtime_type='head', runtime_indices=(),
          monitor_address=None, monitor_port=None,
          num_workers=None, num_threads=None,
          mode='local', monitor_strategy='round-robin',
-         log_level='info', node_list=None,
+         log_level='info', profile=False, node_list=None,
          asyncio_loop=None, wait=False,
          **kwargs):
     """
@@ -65,6 +68,8 @@ def init(runtime_type='head', runtime_indices=(),
         Strategy used by the monitor to allocate tessera, defaults to round robin.
     log_level : str, optional
         Log level, defaults to ``info``.
+    profile : bool, optional
+        Whether to start the profiler, defaults to False.
     node_list : list, optional
         List of available node addresses to connect to.
     asyncio_loop: object, optional
@@ -92,6 +97,7 @@ def init(runtime_type='head', runtime_indices=(),
         'num_workers': num_workers,
         'num_threads': num_threads,
         'log_level': log_level,
+        'profile': profile,
         'node_list': node_list,
     }
 
@@ -121,6 +127,9 @@ def init(runtime_type='head', runtime_indices=(),
 
     loop = _runtime.get_event_loop(asyncio_loop=asyncio_loop)
     result = loop.run(_runtime.init, **runtime_config)
+
+    if profile:
+        profiler.start()
 
     if wait is True:
         try:
@@ -226,6 +235,35 @@ def run(main, *args, **kwargs):
 
     """
     global _runtime
+
+    monitor_address = kwargs.get('monitor_address', None)
+    if monitor_address is None:
+        path = os.path.join(os.getcwd(), 'mosaic-workspace')
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        filename = os.path.join(path, 'monitor.key')
+
+        if os.path.exists(filename):
+            with open(filename, 'r') as file:
+                file.readline()
+
+                _ = file.readline().split('=')[1].strip()
+                parent_address = file.readline().split('=')[1].strip()
+                parent_port = file.readline().split('=')[1].strip()
+
+                kwargs['monitor_address'] = parent_address
+                kwargs['monitor_port'] = int(parent_port)
+
+                try:
+                    arg_start = file.readline().strip()
+                except EOFError:
+                    pass
+                else:
+                    if arg_start == '[ARGS]':
+                        for line in file:
+                            key, value = line.strip().split('=')
+                            kwargs[key] = eval(value)
 
     init(*args, **kwargs)
 

@@ -1,5 +1,6 @@
 
 import sys
+import uuid
 import asyncio
 import zmq
 import zmq.asyncio
@@ -17,12 +18,16 @@ from .compression import maybe_compress, decompress
 from .serialisation import serialise, deserialise
 from ..utils import Future
 from ..utils.utils import sizeof
+from ..profile import profiler
 
 
 __all__ = ['CommsManager', 'get_hostname']
 
 
 _protocol_version = '0.0.0'
+
+_skip_methods = ['hand', 'shake', 'connect', 'disconnect', 'stop', 'heart', 'beat',
+                 'log', 'profile', 'update_monitor', 'reply']
 
 
 def join_address(address, port, protocol='tcp'):
@@ -95,6 +100,7 @@ class Message:
     """
 
     def __init__(self, sender_id, msg):
+        self.id = msg['id']
         self.method = msg['method']
         self.sender_id = sender_id
         self.runtime_id = msg['runtime_id']
@@ -653,7 +659,10 @@ class OutboundConnection(Connection):
         else:
             reply_future = None
 
+        msg_id = '%s.%s' % (self._runtime.uid, uuid.uuid4().hex)
+
         msg = {
+            'id': msg_id,
             'method': method,
             'runtime_id': self.uid,
             'kwargs': kwargs,
@@ -663,12 +672,23 @@ class OutboundConnection(Connection):
 
         if not method.startswith('log') and not method.startswith('update_monitored_node'):
             if method == 'cmd':
+                method = '%s:%s.%s' % (method, cmd['type'], cmd['method'])
+
                 self.logger.debug('Sending cmd %s %s to %s (%s) from %s' % (method, cmd['method'],
                                                                             self.uid, cmd['uid'],
                                                                             self._runtime.uid))
             else:
                 self.logger.debug('Sending msg %s to %s from %s' % (method, self.uid,
                                                                     self._runtime.uid))
+
+            notify = True
+            for skip_method in _skip_methods:
+                if skip_method in method:
+                    notify = False
+                    break
+
+            if notify:
+                profiler.r_call(msg['id'], method, target=self.uid)
 
         msg = serialise(msg)
         msg_size = sizeof(msg)
@@ -819,7 +839,10 @@ class CircularConnection(Connection):
         else:
             reply_future = None
 
+        msg_id = '%s.%s' % (self._runtime.uid, uuid.uuid4().hex)
+
         msg = {
+            'id': msg_id,
             'method': method,
             'runtime_id': self.uid,
             'kwargs': kwargs,
@@ -1268,6 +1291,19 @@ class CommsManager:
         if method is not False:
             if msg.cmd is not None:
                 msg.kwargs['cmd'] = msg.cmd
+
+            method_name = msg.method
+            if method_name == 'cmd':
+                method_name = '%s:%s.%s' % (method_name, msg.cmd.type, msg.cmd.method)
+
+            notify = True
+            for skip_method in _skip_methods:
+                if skip_method in msg.method:
+                    notify = False
+                    break
+
+            if notify:
+                profiler.r_return(msg.id, method_name, source=sender_id)
 
             future = self._loop.run(call,
                                     sender_id, method, msg.reply,

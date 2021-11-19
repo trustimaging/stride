@@ -5,6 +5,7 @@ import mosaic
 from .runtime import Runtime, RuntimeProxy
 from ..utils import LoggerManager
 from ..utils import subprocess
+from ..profile import profiler, global_profiler
 
 
 __all__ = ['Head']
@@ -33,25 +34,6 @@ class Head(Runtime):
         -------
 
         """
-        monitor_address = kwargs.get('monitor_address', None)
-        if not self.is_monitor and monitor_address is None:
-            path = os.path.join(os.getcwd(), 'mosaic-workspace')
-            if not os.path.exists(path):
-                os.makedirs(path)
-
-            filename = os.path.join(path, 'monitor.key')
-
-            if os.path.exists(filename):
-                with open(filename, 'r') as file:
-                    file.readline()
-
-                    _ = file.readline().split('=')[1].strip()
-                    parent_address = file.readline().split('=')[1].strip()
-                    parent_port = file.readline().split('=')[1].strip()
-
-                    kwargs['monitor_address'] = parent_address
-                    kwargs['monitor_port'] = int(parent_port)
-
         await super().init(**kwargs)
 
         # if self.mode == 'local':
@@ -100,6 +82,10 @@ class Head(Runtime):
         -------
 
         """
+        # Send final profile updates before closing
+        if profiler.tracing:
+            await self.send_profile()
+
         if self._monitor.subprocess is not None:
             await self._monitor.stop()
             self._monitor.subprocess.join_process()
@@ -117,3 +103,14 @@ class Head(Runtime):
         """
         self.logger = LoggerManager()
         self.logger.set_local(format=self.mode)
+
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        global_profiler.set_remote('monitor')
+        super().set_profiler()

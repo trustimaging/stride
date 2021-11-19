@@ -82,6 +82,10 @@ export OMP_NUM_THREADS=$num_threads_per_worker
 # for example:
 # export DEVITO_COMPILER=icc
 
+# add any commands to be executed in the remote node before starting the runtime
+# for example:
+# export SSH_FLAGS="source /etc/profile; module load anaconda3/personal; conda activate stride"
+
 # run our job
 cd $PBS_O_WORKDIR
 ls -l

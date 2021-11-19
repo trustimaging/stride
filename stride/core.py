@@ -491,7 +491,7 @@ class Operator:
     construct an adjoint graph that can then be executed in an adjoint run
     to calculate necessary gradients.
 
-    Parameters0
+    Parameters
     ----------
     name : str, optional
         Name of the varible, defaults to automatic name.

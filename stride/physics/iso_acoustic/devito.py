@@ -10,6 +10,7 @@ import scipy.signal
 
 import mosaic
 from mosaic.utils import camel_case
+from mosaic.profile import skip_profile
 
 from stride.utils import fft
 from stride.problem import StructuredData
@@ -942,6 +943,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.state_operator.operator = None
             self.adjoint_operator.operator = None
 
+    @skip_profile(stop_trace=True)
     def _stencil(self, field, wavelets, vp, rho=None, alpha=None, direction='forward', **kwargs):
         # Prepare medium functions
         vp_fun, vp2_fun, inv_vp2_fun, rho_fun, buoy_fun, alpha_fun = self._medium_functions(vp, rho, alpha, **kwargs)
