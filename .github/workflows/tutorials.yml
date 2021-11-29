@@ -1,0 +1,66 @@
+name: Tutorials
+
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the master branch
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  examples:
+    name: Tutorials
+    runs-on: ubuntu-latest
+
+    env:
+      DEVITO_COMPILER: gcc
+      DEVITO_LANGUAGE: "openmp"
+      PYTHON_VERSION: "3.7"
+
+    strategy:
+      # Prevent all build to stop if a single one fails
+      fail-fast: false
+
+    steps:
+    - name: Checkout stride
+      uses: actions/checkout@v2
+      with:
+        repository: trustimaging/stride
+        path: "stride"
+
+    - name: Checkout devito
+      uses: actions/checkout@v2
+      with:
+        repository: devitocodes/devito
+        path: "devito"
+
+    - name: Setup conda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        activate-environment: stride
+        environment-file: "stride/environment.yml"
+        python-version: 3.7
+        auto-activate-base: false
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        cd stride
+        pip install -e .
+
+    - name: Manually install devito
+      shell: bash -l {0}
+      run: |
+        cd devito
+        pip uninstall -y devito
+        pip install -e .
+
+    - name: Tutorials
+      shell: bash -l {0}
+      run: |
+        cd stride/examples/tutorials/
+        mrun -nw 1 -nth 2 python 07_script_running.py
+        py.test -p no:python --nbval-lax

@@ -13,6 +13,7 @@ dependencies:
   - gputil
   - h5py>=3.2
   - matplotlib>=3.4
+  - nbval
   - numpy>=1.20
   - notebook>=6.4
   - pickle5
@@ -34,5 +35,5 @@ dependencies:
   - wxPython
   - zlib
   - pip:
-      - devito>=4.4
+      - devito>=4.6
       - python-daemon

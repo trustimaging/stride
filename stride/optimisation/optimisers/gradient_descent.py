@@ -29,7 +29,7 @@ class GradientDescent(LocalOptimiser):
 
         self.step_size = kwargs.pop('step_size', 1.)
 
-    async def step(self, step_size=None, **kwargs):
+    async def step(self, step_size=None, direction=None, **kwargs):
         """
         Apply the optimiser.
 
@@ -37,6 +37,8 @@ class GradientDescent(LocalOptimiser):
         ----------
         step_size : float, optional
             Step size to use for this application, defaults to instance step.
+        direction : Data, optional
+            Direction to use for the step, defaults to variable gradient.
         kwargs
             Extra parameters to be used by the method.
 
@@ -46,29 +48,44 @@ class GradientDescent(LocalOptimiser):
             Updated variable.
 
         """
-        step_size = step_size or self.step_size
-        grad = self.variable.process_grad(**kwargs)
-        grad = await self._process_grad(grad)
+        step_size = self.step_size if step_size is None else step_size
 
-        min_grad = np.min(grad.extended_data)
-        max_grad = np.max(grad.extended_data)
+        logger = mosaic.logger()
+        logger.info('Updating variable %s,' % self.variable.name)
+
+        if direction is None:
+            grad = self.variable.process_grad(**kwargs)
+
+            min_dir = np.min(grad.extended_data)
+            max_dir = np.max(grad.extended_data)
+
+            logger.info('\t direction before processing in range [%e, %e]' %
+                        (min_dir, max_dir))
+
+            direction = await self._process_grad(grad, **kwargs)
+
+        min_dir = np.min(direction.extended_data)
+        max_dir = np.max(direction.extended_data)
 
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
-        runtime = mosaic.runtime()
-        runtime.logger.info('Updating variable %s, gradient in range [%e, %e]' %
-                            (self.variable.name, min_grad, max_grad))
-        runtime.logger.info('\t variable range before update [%e, %e]' %
-                            (min_var, max_var))
+        logger.info('\t direction after processing in range [%e, %e]' %
+                    (min_dir, max_dir))
+        logger.info('\t variable range before update [%e, %e]' %
+                    (min_var, max_var))
 
-        self.variable -= step_size*grad
-        self.variable = await self._process_model(self.variable)
+        self.variable -= step_size*direction
+
+        processed_variable = await self._process_model(self.variable, **kwargs)
+        self.variable.extended_data[:] = processed_variable.extended_data[:]
 
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
-        runtime.logger.info('\t variable range after update [%e, %e]' %
-                            (min_var, max_var))
+        logger.info('\t variable range after update [%e, %e]' %
+                    (min_var, max_var))
+
+        self.variable.release_grad()
 
         return self.variable

@@ -1,7 +1,7 @@
 
 from mosaic import h5
 
-from .domain import Space, Time, Grid
+from .domain import Space, Time, SlowTime, Grid
 
 
 __all__ = ['Gridded', 'Saved', 'GriddedSaved', 'ProblemBase']
@@ -96,7 +96,7 @@ class Saved:
     """
 
     def __init__(self, **kwargs):
-        self.name = kwargs.pop('name')
+        self.name = kwargs.pop('name', self.__class__.__name__.lower())
 
     def dump(self, *args, **kwargs):
         """
@@ -108,7 +108,7 @@ class Saved:
         -------
 
         """
-        description = self.__get_desc__()
+        description = self.__get_desc__(**kwargs)
 
         kwargs['parameter'] = kwargs.get('parameter', self.name)
         with h5.HDF5(*args, **kwargs, mode='w') as file:
@@ -129,7 +129,7 @@ class Saved:
             self.dump(*args, **kwargs)
             return
 
-        description = self.__get_desc__()
+        description = self.__get_desc__(**kwargs)
 
         with h5.HDF5(*args, **kwargs, mode='a') as file:
             file.append(description)
@@ -150,7 +150,20 @@ class Saved:
 
             self.__set_desc__(description)
 
-    def __get_desc__(self):
+    def rm(self, *args, **kwargs):
+        """
+        Remove file.
+
+        See :class:`~mosaic.file_manipulation.h5.rm` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
+        kwargs['parameter'] = self.name
+        h5.rm(*args, **kwargs, mode='r')
+
+    def __get_desc__(self, **kwargs):
         return {}
 
     def __set_desc__(self, description):
@@ -182,7 +195,7 @@ class GriddedSaved(Saved, Gridded):
         """
         grid_description = self.grid_description()
 
-        description = self.__get_desc__()
+        description = self.__get_desc__(**kwargs)
         grid_description.update(description)
 
         kwargs['parameter'] = kwargs.get('parameter', self.name)
@@ -208,7 +221,7 @@ class GriddedSaved(Saved, Gridded):
 
         grid_description = self.grid_description()
 
-        description = self.__get_desc__()
+        description = self.__get_desc__(**kwargs)
         grid_description.update(description)
 
         with h5.HDF5(*args, **kwargs, mode='a') as file:
@@ -247,8 +260,14 @@ class GriddedSaved(Saved, Gridded):
 
                 self._grid.time = time
 
-            if 'slow_time' in description:
-                pass
+            if 'slow_time' in description and self._grid.slow_time is None:
+                slow_time = SlowTime(start=description.slow_time.start,
+                                     stop=description.slow_time.stop,
+                                     step=description.slow_time.step,
+                                     num=description.slow_time.num,
+                                     freq=description.slow_time.freq)
+
+                self._grid.slow_time = slow_time
 
             self.__set_desc__(description)
 
@@ -283,7 +302,14 @@ class GriddedSaved(Saved, Gridded):
             }
 
         if self.slow_time is not None:
-            pass
+            slow_time = self.slow_time
+            grid_description['slow_time'] = {
+                'start': slow_time.start,
+                'stop': slow_time.stop,
+                'step': slow_time.step,
+                'num': slow_time.num,
+                'freq': slow_time.freq,
+            }
 
         return grid_description
 

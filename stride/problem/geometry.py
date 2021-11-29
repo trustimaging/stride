@@ -86,7 +86,7 @@ class TransducerLocation(GriddedSaved):
 
         return sub_location
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'transducer_id': self.transducer.id,
@@ -397,7 +397,7 @@ class Geometry(ProblemBase):
 
         return sub_geometry
 
-    def __get_desc__(self):
+    def __get_desc__(self, **kwargs):
         description = {
             'num_locations': self.num_locations,
             'locations': [],

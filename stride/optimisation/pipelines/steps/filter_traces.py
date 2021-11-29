@@ -58,16 +58,20 @@ class FilterTraces(Operator):
         f_min = self.f_min*time.step if self.f_min is not None else 0
         f_max = self.f_max*time.step if self.f_max is not None else 0
 
+        out_traces = traces.alike(name='filtered_%s' % traces.name)
+
         if self.f_min is None and self.f_max is not None:
             filtered = filters.lowpass_filter_fir(traces.extended_data, f_max)
-            traces.extended_data[:] = filtered
 
         elif self.f_min is not None and self.f_max is None:
             filtered = filters.highpass_filter_fir(traces.extended_data, f_min)
-            traces.extended_data[:] = filtered
 
         elif self.f_min is not None and self.f_max is not None:
             filtered = filters.bandpass_filter_fir(traces.extended_data, f_min, f_max)
-            traces.extended_data[:] = filtered
 
-        return traces
+        else:
+            filtered = traces.extended_data
+
+        out_traces.extended_data[:] = filtered
+
+        return out_traces

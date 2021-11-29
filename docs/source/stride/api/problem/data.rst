@@ -26,3 +26,8 @@ Data
     :members:
     :undoc-members:
     :show-inheritance:
+
+.. autoclass:: stride.problem.data.Scalar
+    :members:
+    :undoc-members:
+    :show-inheritance:

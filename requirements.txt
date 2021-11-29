@@ -3,10 +3,11 @@ cached-property
 click
 cloudpickle>=1.6
 cython
-devito>=4.4
+devito>=4.6
 flake8
 gputil
 h5py>=3.2
+nbval
 numpy>=1.20
 pickle5
 pre_commit

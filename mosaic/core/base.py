@@ -44,7 +44,10 @@ class Base:
 
     @property
     def logger(self):
-        return self.runtime.logger
+        if self.runtime:
+            return self.runtime.logger
+        else:
+            return mosaic.logger()
 
 
 class CMDBase(Base):
@@ -334,7 +337,7 @@ class RemoteBase(CMDBase):
 
         self._uid = uid
         self._ref_count = 1
-        self._proxies = set()
+        self._proxies = dict()
 
         self._init_future.set_result(True)
 
@@ -351,7 +354,8 @@ class RemoteBase(CMDBase):
         Set of proxies that keep references to this remote.
 
         """
-        raise self._proxies
+        proxies = set(self._proxies.keys())
+        raise proxies
 
     @property
     def remote_runtime(self):
@@ -376,7 +380,10 @@ class RemoteBase(CMDBase):
         -------
 
         """
-        self._proxies.add(uid)
+        if uid not in self._proxies:
+            self._proxies[uid] = 0
+
+        self._proxies[uid] += 1
 
     def deregister_proxy(self, uid):
         """
@@ -390,7 +397,13 @@ class RemoteBase(CMDBase):
         -------
 
         """
-        self._proxies.remove(uid)
+        if uid not in self._proxies:
+            return
+
+        self._proxies[uid] -= 1
+
+        if self._proxies[uid] < 1:
+            del self._proxies[uid]
 
     def inc_ref(self):
         """
@@ -412,7 +425,7 @@ class RemoteBase(CMDBase):
         """
         self._ref_count -= 1
 
-        if self._ref_count < 1:
+        if self._ref_count < 1 and self.runtime is not None:
             self.runtime.deregister(self)
 
     _serialisation_attrs = CMDBase._serialisation_attrs + []
@@ -463,11 +476,11 @@ class ProxyBase(CMDBase):
 
         obj_type = cls.remote_type()
 
-        instance = instance.runtime.register(instance)
+        reg_instance = instance.runtime.register(instance)
         if instance.is_proxy and instance._registered:
-            instance.remote_runtime.inc_ref(uid=instance.uid, type=obj_type, as_async=False)
+            reg_instance.remote_runtime.inc_ref(uid=reg_instance.uid, type=obj_type, as_async=False)
 
-        return instance
+        return reg_instance
 
     def __del__(self):
         if self._registered and self.runtime:

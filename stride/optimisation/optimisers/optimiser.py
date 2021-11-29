@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 __all__ = ['LocalOptimiser']
 
 
-async def noop(*args, **kwargs):
-    return args
+async def noop(arg, *args, **kwargs):
+    return arg
 
 
 class LocalOptimiser(ABC):
@@ -37,7 +37,7 @@ class LocalOptimiser(ABC):
 
     def clear_grad(self):
         """
-        Clear the internal gradient buffers of the varible.
+        Clear the internal gradient buffers of the variable.
 
         Returns
         -------

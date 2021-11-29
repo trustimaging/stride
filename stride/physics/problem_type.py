@@ -226,6 +226,10 @@ class ProblemTypeBase(ABC, Gridded, Operator):
                 raise ValueError('Variable %s not implemented' % variable.name)
 
             update = await method(variable, **kwargs)
+
+            if not isinstance(update, tuple):
+                update = (update,)
+
             gradient_update += update
 
         return gradient_update

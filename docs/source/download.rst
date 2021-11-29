@@ -2,6 +2,8 @@
 Download
 ========
 
+Jump right in using a Jupyter notebook directly in your browser, using `binder <https://mybinder.org/v2/gh/trustimaging/stride/HEAD>`_.
+
 The recommended way to install Stride is through Anaconda's package manager (version >=4.9), which can be downloaded
 in:
 

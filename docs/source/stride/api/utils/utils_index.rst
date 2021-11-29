@@ -10,3 +10,5 @@ Utils
     wavelets
     geometries
     fetch
+    noise
+    operators

@@ -8,11 +8,6 @@ Core
     :show-inheritance:
     :special-members: __call_adjoint__
 
-.. autoclass:: stride.core.Scalar
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 .. autoclass:: stride.core.Operator
     :members:
     :undoc-members:

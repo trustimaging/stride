@@ -1,8 +1,10 @@
 
+import uuid
 import inspect
 from abc import abstractmethod
 from collections import OrderedDict
 
+import mosaic
 from mosaic.core.base import CMDBase
 from mosaic.core import TaskProxy, TaskOutput, TaskDone
 
@@ -15,12 +17,6 @@ async def _maybe_sum(a, b):
         a = await a.result()
 
     if isinstance(b, TaskOutput):
-        b = await b.result()
-
-    if isinstance(a, tuple):
-        a = await a.result()
-
-    if isinstance(b, tuple):
         b = await b.result()
 
     if b is None:
@@ -88,13 +84,15 @@ class Node:
     """
 
     def __init__(self, op, method, idx=0, nxt=None):
-        self.op_name = op.name
+        self.op_name = op.uname
         self.method = method
         self.idx = idx
         self.next = nxt or []
 
-        if hasattr(op, '_tessera'):
+        if hasattr(op, '_tessera') and \
+                (not hasattr(op, 'has_tessera') or not op.has_tessera):
             op = getattr(op, '_tessera')
+
         self.op = op
 
     @property
@@ -266,8 +264,23 @@ class Variable:
 
     def __init__(self, *args, **kwargs):
         cls = self.__class__
-        name = kwargs.pop('name', None)
-        self.name = name or '%s_%d' % (cls.__name__.lower(), cls._count)
+        name = kwargs.pop('name', cls.__name__.lower())
+        self._init_name = name
+
+        runtime = mosaic.runtime()
+        runtime = runtime.uid if runtime else 'head'
+
+        uname = '%s:%s_%d' % (runtime,
+                              cls.__name__.lower(),
+                              cls._count)
+
+        self.name = name or uname
+
+        uid = uuid.uuid5(uuid.NAMESPACE_OID, uname).hex
+        self.uname = '%s-%d-%s' % (name or cls.__name__.lower(),
+                                   cls._count,
+                                   uid)
+
         cls._count += 1
 
         self.grad = None
@@ -293,11 +306,12 @@ class Variable:
 
         """
         # init grad
-        grad = grad or Scalar(1.0)
+        grad = grad or 1.0
 
         # no need to run graph
         if self.prev_op is None:
             await self.__call_adjoint__(grad, **kwargs)
+            self.graph = Graph()
             return
 
         prev = dict()
@@ -313,7 +327,7 @@ class Variable:
 
             # call adjoint method
             method = getattr(node.op, node.method)
-            if hasattr(node.op, 'has_tessera') and node.op.has_tessera:
+            if hasattr(node.op, 'has_tessera') and node.op.has_tessera and node.op.is_proxy:
                 ret = await method(*output_grads, propagate=True, **kwargs)
             else:
                 ret = await method(*output_grads, **kwargs)
@@ -322,6 +336,14 @@ class Variable:
                 input_grads = ret.outputs
             else:
                 input_grads = (ret,) if not isinstance(ret, tuple) else ret
+
+            try:
+                if len(input_grads) < len(node.next):
+                    raise RuntimeError('Provided %d outputs for the adjoint of operator %s, '
+                                       'but %d were expected' % (len(input_grads), node.op.uname, len(node.next)))
+
+            except TypeError:
+                pass
 
             # store gradients for future use
             for nxt_index in range(len(node.next)):
@@ -338,6 +360,85 @@ class Variable:
 
         self.graph = Graph()
         self.prev_op = None
+
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph.
+
+        Returns
+        -------
+        Variable
+            Detached variable.
+
+        """
+        kwargs['name'] = kwargs.pop('name', self._init_name)
+        kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+
+        if hasattr(self, 'has_tessera') and self.has_tessera:
+            cpy = self.__class__.parameter(*args, **kwargs)
+        else:
+            cpy = self.__class__(*args, **kwargs)
+
+        if self.grad is not None:
+            cpy.grad = self.grad.copy()
+
+        if self.prec is not None:
+            cpy.prec = self.prec.copy()
+
+        return cpy
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        Variable
+            Detached variable.
+
+        """
+        kwargs['name'] = kwargs.pop('name', self._init_name)
+        kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+
+        cpy = self.__class__.parameter(*args, **kwargs)
+
+        if self.grad is not None:
+            cpy.grad = self.grad.copy()
+
+        if self.prec is not None:
+            cpy.prec = self.prec.copy()
+
+        return cpy
+
+    def copy(self, *args, **kwargs):
+        """
+        Create a variable that shares its characteristics with this object.
+
+        The same parameters as those given to ``__init__`` are valid here. Otherwise the
+        new object will be configured to be like this one.
+
+        Returns
+        -------
+        Variable
+            Copied variable.
+
+        """
+        kwargs['name'] = kwargs.pop('name', self._init_name)
+        kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+
+        if hasattr(self, 'has_tessera') and self.has_tessera:
+            return self.__class__.parameter(*args, **kwargs)
+        else:
+            return self.__class__(*args, **kwargs)
+
+    def alike(self, *args, **kwargs):
+        """
+        Alias for a copy.
+
+        """
+        return self.copy(*args, **kwargs)
 
     def clear_grad(self):
         """
@@ -375,29 +476,13 @@ class Variable:
         -------
 
         """
-        if grad is None or not self.needs_grad:
+        if grad is None or not self.needs_grad or self.grad is None:
             return
 
-        self.grad += grad
+        self.grad = await _maybe_sum(self.grad, grad)
 
     def __repr__(self):
         return self.name
-
-
-class Scalar(float, Variable):
-    """
-    Variable version of a Python float.
-
-    """
-
-    def clear_grad(self):
-        self.grad = 0
-
-    def process_grad(self):
-        return self.grad
-
-    def __repr__(self):
-        return '%s(%s)' % (self.name, float.__repr__(self))
 
 
 class Operator:
@@ -406,7 +491,7 @@ class Operator:
     construct an adjoint graph that can then be executed in an adjoint run
     to calculate necessary gradients.
 
-    Parameters
+    Parameters0
     ----------
     name : str, optional
         Name of the varible, defaults to automatic name.
@@ -418,11 +503,24 @@ class Operator:
     def __init__(self, *args, **kwargs):
         cls = self.__class__
         name = kwargs.pop('name', None)
-        self.name = name or '%s_%d' % (cls.__name__.lower(), cls._count)
+
+        runtime = mosaic.runtime()
+        runtime = runtime.uid if runtime else 'head'
+
+        uname = '%s:%s_%d' % (runtime,
+                              cls.__name__.lower(),
+                              cls._count)
+
+        self.name = name or uname
+
+        uid = uuid.uuid5(uuid.NAMESPACE_OID, uname).hex
+        self.uname = '%s-%d-%s' % (name or cls.__name__.lower(),
+                                   cls._count,
+                                   uid)
+
         cls._count += 1
 
         self.inputs = None
-        self.outputs = None
 
     @abstractmethod
     async def forward(self, *args, **kwargs):
@@ -521,7 +619,7 @@ class Operator:
         self.inputs = (args, kwargs)
 
         # call forward
-        if inspect.iscoroutinefunction(self.adjoint):
+        if inspect.iscoroutinefunction(self.forward):
             outputs = await self.forward(*args, **kwargs)
         else:
             outputs = self.forward(*args, **kwargs)
@@ -536,8 +634,6 @@ class Operator:
                 output.prev_op = prev_op
 
             output.needs_grad = needs_grad
-
-        self.outputs = outputs
 
         outputs = outputs if len(outputs) > 1 else outputs[0]
 
@@ -571,7 +667,6 @@ class Operator:
 
         # clean up
         self.inputs = None
-        self.outputs = None
 
         return input_grads
 
