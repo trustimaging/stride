@@ -41,11 +41,11 @@ class IsoElasticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            !!!!!!!!!!!!!!!!!!!!!!!.
-        rho : ScalarField, optional
-            !!!!!!!!!!!!!!!!!!!!!!!.
-        alpha : ScalarField, optional
-            !!!!!!!!!!!!!!!!!!!!!!!.
+            Compressional (acoustic) speed of sound of the medium, in [m/s].
+        vs : ScalarField
+            Transverse (shear) speed of sound of the medium, in [m/s].
+        rho : ScalarField
+            Density of the medium in [kg/m^3].
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool or int, optional
@@ -94,8 +94,6 @@ class IsoElasticDevito(ProblemTypeBase):
         self._src_scale = 0.
         self._bandwidth = 0.
 
-        # config_devito(**kwargs)
-
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
 
         kwargs.pop('grid', None)
@@ -125,11 +123,11 @@ class IsoElasticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        rho : ScalarField, optional
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        alpha : ScalarField, optional
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            Compressional (acoustic) speed of sound of the medium, in [m/s].
+        vs : ScalarField
+            Transverse (shear) speed of sound of the medium, in [m/s].
+        rho : ScalarField
+            Density of the medium in [kg/m^3].
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool or int, optional
@@ -180,16 +178,19 @@ class IsoElasticDevito(ProblemTypeBase):
 
             s = self.time.step
             # Create stencil
+            # TODO: save wavefield during simulation
             # save_wavefield = kwargs.get('save_wavefield', False)
             # save = Buffer(save_wavefield) if type(save_wavefield) is int else None
             vel = self.dev_grid.vector_time_function('vel')
             tau = self.dev_grid.tensor_time_function('tau')
 
             # Absorbing boundaries
+            # TODO: abstract absorbing boundaries
             damp = devito.Function(name="damp", grid=self.dev_grid.devito_grid)
             eqs = [devito.Eq(damp, 1.0)]
             padsizes = [self.space.absorbing for _ in range(self.dev_grid.devito_grid.dim)]
             for (nbl, nbr), d in zip(padsizes, damp.dimensions):
+                # TODO: calculate boundary coefficient
                 dampcoeff = 0.008635*self.space.spacing[0] # 0.2763102111592855 (water_example)
                 # left
                 dim_l = devito.SubDimension.left(name='abc_%s_l' % d.name, parent=d, thickness=nbl)
@@ -216,9 +217,6 @@ class IsoElasticDevito(ProblemTypeBase):
             lam_fun = self.dev_grid.function('lam_fun')
             mu_fun = self.dev_grid.function('mu_fun')
             byn_fun = self.dev_grid.function('byn_fun')
-            # devito.Function(name='lam_fun', grid=self.dev_grid.devito_grid, space_order=self.dev_grid.space_order, parameter=True)
-            # devito.Function(name='mu_fun', grid=self.dev_grid.devito_grid, space_order=self.dev_grid.space_order, parameter=True)
-            # devito.Function(name='byn_fun', grid=self.dev_grid.devito_grid, space_order=self.dev_grid.space_order, parameter=True)
 
             # Compile the operator
             # velocity (first derivative vel w.r.t. time, first order euler method), s: time_spacing
@@ -248,10 +246,10 @@ class IsoElasticDevito(ProblemTypeBase):
         self.dev_grid.vars.rec_tau.data_with_halo.fill(0.)
         self.dev_grid.vars.vel[0].data_with_halo.fill(0.)
         self.dev_grid.vars.vel[1].data_with_halo.fill(0.)
-        self.dev_grid.vars.tau[0,0].data_with_halo.fill(0.)
-        self.dev_grid.vars.tau[0,1].data_with_halo.fill(0.)
-        self.dev_grid.vars.tau[1,0].data_with_halo.fill(0.)
-        self.dev_grid.vars.tau[1,1].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[0, 0].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[0, 1].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[1, 0].data_with_halo.fill(0.)
+        self.dev_grid.vars.tau[1, 1].data_with_halo.fill(0.)
         # self.boundary.clear()
 
         # Set medium parameters
@@ -282,7 +280,7 @@ class IsoElasticDevito(ProblemTypeBase):
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec_tau.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
+    async def run_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Run the state or forward problem.
 
@@ -291,11 +289,11 @@ class IsoElasticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
-        rho : ScalarField, optional
-            Density of the medium, defaults to homogeneous, in [kg/m^3].
-        alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Compressional (acoustic) speed of sound of the medium, in [m/s].
+        vs : ScalarField
+            Transverse (shear) speed of sound of the medium, in [m/s].
+        rho : ScalarField
+            Density of the medium in [kg/m^3].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -311,7 +309,7 @@ class IsoElasticDevito(ProblemTypeBase):
                                 **functions,
                                 **kwargs.pop('devito_args', {}))
 
-    async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
+    async def after_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 
@@ -320,11 +318,11 @@ class IsoElasticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        rho : ScalarField, optional
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        alpha : ScalarField, optional
-            !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            Compressional (acoustic) speed of sound of the medium, in [m/s].
+        vs : ScalarField
+            Transverse (shear) speed of sound of the medium, in [m/s].
+        rho : ScalarField
+            Density of the medium in [kg/m^3].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -376,6 +374,7 @@ class IsoElasticDevito(ProblemTypeBase):
         Not implemented
         """
         pass
+
     # gradients
 
     async def prepare_grad_vp(self, **kwargs):
@@ -544,18 +543,6 @@ class IsoElasticDevito(ProblemTypeBase):
         if recompile:
             self.state_operator.operator = None
             self.adjoint_operator.operator = None
-
-    def _medium_functions(self, vp, rho=None, alpha=None, **kwargs):
-        _kwargs = dict(coefficients='symbolic' if self.drp else 'standard')
-
-        v_fun = devito.VectorTimeFunction(name='v', grid=self.grid, space_order=self.space_order)
-        tau_fun = devito.TensorTimeFunction(name='t', grid=self.grid, space_order=self.space_order)
-
-        # vp_fun = self.dev_grid.function('vp', **_kwargs)
-        # vp2_fun = self.dev_grid.function('vp2', **_kwargs)
-        # inv_vp2_fun = self.dev_grid.function('inv_vp2', **_kwargs)
-
-        return v_fun, tau_fun
 
     def _saved(self, field, *kwargs):
         return field.dt2
