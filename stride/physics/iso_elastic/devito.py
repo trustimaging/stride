@@ -1,15 +1,11 @@
 
-import os
 import devito
-from devito.types import Buffer
 import numpy as np
 import scipy.signal
 
 import mosaic
 from mosaic.utils import camel_case
 
-from stride.utils import fft
-from stride.problem import ScalarField
 from ..common.devito import GridDevito, OperatorDevito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
@@ -106,7 +102,6 @@ class IsoElasticDevito(ProblemTypeBase):
                                                grid=self.dev_grid,
                                                **kwargs)
         self.boundary = None
-
 
     def clear_operators(self):
         self.state_operator.devito_operator = None
@@ -211,7 +206,12 @@ class IsoElasticDevito(ProblemTypeBase):
 
             # stress (first derivative tau w.r.t. time, first order euler method)
             u_tau = devito.Eq(tau.forward,
-                              damp*(tau + s * (lam_fun * devito.diag(devito.div(vel.forward)) + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T))))
+                              damp *
+                              (tau
+                               + s * (
+                                       lam_fun * devito.diag(devito.div(vel.forward))
+                                       + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T)
+                                      )))
 
             self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz + rec_term,
                                              **kwargs)
@@ -285,9 +285,7 @@ class IsoElasticDevito(ProblemTypeBase):
         -------
 
         """
-        functions = dict(
-            src=self.dev_grid.vars.src,
-            )
+        functions = dict(src=self.dev_grid.vars.src, )
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
