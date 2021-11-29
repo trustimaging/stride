@@ -84,7 +84,7 @@ class IsoElasticDevito(ProblemTypeBase):
         self.kernel = 'OT2'
         self.drp = False
         self.undersampling_factor = 4
-        self.boundary_type = 'sponge_boundary_2'
+        self.boundary_type = 'SpongeBoundaryElastic'
         self.interpolation_type = 'linear'
         self.attenuation_power = 0
 
@@ -185,7 +185,9 @@ class IsoElasticDevito(ProblemTypeBase):
             tau = self.dev_grid.tensor_time_function('tau')
 
             # Absorbing boundaries
-            damp = boundaries.devito.SpongeBoundaryElastic(self.dev_grid, 0.008635).apply()
+            boundaries_module = boundaries.devito
+            self.boundary = getattr(boundaries_module, camel_case(self.boundary_type))(self.dev_grid)
+            damp = self.boundary.apply(vel, vp.extended_data, 0.008635)
 
             # Define the source injection function using a pressure disturbance
             src_xx = src.inject(field=tau.forward[0, 0], expr=s * src)

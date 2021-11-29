@@ -79,7 +79,7 @@ async def main(runtime):
     print('Shots complete')
 
     # Create the PDE
-    pde = IsoElasticDevito.remote(space=space, time=time)
+    pde = IsoElasticDevito(space=space, time=time)
 
     # Set up test cases
     cases = {
@@ -98,9 +98,9 @@ async def main(runtime):
         shot_wavelets = sub_problem.shot.wavelets
 
         # ipdb.set_trace()
-        await pde.clear_operators()
+        pde.clear_operators()
         print('Operators cleared')
-        traces = await pde(shot_wavelets, vp, vs, rho, problem=sub_problem, **config).result()
+        traces = await pde(shot_wavelets, vp, vs, rho, problem=sub_problem, **config)
 
         # Check consistency with analytical solution
         data_stride = traces.data.copy()
