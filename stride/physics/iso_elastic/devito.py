@@ -185,25 +185,7 @@ class IsoElasticDevito(ProblemTypeBase):
             tau = self.dev_grid.tensor_time_function('tau')
 
             # Absorbing boundaries
-            # TODO: abstract absorbing boundaries
-            damp = devito.Function(name="damp", grid=self.dev_grid.devito_grid)
-            eqs = [devito.Eq(damp, 1.0)]
-            padsizes = [self.space.absorbing for _ in range(self.dev_grid.devito_grid.dim)]
-            for (nbl, nbr), d in zip(padsizes, damp.dimensions):
-                # TODO: calculate boundary coefficient
-                dampcoeff = 0.008635*self.space.spacing[0] # 0.2763102111592855 (water_example)
-                # left
-                dim_l = devito.SubDimension.left(name='abc_%s_l' % d.name, parent=d, thickness=nbl)
-                pos = devito.Abs((nbl - (dim_l - d.symbolic_min) + 1) / float(nbl))
-                val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
-                eqs += [devito.Inc(damp.subs({d: dim_l}), val / d.spacing)]
-                # right
-                dampcoeff = 0.008635*self.space.spacing[0] # 0.2763102111592855 (water_example)
-                dim_r = devito.SubDimension.right(name='abc_%s_r' % d.name, parent=d, thickness=nbr)
-                pos = devito.Abs((nbr - (d.symbolic_max - dim_r) + 1) / float(nbr))
-                val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
-                eqs += [devito.Inc(damp.subs({d: dim_r}), val / d.spacing)]
-            devito.Operator(eqs, name='initdamp')()
+            damp = boundaries.devito.SpongeBoundaryElastic(self.dev_grid, 0.008635).apply()
 
             # Define the source injection function using a pressure disturbance
             src_xx = src.inject(field=tau.forward[0, 0], expr=s * src)
@@ -250,7 +232,7 @@ class IsoElasticDevito(ProblemTypeBase):
         self.dev_grid.vars.tau[0, 1].data_with_halo.fill(0.)
         self.dev_grid.vars.tau[1, 0].data_with_halo.fill(0.)
         self.dev_grid.vars.tau[1, 1].data_with_halo.fill(0.)
-        # self.boundary.clear()
+        self.boundary.clear()
 
         # Set medium parameters
         vp_with_halo = self.dev_grid.with_halo(vp.extended_data)
@@ -351,7 +333,7 @@ class IsoElasticDevito(ProblemTypeBase):
         self.dev_grid.deallocate('rho')
         self.dev_grid.deallocate('buoy')
         self.dev_grid.deallocate('alpha')
-        # self.boundary.deallocate()
+        self.boundary.deallocate()
 
         return traces
 
@@ -397,161 +379,20 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # utils
 
-    def _check_problem(self, wavelets, vp, vs, density, **kwargs):
-        problem = kwargs.get('problem')
+    def _check_problem(self):
+        raise NotImplementedError('Check problem not implemented for elastic propagator')
 
-        recompile = False
+    def _check_conditions(self):
+        raise NotImplementedError('Check conditions not implemented for elastic propagator')
 
-        boundary_type = kwargs.get('boundary_type', 'sponge_boundary_2')
-        if boundary_type != self.boundary_type or self.boundary is None:
-            recompile = True
-            self.boundary_type = boundary_type
+    def _saved(self):
+        raise NotImplementedError('Saved not implemented for elastic propagator')
 
-            if isinstance(self.boundary_type, str):
-                boundaries_module = boundaries.devito
-                self.boundary = getattr(boundaries_module, camel_case(self.boundary_type))(self.dev_grid)
-
-            else:
-                self.boundary = self.boundary_type
-
-        interpolation_type = kwargs.get('interpolation_type', 'linear')
-        if interpolation_type != self.interpolation_type:
-            recompile = True
-            self.interpolation_type = interpolation_type
-
-        attenuation_power = kwargs.get('attenuation_power', 0)
-        if attenuation_power != self.attenuation_power:
-            recompile = True
-            self.attenuation_power = attenuation_power
-
-        drp = kwargs.get('drp', False)
-        if drp != self.drp:
-            recompile = True
-            self.drp = drp
-
-        preferred_kernel = kwargs.get('kernel', None)
-        preferred_undersampling = kwargs.get('undersampling', None)
-
-        self._check_conditions(wavelets, vp, vs, density,
-                               preferred_kernel, preferred_undersampling,
-                               **kwargs)
-
-        # Recompile every time if using hicks
-        if self.interpolation_type == 'hicks' or recompile:
-            self.state_operator.devito_operator = None
-            self.adjoint_operator.devito_operator = None
-
-        runtime = mosaic.runtime()
-        runtime.logger.info('(ShotID %d) Selected time stepping scheme %s' %
-                            (problem.shot_id, self.kernel,))
-
-    def _check_conditions(self, wavelets, vp, vs, density,
-                          preferred_kernel=None, preferred_undersampling=None, **kwargs):
-        runtime = mosaic.runtime()
-
-        problem = kwargs.get('problem')
-
-        # Get speed of sound bounds
-        vp_min = np.min(vp.extended_data)
-        vp_max = np.max(vp.extended_data)
-
-        # Figure out propagated bandwidth
-        wavelets = wavelets.data
-        f_min, f_centre, f_max = fft.bandwidth(wavelets, self.time.step, cutoff=-10)
-
-        self._bandwidth = (f_min, f_centre, f_max)
-
-        runtime.logger.info('(ShotID %d) Estimated bandwidth for the propagated '
-                            'wavelet %.3f-%.3f MHz' % (problem.shot_id, f_min / 1e6, f_max / 1e6))
-
-        # Check for dispersion
-        if self.drp is True:
-            self.drp = False
-
-            runtime.logger.warn('(ShotID %d) DRP weights are not implemented in this version of stride' %
-                                problem.shot_id)
-
-        h = max(*self.space.spacing)
-
-        wavelength = vp_min / f_max
-        ppw = wavelength / h
-        ppw_max = 5
-
-        h_max = wavelength / ppw_max
-
-        if h > h_max:
-            runtime.logger.warn('(ShotID %d) Spatial grid spacing (%.3f mm | %d PPW) is '
-                                'higher than dispersion limit (%.3f mm | %d PPW)' %
-                                (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
-        else:
-            runtime.logger.info('(ShotID %d) Spatial grid spacing (%.3f mm | %d PPW) is '
-                                'below dispersion limit (%.3f mm | %d PPW)' %
-                                (problem.shot_id, h / 1e-3, ppw, h_max / 1e-3, ppw_max))
-
-        # Check for instability
-        dt = self.time.step
-
-        dt_max_OT2 = self._dt_max(2.0 / np.pi, h, vp_max)
-        dt_max_OT4 = self._dt_max(3.6 / np.pi, h, vp_max)
-
-        crossing_factor = dt*vp_max / h * 100
-
-        recompile = False
-        if dt <= dt_max_OT2:
-            runtime.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
-                                'below OT2 limit (%.3f \u03BCs)' %
-                                (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
-
-            selected_kernel = 'OT2'
-
-        elif dt <= dt_max_OT4:
-            runtime.logger.info('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
-                                'above OT2 limit (%.3f \u03BCs)'
-                                % (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT2 / 1e-6))
-
-            selected_kernel = 'OT4'
-
-        else:
-            runtime.logger.warn('(ShotID %d) Time grid spacing (%.3f \u03BCs | %d%%) is '
-                                'above OT4 limit (%.3f \u03BCs)'
-                                % (problem.shot_id, dt / 1e-6, crossing_factor, dt_max_OT4 / 1e-6))
-
-            selected_kernel = 'OT4'
-
-        selected_kernel = selected_kernel if preferred_kernel is None else preferred_kernel
-
-        if self.kernel != selected_kernel:
-            recompile = True
-
-        self.kernel = selected_kernel
-
-        # Select undersampling level
-        f_max *= 4
-        dt_max = 1 / f_max
-
-        undersampling = min(max(2, int(dt_max / dt)), 10) if preferred_undersampling is None else preferred_undersampling
-
-        if self.undersampling_factor != undersampling:
-            recompile = True
-
-        self.undersampling_factor = undersampling
-
-        runtime.logger.info('(ShotID %d) Selected undersampling level %d' %
-                            (problem.shot_id, undersampling,))
-
-        # Maybe recompile
-        if recompile:
-            self.state_operator.operator = None
-            self.adjoint_operator.operator = None
-
-    def _saved(self, field, *kwargs):
-        return field.dt2
-
-    def _symbolic_coefficients(self, *functions):
+    def _symbolic_coefficients(self):
         raise NotImplementedError('DRP weights are not implemented in this version of stride')
 
     def _weights(self):
         raise NotImplementedError('DRP weights are not implemented in this version of stride')
 
-    def _dt_max(self, k, h, vp_max):
-        return k * h / vp_max * 1 / np.sqrt(self.space.dim)
+    def _dt_max(self):
+        raise NotImplementedError('dt_max not implemented for elastic propagator')

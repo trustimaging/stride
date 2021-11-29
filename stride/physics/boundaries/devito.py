@@ -5,6 +5,42 @@ import numpy as np
 from .boundary import Boundary
 
 
+class SpongeBoundaryElastic(Boundary):
+
+    def __init__(self, grid, parameter=0):
+        '''
+        Sponge boundary for elastic codes
+        :param parameter: 0.2763 for homogeneous water, 0.008635 alpha2D
+        '''
+        super().__init__(self, grid)
+        self.damp = None
+        # TODO: calculate boundary coefficient
+        self.parameter = parameter
+
+    def apply(self):
+        space = self._grid.space
+        time = self._grid.time
+
+        self.damp = devito.Function(name="damp", grid=self._grid.devito_grid)
+        eqs = [devito.Eq(self.damp, 1.0)]
+        padsizes = [space.absorbing for _ in range(self._grid.devito_grid.dim)]
+        for (nbl, nbr), d in zip(padsizes, self.damp.dimensions):
+            dampcoeff = self.parameter * space.spacing[0]  # 0.2763102111592855 (water_example)
+            # left
+            dim_l = devito.SubDimension.left(name='abc_%s_l' % d.name, parent=d, thickness=nbl)
+            pos = devito.Abs((nbl - (dim_l - d.symbolic_min) + 1) / float(nbl))
+            val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
+            eqs += [devito.Inc(self.damp.subs({d: dim_l}), val / d.spacing)]
+            # right
+            dampcoeff = self.parameter * space.spacing[0]  # 0.2763102111592855 (water_example)
+            dim_r = devito.SubDimension.right(name='abc_%s_r' % d.name, parent=d, thickness=nbr)
+            pos = devito.Abs((nbr - (d.symbolic_max - dim_r) + 1) / float(nbr))
+            val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
+            eqs += [devito.Inc(self.damp.subs({d: dim_r}), val / d.spacing)]
+        devito.Operator(eqs, name='initdamp')()
+        return self.damp
+
+
 class SpongeBoundary2(Boundary):
     """
     Sponge boundary layer for a second-order equation as proposed in
