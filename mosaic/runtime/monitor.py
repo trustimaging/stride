@@ -1,23 +1,24 @@
 
 import os
+import uuid
 import time
+import copy
 import psutil
-import pprint
 import asyncio
+import datetime
+from collections import OrderedDict
 import subprocess as cmd_subprocess
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
-from .node import MonitoredNode
 from .strategies import RoundRobin
-from ..core.tessera import MonitoredTessera
-from ..core.task import MonitoredTask
+from ..file_manipulation import h5
 from ..utils import subprocess
 from ..utils.logger import LoggerManager, _stdout, _stderr
 from ..profile import profiler, global_profiler
 
 
-__all__ = ['Monitor', 'monitor_strategies']
+__all__ = ['Monitor', 'MonitoredResource', 'MonitoredObject', 'monitor_strategies']
 
 
 monitor_strategies = {
@@ -45,6 +46,12 @@ class Monitor(Runtime):
         self._monitored_nodes = dict()
         self._monitored_tessera = dict()
         self._monitored_tasks = dict()
+
+        now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        self._profile_filename = '%s.profile.h5' % now
+
+        self._start_t = time.time()
+        self._end_t = None
 
     async def init(self, **kwargs):
         """
@@ -170,121 +177,104 @@ class Monitor(Runtime):
         """
         global_profiler.set_local()
 
-    def update_monitored_node(self, sender_id, monitored_node):
-        """
-        Update inner record of node state.
-
-        Parameters
-        ----------
-        sender_id : str
-        monitored_node : dict
-
-        Returns
-        -------
-
-        """
+    def update_node(self, sender_id, update, sub_resources):
         if sender_id not in self._monitored_nodes:
-            self._monitored_nodes[sender_id] = MonitoredNode(sender_id)
+            self._monitored_nodes[sender_id] = MonitoredResource(sender_id)
 
-        self._monitored_nodes[sender_id].update_history(**monitored_node)
+        node = self._monitored_nodes[sender_id]
+        node.update(update, **sub_resources)
+        self._monitor_strategy.update_node(node)
 
-        if os.environ.get('MOSAIC_DUMP_NODES', None) == 'yes':
-            update = self._monitored_nodes[sender_id].get_update()
-            update_str = pprint.pformat(update)
+        if profiler.tracing:
+            node_description = node.append()
+            description = {
+                'monitored_nodes': {
+                    sender_id: node_description
+                }
+            }
 
-            with open('nodes.log', 'a') as file:
-                file.write('============\n')
-                file.write(sender_id + '\n')
-                file.write(update['time'] + '\n')
-                file.write(update_str)
-                file.write('\n')
+            self._append_description(description)
 
-        self._monitor_strategy.update_node(self._monitored_nodes[sender_id])
+    def add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
+        if uid not in self._monitored_tessera:
+            self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
 
-    def init_tessera(self, sender_id, uid, runtime_id):
-        """
-        Start monitoring given tessera.
+        obj = self._monitored_tessera[uid]
+        obj.add_event(sender_id, **kwargs)
+        self._monitor_strategy.update_tessera(obj)
 
-        Parameters
-        ----------
-        sender_id : str
-        uid : str
-        runtime_id : str
+        if profiler.tracing:
+            obj_description = obj.append()
+            description = {
+                'monitored_tessera': {
+                    uid: obj_description
+                }
+            }
 
-        Returns
-        -------
+            self._append_description(description)
 
-        """
-        monitored = MonitoredTessera(uid, runtime_id)
-        self._monitored_tessera[uid] = monitored
-
-        self._monitor_strategy.update_tessera(self._monitored_tessera[uid])
-
-    def init_task(self, sender_id, uid, tessera_id, runtime_id):
-        """
-        Start monitoring given task.
-
-        Parameters
-        ----------
-        sender_id : str
-        uid : str
-        tessera_id : str
-        runtime_id : str
-
-        Returns
-        -------
-
-        """
-        monitored = MonitoredTask(uid, tessera_id, runtime_id)
-        self._monitored_tasks[uid] = monitored
-
-        self._monitor_strategy.update_task(self._monitored_tasks[uid])
-
-    def tessera_state_changed(self, sender_id, uid, state):
-        """
-        Update monitored tessera state.
-
-        Parameters
-        ----------
-        sender_id : str
-        uid : str
-        state : str
-
-        Returns
-        -------
-
-        """
+    def add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
         if uid not in self._monitored_tasks:
-            return
+            self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
 
-        self._monitored_tasks[uid].update_history(state=state)
+        obj = self._monitored_tasks[uid]
+        obj.add_event(sender_id, **kwargs)
+        self._monitor_strategy.update_task(obj)
 
-        self._monitor_strategy.update_tessera(self._monitored_tessera[uid])
+        if profiler.tracing:
+            obj_description = obj.append()
+            description = {
+                'monitored_tasks': {
+                    uid: obj_description
+                }
+            }
 
-    def task_state_changed(self, sender_id, uid, state, elapsed=None):
-        """
-        Update monitored task state.
+            self._append_description(description)
 
-        Parameters
-        ----------
-        sender_id : str
-        uid : str
-        state : str
-        elapsed : float, optional
+    def add_tessera_profile(self, sender_id, runtime_id, uid, profile):
+        if uid not in self._monitored_tessera:
+            self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
 
-        Returns
-        -------
+        obj = self._monitored_tessera[uid]
+        obj.add_profile(sender_id, profile)
 
-        """
+        if profiler.tracing:
+            obj_description = obj.append()
+            description = {
+                'monitored_tessera': {
+                    uid: obj_description
+                }
+            }
+
+            self._append_description(description)
+
+    def add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
         if uid not in self._monitored_tasks:
-            return
+            self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
 
-        self._monitored_tasks[uid].update_history(state=state)
+        obj = self._monitored_tasks[uid]
+        obj.add_profile(sender_id, profile)
 
-        if elapsed is not None:
-            self._monitored_tasks[uid].elapsed = elapsed
+        if profiler.tracing:
+            obj_description = obj.append()
+            description = {
+                'monitored_tasks': {
+                    uid: obj_description
+                }
+            }
 
-        self._monitor_strategy.update_task(self._monitored_tasks[uid])
+            self._append_description(description)
+
+    def _append_description(self, description):
+        if not h5.file_exists(filename=self._profile_filename):
+            description['start_t'] = self._start_t
+
+            with h5.HDF5(filename=self._profile_filename, mode='w') as file:
+                file.dump(description)
+
+        else:
+            with h5.HDF5(filename=self._profile_filename, mode='a') as file:
+                file.append(description)
 
     async def stop(self, sender_id=None):
         """
@@ -301,16 +291,34 @@ class Monitor(Runtime):
         # Get final profile updates before closing
         if profiler.tracing:
             profiler.stop()
+            self._end_t = time.time()
 
-            for node_id, node in self._nodes.items():
-                profiler_update = await node.request_profile(reply=True)
-                global_profiler.recv_profile(node_id, profiler_update)
+            description = {
+                'end_t': self._end_t,
+                'monitored_tessera': {},
+                'monitored_tasks': {},
+            }
 
-            for worker_id, worker in self._workers.items():
-                profiler_update = await worker.request_profile(reply=True)
-                global_profiler.recv_profile(worker_id, profiler_update)
+            for uid, tessera in self._monitored_tessera.items():
+                tessera.collect()
+                description['monitored_tessera'][tessera.uid] = tessera.append()
 
-            global_profiler.append(filename=global_profiler.profiler.filename)
+            for uid, task in self._monitored_tasks.items():
+                task.collect()
+                description['monitored_tasks'][task.uid] = task.append()
+
+            with h5.HDF5(filename=self._profile_filename, mode='a') as file:
+                file.append(description)
+
+            # for node_id, node in self._nodes.items():
+            #     profiler_update = await node.request_profile(reply=True)
+            #     global_profiler.recv_profile(node_id, profiler_update)
+            #
+            # for worker_id, worker in self._workers.items():
+            #     profiler_update = await worker.request_profile(reply=True)
+            #     global_profiler.recv_profile(worker_id, profiler_update)
+            #
+            # global_profiler.append(filename=global_profiler.profiler.filename)
 
         for node_id, node in self._nodes.items():
             await node.stop()
@@ -377,3 +385,267 @@ class Monitor(Runtime):
 
             if timeout is not None and (time.time() - tic) > timeout:
                 break
+
+
+class MonitoredResource:
+    """
+    Base class for those that keep track of the state of a Mosaic runtime,
+
+    """
+
+    def __init__(self, uid):
+        self.uid = self.name = uid
+        self.history = []
+        self.sub_resources = dict()
+
+        self._last_update = 0
+        self._last_append = 0
+
+    @property
+    def state(self):
+        try:
+            return self.history[-1]['state']
+        except IndexError:
+            return None
+
+    @state.setter
+    def state(self, value):
+        last_event = copy.deepcopy(self.history[-1])
+        last_event['state'] = value
+        self.update(last_event)
+
+    def update(self, update, **kwargs):
+        if not isinstance(update, list):
+            update = [update]
+
+        self.history.extend(update)
+
+        for group_name, group_update in kwargs.items():
+            self.add_group(group_name)
+
+            group = self.sub_resources[group_name]
+
+            for name, resource in group_update.items():
+                self.add_resource(group_name, name)
+
+                group[name].update(resource)
+
+    def get_update(self):
+        history = self.history[self._last_update:]
+        self._last_update = len(self.history)
+
+        sub_resources = OrderedDict()
+        for group_name, group in self.sub_resources.items():
+            sub_resources[group_name] = OrderedDict()
+
+            for name, resource in group.items():
+                sub_resources[group_name][name] = resource.get_update()[0]
+
+        return history, sub_resources
+
+    def append(self, filename=None):
+        history = self.history[self._last_append:]
+
+        node_description = {}
+        for index, item in enumerate(history):
+            label = 'history_%08d' % (self._last_append + index)
+            node_description[label] = item
+
+        self._last_append = len(self.history)
+
+        sub_description = {}
+        for group_name, group in self.sub_resources.items():
+            group_description = dict()
+
+            for name, resource in group.items():
+                resource_description = resource.append()
+                group_description[name] = resource_description
+
+            sub_description[group_name] = group_description
+
+        description = {
+            'history': node_description,
+            'sub_resources': sub_description,
+        }
+
+        if filename is None:
+            return description
+
+        if not h5.file_exists(filename=filename):
+            with h5.HDF5(filename=filename, mode='w') as file:
+                file.dump(description)
+
+        else:
+            with h5.HDF5(filename=filename, mode='a') as file:
+                file.append(description)
+
+    def add_group(self, group_name):
+        if group_name not in self.sub_resources:
+            self.sub_resources[group_name] = OrderedDict()
+
+        return self.sub_resources[group_name]
+
+    def add_resource(self, group_name, name):
+        group = self.sub_resources[group_name]
+
+        if name not in group:
+            group[name] = MonitoredResource(name)
+
+        return group[name]
+
+    def sort_resources(self, group_name, key, desc=False):
+        group = self.sub_resources[group_name]
+
+        self.sub_resources[group_name] = OrderedDict(sorted(group.items(),
+                                                     key=lambda x: x[1].history[-1][key],
+                                                     reverse=desc))
+
+
+class MonitoredObject:
+    """
+    Base class for those that keep track of the state of a Mosaic object,
+
+    """
+
+    def __init__(self, runtime_id, uid, tessera_id=None):
+        self.uid = uid
+        self.runtime_id = runtime_id
+
+        if tessera_id is not None:
+            self.tessera_id = tessera_id
+
+        self.proxy_events = OrderedDict()
+        self.proxy_profiles = OrderedDict()
+        self.remote_events = []
+        self.remote_profiles = []
+
+        self._last_proxy_event = dict()
+        self._last_proxy_profile = dict()
+        self._last_remote_event = 0
+        self._last_remote_profile = 0
+
+    @property
+    def state(self):
+        try:
+            return self.remote_events[-1]['name']
+        except IndexError:
+            return None
+
+    @state.setter
+    def state(self, value):
+        event = {
+            'name': 'collected',
+            'event_t': time.time(),
+        }
+
+        self.remote_events.append(event)
+
+    def collect(self):
+        event = {
+            'name': 'collected',
+            'event_t': time.time(),
+        }
+
+        if self.state != 'collected':
+            self.remote_events.append(event)
+
+        for runtime_id, proxy in self.proxy_events.items():
+            if proxy[-1]['name'] != 'collected':
+                proxy.append(event)
+
+    def add_event(self, runtime_id, event_type, event_name, **kwargs):
+        event_uid = uuid.uuid4().hex
+        event = dict(name=event_name, event_uid=event_uid, **kwargs)
+
+        if event_type == 'proxy':
+            if runtime_id not in self.proxy_events:
+                self.proxy_events[runtime_id] = []
+
+            self.proxy_events[runtime_id].append(event)
+        elif event_type == 'remote':
+            self.remote_events.append(event)
+
+    def add_profile(self, runtime_id, profile_type, profile):
+        if profile_type == 'proxy':
+            if runtime_id not in self.proxy_profiles:
+                self.proxy_profiles[runtime_id] = []
+
+            self.proxy_profiles[runtime_id].append(profile)
+        elif profile_type == 'remote':
+            self.remote_profiles.append(profile)
+
+    def append(self, filename=None):
+        remote_events = self.remote_events[self._last_remote_event:]
+        remote_profiles = self.remote_profiles[self._last_remote_profile:]
+
+        remote_events_description = {}
+        for index, item in enumerate(remote_events):
+            label = 'history_%08d' % (self._last_remote_event + index)
+            remote_events_description[label] = item
+
+        remote_profiles_description = {}
+        for index, item in enumerate(remote_profiles):
+            label = 'history_%08d' % (self._last_remote_profile + index)
+            remote_profiles_description[label] = item
+
+        self._last_remote_event = len(self.remote_events)
+        self._last_remote_profile = len(self.remote_profiles)
+
+        proxy_events_description = {}
+        for proxy_name, proxy in self.proxy_events.items():
+            try:
+                last_event = self._last_proxy_event[proxy_name]
+            except KeyError:
+                last_event = 0
+
+            proxy_events = proxy[last_event:]
+
+            proxy_description = {}
+            for index, item in enumerate(proxy_events):
+                label = 'history_%08d' % (last_event + index)
+                proxy_description[label] = item
+
+            proxy_events_description[proxy_name] = proxy_description
+
+            self._last_proxy_event[proxy_name] = len(proxy)
+
+        proxy_profiles_description = {}
+        for proxy_name, proxy in self.proxy_profiles.items():
+            try:
+                last_profile = self._last_proxy_profile[proxy_name]
+            except KeyError:
+                last_profile = 0
+
+            proxy_profiles = proxy[last_profile:]
+
+            proxy_description = {}
+            for index, item in enumerate(proxy_profiles):
+                label = 'history_%08d' % (last_profile + index)
+                proxy_description[label] = item
+
+            proxy_profiles_description[proxy_name] = proxy_description
+
+            self._last_proxy_profile[proxy_name] = len(proxy)
+
+        description = {
+            'uid': self.uid,
+            'runtime_id': self.runtime_id,
+            'remote_events': remote_events_description,
+            'remote_profiles': remote_profiles_description,
+            'proxy_events': proxy_events_description,
+            'proxy_profiles': proxy_profiles_description,
+        }
+
+        if hasattr(self, 'tessera_id'):
+            description['tessera_id'] = self.tessera_id
+
+        if filename is None:
+            return description
+
+        if not h5.file_exists(filename=filename):
+            with h5.HDF5(filename=filename, mode='w') as file:
+                file.dump(description)
+
+        else:
+            with h5.HDF5(filename=filename, mode='a') as file:
+                file.append(description)

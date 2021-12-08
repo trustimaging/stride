@@ -12,12 +12,12 @@ from cached_property import cached_property
 
 import mosaic
 from .task import TaskProxy
-from .base import Base, CMDBase, RemoteBase, ProxyBase, MonitoredBase
+from .base import Base, CMDBase, RemoteBase, ProxyBase
 from ..utils.event_loop import AwaitableOnly
 from ..profile import use_trace
 
 
-__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'MonitoredTessera', 'tessera']
+__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'tessera']
 
 
 def _extract_methods(cls, exclude):
@@ -71,7 +71,7 @@ class Tessera(RemoteBase):
         super().__init__(uid, *args, **kwargs)
         kwargs = self._fill_config(**kwargs)
 
-        self._state = 'init'
+        self._state = None
         self._is_parameter = False
         self._task_queue = asyncio.Queue()
         self._task_lock = asyncio.Lock()
@@ -89,6 +89,7 @@ class Tessera(RemoteBase):
         self._set_cls()
 
         self.runtime.register(self)
+        self.state_changed('init', sync=True)
         self.listen()
 
     def _set_cls(self):
@@ -279,6 +280,8 @@ class Tessera(RemoteBase):
             del task
             del method
 
+        await self.state_changed('stopped')
+
     async def call_safe(self, sender_id, method, task):
         """
         Call a method while handling exceptions, which will be sent back to the
@@ -356,22 +359,6 @@ class Tessera(RemoteBase):
         finally:
             pass
 
-    async def state_changed(self, state):
-        """
-        Signal state changed.
-
-        Parameters
-        ----------
-        state : str
-            New state.
-
-        Returns
-        -------
-
-        """
-        self._state = state
-        await self.runtime.tessera_state_changed(self)
-
     def _dec_parameter_ref(self):
         def _dec_ref(*args):
             self.dec_ref()
@@ -390,7 +377,7 @@ class Tessera(RemoteBase):
     def __del__(self):
         try:
             self.logger.debug('Garbage collected object %s' % self)
-            self.loop.run(self.state_changed, 'collected')
+            self.state_changed('collected', sync=True)
         except AttributeError:
             pass
 
@@ -515,7 +502,7 @@ class TesseraProxy(ProxyBase):
         self._cls_attr_names = None
         self._set_cls()
 
-        self._state = 'pending'
+        self.state_changed('pending', sync=True)
 
     def _set_cls(self):
         if self.__class__.__name__ == '_TesseraProxy':
@@ -547,14 +534,12 @@ class TesseraProxy(ProxyBase):
         Asynchronous correlate of ``__init__``.
 
         """
+        await self.state_changed('init')
+
         kwargs = self._fill_config(**kwargs)
         kwargs.pop('runtime', None)
 
         self._runtime_id = await self.select_worker(self._runtime_id)
-
-        self._state = 'pending'
-        await self.monitor.init_tessera(uid=self._uid,
-                                        runtime_id=self._runtime_id)
 
         self.runtime.register(self)
         cls_attrs = await self.remote_runtime.init_tessera(cls=self._cls,
@@ -562,7 +547,7 @@ class TesseraProxy(ProxyBase):
                                                            reply=True, **kwargs)
         self._cls_attr_names = cls_attrs
 
-        self._state = 'listening'
+        await self.state_changed('listening')
 
     @property
     def runtime_id(self):
@@ -782,10 +767,13 @@ class ArrayProxy(CMDBase):
         Asynchronous correlate of ``__init__``.
 
         """
+        inits = []
         for proxy in self._proxies:
-            await proxy.__init_async__(*args, **kwargs)
+            inits.append(proxy.__init_async__(*args, **kwargs))
             self._runtime_id.append(proxy.runtime_id)
             self._cls_attr_names = proxy._cls_attr_names
+
+        await asyncio.gather(*inits)
 
         self.runtime.register(self)
 
@@ -964,14 +952,6 @@ class ArrayProxy(CMDBase):
                                                            '_runtime_id',
                                                            '_cls_attr_names',
                                                            '_len']
-
-
-class MonitoredTessera(MonitoredBase):
-    """
-    Information container on the state of a tessera.
-
-    """
-    pass
 
 
 class PickleClass:

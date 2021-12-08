@@ -1,485 +1,566 @@
 
+import copy
 import click
 import dash
-import dash_cytoscape as cyto
+from matplotlib import cm
 from dash.dependencies import Input, Output, State
+from collections import OrderedDict
 
-from ..profile import global_profiler
-from ..types import Struct
-
-
-graph_stylesheet = [
-        # Group selectors
-        {
-            'selector': 'node',
-            'style': {
-                'content': 'data(label)',
-            }
-        },
-        {
-            'selector': '.node',
-            'style': {
-                'content': 'data(label)',
-                'font-size': '12px',
-                'text-wrap': 'wrap',
-                'text-halign': 'center',
-                'text-valign': 'center',
-                'line-height': '2px',
-                'width': 'label',
-                'height': 'label',
-                'padding': '10px',
-                'shape': 'round-rectangle',
-                'background-color': 'mapData(t_elapsed_percent, 0, 100, #3496C3, #EA5B40)',
-            }
-        },
-        {
-            'selector': '.compound',
-            'style': {
-                'content': 'data(short_label)',
-                'text-rotation': '-90deg',
-                'font-size': '12px',
-                'text-wrap': 'none',
-                'text-halign': 'left',
-                'text-valign': 'center',
-                'padding': 'auto',
-                'text-margin-x': '-10px',
-                'text-margin-y': '-50%',
-            }
-        },
-        {
-            'selector': '.r-edge',
-            'style': {
-                'label': 'data(label)',
-                'curve-style': 'bezier',
-                'line-style': 'dashed',
-                'target-arrow-shape': 'triangle',
-                'arrow-scale': '1.2',
-                'text-rotation': 'autorotate',
-                'font-size': '10px',
-                'text-background-color': 'white',
-                'text-background-padding': '5px',
-                'text-background-opacity': '1',
-            }
-        },
-    ]
-
-node_data_stylesheet = {
-        'node-data': {
-            'position': 'fixed',
-            'width': '500px',
-            'height': '300px',
-            'padding-bottom': '15px',
-            'top': '50px',
-            'right': '50px',
-            'overflow-x': 'hidden',
-            'overflow-y': 'auto',
-            'border': 'solid 1px #F3F2F1',
-            'box-shadow': '-2px 2px 5px 0px rgba(233,233,233,0.74)',
-            'background-color': 'white',
-
-        },
-        'node-title': {
-            'font-size': '16px',
-            'font-family': 'sans-serif',
-            'height': '50px',
-            'padding': '10px 15px',
-            'background-color': '#F3F2F1',
-            'margin-top': '0',
-        },
-        'row': {
-            'display': 'block',
-            'border-bottom': 'solid 1px white',
-            'padding-left': '15px',
-        },
-        'label': {
-            'display': 'inline-block',
-            'width': '100px',
-            'background-color': '#F3F2F1',
-            'padding': '10px',
-            'font-weight': 'bold',
-            'font-size': '12px',
-            'font-family': 'sans-serif'
-        },
-        'value': {
-            'display': 'inline-block',
-            'width': '320px',
-            'padding': '10px',
-            'font-size': '12px',
-            'font-family': 'sans-serif'
-        },
-    }
-
-node_fields = [
-    ('id', 'ID'),
-    ('runtime_id', 'Runtime'),
-    ('parent', 'Parent node'),
-    ('filename', 'Filename'),
-    ('lineno', 'Line number'),
-    ('t_elapsed', 'Time (s)'),
-    ('t_elapsed_percent', 'Time (%)'),
-]
+from ..file_manipulation import h5
 
 
-def _generate_node():
-    rows = []
+class DisplayElement:
 
-    for field in node_fields:
-        label = field[1]
-        field = field[0]
+    def __init__(self, label_id, label):
+        self.label_id = label_id
+        self.label = label
+        self.elements = []
+        self.html = None
+        self.sub_elements = OrderedDict()
 
-        rows.append(
-            dash.html.Div(
-                [
-                    dash.html.Span(label, id='node-%s-label' % field, style=node_data_stylesheet['label'], ),
-                    dash.html.Span(id='node-%s' % field, style=node_data_stylesheet['value'], ),
-                ],
-                style=node_data_stylesheet['row'],
-            ),
-        )
-
-    return rows
-
-
-class NodeSet:
-
-    def __init__(self):
-        self.nodes = []
-        self.edges = []
-        self.r_calls = []
-        self.parent = None
-
-    def append_node(self, node):
-        self.nodes.append(node)
-
-    def append_edge(self, edge):
-        self.edges.append(edge)
-
-
-cyto.load_extra_layouts()
 
 app = dash.Dash(__name__, title='Mosaic Profiling',)
+
+
+# EVENTS
+#
+# * Tessera
+#   Remote:  init --> (listening --> running) --> collected
+#   Proxy:   pending --> init --> listening --> collected
+#
+# * Task
+#   Remote:  init --> pending --> ready --> running --> done --> collected
+#   Proxy:   pending --> init --> queued --> (done --> result) --> collected
 
 
 @click.command()
 @click.argument('filename', required=True, nargs=1)
 @click.version_option()
 def go(filename):
-    plot_nodes = dict()
-    global_profiler.set_local()
-    global_profiler.load(filename=filename.rstrip('/'))
+    with h5.HDF5(filename=filename, mode='r') as file:
+        profile = file.load()
 
-    total_time = global_profiler.profiler.t_elapsed
-    profiles = global_profiler.profiler.profiles
+    cmap = cm.get_cmap('plasma')
 
-    def _add_r_call(runtime_id, source, target, call_id, return_id, label, node):
-        node.r_calls.append({
-            'source': source,
-            'target': target,
-            'call_id': call_id,
-            'return_id': return_id,
-            'label': label,
-        })
+    # General parameters
+    start_t = profile.start_t
+    end_t = profile.end_t
+    total_t = (end_t - start_t)*1.10
+    total_width = 100
 
-        if node.parent:
-            source = node.parent
-            _add_r_call(runtime_id,
-                        source, target,
-                        call_id, return_id,
-                        label,
-                        plot_nodes[runtime_id][node.parent])
+    # Style configuration
+    stylesheet = {
+        'content': {
+            'display': 'flex',
+            'width': '100%',
+            'height': '100vh',
+        },
+        'sidebar': {
+            'height': '100vh',
+            'width': '300px',
+            'borderRight': 'solid 1px gray',
+            'flexGrow': '0',
+            'flexShrink': '0',
+        },
+        'main': {
+            'height': '100vh',
+            'flexGrow': '1',
+            'overflow': 'auto',
+            'position': 'relative',
+        },
+        'inner-main': {
+            'position': 'relative',
+            'width': '%f%%' % total_width,
+            'transform': 'translateZ(0)',
+            'padding': '30px 0 0',
+        },
+        'ruler': {
+            'position': 'fixed',
+            'top': '0',
+            'left': '0',
+            'width': '100%',
+            'height': '100%',
+        },
+        'divisor-label': {
+            'fontSize': '12px',
+            'fontStyle': 'normal',
+            'display': 'inline-block',
+            'padding': '10px',
+            'color': '#676767',
+        },
+        'runtime': {
+            'padding': '15px 0',
+            'borderBottom': 'solid 1px #d4d4d4',
+            'position': 'relative',
+            'minHeight': '85px',
+        },
+        'runtime-label': {
+            'width': '550px',
+            'fontWeight': 'bold',
+            'margin': '0 0 15px',
+            'padding': '0 15px',
+            'display': 'block',
+            'cursor': 'pointer',
+            'position': 'relative',
+        },
+        'runtime-row': {
+            'position': 'relative',
+            'height': '65px',
+            'padding': '5px 15px',
+            'display': 'none',
+        },
+        'task-row': {
+            'backgroundColor': 'rgba(249, 249, 249, 0.6)',
+        },
+        'row-label': {
+            'width': '550px',
+            'display': 'block',
+            'fontStyle': 'normal',
+            'fontSize': '14px',
+            'cursor': 'pointer',
+            'position': 'relative',
+        },
+        'event': {
+            'display': 'inline-block',
+            'width': '2px',
+            'minWidth': '3px',
+            'height': '35px',
+            'borderLeft': 'solid 0.5px white',
+            'borderRight': 'solid 0.5px white',
+            'position': 'absolute',
+            'bottom': '5px',
+            'fontSize': '12px',
+            'padding': '5px 0px',
+            'textIndent': '5px',
+            'color': 'white',
+            'cursor': 'default',
+        },
+        'event-label': {
+            'fontSize': '12px',
+            'color': 'white',
+            'fontStyle': 'normal',
+            'display': 'block',
+            'overflow': 'hidden',
+            'cursor': 'default',
+            'padding': '0 2px 0 0',
+        },
+        'tooltip': {
+            'display': 'none',
+            'width': 'auto',
+            'minWidth': '500px',
+            'height': 'auto',
+            'position': 'absolute',
+            'left': '0',
+            'top': '35px',
+            'backgroundColor': 'white',
+            'fontSize': '12px',
+            'color': 'black',
+            'padding': '15px',
+            'boxShadow': '-2px 2px 5px 0px rgba(233,233,233,0.74)',
+            'zIndex': '9999',
+        },
+        'tooltip-row': {
+            'display': 'block',
+        },
+        'tooltip-label': {
+            'display': 'inline-block',
+            'fontWeight': 'bold',
+        },
+        'tooltip-value': {
+            'display': 'inline-block',
+        },
+    }
 
-    def _add_plot_node(runtime_id, key, node, graph):
-        plot_nodes[runtime_id][key] = NodeSet()
-        plot_nodes[runtime_id][key].parent = node['data'].get('parent', None)
+    # Define divisor styles
+    n_divisors = 10
+    n_small_divisors = 10
+    divisor_width = total_width / n_divisors
+    small_divisor_width = 100 / n_small_divisors
+    div_s = total_t / n_divisors
 
-        prev_key = None
+    divisor = {
+        'position': 'absolute',
+        'top': '0',
+        'height': '100%',
+        'width': '%f%%' % divisor_width,
+        'borderRight': 'solid 1px #d4d4d4',
 
-        if 'target' in graph and graph['target'] != 'monitor':
-            msg_id = key
-            target_runtime_id = graph['target']
-            call_id = key
-            return_id = '%s.%s' % (target_runtime_id, msg_id)
+    }
+    for i in range(n_divisors):
+        divisor = copy.deepcopy(divisor)
 
-            target_node = None
-            for trace_id, trace in profiles[target_runtime_id].items():
-                for node_id, prospect_node in trace.items():
-                    if node_id == return_id:
-                        target_node = prospect_node
-                        break
+        divisor['left'] = '%f%%' % (i*divisor_width,)
 
-                if target_node:
-                    break
+        stylesheet['divisor-%d' % i] = divisor
 
-            if target_node is not None:
-                t_elapsed = target_node['t_end'] - graph['t_start']
+    small_divisor = {
+        'position': 'absolute',
+        'top': '0',
+        'height': '10px',
+        'width': '%f%%' % small_divisor_width,
+        'borderRight': 'solid 1px #d4d4d4',
+    }
+    for i in range(n_small_divisors-1):
+        small_divisor = copy.deepcopy(small_divisor)
 
-                source = key
-                target = target_node['trace_id']
-                label = node['data']['name'] + ' (%f s)' % t_elapsed
+        small_divisor['left'] = '%f%%' % (i*small_divisor_width,)
 
-                _add_r_call(runtime_id,
-                            source, target,
-                            call_id, return_id,
-                            label,
-                            plot_nodes[runtime_id][key])
+        stylesheet['small-divisor-%d' % i] = small_divisor
 
-        for child_key, child_graph in graph.items():
-            if not isinstance(child_graph, (dict, Struct)):
-                continue
+    # Transform profile into events and organise
+    runtime_events = OrderedDict()
 
-            try:
-                node_name = child_graph.get('name', child_key)
-            except KeyError:
-                continue
+    for uid, obj in profile.monitored_tessera.items():
+        remote_runtime_id = obj['runtime_id']
+        if remote_runtime_id not in runtime_events:
+            runtime_events[remote_runtime_id] = OrderedDict()
 
-            long_label = node_name
-            short_label = node_name
-
-            t_elapsed = -1
-            t_elapsed_percent = -1
-
-            if 't_elapsed' in child_graph:
-                t_elapsed = child_graph['t_elapsed']
-                t_elapsed_percent = child_graph['t_elapsed'] / total_time * 100
-
-                long_label += ' \n(%f%%)' % t_elapsed_percent
-                short_label += ' (%f%%)' % t_elapsed_percent
-
-            child_node = {
-                'data': {
-                    'id': child_key,
-                    'name': node_name,
-                    'filename': child_graph.get('filename', ''),
-                    'lineno': child_graph.get('lineno', -1),
-                    'label': long_label,
-                    'short_label': short_label,
-                    'parent': key,
-                    'runtime_id': runtime_id,
-                    't_elapsed': t_elapsed,
-                    't_elapsed_percent': t_elapsed_percent,
-                    'expanded': False,
-                },
-                'classes': 'node',
-            }
-            plot_nodes[runtime_id][key].append_node(child_node)
-
-            if prev_key is not None:
-                edge = {
-                    'data': {'source': prev_key, 'target': child_key}
-                }
-                plot_nodes[runtime_id][key].append_edge(edge)
-
-            prev_key = child_key
-            _add_plot_node(runtime_id, child_key, child_node, child_graph)
-
-        return prev_key
-
-    plot_elements = []
-
-    for runtime_id in profiles.keys():
-        if runtime_id == 'monitor':
-            continue
-
-        if not len(profiles[runtime_id].keys()):
-            continue
-
-        node = {
-            'data': {
-                'id': runtime_id,
-                'name': runtime_id,
-                'label': runtime_id,
-                'short_label': runtime_id,
-                'expanded': True
-            },
-            'classes': 'compound',
+        runtime_events[remote_runtime_id][uid] = {
+            'events': [],
+            'tasks': OrderedDict(),
         }
 
-        plot_nodes[runtime_id] = dict()
-        _add_plot_node(runtime_id, runtime_id, node, profiles[runtime_id])
+        for runtime_id, runtime in obj.proxy_events.items():
+            if runtime_id not in runtime_events:
+                runtime_events[runtime_id] = OrderedDict()
 
-        for trace_index, trace_id in enumerate(profiles[runtime_id].keys()):
-            for r_call in plot_nodes[runtime_id][trace_id].r_calls:
-                r_edge = {
-                    'data': {'source': r_call['source'], 'target': r_call['target'],
-                             'label': r_call['label']},
-                    'classes': 'r-edge',
-                }
-                plot_elements.append(r_edge)
+            runtime_events[runtime_id][uid] = {
+                'events': [],
+                'tasks': OrderedDict(),
+            }
 
-        plot_nodes[runtime_id][runtime_id].nodes.insert(0, node)
+            events = list(runtime.values())
+            for index, event in enumerate(events):
+                event['uid'] = uid
+                event['runtime_id'] = runtime_id
+                event['remote_runtime_id'] = remote_runtime_id
+                event['event_type'] = 'proxy'
+                event['event_t'] = event['event_t'] - start_t
+                event['rel_event_t'] = event['event_t']/total_t * 100.
 
-        plot_elements += plot_nodes[runtime_id][runtime_id].nodes + plot_nodes[runtime_id][runtime_id].edges
+                try:
+                    next_event = events[index+1]
+                except IndexError:
+                    pass
+                else:
+                    event['end_t'] = next_event['event_t'] - start_t
+                    event['total_t'] = event['end_t'] - event['event_t']
 
-    app.layout = dash.html.Div(
-        [
-            cyto.Cytoscape(
-                id='cytoscape',
-                elements=plot_elements,
-                style={'width': '100%', 'height': '100vh'},
-                layout={
-                    'name': 'dagre',
-                    'fit': False,
-                    'nodeDimensionsIncludeLabels': True,
-                    'rankDir': 'TB',
-                    'animate': False,
-                    'ranker': 'network-simplex',
-                    'nodeSep': 50,
-                    'edgeSep': 80,
-                },
-                stylesheet=graph_stylesheet,
-                autounselectify=True,
-            ),
+                    event['rel_end_t'] = event['end_t']/total_t * 100.
+                    event['rel_total_t'] = event['total_t']/total_t * 100.
+
+                runtime_events[runtime_id][uid]['events'].append(event)
+
+        events = list(obj.remote_events.values())
+        for index, event in enumerate(events):
+            event['uid'] = uid
+            event['runtime_id'] = remote_runtime_id
+            event['remote_runtime_id'] = obj['runtime_id']
+            event['event_type'] = 'remote'
+            event['event_t'] = event['event_t'] - start_t
+            event['rel_event_t'] = event['event_t'] / total_t * 100.
+
+            try:
+                next_event = events[index + 1]
+            except IndexError:
+                pass
+            else:
+                event['end_t'] = next_event['event_t'] - start_t
+                event['total_t'] = event['end_t'] - event['event_t']
+
+                event['rel_end_t'] = event['end_t'] / total_t * 100.
+                event['rel_total_t'] = event['total_t'] / total_t * 100.
+
+            runtime_events[remote_runtime_id][uid]['events'].append(event)
+
+    for uid, obj in profile.monitored_tasks.items():
+        remote_runtime_id = obj['runtime_id']
+        tessera_id = obj['tessera_id']
+
+        for runtime_id, runtime in obj.proxy_events.items():
+            if runtime_id not in runtime_events:
+                runtime_events[runtime_id] = OrderedDict()
+
+            runtime_events[runtime_id][tessera_id]['tasks'][uid] = []
+
+            events = list(runtime.values())
+            for index, event in enumerate(events):
+                event['uid'] = uid
+                event['runtime_id'] = runtime_id
+                event['remote_runtime_id'] = remote_runtime_id
+                event['tessera_id'] = obj['tessera_id']
+                event['event_type'] = 'proxy'
+                event['event_t'] = event['event_t'] - start_t
+                event['rel_event_t'] = event['event_t']/total_t * 100.
+
+                try:
+                    next_event = events[index+1]
+                except IndexError:
+                    pass
+                else:
+                    event['end_t'] = next_event['event_t'] - start_t
+                    event['total_t'] = event['end_t'] - event['event_t']
+
+                    event['rel_end_t'] = event['end_t']/total_t * 100.
+                    event['rel_total_t'] = event['total_t']/total_t * 100.
+
+                runtime_events[runtime_id][tessera_id]['tasks'][uid].append(event)
+
+        runtime_events[remote_runtime_id][tessera_id]['tasks'][uid] = []
+
+        events = list(obj.remote_events.values())
+        for index, event in enumerate(events):
+            event['uid'] = uid
+            event['runtime_id'] = remote_runtime_id
+            event['remote_runtime_id'] = obj['runtime_id']
+            event['tessera_id'] = obj['tessera_id']
+            event['event_type'] = 'remote'
+            event['event_t'] = event['event_t'] - start_t
+            event['rel_event_t'] = event['event_t'] / total_t * 100.
+
+            try:
+                next_event = events[index + 1]
+            except IndexError:
+                pass
+            else:
+                event['end_t'] = next_event['event_t'] - start_t
+                event['total_t'] = event['end_t'] - event['event_t']
+
+                event['rel_end_t'] = event['end_t'] / total_t * 100.
+                event['rel_total_t'] = event['total_t'] / total_t * 100.
+
+            runtime_events[remote_runtime_id][tessera_id]['tasks'][uid].append(event)
+
+    for runtime_id, runtime in runtime_events.items():
+        for obj_id, obj in runtime.items():
+            obj['tasks'] = OrderedDict(sorted(obj['tasks'].items(),
+                                              key=lambda x: x[1][0]['event_t']))
+
+    runtime_events = OrderedDict(sorted(runtime_events.items(), key=lambda x: x[0]))
+
+    # Create display elements and ruler
+    z_index = [99999]
+    display_elements = OrderedDict()
+
+    def generate_element(index, event):
+        style = copy.deepcopy(stylesheet['event'])
+
+        style['zIndex'] = str(z_index[-1])
+        z_index.append(z_index[-1] - 1)
+
+        style['left'] = '%f%%' % event['rel_event_t']
+        style['width'] = '%f%%' % event['rel_total_t']
+
+        colour = cmap(event['rel_total_t'] / 100)
+        style['backgroundColor'] = 'rgba(%f, %f, %f, %f)' % (colour[0] * 255, colour[1] * 255, colour[2] * 255, colour[3])
+
+        event_info = {
+            'event_uid': 'UID:',
+            'uid': 'Object UID:',
+            'name': 'Event name:',
+            'runtime_id': 'Event runtime:',
+            'remote_runtime_id': 'Remote runtime:',
+            'event_t': 'Start time (s):',
+            'end_t': 'End time (s):',
+            'total_t': 'Total time (s):',
+            'rel_total_t': 'Total relative time (%):',
+        }
+
+        event_tooltip = [
             dash.html.Div(
                 [
-                    dash.html.H2(id='node-title', style=node_data_stylesheet['node-title'], ),
-                ] + _generate_node(),
-                id='node-data',
-                style=node_data_stylesheet['node-data'],
-            )
+                    dash.html.Span(value, style=stylesheet['tooltip-label']),
+                    dash.html.Span(str(event[key]), style=stylesheet['tooltip-value']),
+                ],
+                style=stylesheet['tooltip-row'],
+            ) for key, value in event_info.items()
         ]
-    )
 
-    @app.callback(Output('cytoscape', 'elements'),
-                  Input('cytoscape', 'tapNodeData'),
-                  State('cytoscape', 'elements'))
-    def generate_elements(node_data, elements):
-        if not node_data:
-            return plot_elements
+        event_element = dash.html.Div(
+            [
+                dash.html.Span(event['name'], className='event-label', style=stylesheet['event-label']),
+                dash.html.Span(event['uid'], className='event-label', style=stylesheet['event-label']),
+                dash.html.Div(
+                    event_tooltip,
+                    className='tooltip',
+                    style=stylesheet['tooltip'],
+                ),
+            ],
+            id=event['event_uid'],
+            className='event',
+            style=style,
+        )
 
-        runtime_id = node_data['runtime_id']
-        node_id = node_data['id']
+        return event_element
 
-        if node_id not in plot_nodes[runtime_id]:
-            return plot_elements
+    def generate_elements():
+        elements = []
 
-        # Find sub-graph
-        sub_nodes = plot_nodes[runtime_id][node_id].nodes
-        sub_edges = plot_nodes[runtime_id][node_id].edges
+        for runtime_id, runtime in runtime_events.items():
+            display_elements[runtime_id] = DisplayElement(
+                label_id=runtime_id,
+                label=dash.html.Span(runtime_id,
+                                     id='%s-label' % runtime_id,
+                                     n_clicks=0,
+                                     className='runtime-label',
+                                     style=stylesheet['runtime-label']),
+            )
 
-        if not sub_nodes:
-            return elements
+            for obj_id, obj in runtime.items():
+                label_id = '%s-%s' % (runtime_id, obj_id)
 
-        # Retrieve the currently selected element, and toggle expanded
-        index = -1
-        for index, element in enumerate(elements):
-            if node_id == element.get('data').get('id'):
-                element['data']['expanded'] = not element['data']['expanded']
+                display_elements[obj_id] = DisplayElement(
+                    label_id=label_id,
+                    label=dash.html.Span(obj_id,
+                                         id='%s-label' % label_id,
+                                         n_clicks=0,
+                                         className='row-label',
+                                         style=stylesheet['row-label']),
+                )
 
-                if not node_data.get('expanded'):
-                    element['classes'] = 'compound'
-                else:
-                    element['classes'] = 'node'
+                for index, event in enumerate(obj['events']):
+                    if 'rel_total_t' not in event:
+                        continue
 
-                break
+                    event_element = generate_element(index, event)
+                    display_elements[obj_id].elements.append(event_element)
 
-        # Check if node has been expanded
-        if not node_data.get('expanded'):
-            if sub_nodes:
-                for sub_index, node in enumerate(sub_nodes):
-                    elements.insert(index + sub_index + 1, node)
+                for task_id, task in obj['tasks'].items():
+                    task_label_id = '%s-%s' % (runtime_id, task_id)
 
-                # Find the first node in the subgraph
-                sub_first_node = sub_nodes[0]
+                    display_elements[task_id] = DisplayElement(
+                        label_id=task_label_id,
+                        label=dash.html.Span(task_id,
+                                             id='%s-label' % task_label_id,
+                                             n_clicks=0,
+                                             className='row-label',
+                                             style=stylesheet['row-label']),
+                    )
 
-                # Find the previous edge in the current graph
-                for element in elements:
-                    if element.get('classes') != 'r-edge' and node_id == element['data'].get('target'):
-                        element['data']['target'] = sub_first_node['data']['id']
-                        break
+                    for index, event in enumerate(task):
+                        if 'rel_total_t' not in event:
+                            continue
 
-                # Find the last node in the subgraph
-                sub_last_node = sub_nodes[-1]
+                        event_element = generate_element(index, event)
+                        display_elements[task_id].elements.append(event_element)
 
-                # Find the next edge in the current graph
-                for element in elements:
-                    if element.get('classes') != 'r-edge' and node_id == element['data'].get('source'):
-                        element['data']['source'] = sub_last_node['data']['id']
-                        break
+                    task_html = dash.html.Div(
+                        [display_elements[task_id].label] + display_elements[task_id].elements,
+                        id=task_label_id,
+                        style={**stylesheet['runtime-row'], **stylesheet['task-row']},
+                    )
+                    display_elements[task_id].html = task_html
 
-                # Find whether there are any r_calls in the sub_nodes
-                for node in sub_nodes:
-                    for r_call in plot_nodes[runtime_id][node['data']['id']].r_calls:
-                        for element in elements:
-                            if element.get('classes') == 'r-edge' and element['data'].get('target') == r_call['target']:
-                                del element['data']['id']
-                                element['data']['source'] = r_call['source']
-                                break
+                    display_elements[obj_id].sub_elements[task_id] = display_elements[task_id]
 
-            if sub_edges:
-                elements.extend(sub_edges)
+                obj_html = dash.html.Div(
+                    [display_elements[obj_id].label] + display_elements[obj_id].elements,
+                    id=label_id,
+                    style=stylesheet['runtime-row'],
+                )
+                display_elements[obj_id].html = obj_html
 
-        else:
-            if sub_nodes:
-                for node in sub_nodes:
-                    elements.remove(node)
+                display_elements[runtime_id].sub_elements[obj_id] = display_elements[obj_id]
 
-                # Find the first node in the subgraph
-                sub_first_node = sub_nodes[0]
+            runtime_rows = []
 
-                # Find the previous edge in the current graph
-                for element in elements:
-                    if element.get('classes') != 'r-edge' and sub_first_node['data']['id'] == element['data'].get('target'):
-                        del element['data']['id']
-                        element['data']['target'] = node_id
-                        break
+            def generate_rows(obj_id):
+                for sub_id, sub_element in display_elements[obj_id].sub_elements.items():
+                    runtime_rows.append(sub_element.html)
 
-                # Find the last node in the subgraph
-                sub_last_node = sub_nodes[-1]
+                    generate_rows(sub_id)
 
-                # Find the last edge in the current graph
-                for element in elements:
-                    if element.get('classes') != 'r-edge' and sub_last_node['data']['id'] == element['data'].get('source'):
-                        del element['data']['id']
-                        element['data']['source'] = node_id
-                        break
+            generate_rows(runtime_id)
 
-                # Find whether there are any r_calls in the sub_nodes
-                for node in sub_nodes:
-                    for r_call in plot_nodes[runtime_id][node['data']['id']].r_calls:
-                        for element in elements:
-                            if element.get('classes') == 'r-edge' and element['data'].get('target') == r_call['target']:
-                                del element['data']['id']
-                                element['data']['source'] = node_id
-                                break
+            runtime_html = dash.html.Div(
+                [display_elements[runtime_id].label] + runtime_rows,
+                id=runtime_id,
+                style=stylesheet['runtime'],
+            )
+            display_elements[runtime_id].html = runtime_html
+            elements.append(runtime_html)
 
-            if sub_edges:
-                for edge in sub_edges:
-                    source = edge['data']['source']
-                    target = edge['data']['target']
+            def generate_callback(obj_id):
 
-                    for element in elements:
-                        if element['data'].get('source') == source \
-                                and element['data'].get('target') == target:
-                            elements.remove(element)
+                label_id = display_elements[obj_id].label_id
+                output_labels = [each.label_id
+                                 for each in display_elements[obj_id].sub_elements.values()]
+
+                if not len(output_labels):
+                    return
+
+                @app.callback(
+                    [Output(each, 'style') for each in output_labels],
+                    [Input('%s-label' % label_id, 'n_clicks')],
+                    [State(each, 'style') for each in output_labels],
+                    prevent_initial_call=True,
+                )
+                def clicks(n_clicks, *styles):
+                    closed = (n_clicks % 2) != 0
+                    display_elements[obj_id].label.n_clicks += 1
+
+                    if closed:
+                        for style in styles:
+                            style['display'] = 'block'
+
+                    else:
+                        for style in styles:
+                            style['display'] = 'none'
+
+                    return styles
+
+                for sub_id, sub_element in display_elements[obj_id].sub_elements.items():
+                    generate_callback(sub_id)
+
+                return clicks
+
+            generate_callback(runtime_id)
 
         return elements
 
-    outputs = []
-    for field in node_fields:
-        field = field[0]
+    def generate_ruler():
+        divisors = []
 
-        outputs.append(Output('node-%s' % field, 'children'))
+        for i in range(n_divisors):
+            small_divisors = [
+                dash.html.Span('%.2f s' % (div_s*i,), style=stylesheet['divisor-label'])
+            ]
 
-    @app.callback(Output('node-data', 'style'),
-                  Output('node-title', 'children'),
-                  *outputs,
-                  Input('cytoscape', 'mouseoverNodeData'),
-                  Input('node-data', 'style'))
-    def display_node_data(node_data, style):
-        title = 'NODE — '
+            for j in range(n_small_divisors-1):
+                small_divisor = dash.html.I(style=stylesheet['small-divisor-%d' % j])
+                small_divisors.append(small_divisor)
 
-        if not node_data:
-            style['display'] = 'none'
+            divisor = dash.html.I(small_divisors, className='divisor', style=stylesheet['divisor-%d' % i])
+            divisors.append(divisor)
 
-            return (style, title) + (None,) * len(node_fields)
+        return divisors
 
-        title += node_data['name']
-        style['display'] = 'block'
+    # Configure the app
+    app.config['suppress_callback_exceptions'] = True
 
-        return (style, title) + tuple([node_data[field[0]] if field[0] in node_data else None
-                                       for field in node_fields])
+    app.layout = dash.html.Div(
+        [
+            dash.html.Div(
+                [],
+                id='sidebar',
+                style=stylesheet['sidebar'],
+            ),
+            dash.html.Div(
+                dash.html.Div(
+                    generate_ruler() + generate_elements(),
+                    id='inner-main',
+                    style=stylesheet['inner-main'],
+                ),
+                id='main',
+                style=stylesheet['main'],
+            ),
+        ],
+        id='content',
+        style=stylesheet['content'],
+    )
 
-    app.run_server(debug=False)
+    # Start server
+    app.run_server(debug=True)
 
 
 if __name__ == '__main__':

@@ -1,15 +1,14 @@
 
 import uuid
-import time
 import weakref
 import operator
 from cached_property import cached_property
 
-from .base import Base, RemoteBase, ProxyBase, MonitoredBase
+from .base import Base, RemoteBase, ProxyBase
 from ..utils import Future
 
 
-__all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone', 'MonitoredTask']
+__all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone']
 
 
 class Task(RemoteBase):
@@ -87,8 +86,9 @@ class Task(RemoteBase):
         self._result = None
         self._exception = None
 
-        self._state = 'init'
+        self._state = None
         self.runtime.register(self)
+        self.state_changed('init', sync=True)
         self.register_proxy(self._sender_id)
 
     @property
@@ -98,6 +98,14 @@ class Task(RemoteBase):
 
         """
         return self._sender_id
+
+    @property
+    def tessera_id(self):
+        """
+        Tessera UID.
+
+        """
+        return self._tessera.uid
 
     @cached_property
     def remote_runtime(self):
@@ -218,6 +226,14 @@ class Task(RemoteBase):
 
         self._args_state = dict()
         self._kwargs_state = dict()
+
+    def add_event(self, event_name, sync=False, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_event(event_name, sync=sync, **kwargs)
+
+    def add_profile(self, profile, sync=False, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_profile(profile, sync=sync, **kwargs)
 
     # TODO Await all of the remote results together using gather
     async def prepare_args(self):
@@ -357,33 +373,9 @@ class Task(RemoteBase):
             if not self._ready_future.done():
                 self._ready_future.set_result(True)
 
-    async def state_changed(self, state):
-        """
-        Signal change in task state.
-
-        Parameters
-        ----------
-        state : str
-            New state of the task.
-
-        Returns
-        -------
-
-        """
-        self._state = state
-
-        if state == 'running':
-            self._tic = time.time()
-
-        elapsed = None
-        if state == 'done' or state == 'failed':
-            self._elapsed = elapsed = time.time() - self._tic
-
-        await self.runtime.task_state_changed(self, elapsed=elapsed)
-
     def __del__(self):
         self.logger.debug('Garbage collected object %s' % self)
-        self.loop.run(self.state_changed, 'collected')
+        self.state_changed('collected', sync=True)
 
 
 class TaskProxy(ProxyBase):
@@ -409,10 +401,12 @@ class TaskProxy(ProxyBase):
         self.args = args
         self.kwargs = kwargs
 
-        self._state = 'pending'
+        self._state = None
         self._result = None
         self._done_future = Future()
         self._outputs = None
+
+        self.state_changed('pending', sync=True)
 
     async def init(self):
         """
@@ -422,9 +416,7 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        await self.monitor.init_task(uid=self._uid,
-                                     tessera_id=self._tessera_proxy.uid,
-                                     runtime_id=self.runtime_id)
+        await self.state_changed('init')
 
         self.runtime.register(self)
 
@@ -438,7 +430,7 @@ class TaskProxy(ProxyBase):
         await self.remote_runtime.init_task(task=task, uid=self._uid,
                                             reply=True)
 
-        self._state = 'queued'
+        await self.state_changed('queued')
 
     @property
     def runtime_id(self):
@@ -447,6 +439,14 @@ class TaskProxy(ProxyBase):
 
         """
         return self._tessera_proxy.runtime_id
+
+    @property
+    def tessera_id(self):
+        """
+        Tessera UID.
+
+        """
+        return self._tessera_proxy.uid
 
     @cached_property
     def remote_runtime(self):
@@ -499,7 +499,7 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        self._state = 'done'
+        self.state_changed('done', sync=True)
 
         self._done_future.set_result(True)
 
@@ -518,7 +518,7 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        self._state = 'failed'
+        self.state_changed('failed', sync=True)
 
         exc = exc[1].with_traceback(exc[2].as_traceback())
         self._done_future.set_exception(exc)
@@ -557,6 +557,14 @@ class TaskProxy(ProxyBase):
         # so that it can be garbage collected if necessary
         self._tessera_proxy = weakref.proxy(self._tessera_proxy)
 
+    def add_event(self, event_name, sync=False, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_event(event_name, sync=sync, **kwargs)
+
+    def add_profile(self, profile, sync=False, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_profile(profile, sync=sync, **kwargs)
+
     async def result(self):
         """
         Gather remote result from the task.
@@ -571,7 +579,11 @@ class TaskProxy(ProxyBase):
         if self._result is not None:
             return self._result
 
+        await self.state_changed('result')
+
         self._result = await self.cmd_recv_async(method='get_result')
+
+        await self.state_changed('done')
 
         return self._result
 
@@ -754,7 +766,11 @@ class TaskOutput(TaskOutputBase):
         if self._result is not None:
             return self._result
 
+        await self._task_proxy.state_changed('result')
+
         self._result = await self._task_proxy.cmd_recv_async(method='get_result', key=self._key)
+
+        await self._task_proxy.state_changed('done')
 
         return self._result
 
@@ -785,16 +801,3 @@ class TaskDone(TaskOutputBase):
         self._result = True
 
         return self._result
-
-
-class MonitoredTask(MonitoredBase):
-    """
-    Information container on the state of a task.
-
-    """
-
-    def __init__(self, uid, tessera_id, runtime_id):
-        super().__init__(uid, runtime_id)
-
-        self.tessera_id = tessera_id
-        self.elapsed = None

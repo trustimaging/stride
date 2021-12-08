@@ -6,6 +6,7 @@ from datetime import datetime
 
 from ..utils.change_case import camel_case
 from ..types import Struct
+from ..profile import skip_profile
 
 
 __all__ = ['HDF5', 'file_exists']
@@ -123,7 +124,7 @@ def read(obj, lazy=True):
     if isinstance(obj, h5py.Group):
         if obj.attrs['is_array']:
             data = []
-            for key in obj.keys():
+            for key in sorted(obj.keys()):
                 data.append(read(obj[key], lazy=lazy))
 
         else:
@@ -260,7 +261,7 @@ class HDF5:
             filename = _abs_filename(filename, path)
 
         self._filename = filename
-        self._file = h5py.File(self._filename, self._mode, libver='latest')
+        self._file = h5py.File(self._filename, self._mode)
 
     @property
     def mode(self):
@@ -277,15 +278,18 @@ class HDF5:
     def close(self):
         self._file.close()
 
+    @skip_profile(stop_trace=True)
     def load(self, lazy=True):
         group = self._file['/']
         description = read(group, lazy=lazy)
 
         return Struct(description)
 
+    @skip_profile(stop_trace=True)
     def dump(self, description):
         write('/', description, self._file)
 
+    @skip_profile(stop_trace=True)
     def append(self, description):
         append('/', description, self._file)
 

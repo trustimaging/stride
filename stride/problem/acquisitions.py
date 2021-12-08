@@ -13,6 +13,7 @@ except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
 from mosaic.file_manipulation import h5
+from mosaic.profile import skip_profile
 
 from .data import Traces
 from .base import ProblemBase
@@ -972,6 +973,7 @@ class Acquisitions(ProblemBase):
 
         return axis
 
+    @skip_profile(stop_trace=True)
     def plot_wavelets(self, **kwargs):
         """
         Plot wavelets for for all shots if they are allocated.
@@ -1000,6 +1002,7 @@ class Acquisitions(ProblemBase):
 
         return self._plot(update)
 
+    @skip_profile(stop_trace=True)
     def plot_observed(self, **kwargs):
         """
         Plot observed for for all shots if they are allocated.

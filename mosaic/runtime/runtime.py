@@ -327,7 +327,8 @@ class Runtime(BaseRPC):
         -------
 
         """
-        self._loop.interval(self.send_profile, interval=5)
+        pass
+        # self._loop.interval(self.send_profile, interval=25)
 
     def set_comms(self, address=None, port=None):
         """
@@ -942,40 +943,6 @@ class Runtime(BaseRPC):
 
         tessera.queue_task((sender_id, task, frame_info))
         await task.state_changed('pending')
-
-    async def tessera_state_changed(self, tessera):
-        """
-        Notify change in tessera state.
-
-        Parameters
-        ----------
-        tessera : Tessera
-
-        Returns
-        -------
-
-        """
-        monitor = self.get_monitor()
-        await monitor.tessera_state_changed(uid=tessera.uid,
-                                            state=tessera.state)
-
-    async def task_state_changed(self, task, elapsed=None):
-        """
-        Notify change in task state.
-
-        Parameters
-        ----------
-        task : Task
-        elapsed : float, optional
-
-        Returns
-        -------
-
-        """
-        monitor = self.get_monitor()
-        await monitor.task_state_changed(uid=task.uid,
-                                         state=task.state,
-                                         elapsed=elapsed)
 
 
 class RuntimeProxy(BaseRPC):

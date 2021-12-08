@@ -3,6 +3,7 @@ cached-property
 click
 cloudpickle>=1.6
 cython
+dash>=2.0.0
 devito>=4.6
 flake8
 gputil

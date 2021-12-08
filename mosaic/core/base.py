@@ -1,12 +1,12 @@
 
-import datetime
+import time
 
 import mosaic
 from ..utils import Future
-from ..profile import skip_profile
+from ..profile import profiler, skip_profile
 
 
-__all__ = ['RemoteBase', 'ProxyBase', 'MonitoredBase']
+__all__ = ['RemoteBase', 'ProxyBase']
 
 
 class Base:
@@ -118,6 +118,14 @@ class CMDBase(Base):
 
         """
         raise NotImplementedError('Unimplemented Base property remote_runtime')
+
+    @property
+    def runtime_id(self):
+        """
+        Runtime ID where remote object resides.
+
+        """
+        raise NotImplementedError('Unimplemented CMDBase property runtime_id')
 
     @classmethod
     def remote_type(cls):
@@ -292,6 +300,90 @@ class CMDBase(Base):
 
         return result
 
+    async def start_trace(self):
+        profiler.start_trace(self._uid)
+
+    async def stop_trace(self):
+        profiler.stop_trace(self._uid)
+
+    def state_changed(self, state, sync=False):
+        """
+        Signal state changed.
+
+        Parameters
+        ----------
+        state : str
+            New state.
+        sync : bool, optional
+            Whether to execute synchronously
+
+        Returns
+        -------
+
+        """
+        self._state = state
+        return self.add_event(state, sync=sync)
+
+    def add_event(self, event_name, sync=False, **kwargs):
+        obj_type = self.type.split('_')[0]
+        method = getattr(self.monitor, 'add_%s_event' % obj_type)
+
+        event_type = 'proxy' if self.is_proxy else 'remote'
+        event_t = time.time()
+
+        # *sender_id
+        # runtime_id (remote_runtime_id)
+        # uid,
+        # *tessera_id
+        # event_type
+        # event_name
+        # **kwargs
+        event = dict(runtime_id=self.runtime_id,
+                     uid=self._uid,
+                     event_type=event_type,
+                     event_name=event_name,
+                     event_t=event_t, **kwargs)
+
+        def add_event_sync():
+            method(**event, as_async=False)
+
+        async def add_event_async():
+            await method(**event, as_async=True)
+
+        if sync:
+            return add_event_sync()
+        else:
+            return add_event_async()
+
+    def add_profile(self, profile, sync=False, **kwargs):
+        obj_type = self.type.split('_')[0]
+        method = getattr(self.monitor, 'add_%s_profile' % obj_type)
+
+        profile_type = 'proxy' if self.is_proxy else 'remote'
+
+        # *sender_id
+        # runtime_id (remote_runtime_id)
+        # uid,
+        # *tessera_id
+        # profile_type
+        # profile
+        profile_update = dict(runtime_id=self.runtime_id,
+                              uid=self._uid,
+                              profile_type=profile_type,
+                              profile=profile,
+                              **kwargs)
+
+        def add_profile_sync():
+            method(**profile_update, as_async=False)
+
+        async def add_profile_async():
+            await method(**profile_update, as_async=True)
+
+        if sync:
+            return add_profile_sync()
+        else:
+            return add_profile_async()
+
     _serialisation_attrs = ['_uid', '_state']
 
     def _serialisation_helper(self):
@@ -344,11 +436,19 @@ class RemoteBase(CMDBase):
         self._init_future.set_result(True)
 
     def __repr__(self):
-        runtime_id = self.runtime.uid
+        runtime_id = self.runtime_id
 
         return "<%s object at %s, uid=%s, runtime=%s, state=%s>" % \
                (self.__class__.__name__, id(self),
                 self.uid, runtime_id, self._state)
+
+    @property
+    def runtime_id(self):
+        """
+        Runtime ID where remote object resides.
+
+        """
+        return self.runtime.uid
 
     @property
     def proxies(self):
@@ -481,74 +581,12 @@ class ProxyBase(CMDBase):
         reg_instance = instance.runtime.register(instance)
         if instance.is_proxy and instance._registered:
             reg_instance.remote_runtime.inc_ref(uid=reg_instance.uid, type=obj_type, as_async=False)
+            reg_instance.state_changed('listening', sync=True)
 
         return reg_instance
 
     def __del__(self):
         if self._registered and self.runtime:
+            self.state_changed('collected', sync=True)
             self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type(), as_async=False)
             self.runtime.deregister(self)
-
-
-class MonitoredBase:
-    """
-    Base class for those that keep track of the state of a remote object,
-
-    """
-
-    def __init__(self, uid, runtime_id):
-        self.uid = uid
-        self.state = 'init'
-        self.runtime_id = runtime_id
-
-        self.time = -1
-        self.history = []
-
-    def update(self, **update):
-        """
-        Update internal state.
-
-        Parameters
-        ----------
-        update
-
-        Returns
-        -------
-
-        """
-        self.time = str(datetime.datetime.now())
-
-        for key, value in update.items():
-            setattr(self, key, value)
-
-    def update_history(self, **update):
-        """
-        Update internal state and add the update to the history.
-
-        Parameters
-        ----------
-        update
-
-        Returns
-        -------
-
-        """
-        self.update(**update)
-
-        update['time'] = self.time
-        self.history.append(update)
-
-    def get_update(self):
-        """
-        Get latest update.
-
-        Returns
-        -------
-        dict
-
-        """
-        update = dict(
-            state=self.state,
-        )
-
-        return update

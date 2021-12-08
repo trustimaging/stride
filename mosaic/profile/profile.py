@@ -23,7 +23,7 @@ __all__ = ['Profiler', 'GlobalProfiler', 'profiler',
            'use_trace']
 
 
-filter_modules = ['devito', 'sympy', 'matplotlib', 'traits']
+filter_modules = ['devito', 'sympy', 'matplotlib', 'traits', 'numpy', 'scipy', 'tkinter']
 profiler = None
 global_profiler = None
 
@@ -131,8 +131,8 @@ def _full_info(frame):
 def trace(frame, event, arg):
     frame.f_trace_lines = False
 
-    if not len(profiler.traces):
-        return
+    if not len(profiler.active_traces):
+        return trace
 
     if event not in ['call', 'return', 'exception']:
         return
@@ -151,13 +151,29 @@ def trace(frame, event, arg):
 
 
 def profiled_task_factory(loop, coro):
-    sys.settrace(None)
+    if profiler.tracing:
+        sys.settrace(None)
 
     # create task
     child_task = asyncio.tasks.Task(coro, loop=loop)
 
+    if not profiler.tracing:
+        return child_task
+
+    if not len(profiler.active_traces):
+        profiler.maybe_trace()
+        return child_task
+
+    # find the outer and inner frames,
+    # delete the node corresponding to the current frame
+    trace_id, outer_frame_id, curr_frame_id = profiler._del_node()
+
+    if outer_frame_id is None:
+        profiler.maybe_trace()
+        return child_task
+
     if not hasattr(coro, 'cr_frame') and not hasattr(coro, 'gi_frame'):
-        sys.settrace(trace)
+        profiler.maybe_trace()
         return child_task
 
     try:
@@ -165,18 +181,10 @@ def profiled_task_factory(loop, coro):
     except AttributeError:
         frame = coro.gi_frame
 
-    # find the outer and inner frames,
-    # delete the node corresponding to the current frame
-    trace_id, outer_frame_id, curr_frame_id = profiler._del_node()
-
-    if outer_frame_id is None:
-        sys.settrace(trace)
-        return child_task
-
-    # and substitute it with a new one for the coro
+    # substitute it with a new one for the coro
     profiler._new_node(trace_id, outer_frame_id, frame, timeit=False)
 
-    sys.settrace(trace)
+    profiler.maybe_trace()
 
     return child_task
 
@@ -219,12 +227,21 @@ class Profiler:
         self.hash_nodes = dict()
         self.skip_nodes = dict()
         self.task_nodes = dict()
-        self.traces = set()
+        self.traces = dict()
+        self.active_traces = dict()
         self.t_start = None
         self.t_end = None
         self.t_elapsed = None
         self._tracing = False
         self._runtime_id = None
+
+    def maybe_trace(self):
+        if self.tracing and len(self.active_traces):
+            sys.settrace(trace)
+
+    def maybe_stop_trace(self):
+        if not len(self.active_traces):
+            sys.settrace(None)
 
     def clear(self):
         """
@@ -239,7 +256,8 @@ class Profiler:
         self.async_nodes = set()
         self.hash_nodes = dict()
         self.skip_nodes = dict()
-        self.traces = set()
+        self.traces = dict()
+        self.active_traces = dict()
         self.t_start = None
         self.t_end = None
         self.t_elapsed = None
@@ -259,46 +277,11 @@ class Profiler:
         runtime = mosaic.runtime()
         self._runtime_id = runtime.uid if runtime is not None else 'head'
 
-        sys.settrace(trace)
-
         loop = asyncio.get_event_loop()
         loop.set_task_factory(profiled_task_factory)
 
         if global_profiler is not None:
             global_profiler.start()
-
-    def start_trace(self, level=1):
-        """
-        Start a new profiling trace.
-
-        Parameters
-        ----------
-        level : int, optional
-            Level at which the trace should start.
-
-        Returns
-        -------
-
-        """
-        root_frame = sys._getframe(level)
-        root_frame_id = self._frame_id(root_frame)
-        root_frame.f_locals['__frame_id__'] = root_frame_id
-        root_frame.f_locals['__trace_id__'] = root_frame_id
-        root_frame.f_trace_lines = False
-
-        t_start = time.time()
-        new_node = OrderedDict(name='trace:%d' % len(list(self.traces)),
-                               t_start=t_start)
-
-        self.nodes[root_frame_id] = new_node
-        self.active_nodes[root_frame_id] = new_node
-        self.traces.add(root_frame_id)
-
-        is_async = _profile.is_async(root_frame)
-        if is_async:
-            self.async_nodes.add(root_frame_id)
-
-        return root_frame_id
 
     def stop(self):
         """
@@ -308,6 +291,9 @@ class Profiler:
         -------
 
         """
+        for trace_id in self.active_traces.keys():
+            self.stop_trace(trace_id)
+
         self.t_end = time.time()
         self.t_elapsed = self.t_end - self.t_start
         self._tracing = False
@@ -317,11 +303,105 @@ class Profiler:
         if global_profiler is not None:
             global_profiler.stop()
 
-        for trace_id in list(self.traces):
-            try:
-                del self.active_nodes[trace_id]
-            except KeyError:
-                pass
+    def start_trace(self, trace_id=None, level=1):
+        """
+        Start a new profiling trace.
+
+        Parameters
+        ----------
+        trace_id : str, optional
+            Optional trace_id for this trace.
+        level : int, optional
+            Level at which the trace should start.
+
+        Returns
+        -------
+
+        """
+        if not self.tracing:
+            return
+
+        root_frame = sys._getframe(level)
+
+        if trace_id is None:
+            trace_id = self._frame_id(root_frame)
+        else:
+            self.hash_nodes[trace_id] = 1
+
+        t_start = time.time()
+        new_node = OrderedDict(name='trace:%d' % len(self.traces),
+                               frame_id=trace_id,
+                               trace_id=trace_id,
+                               t_start=t_start)
+
+        try:
+            outer_frame_id = root_frame.f_locals['__frame_id__']
+            outer_trace_id = root_frame.f_locals['__trace_id__']
+
+            root_frame.f_locals['__prev_frame_id__'] = outer_frame_id
+            root_frame.f_locals['__prev_trace_id__'] = outer_trace_id
+
+            self.active_nodes[outer_frame_id][trace_id] = new_node
+        except KeyError:
+            self.nodes[trace_id] = new_node
+
+        root_frame.f_locals['__frame_id__'] = trace_id
+        root_frame.f_locals['__trace_id__'] = trace_id
+        root_frame.f_trace_lines = False
+
+        self.active_nodes[trace_id] = new_node
+        self.traces[trace_id] = new_node
+        self.active_traces[trace_id] = new_node
+
+        is_async = _profile.is_async(root_frame)
+        if is_async:
+            self.async_nodes.add(trace_id)
+
+        self.maybe_trace()
+
+        return trace_id
+
+    def stop_trace(self, trace_id=None, level=1):
+        """
+        Stop a profiling trace.
+
+        Returns
+        -------
+
+        """
+        _trace_id, _, _ = self._del_node(level=level)
+
+        if not self.tracing:
+            return
+
+        root_frame = sys._getframe(level)
+
+        try:
+            outer_frame_id = root_frame.f_locals['__prev_frame_id__']
+            outer_trace_id = root_frame.f_locals['__prev_trace_id__']
+
+            root_frame.f_locals['__frame_id__'] = outer_frame_id
+            root_frame.f_locals['__trace_id__'] = outer_trace_id
+        except KeyError:
+            pass
+
+        trace_id = trace_id or _trace_id
+
+        try:
+            node = self.active_nodes[trace_id]
+            del self.active_nodes[trace_id]
+            del self.active_traces[trace_id]
+        except KeyError:
+            return
+
+        t_end = time.time()
+        node['t_end'] = t_end
+        node['t_elapsed'] = node['t_end'] - node['t_start']
+
+        if trace_id in self.async_nodes:
+            self.async_nodes.remove(trace_id)
+
+        self.maybe_stop_trace()
 
     def frame_info(self, level=1):
         frame = sys._getframe(level)
@@ -392,7 +472,7 @@ class Profiler:
         if is_suspended:
             return
 
-        if is_async:
+        if is_async and frame_id in self.async_nodes:
             self.async_nodes.remove(frame_id)
 
         try:
@@ -404,72 +484,6 @@ class Profiler:
         t_end = time.time()
         node['t_end'] = t_end
         node['t_elapsed'] = node['t_end'] - node['t_start']
-
-        curr_trace = self.active_nodes[trace_id]
-        if 't_end' not in curr_trace or t_end > curr_trace['t_end']:
-            curr_trace['t_end'] = t_end
-            curr_trace['t_elapsed'] = curr_trace['t_end'] - curr_trace['t_start']
-
-    def r_call(self, frame_id, frame_name, target=None):
-        """
-        Event fired when remote function is called.
-
-        Parameters
-        ----------
-        frame_id
-        frame_name
-        target
-
-        Returns
-        -------
-
-        """
-        if not self.tracing:
-            return
-
-        trace_id, outer_frame_id, curr_frame_id = self._del_node()
-
-        frame_name = 'r_call:%s' % frame_name
-        t_start = time.time()
-        new_node = OrderedDict(name=frame_name, t_start=t_start,
-                               target=target)
-
-        try:
-            self.active_nodes[outer_frame_id][frame_id] = new_node
-        except KeyError:
-            return
-
-    def r_return(self, frame_id, frame_name, source=None):
-        """
-        Event fired when remote function returns.
-
-        Parameters
-        ----------
-        frame_id
-        frame_name
-        source
-
-        Returns
-        -------
-
-        """
-        if not self.tracing:
-            return
-
-        trace_id = self.start_trace(level=2)
-
-        _, outer_frame_id, curr_frame_id = self._del_node()
-
-        frame_id = '%s.%s' % (self._runtime_id, frame_id)
-        frame_name = 'r_return:%s' % frame_name
-        t_end = time.time()
-        new_node = OrderedDict(name=frame_name, t_end=t_end,
-                               source=source, trace_id=trace_id)
-
-        try:
-            self.active_nodes[outer_frame_id][frame_id] = new_node
-        except KeyError:
-            return
 
     def _new_node(self, trace_id, outer_frame_id, frame, timeit=True):
         if outer_frame_id not in self.active_nodes:
@@ -501,7 +515,10 @@ class Profiler:
         # create new node
         frame_info = _full_info(frame)
         t_start = time.time() if timeit else None
-        new_node = OrderedDict(**frame_info, t_start=t_start)
+        new_node = OrderedDict(**frame_info,
+                               frame_id=frame_id,
+                               trace_id=trace_id,
+                               t_start=t_start)
 
         try:
             self.active_nodes[outer_frame_id][frame_id] = new_node
@@ -523,6 +540,7 @@ class Profiler:
 
         try:
             curr_frame_id = curr_frame.f_locals['__frame_id__']
+
             del self.active_nodes[outer_frame_id][curr_frame_id]
             del self.active_nodes[curr_frame_id]
         except KeyError:
@@ -542,237 +560,6 @@ class Profiler:
 
 
 profiler = Profiler()
-
-
-class LocalProfiler:
-
-    def __init__(self):
-        self.profiles = OrderedDict()
-        self._last_profile = OrderedDict()
-        self._last_part = -1
-        self.t_start = None
-        self.t_end = None
-        self.t_elapsed = None
-
-        now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        self.filename = '%s.profile' % now
-
-    def clear(self):
-        self.profiles = OrderedDict()
-        self._last_profile = OrderedDict()
-        self._last_part = -1
-        self.t_start = None
-        self.t_end = None
-        self.t_elapsed = None
-
-    def start(self):
-        self.clear()
-
-        runtime = mosaic.runtime()
-        self.profiles[runtime.uid] = profiler.nodes
-
-        self.t_start = time.time()
-
-        loop = mosaic.get_event_loop()
-        loop.interval(self.append, filename=self.filename, interval=10)
-
-    def stop(self):
-        self.t_end = time.time()
-        self.t_elapsed = self.t_end - self.t_start
-
-    def update(self, sender_id, profiler_update):
-        if sender_id not in self.profiles:
-            self.profiles[sender_id] = OrderedDict()
-
-        self.profiles[sender_id] = dict_update(self.profiles[sender_id], profiler_update)
-
-    def dump(self, *args, **kwargs):
-        description = dict()
-        description['profiles'] = self.profiles
-        description['t_start'] = self.t_start
-        description['t_end'] = self.t_end
-        description['t_elapsed'] = self.t_elapsed
-
-        filename = kwargs.pop('filename')
-
-        with open(filename, 'wb') as file:
-            pickle.dump(description, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-        self._last_profile = copy.deepcopy(self.profiles)
-
-    def load(self, *args, **kwargs):
-        filename = kwargs.pop('filename')
-
-        if filename.endswith('.parts'):
-            path = filename
-            filename = filename.split('/')[-1][:-6]
-
-            parts = glob.glob(os.path.join(path, '%s.*' % filename))
-            parts.sort()
-
-            for part in parts:
-                with open(part, 'rb') as file:
-                    update = pickle.load(file)
-
-                self.t_start = update.get('t_start')
-                self.t_end = update.get('t_end')
-                self.t_elapsed = update.get('t_elapsed')
-
-                self.profiles = dict_update(self.profiles, update['profiles'])
-
-        else:
-            with open(filename, 'rb') as file:
-                update = pickle.load(file)
-
-            self.t_start = update.get('t_start')
-            self.t_end = update.get('t_end')
-            self.t_elapsed = update.get('t_elapsed')
-
-            self.profiles = update['profiles']
-
-    def append(self, *args, **kwargs):
-        path = '%s.parts' % self.filename
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-        self._last_part += 1
-        filename = os.path.join(path, '%s.%d' % (self.filename, self._last_part))
-
-        description = dict()
-        description['profiles'] = self.get_update()
-        description['t_start'] = self.t_start
-        description['t_end'] = self.t_end
-        description['t_elapsed'] = self.t_elapsed
-
-        with open(filename, 'wb') as file:
-            pickle.dump(description, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-    def get_update(self):
-        current_profile = copy.deepcopy(self.profiles)
-        profile_update = dict_diff(self._last_profile, current_profile)
-
-        for runtime_id, runtime in self.profiles.items():
-            for trace_id, trace_node in runtime.items():
-                if trace_id not in profile_update[runtime_id]:
-                    profile_update[runtime_id][trace_id] = OrderedDict()
-
-                profile_update[runtime_id][trace_id]['t_end'] = trace_node.get('t_end')
-                profile_update[runtime_id][trace_id]['t_elapsed'] = trace_node.get('t_elapsed')
-
-        self._last_profile = current_profile
-
-        return profile_update
-
-
-class RemoteProfiler:
-
-    def __init__(self, runtime_id='monitor'):
-        self._runtime_id = runtime_id
-        self._last_profile = OrderedDict()
-
-    @cached_property
-    def remote_runtime(self):
-        runtime = mosaic.runtime()
-        return runtime.proxy(self._runtime_id)
-
-    def clear(self):
-        self._last_profile = OrderedDict()
-
-    def start(self):
-        self.clear()
-
-    def stop(self):
-        pass
-
-    def update(self):
-        profiler_update = self.get_update()
-
-        if not len(profiler_update.keys()):
-            return
-
-        self.remote_runtime.recv_profile(profiler_update=profiler_update, as_async=False)
-
-        return profiler_update
-
-    def get_update(self):
-        current_profile = copy.deepcopy(profiler.nodes)
-        profiler_update = dict_diff(self._last_profile, current_profile)
-
-        for trace_id, trace_node in profiler.nodes.items():
-            if trace_id not in profiler_update:
-                profiler_update[trace_id] = OrderedDict()
-
-            profiler_update[trace_id]['t_end'] = trace_node.get('t_end')
-            profiler_update[trace_id]['t_elapsed'] = trace_node.get('t_elapsed')
-
-        self._last_profile = current_profile
-
-        return profiler_update
-
-
-class GlobalProfiler:
-    """
-    The global profiler keeps the different endpoints of the runtime in contact,
-    so that local profiles can be consolidated into a single, global one.
-
-    """
-
-    def __init__(self):
-        self.profiler = None
-        self.mode = None
-
-    def start(self):
-        self.profiler.start()
-        
-    def stop(self):
-        self.profiler.stop()
-
-    def set_local(self):
-        self.profiler = LocalProfiler()
-        self.mode = 'local'
-
-    def set_remote(self, runtime_id='monitor'):
-        self.profiler = RemoteProfiler(runtime_id=runtime_id)
-        self.mode = 'remote'
-
-    def send_profile(self):
-        if self.mode != 'remote':
-            return
-
-        self.profiler.update()
-
-    def get_profile(self):
-        if self.mode != 'remote':
-            return
-
-        return self.profiler.get_update()
-
-    def recv_profile(self, sender_id, profiler_update):
-        if self.mode != 'local':
-            return
-
-        self.profiler.update(sender_id, profiler_update)
-
-    def dump(self, *args, **kwargs):
-        if self.mode != 'local':
-            return
-
-        self.profiler.dump(*args, **kwargs)
-
-    def load(self, *args, **kwargs):
-        if self.mode != 'local':
-            return
-
-        self.profiler.load(*args, **kwargs)
-
-    def append(self, *args, **kwargs):
-        if self.mode != 'local':
-            return
-
-        self.profiler.append(*args, **kwargs)
-
-
-global_profiler = GlobalProfiler()
 
 
 def skip_profile(*args, **kwargs):
@@ -865,7 +652,7 @@ class no_profiler:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._frame_id is not None:
             if self._stop_trace:
-                sys.settrace(trace)
+                profiler.maybe_trace()
 
             t_end = time.time()
             self._node['t_end'] = t_end
@@ -910,6 +697,246 @@ class use_trace:
         self._frame.f_locals['__trace_id__'] = self._prev_trace_id
         if self._outer_frame_id:
             self._frame.f_locals['__frame_id__'] = self._prev__outer_frame_id
+
+
+class LocalProfiler:
+
+    def __init__(self):
+        self.profiles = OrderedDict()
+        self._last_profile = OrderedDict()
+        self._last_part = -1
+        self.t_start = None
+        self.t_end = None
+        self.t_elapsed = None
+
+        now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        self.filename = '%s.profile' % now
+
+    def clear(self):
+        self.profiles = OrderedDict()
+        self._last_profile = OrderedDict()
+        self._last_part = -1
+        self.t_start = None
+        self.t_end = None
+        self.t_elapsed = None
+
+    def start(self):
+        self.clear()
+
+        runtime = mosaic.runtime()
+        self.profiles[runtime.uid] = profiler.nodes
+
+        self.t_start = time.time()
+
+        # loop = mosaic.get_event_loop()
+        # loop.interval(self.append, filename=self.filename, interval=30)
+
+    def stop(self):
+        self.t_end = time.time()
+        self.t_elapsed = self.t_end - self.t_start
+
+    @skip_profile(stop_trace=True)
+    def update(self, sender_id, profiler_update):
+        if sender_id not in self.profiles:
+            self.profiles[sender_id] = OrderedDict()
+
+        self.profiles[sender_id] = dict_update(self.profiles[sender_id], profiler_update)
+
+    @skip_profile(stop_trace=True)
+    def dump(self, *args, **kwargs):
+        description = dict()
+        description['profiles'] = self.profiles
+        description['t_start'] = self.t_start
+        description['t_end'] = self.t_end
+        description['t_elapsed'] = self.t_elapsed
+
+        filename = kwargs.pop('filename')
+
+        with open(filename, 'wb') as file:
+            pickle.dump(description, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        self._last_profile = copy.deepcopy(self.profiles)
+
+    @skip_profile(stop_trace=True)
+    def load(self, *args, **kwargs):
+        filename = kwargs.pop('filename')
+
+        if filename.endswith('.parts'):
+            path = filename
+            filename = filename.split('/')[-1][:-6]
+
+            parts = glob.glob(os.path.join(path, '%s.*' % filename))
+            parts.sort()
+
+            for part in parts:
+                with open(part, 'rb') as file:
+                    update = pickle.load(file)
+
+                self.t_start = update.get('t_start')
+                self.t_end = update.get('t_end')
+                self.t_elapsed = update.get('t_elapsed')
+
+                self.profiles = dict_update(self.profiles, update['profiles'])
+
+        else:
+            with open(filename, 'rb') as file:
+                update = pickle.load(file)
+
+            self.t_start = update.get('t_start')
+            self.t_end = update.get('t_end')
+            self.t_elapsed = update.get('t_elapsed')
+
+            self.profiles = update['profiles']
+
+    @skip_profile(stop_trace=True)
+    def append(self, *args, **kwargs):
+        path = '%s.parts' % self.filename
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        self._last_part += 1
+        filename = os.path.join(path, '%s.%d' % (self.filename, self._last_part))
+
+        description = dict()
+        description['profiles'] = self.get_update()
+        description['t_start'] = self.t_start
+        description['t_end'] = self.t_end
+        description['t_elapsed'] = self.t_elapsed
+
+        with open(filename, 'wb') as file:
+            pickle.dump(description, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+    @skip_profile(stop_trace=True)
+    def get_update(self):
+        current_profile = self.profiles
+        profile_update = dict_diff(self._last_profile, current_profile)
+
+        for runtime_id, runtime in self.profiles.items():
+            for trace_id, trace_node in runtime.items():
+                if trace_id not in profile_update[runtime_id]:
+                    profile_update[runtime_id][trace_id] = OrderedDict()
+
+                profile_update[runtime_id][trace_id]['t_end'] = trace_node.get('t_end')
+                profile_update[runtime_id][trace_id]['t_elapsed'] = trace_node.get('t_elapsed')
+
+        self._last_profile = current_profile
+
+        return profile_update
+
+
+class RemoteProfiler:
+
+    def __init__(self, runtime_id='monitor'):
+        self._runtime_id = runtime_id
+        self._last_profile = OrderedDict()
+
+    @cached_property
+    def remote_runtime(self):
+        runtime = mosaic.runtime()
+        return runtime.proxy(self._runtime_id)
+
+    def clear(self):
+        self._last_profile = OrderedDict()
+
+    def start(self):
+        self.clear()
+
+    def stop(self):
+        pass
+
+    @skip_profile(stop_trace=True)
+    def update(self):
+        # start = time.time()
+        profiler_update = self.get_update()
+        # print(mosaic.runtime().uid, 1, time.time()-start)
+
+        if not len(profiler_update.keys()):
+            return
+
+        self.remote_runtime.recv_profile(profiler_update=profiler_update, as_async=False)
+
+        return profiler_update
+
+    @skip_profile(stop_trace=True)
+    def get_update(self):
+        current_profile = profiler.nodes
+        profiler_update = dict_diff(self._last_profile, current_profile)
+
+        for trace_id, trace_node in profiler.nodes.items():
+            if trace_id not in profiler_update:
+                profiler_update[trace_id] = OrderedDict()
+
+            profiler_update[trace_id]['t_end'] = trace_node.get('t_end')
+            profiler_update[trace_id]['t_elapsed'] = trace_node.get('t_elapsed')
+
+        self._last_profile = current_profile
+
+        return profiler_update
+
+
+class GlobalProfiler:
+    """
+    The global profiler keeps the different endpoints of the runtime in contact,
+    so that local profiles can be consolidated into a single, global one.
+
+    """
+
+    def __init__(self):
+        self.profiler = None
+        self.mode = None
+
+    def start(self):
+        self.profiler.start()
+        
+    def stop(self):
+        self.profiler.stop()
+
+    def set_local(self):
+        self.profiler = LocalProfiler()
+        self.mode = 'local'
+
+    def set_remote(self, runtime_id='monitor'):
+        self.profiler = RemoteProfiler(runtime_id=runtime_id)
+        self.mode = 'remote'
+
+    def send_profile(self):
+        if self.mode != 'remote':
+            return
+
+        self.profiler.update()
+
+    def get_profile(self):
+        if self.mode != 'remote':
+            return
+
+        return self.profiler.get_update()
+
+    def recv_profile(self, sender_id, profiler_update):
+        if self.mode != 'local':
+            return
+
+        self.profiler.update(sender_id, profiler_update)
+
+    def dump(self, *args, **kwargs):
+        if self.mode != 'local':
+            return
+
+        self.profiler.dump(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        if self.mode != 'local':
+            return
+
+        self.profiler.load(*args, **kwargs)
+
+    def append(self, *args, **kwargs):
+        if self.mode != 'local':
+            return
+
+        self.profiler.append(*args, **kwargs)
+
+
+global_profiler = GlobalProfiler()
 
 
 def _stop_tracing():

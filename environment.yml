@@ -9,6 +9,7 @@ dependencies:
   - click
   - cloudpickle>=1.6
   - cython
+  - dash>=2.0.0
   - flake8
   - gputil
   - h5py>=3.2
