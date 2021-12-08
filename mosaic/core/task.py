@@ -441,7 +441,10 @@ class TaskProxy(ProxyBase):
         UID of the runtime where the task lives.
 
         """
-        return self._tessera_proxy.runtime_id
+        try:
+            return self._tessera_proxy.runtime_id
+        except ReferenceError:
+            return None
 
     @property
     def tessera_id(self):
