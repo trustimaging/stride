@@ -1,7 +1,7 @@
 
 from setuptools import setup, find_packages, Extension
 
-import stride
+import version
 
 with open('requirements.txt') as f:
     required = f.read().splitlines()
@@ -29,7 +29,7 @@ for requirement in optionals:
 
 setup(
     name='stride',
-    version=stride.__version__,
+    version=version.__version__,
     description='A (somewhat) general optimisation framework for ultrasound medical imaging',
     long_description='A (somewhat) general optimisation framework for ultrasound medical imaging',
     url='https://github.com/trustimaging/stride',

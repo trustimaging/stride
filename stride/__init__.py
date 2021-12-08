@@ -1,8 +1,5 @@
 
 
-__version__ = '1.1'
-
-
 import os
 import signal
 import warnings

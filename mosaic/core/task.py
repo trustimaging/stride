@@ -105,7 +105,10 @@ class Task(RemoteBase):
         Tessera UID.
 
         """
-        return self._tessera.uid
+        try:
+            return self._tessera.uid
+        except ReferenceError:
+            return None
 
     @cached_property
     def remote_runtime(self):
@@ -446,7 +449,10 @@ class TaskProxy(ProxyBase):
         Tessera UID.
 
         """
-        return self._tessera_proxy.uid
+        try:
+            return self._tessera_proxy.uid
+        except ReferenceError:
+            return None
 
     @cached_property
     def remote_runtime(self):
