@@ -177,6 +177,8 @@ class Monitor(Runtime):
         """
         global_profiler.set_local()
 
+        self._loop.interval(self.append_description, interval=10)
+
     def update_node(self, sender_id, update, sub_resources):
         if sender_id not in self._monitored_nodes:
             self._monitored_nodes[sender_id] = MonitoredResource(sender_id)
@@ -185,15 +187,15 @@ class Monitor(Runtime):
         node.update(update, **sub_resources)
         self._monitor_strategy.update_node(node)
 
-        if profiler.tracing:
-            node_description = node.append()
-            description = {
-                'monitored_nodes': {
-                    sender_id: node_description
-                }
-            }
-
-            self._append_description(description)
+        # if profiler.tracing:
+        #     node_description = node.append()
+        #     description = {
+        #         'monitored_nodes': {
+        #             sender_id: node_description
+        #         }
+        #     }
+        #
+        #     self._append_description(description)
 
     def add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
         if uid not in self._monitored_tessera:
@@ -203,15 +205,15 @@ class Monitor(Runtime):
         obj.add_event(sender_id, **kwargs)
         self._monitor_strategy.update_tessera(obj)
 
-        if profiler.tracing:
-            obj_description = obj.append()
-            description = {
-                'monitored_tessera': {
-                    uid: obj_description
-                }
-            }
-
-            self._append_description(description)
+        # if profiler.tracing:
+        #     obj_description = obj.append()
+        #     description = {
+        #         'monitored_tessera': {
+        #             uid: obj_description
+        #         }
+        #     }
+        #
+        #     self._append_description(description)
 
     def add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
         if uid not in self._monitored_tasks:
@@ -221,15 +223,15 @@ class Monitor(Runtime):
         obj.add_event(sender_id, **kwargs)
         self._monitor_strategy.update_task(obj)
 
-        if profiler.tracing:
-            obj_description = obj.append()
-            description = {
-                'monitored_tasks': {
-                    uid: obj_description
-                }
-            }
-
-            self._append_description(description)
+        # if profiler.tracing:
+        #     obj_description = obj.append()
+        #     description = {
+        #         'monitored_tasks': {
+        #             uid: obj_description
+        #         }
+        #     }
+        #
+        #     self._append_description(description)
 
     def add_tessera_profile(self, sender_id, runtime_id, uid, profile):
         if uid not in self._monitored_tessera:
@@ -238,15 +240,15 @@ class Monitor(Runtime):
         obj = self._monitored_tessera[uid]
         obj.add_profile(sender_id, profile)
 
-        if profiler.tracing:
-            obj_description = obj.append()
-            description = {
-                'monitored_tessera': {
-                    uid: obj_description
-                }
-            }
-
-            self._append_description(description)
+        # if profiler.tracing:
+        #     obj_description = obj.append()
+        #     description = {
+        #         'monitored_tessera': {
+        #             uid: obj_description
+        #         }
+        #     }
+        #
+        #     self._append_description(description)
 
     def add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
         if uid not in self._monitored_tasks:
@@ -255,17 +257,39 @@ class Monitor(Runtime):
         obj = self._monitored_tasks[uid]
         obj.add_profile(sender_id, profile)
 
-        if profiler.tracing:
-            obj_description = obj.append()
-            description = {
-                'monitored_tasks': {
-                    uid: obj_description
-                }
-            }
+        # if profiler.tracing:
+        #     obj_description = obj.append()
+        #     description = {
+        #         'monitored_tasks': {
+        #             uid: obj_description
+        #         }
+        #     }
+        #
+        #     self._append_description(description)
 
-            self._append_description(description)
+    def append_description(self):
+        if not profiler.tracing:
+            return
+
+        description = {
+            'monitored_nodes': {},
+            'monitored_tessera': {},
+            'monitored_tasks': {},
+        }
+
+        for uid, node in self._monitored_nodes.items():
+            description['monitored_nodes'][node.uid] = node.append()
+
+        for uid, tessera in self._monitored_tessera.items():
+            description['monitored_tessera'][tessera.uid] = tessera.append()
+
+        for uid, task in self._monitored_tasks.items():
+            description['monitored_tasks'][task.uid] = task.append()
+
+        self._append_description(description)
 
     def _append_description(self, description):
+        start = time.time()
         if not h5.file_exists(filename=self._profile_filename):
             description['start_t'] = self._start_t
 
@@ -275,6 +299,8 @@ class Monitor(Runtime):
         else:
             with h5.HDF5(filename=self._profile_filename, mode='a') as file:
                 file.append(description)
+
+        print('====> SAVING!', time.time()-start)
 
     async def stop(self, sender_id=None):
         """
@@ -295,9 +321,13 @@ class Monitor(Runtime):
 
             description = {
                 'end_t': self._end_t,
+                'monitored_nodes': {},
                 'monitored_tessera': {},
                 'monitored_tasks': {},
             }
+
+            for uid, node in self._monitored_nodes.items():
+                description['monitored_nodes'][node.uid] = node.append()
 
             for uid, tessera in self._monitored_tessera.items():
                 tessera.collect()
@@ -307,18 +337,7 @@ class Monitor(Runtime):
                 task.collect()
                 description['monitored_tasks'][task.uid] = task.append()
 
-            with h5.HDF5(filename=self._profile_filename, mode='a') as file:
-                file.append(description)
-
-            # for node_id, node in self._nodes.items():
-            #     profiler_update = await node.request_profile(reply=True)
-            #     global_profiler.recv_profile(node_id, profiler_update)
-            #
-            # for worker_id, worker in self._workers.items():
-            #     profiler_update = await worker.request_profile(reply=True)
-            #     global_profiler.recv_profile(worker_id, profiler_update)
-            #
-            # global_profiler.append(filename=global_profiler.profiler.filename)
+            self._append_description(description)
 
         for node_id, node in self._nodes.items():
             await node.stop()

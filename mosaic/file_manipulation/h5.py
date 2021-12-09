@@ -122,7 +122,7 @@ def _write_dataset(name, obj, group):
 
 def read(obj, lazy=True):
     if isinstance(obj, h5py.Group):
-        if obj.attrs['is_array']:
+        if obj.attrs.get('is_array'):
             data = []
             for key in sorted(obj.keys()):
                 data.append(read(obj[key], lazy=lazy))
