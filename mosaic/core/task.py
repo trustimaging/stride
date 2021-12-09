@@ -99,7 +99,7 @@ class Task(RemoteBase):
         """
         return self._sender_id
 
-    @property
+    @cached_property
     def tessera_id(self):
         """
         Tessera UID.
@@ -435,7 +435,7 @@ class TaskProxy(ProxyBase):
 
         await self.state_changed('queued')
 
-    @property
+    @cached_property
     def runtime_id(self):
         """
         UID of the runtime where the task lives.
@@ -446,7 +446,7 @@ class TaskProxy(ProxyBase):
         except ReferenceError:
             return None
 
-    @property
+    @cached_property
     def tessera_id(self):
         """
         Tessera UID.
@@ -705,7 +705,7 @@ class TaskOutputBase(Base):
     def state(self):
         return self._task_proxy.state
 
-    @property
+    @cached_property
     def runtime_id(self):
         return self._task_proxy.runtime_id
 
