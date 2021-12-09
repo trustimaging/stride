@@ -84,14 +84,15 @@ def go(cmd=None, **kwargs):
 
         if sge_nodes is not None:
             node_list = sge_nodes
-            num_nodes = len(node_list)
 
         elif pbs_nodes is not None:
             node_list = pbs_nodes
-            num_nodes = len(node_list)
 
         else:
             local = True
+
+        if node_list is not None and num_nodes != len(node_list):
+            node_list = node_list[:num_nodes]
 
     runtime_config = {
         'runtime_indices': runtime_indices,
