@@ -428,7 +428,9 @@ class Variable:
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
 
-        if hasattr(self, 'has_tessera') and self.has_tessera:
+        propagate_tessera = kwargs.pop('propagate_tessera', True)
+
+        if propagate_tessera and hasattr(self, 'has_tessera') and self.has_tessera:
             return self.__class__.parameter(*args, **kwargs)
         else:
             return self.__class__(*args, **kwargs)

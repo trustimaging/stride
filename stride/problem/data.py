@@ -170,6 +170,7 @@ class StructuredData(Data):
         kwargs['inner'] = kwargs.pop('inner', self.inner)
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['propagate_tessera'] = False
 
         return super().copy(*args, **kwargs)
 
