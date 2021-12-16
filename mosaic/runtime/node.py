@@ -113,7 +113,7 @@ class Node(Runtime):
         await self.update_monitored_node()
 
         self._loop.interval(self.resource_monitor, interval=0.1)
-        self._loop.interval(self.update_monitored_node, interval=0.1)
+        self._loop.interval(self.update_monitored_node, interval=1)
 
     def set_logger(self):
         """

@@ -47,6 +47,9 @@ class Monitor(Runtime):
         self._monitored_tessera = dict()
         self._monitored_tasks = dict()
 
+        self._dirty_tessera = set()
+        self._dirty_tasks = set()
+
         now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         self._profile_filename = '%s.profile.h5' % now
 
@@ -204,6 +207,7 @@ class Monitor(Runtime):
         obj = self._monitored_tessera[uid]
         obj.add_event(sender_id, **kwargs)
         self._monitor_strategy.update_tessera(obj)
+        self._dirty_tessera.add(uid)
 
         # if profiler.tracing:
         #     obj_description = obj.append()
@@ -222,6 +226,7 @@ class Monitor(Runtime):
         obj = self._monitored_tasks[uid]
         obj.add_event(sender_id, **kwargs)
         self._monitor_strategy.update_task(obj)
+        self._dirty_tasks.add(obj)
 
         # if profiler.tracing:
         #     obj_description = obj.append()
@@ -239,6 +244,7 @@ class Monitor(Runtime):
 
         obj = self._monitored_tessera[uid]
         obj.add_profile(sender_id, profile)
+        self._dirty_tessera.add(uid)
 
         # if profiler.tracing:
         #     obj_description = obj.append()
@@ -256,6 +262,7 @@ class Monitor(Runtime):
 
         obj = self._monitored_tasks[uid]
         obj.add_profile(sender_id, profile)
+        self._dirty_tasks.add(obj)
 
         # if profiler.tracing:
         #     obj_description = obj.append()
@@ -272,21 +279,22 @@ class Monitor(Runtime):
             return
 
         description = {
-            'monitored_nodes': {},
             'monitored_tessera': {},
             'monitored_tasks': {},
         }
 
-        for uid, node in self._monitored_nodes.items():
-            description['monitored_nodes'][node.uid] = node.append()
+        for uid in self._dirty_tessera:
+            tessera = self._monitored_tessera[uid]
+            description['monitored_tessera'][uid] = tessera.append()
 
-        for uid, tessera in self._monitored_tessera.items():
-            description['monitored_tessera'][tessera.uid] = tessera.append()
-
-        for uid, task in self._monitored_tasks.items():
-            description['monitored_tasks'][task.uid] = task.append()
+        for uid in self._dirty_tasks:
+            task = self._monitored_tasks[uid]
+            description['monitored_tasks'][uid] = task.append()
 
         self._append_description(description)
+
+        self._dirty_tessera = set()
+        self._dirty_tasks = set()
 
     def _append_description(self, description):
         start = time.time()
@@ -321,13 +329,9 @@ class Monitor(Runtime):
 
             description = {
                 'end_t': self._end_t,
-                'monitored_nodes': {},
                 'monitored_tessera': {},
                 'monitored_tasks': {},
             }
-
-            for uid, node in self._monitored_nodes.items():
-                description['monitored_nodes'][node.uid] = node.append()
 
             for uid, tessera in self._monitored_tessera.items():
                 tessera.collect()
