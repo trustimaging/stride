@@ -278,6 +278,9 @@ class Monitor(Runtime):
         if not profiler.tracing:
             return
 
+        if not len(self._dirty_tessera) and not len(self._dirty_tasks):
+            return
+
         description = {
             'monitored_tessera': {},
             'monitored_tasks': {},
