@@ -226,7 +226,7 @@ class Monitor(Runtime):
         obj = self._monitored_tasks[uid]
         obj.add_event(sender_id, **kwargs)
         self._monitor_strategy.update_task(obj)
-        self._dirty_tasks.add(obj)
+        self._dirty_tasks.add(uid)
 
         # if profiler.tracing:
         #     obj_description = obj.append()
@@ -262,7 +262,7 @@ class Monitor(Runtime):
 
         obj = self._monitored_tasks[uid]
         obj.add_profile(sender_id, profile)
-        self._dirty_tasks.add(obj)
+        self._dirty_tasks.add(uid)
 
         # if profiler.tracing:
         #     obj_description = obj.append()
