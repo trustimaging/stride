@@ -230,6 +230,7 @@ class LoggerManager:
             handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
+        logger.setLevel(_local_log_levels[log_level])
         logger.propagate = False
         if logger.hasHandlers():
             logger.handlers.clear()
@@ -283,6 +284,7 @@ class LoggerManager:
             handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
+        logger.setLevel(_local_log_levels[log_level])
         logger.propagate = False
         if logger.hasHandlers():
             logger.handlers.clear()
