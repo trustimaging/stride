@@ -18,7 +18,7 @@ __all__ = ['IsoElasticDevito']
 class IsoElasticDevito(ProblemTypeBase):
     """
     This class represents the stress-strain formulation of the elastic wave equation, implemented using Devito using
-    the tutorial .
+    the tutorial https://slimgroup.github.io/Devito-Examples/tutorials/07_elastic_varying_parameters/.
 
     Parameters
     ----------
