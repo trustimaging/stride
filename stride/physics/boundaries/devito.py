@@ -5,20 +5,19 @@ import numpy as np
 from .boundary import Boundary
 
 
-class SpongeBoundaryElastic(Boundary):
+class SpongeBoundary1(Boundary):
 
     def __init__(self, grid):
-        '''
+        """
         Sponge boundary for elastic codes
-        :param parameter: 0.2763 for homogeneous water, 0.008635 alpha2D
-        '''
+        """
         super().__init__(grid)
-        print('======== Elastic')
 
         self.damp = None
 
-    def apply(self, field, velocity, parameter):
+    def apply(self, field, velocity, direction='forward', **kwargs):
         # TODO: calculate boundary coefficient
+        parameter = kwargs.pop('parameter') # 0.2763 for homogeneous water, 0.008635 for alpha2D
         space = self._grid.space
         time = self._grid.time
 
@@ -39,7 +38,7 @@ class SpongeBoundaryElastic(Boundary):
             val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
             eqs += [devito.Inc(self.damp.subs({d: dim_r}), val / d.spacing)]
         devito.Operator(eqs, name='initdamp')()
-        return self.damp
+        return self.damp, [], []
 
 
 class SpongeBoundary2(Boundary):

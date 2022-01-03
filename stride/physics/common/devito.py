@@ -392,11 +392,11 @@ class GridDevito(Gridded):
         time_order = time_order or self.time_order
 
         fun = devito.TensorTimeFunction(name=name,
-                                  grid=self.devito_grid,
-                                  time_order=time_order,
-                                  space_order=space_order,
-                                  dtype=np.float32,
-                                  **kwargs)
+                                        grid=self.devito_grid,
+                                        time_order=time_order,
+                                        space_order=space_order,
+                                        dtype=np.float32,
+                                        **kwargs)
 
         return fun
 
@@ -585,6 +585,8 @@ class GridDevito(Gridded):
         ----------
         name : str
             Name of the function.
+        collect : bool, optional
+            Whether to garbage collect after deallocate, defaults to ``False``.
 
         Returns
         -------

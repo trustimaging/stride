@@ -17,6 +17,8 @@ __all__ = ['IsoElasticDevito']
 @mosaic.tessera
 class IsoElasticDevito(ProblemTypeBase):
     """
+    This class represents the stress-strain formulation of the elastic wave equation, implemented using Devito using
+    the tutorial .
 
     Parameters
     ----------
@@ -44,30 +46,6 @@ class IsoElasticDevito(ProblemTypeBase):
             Density of the medium in [kg/m^3].
         problem : Problem
             Sub-problem being solved by the PDE.
-        save_wavefield : bool or int, optional
-            Whether or not to solve the forward wavefield, defaults to True when
-            a gradient is expected, and to False otherwise. An integer number N can
-            also be provided, in which case the last N timesteps of the wavefield
-            will be saved.
-        boundary_type : str, optional
-            Type of boundary for the wave equation (``sponge_boundary_2`` or
-            ``complex_frequency_shift_PML_2``), defaults to ``sponge_boundary_2``.
-        interpolation_type : str, optional
-            Type of source/receiver interpolation (``linear`` or ``hicks``), defaults
-            to ``linear``.
-        attenuation_power : int, optional
-            Power of the attenuation law if attenuation is given (``0`` or ``2``),
-            defaults to ``0``.
-        drp : bool, optional
-            Whether or not to use dispersion-relation preserving coefficients (only
-            available in some versions of Stride). Defaults to False.
-        kernel : str, optional
-            Type of time kernel to use (``OT2`` for 2nd order in time or ``OT4`` for 4th
-            order in time). If not given, it is automatically decided given the time spacing.
-        undersampling : int, optional
-            Amount of undersampling in time when saving the forward wavefield. If not given,
-            it is calculated given the bandwidth.
-
 
     """
 
@@ -77,18 +55,13 @@ class IsoElasticDevito(ProblemTypeBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.kernel = 'OT2'
-        self.drp = False
-        self.undersampling_factor = 4
-        self.boundary_type = 'SpongeBoundaryElastic'
+        self.boundary_type = 'SpongeBoundary1'
         self.interpolation_type = 'linear'
-        self.attenuation_power = 0
 
         self.wavefield = None
 
         self._max_wavelet = 0.
         self._src_scale = 0.
-        self._bandwidth = 0.
 
         self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
 
@@ -125,29 +98,6 @@ class IsoElasticDevito(ProblemTypeBase):
             Density of the medium in [kg/m^3].
         problem : Problem
             Sub-problem being solved by the PDE.
-        save_wavefield : bool or int, optional
-            Whether or not to solve the forward wavefield, defaults to True when
-            a gradient is expected, and to False otherwise. An integer number N can
-            also be provided, in which case the last N timesteps of the wavefield
-            will be saved.
-        boundary_type : str, optional
-            Type of boundary for the wave equation (``sponge_boundary_2`` or
-            ``complex_frequency_shift_PML_2``), defaults to ``sponge_boundary_2``.
-        interpolation_type : str, optional
-            Type of source/receiver interpolation (``linear`` or ``hicks``), defaults
-            to ``linear``.
-        attenuation_power : int, optional
-            Power of the attenuation law if attenuation is given (``0`` or ``2``),
-            defaults to ``0``.
-        drp : bool, optional
-            Whether or not to use dispersion-relation preserving coefficients (only
-            available in some versions of Stride). Defaults to False.
-        kernel : str, optional
-            Type of time kernel to use (``OT2`` for 2nd order in time or ``OT4`` for 4th
-            order in time). If not given, it is automatically decided given the time spacing.
-        undersampling : int, optional
-            Amount of undersampling in time when saving the forward wavefield. If not given,
-            it is calculated given the bandwidth.
 
 
         Returns
@@ -182,7 +132,7 @@ class IsoElasticDevito(ProblemTypeBase):
             # Absorbing boundaries
             boundaries_module = boundaries.devito
             self.boundary = getattr(boundaries_module, camel_case(self.boundary_type))(self.dev_grid)
-            damp = self.boundary.apply(vel, vp.extended_data, 0.008635)
+            damp, _, _ = self.boundary.apply(vel, vp.extended_data, parameter=0.008635)
 
             # Define the source injection function using a pressure disturbance
             src_xx = src.inject(field=tau.forward[0, 0], expr=s * src)
@@ -223,7 +173,7 @@ class IsoElasticDevito(ProblemTypeBase):
                 self.dev_grid.sparse_time_function('src', num=num_sources, cached=False)
 
             if num_receivers != self.dev_grid.vars.rec_tau.npoint:
-                self.dev_grid.sparse_time_function('rec', num=num_receivers, cached=False)
+                self.dev_grid.sparse_time_function('rec_tau', num=num_receivers, cached=False)
 
         # Clear all buffers
         self.dev_grid.vars.src.data_with_halo.fill(0.)
@@ -285,7 +235,10 @@ class IsoElasticDevito(ProblemTypeBase):
         -------
 
         """
-        functions = dict(src=self.dev_grid.vars.src, )
+        functions = dict(
+            src=self.dev_grid.vars.src,
+            rec_tau=self.dev_grid.vars.rec_tau,
+        )
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
