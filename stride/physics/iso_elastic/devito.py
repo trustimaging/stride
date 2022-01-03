@@ -17,7 +17,7 @@ __all__ = ['IsoElasticDevito']
 @mosaic.tessera
 class IsoElasticDevito(ProblemTypeBase):
     """
-    This class represents the stress-strain formulation of the elastic wave equation, implemented using Devito using
+    This class represents the stress-strain formulation of the elastic wave equation, implemented using Devito from
     the tutorial https://slimgroup.github.io/Devito-Examples/tutorials/07_elastic_varying_parameters/.
 
     Parameters
@@ -121,7 +121,7 @@ class IsoElasticDevito(ProblemTypeBase):
                                                      coordinates=shot.receiver_coordinates,
                                                      interpolation_type=self.interpolation_type)
 
-            s = self.time.step
+            step = self.time.step
             # Create stencil
             # TODO: save wavefield during simulation
             # save_wavefield = kwargs.get('save_wavefield', False)
@@ -135,8 +135,8 @@ class IsoElasticDevito(ProblemTypeBase):
             damp, _, _ = self.boundary.apply(vel, vp.extended_data, parameter=0.008635)
 
             # Define the source injection function using a pressure disturbance
-            src_xx = src.inject(field=tau.forward[0, 0], expr=s * src)
-            src_zz = src.inject(field=tau.forward[1, 1], expr=s * src)
+            src_xx = src.inject(field=tau.forward[0, 0], expr=step * src)
+            src_zz = src.inject(field=tau.forward[1, 1], expr=step * src)
 
             rec_term = rec_tau.interpolate(expr=tau[0, 0] + tau[1, 1])
             # rec_term += rec_v1.interpolate(expr=v[1])  # Placeholder for vel_x receiver
@@ -150,7 +150,7 @@ class IsoElasticDevito(ProblemTypeBase):
             # Compile the operator
             # velocity (first derivative vel w.r.t. time, first order euler method), s: time_spacing
             u_v = devito.Eq(vel.forward,
-                            damp*(vel + s * byn_fun * devito.div(tau)),
+                            damp*(vel + step * byn_fun * devito.div(tau)),
                             grid=self.dev_grid,
                             coefficients=None)
 
@@ -158,10 +158,10 @@ class IsoElasticDevito(ProblemTypeBase):
             u_tau = devito.Eq(tau.forward,
                               damp *
                               (tau
-                               + s * (
-                                       lam_fun * devito.diag(devito.div(vel.forward))
-                                       + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T)
-                                      )))
+                               + step * (
+                                         lam_fun * devito.diag(devito.div(vel.forward))
+                                         + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T)
+                                         )))
 
             self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz + rec_term,
                                              **kwargs)
@@ -192,8 +192,8 @@ class IsoElasticDevito(ProblemTypeBase):
         rho_with_halo = self.dev_grid.with_halo(rho.extended_data)
 
         lam_with_halo = rho_with_halo * (vp_with_halo ** 2 - 2. * vs_with_halo ** 2)
-        mu_with_halo = self.dev_grid.with_halo(rho_with_halo * vs_with_halo ** 2)
-        byn_with_halo = self.dev_grid.with_halo(1 / rho_with_halo)
+        mu_with_halo = rho_with_halo * vs_with_halo ** 2
+        byn_with_halo = 1 / rho_with_halo
 
         self.dev_grid.vars.lam_fun.data_with_halo[:] = lam_with_halo
         self.dev_grid.vars.mu_fun.data_with_halo[:] = mu_with_halo
