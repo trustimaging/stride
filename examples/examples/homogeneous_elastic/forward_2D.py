@@ -20,21 +20,18 @@ async def main(runtime):
                   extra=extra,
                   absorbing=absorbing,
                   spacing=spacing)
-    print('Space complete')
 
-    start = 0.  # [s], start = 0.
-    step = 7.855e-8  # [s], step = 0.08e-6
-    end = 1.e-04/2  # [s]
+    start = 0.  # [s]
+    step = 7.855e-8  # [s]
+    end = 0.5e-04  # [s]
 
     time = Time(start=start,
                 step=step,
                 stop=end)
-    print('Time complete')
 
     # Create problem
     problem = Problem(name='test2D_elastic',
                       space=space, time=time)
-    print('Problem complete')
 
     # Create medium
     vp = ScalarField(name='vp', grid=problem.grid)
@@ -44,12 +41,11 @@ async def main(runtime):
     vs.fill(1000.)  # [m / s]
 
     rho = ScalarField(name='rho', grid=problem.grid)
-    rho.fill(1000.)  # [g / cm^3]
+    rho.fill(1e6)  # [kg / m^3]
 
     problem.medium.add(vp)
     problem.medium.add(vs)
     problem.medium.add(rho)
-    print('Media complete')
 
     # Create transducers
     problem.transducers.default()  # This generates a single transducer, that's a point source and recevier
@@ -58,7 +54,6 @@ async def main(runtime):
     problem.geometry.add(id=0,
                          transducer=problem.transducers.get(0),
                          coordinates=np.array(extent) / 2)  # [m]
-    print('Geometry complete')
 
     # Create acquisitions
     source = problem.geometry.locations[0]
@@ -76,7 +71,6 @@ async def main(runtime):
 
     shot.wavelets.data[0, :] = wavelets.tone_burst(f_centre, n_cycles,
                                                    time.num, time.step)
-    print('Shots complete')
 
     # Create the PDE
     pde = IsoElasticDevito(space=space, time=time)
@@ -98,7 +92,6 @@ async def main(runtime):
         shot_wavelets = sub_problem.shot.wavelets
 
         pde.clear_operators()
-        print('Operators cleared')
         traces = await pde(shot_wavelets, vp, vs, rho, problem=sub_problem, **config)
 
         data_stride = traces.data.copy()
@@ -108,11 +101,6 @@ async def main(runtime):
         _, axis = shot.observed.plot(plot=False, skip=5,
                                      colour=config['colour'], line_style=config['line_style'])
         legends[case] = lines.Line2D([0, 1], [1, 0], color=config['colour'], linestyle=config['line_style'])
-
-    runtime.logger.info('\n')
-    runtime.logger.info('Error results:')
-    for case, error in results.items():
-        runtime.logger.info('\t* %s : %f' % (case, error))
 
     plt.legend(legends.values(), legends.keys(), loc='lower right')
     plt.show()
