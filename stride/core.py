@@ -5,18 +5,19 @@ from abc import abstractmethod
 from collections import OrderedDict
 
 import mosaic
+from mosaic import types
 from mosaic.core.base import CMDBase
-from mosaic.core import TaskProxy, TaskOutput, TaskDone
+from mosaic.core import TaskProxy
 
 
 __all__ = ['Variable', 'Operator']
 
 
 async def _maybe_sum(a, b):
-    if isinstance(a, TaskOutput):
+    if isinstance(a, types.awaitable_types):
         a = await a.result()
 
-    if isinstance(b, TaskOutput):
+    if isinstance(b, types.awaitable_types):
         b = await b.result()
 
     if b is None:
@@ -676,13 +677,11 @@ class Operator:
         processed_args = []
         processed_kwargs = dict()
 
-        waitable_types = [TaskProxy, TaskOutput, TaskDone]
-
         for arg in args:
-            if type(arg) in waitable_types:
+            if type(arg) in types.awaitable_types:
                 await arg
 
-                if isinstance(arg, TaskDone):
+                if isinstance(arg, types.awaitable_types):
                     continue
 
                 arg = await arg.result()
@@ -690,10 +689,10 @@ class Operator:
             processed_args.append(arg)
 
         for key, arg in kwargs.items():
-            if type(arg) in waitable_types:
+            if type(arg) in types.awaitable_types:
                 await arg
 
-                if isinstance(arg, TaskDone):
+                if isinstance(arg, types.awaitable_types):
                     continue
 
                 arg = await arg.result()

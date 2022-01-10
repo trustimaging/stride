@@ -321,10 +321,16 @@ class CMDBase(Base):
         -------
 
         """
+        if self.runtime.uid == 'monitor':
+            return
+
         self._state = state
         return self.add_event(state, sync=sync)
 
     def add_event(self, event_name, sync=False, **kwargs):
+        if self.runtime.uid == 'monitor':
+            return
+
         obj_type = self.type.split('_')[0]
         method = getattr(self.monitor, 'add_%s_event' % obj_type)
 
@@ -356,6 +362,9 @@ class CMDBase(Base):
             return add_event_async()
 
     def add_profile(self, profile, sync=False, **kwargs):
+        if self.runtime.uid == 'monitor':
+            return
+
         obj_type = self.type.split('_')[0]
         method = getattr(self.monitor, 'add_%s_profile' % obj_type)
 
@@ -575,6 +584,9 @@ class ProxyBase(CMDBase):
     def _deserialisation_helper(cls, state):
         instance = super()._deserialisation_helper(state)
         instance._registered = False
+
+        if instance.runtime.uid == 'monitor':
+            return instance
 
         obj_type = cls.remote_type()
 

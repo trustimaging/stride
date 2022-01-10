@@ -16,6 +16,7 @@ psutil
 pyflakes
 pytest
 pytest-cov
+pytest-runner
 pyyaml>=5.4
 pyzmq>=22.1
 python-daemon
@@ -23,4 +24,4 @@ scikit-image
 scipy>=1.6
 sphinx
 sphinx_rtd_theme
-pytest-runner
+zict

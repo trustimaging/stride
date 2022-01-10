@@ -4,6 +4,7 @@ import weakref
 import operator
 from cached_property import cached_property
 
+from .. import types
 from .base import Base, RemoteBase, ProxyBase
 from ..utils import Future
 
@@ -248,12 +249,11 @@ class Task(RemoteBase):
         Future
 
         """
-        waitable_types = [TaskProxy, TaskOutput, TaskDone]
 
         for index in range(len(self.args)):
             arg = self.args[index]
 
-            if type(arg) in waitable_types:
+            if type(arg) in types.awaitable_types:
                 self._args_state[index] = arg.state
 
                 if arg.state != 'done':
@@ -279,7 +279,7 @@ class Task(RemoteBase):
                 self._args_value[index] = arg
 
         for key, value in self.kwargs.items():
-            if type(value) in waitable_types:
+            if type(value) in types.awaitable_types:
                 self._kwargs_state[key] = value.state
 
                 if value.state != 'done':
@@ -810,3 +810,6 @@ class TaskDone(TaskOutputBase):
         self._result = True
 
         return self._result
+
+
+types.awaitable_types += (TaskProxy, TaskOutput, TaskDone)

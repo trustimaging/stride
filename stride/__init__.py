@@ -2,6 +2,7 @@
 
 import os
 import signal
+import asyncio
 import warnings
 from pytools import prefork
 
@@ -91,6 +92,9 @@ async def forward(problem, pde, *args, **kwargs):
     if not isinstance(shot_ids, list):
         shot_ids = [shot_ids]
 
+    published_args = [runtime.put(each, publish=True) for each in args]
+    published_args = await asyncio.gather(*published_args)
+
     @runtime.async_for(shot_ids)
     async def loop(worker, shot_id):
         logger.info('\n')
@@ -98,7 +102,7 @@ async def forward(problem, pde, *args, **kwargs):
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
-        traces = await pde(wavelets, *args,
+        traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
                            runtime=worker, **kwargs).result()
 
@@ -178,6 +182,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                           len=runtime.num_workers)
 
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
+        published_args = [runtime.put(each, publish=True) for each in args]
+        published_args = await asyncio.gather(*published_args)
+
         logger.info('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
                     (iteration.id, block.num_iterations, block.id,
@@ -208,7 +215,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             observed = sub_problem.shot.observed
 
             wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
-            modelled = pde(wavelets, *args, problem=sub_problem, runtime=worker, **kwargs)
+            modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
 
             traces = process_traces(modelled, observed, runtime=worker, **kwargs)
             fun = await loss(traces.outputs[0], traces.outputs[1],

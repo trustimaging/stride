@@ -1,4 +1,5 @@
 
+import os
 import gc
 import zmq
 import zmq.asyncio
@@ -7,10 +8,12 @@ import contextlib
 import weakref
 
 import mosaic
+from .warehouse import Warehouse
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task
 from ..profile import profiler, global_profiler
+from ..utils.utils import memory_limit
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -148,6 +151,7 @@ class Runtime(BaseRPC):
         self._workers = dict()
         self._zmq_context = None
         self._loop = None
+        self._warehouse = None
 
         self.logger = None
 
@@ -176,6 +180,18 @@ class Runtime(BaseRPC):
 
         # Start logger
         self.set_logger()
+
+        # Start warehouse
+        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', 'warehouse')
+        if not os.path.exists(spill_directory):
+            os.makedirs(spill_directory)
+
+        warehouse_memory_fraction = kwargs.pop('warehouse_memory_fraction', 0.25)
+        warehouse_memory = memory_limit() * warehouse_memory_fraction
+
+        warehouse_backend = kwargs.pop('warehouse_backend', 'monitor')
+
+        self._warehouse = Warehouse(spill_directory, warehouse_memory, backend=warehouse_backend)
 
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)
@@ -360,6 +376,16 @@ class Runtime(BaseRPC):
 
         """
         return self._comms
+
+    def get_warehouse(self):
+        """
+        Access warehouse.
+
+        Returns
+        -------
+
+        """
+        return self._warehouse
 
     def get_zmq_context(self):
         """
@@ -739,6 +765,27 @@ class Runtime(BaseRPC):
 
         """
         global_profiler.send_profile()
+
+    async def put(self, obj, publish=False):
+        return await self._warehouse.put(obj, publish=publish)
+
+    async def put_remote(self, sender_id, obj, uid=None, publish=False):
+        await self._warehouse.put(obj, uid=uid, publish=publish)
+
+    async def get(self, uid):
+        return await self._warehouse.get(uid)
+
+    async def get_remote(self, sender_id, uid):
+        return await self._warehouse.get(uid)
+
+    async def drop(self, uid):
+        return await self._warehouse.drop(uid)
+
+    async def drop_remote(self, sender_id, uid):
+        await self._warehouse.drop(uid)
+
+    async def force_put(self, sender_id, obj, uid=None):
+        await self._warehouse.force_put(obj, uid=uid)
 
     # Command and task management methods
 

@@ -3,14 +3,13 @@ __version__ = '1.1'
 
 import os
 import asyncio
-import inspect
 
 from .core import tessera
 from .runtime import Head, Monitor, Node, Worker
 from .utils.subprocess import subprocess
 from .utils import logger as mlogger
 from .utils import gather, default_logger
-from .file_manipulation import yaml, h5
+from .file_manipulation import h5
 from .profile import profiler
 
 

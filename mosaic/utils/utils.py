@@ -35,13 +35,17 @@ def sizeof(obj, seen=None):
     # Important mark as seen *before* entering recursion to gracefully handle
     # self-referential objects
     seen.add(obj_id)
-    if isinstance(obj, dict):
-        size += sum([sizeof(v, seen) for v in obj.values()])
-        size += sum([sizeof(k, seen) for k in obj.keys()])
-    elif hasattr(obj, '__dict__'):
-        size += sizeof(obj.__dict__, seen)
-    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
-        size += sum([sizeof(i, seen) for i in obj])
+
+    try:
+        if isinstance(obj, dict):
+            size += sum([sizeof(v, seen) for v in obj.values()])
+            size += sum([sizeof(k, seen) for k in obj.keys()])
+        elif hasattr(obj, '__dict__'):
+            size += sizeof(obj.__dict__, seen)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            size += sum([sizeof(i, seen) for i in obj])
+    except RuntimeError:
+        pass
 
     return size
 

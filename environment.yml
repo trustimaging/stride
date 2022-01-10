@@ -35,6 +35,7 @@ dependencies:
   - traitsui
   - wxPython
   - zlib
+  - zict
   - pip:
       - devito>=4.6
       - python-daemon
