@@ -180,9 +180,6 @@ class SpillBuffer(zict.Buffer):
         self.spilled_total -= self.spilled_by_key.pop(key)
 
     def __setitem__(self, key, value):
-        if key in self:
-            raise RuntimeError('Buffer values are not writable')
-
         self.spilled_total -= self.spilled_by_key.pop(key, 0)
 
         super().__setitem__(key, value)
@@ -310,6 +307,9 @@ class Warehouse:
 
         """
         if self.backend is None:
+            if uid in self._buffer:
+                raise RuntimeError('Warehouse values are not writable')
+
             self._buffer[uid] = obj
 
             if publish:
