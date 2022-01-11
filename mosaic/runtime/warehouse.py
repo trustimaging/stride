@@ -324,7 +324,8 @@ class Warehouse:
         else:
             warehouse_obj = WarehouseObject(obj)
 
-            await self.backend.put_remote(obj=obj, uid=warehouse_obj.uid, publish=publish)
+            await self.backend.put_remote(obj=obj, uid=warehouse_obj.uid, 
+                                          publish=publish, reply=publish)
 
             return warehouse_obj
 
