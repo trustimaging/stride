@@ -351,10 +351,12 @@ class CMDBase(Base):
                      event_t=event_t, **kwargs)
 
         def add_event_sync():
-            method(**event, as_async=False)
+            pass
+            # method(**event, as_async=False)
 
         async def add_event_async():
-            await method(**event, as_async=True)
+            pass
+            # await method(**event, as_async=True)
 
         if sync:
             return add_event_sync()
@@ -383,10 +385,12 @@ class CMDBase(Base):
                               **kwargs)
 
         def add_profile_sync():
-            method(**profile_update, as_async=False)
+            pass
+            # method(**profile_update, as_async=False)
 
         async def add_profile_async():
-            await method(**profile_update, as_async=True)
+            pass
+            # await method(**profile_update, as_async=True)
 
         if sync:
             return add_profile_sync()

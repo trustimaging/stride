@@ -42,7 +42,7 @@ class Worker(Runtime):
         """
         self.logger = LoggerManager()
 
-        if self.mode == 'local':
+        if self.mode == 'local' or True:
             self.logger.set_local(format=self.mode)
         else:
             runtime_id = 'head' if self.mode == 'interactive' else 'monitor'

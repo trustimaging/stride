@@ -300,7 +300,6 @@ class Monitor(Runtime):
         self._dirty_tasks = set()
 
     def _append_description(self, description):
-        start = time.time()
         if not h5.file_exists(filename=self._profile_filename):
             description['start_t'] = self._start_t
 
@@ -310,8 +309,6 @@ class Monitor(Runtime):
         else:
             with h5.HDF5(filename=self._profile_filename, mode='a') as file:
                 file.append(description)
-
-        print('====> SAVING!', time.time()-start)
 
     async def stop(self, sender_id=None):
         """
