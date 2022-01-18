@@ -1,12 +1,13 @@
 
 import os
 import click
+import shutil
 import subprocess as cmd_subprocess
 
 from . import clusters
 from .. import init, stop, runtime
 from ..comms import get_hostname
-from ..utils import subprocess
+from ..utils import subprocess, at_exit
 from ..utils.logger import _stdout, _stderr
 
 
@@ -150,6 +151,12 @@ def go(cmd=None, **kwargs):
         file.write('[ARGS]\n')
         file.write('profile=%s\n' % profile)
 
+    def _rm_dirs():
+        os.remove(filename)
+        shutil.rmtree(path, ignore_errors=True)
+
+    at_exit.add(_rm_dirs)
+
     def run_head():
         process = cmd_subprocess.run(cmd,
                                      stdout=_stdout,
@@ -172,7 +179,7 @@ def go(cmd=None, **kwargs):
 
         try:
             os.remove(filename)
-            os.rmdir(path)
+            shutil.rmtree(path)
 
         except Exception:
             pass

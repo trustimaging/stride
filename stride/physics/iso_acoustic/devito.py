@@ -1,7 +1,6 @@
 
 import os
 import glob
-import atexit
 import shutil
 import tempfile
 import devito
@@ -9,7 +8,7 @@ import numpy as np
 import scipy.signal
 
 import mosaic
-from mosaic.utils import camel_case
+from mosaic.utils import camel_case, at_exit
 from mosaic.profile import skip_profile
 
 from stride.utils import fft
@@ -399,7 +398,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                     def _rm_tmpdir():
                         shutil.rmtree(self._cache_folder, ignore_errors=True)
 
-                    atexit.register(_rm_tmpdir)
+                    at_exit.add(_rm_tmpdir)
 
                 try:
                     self.wavefield.dump(path=self._cache_folder,

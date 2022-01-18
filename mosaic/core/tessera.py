@@ -1,6 +1,7 @@
 
 import sys
 import uuid
+import copy
 import tblib
 import asyncio
 import inspect
@@ -13,11 +14,12 @@ from cached_property import cached_property
 import mosaic
 from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase
+from ..runtime import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
 from ..profile import use_trace
 
 
-__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'tessera']
+__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'ParameterMixin', 'tessera']
 
 
 def _extract_methods(cls, exclude):
@@ -413,6 +415,43 @@ class ParameterMixin:
     def is_proxy(self):
         return self.has_tessera and isinstance(self._tessera, TesseraProxy)
 
+    @property
+    def ref(self):
+        warehouse_obj = WarehouseObject(uid=self._tessera.uid)
+        return warehouse_obj
+
+    async def publish(self):
+        if self.has_tessera:
+            await self
+
+            warehouse = mosaic.get_warehouse()
+            await warehouse.publish(uid=self._tessera.uid, reply=True)
+
+    async def push(self, publish=False):
+        if self.has_tessera:
+            await self
+
+            __dict__ = copy.copy(self.__dict__)
+            try:
+                del __dict__['_tessera']
+            except KeyError:
+                pass
+
+            warehouse = mosaic.get_warehouse()
+            await warehouse.push_remote(__dict__=__dict__,
+                                        uid=self._tessera.uid,
+                                        publish=publish, reply=publish)
+
+    async def pull(self):
+        if self.has_tessera:
+            await self
+
+            warehouse = mosaic.get_warehouse()
+            __dict__ = await warehouse.pull_remote(uid=self._tessera.uid, reply=True)
+
+            for key, value in __dict__.items():
+                setattr(self, key, value)
+
     async def get(self, item):
         if self.has_tessera:
             value = await self._tessera.get_attr(item)
@@ -428,6 +467,9 @@ class ParameterMixin:
 
     def __getattribute__(self, item):
         member = super().__getattribute__(item)
+
+        if item in dir(ParameterMixin):
+            return member
 
         has_tessera = False
         try:
@@ -465,6 +507,12 @@ class ParameterMixin:
         if self.has_tessera and isinstance(self._tessera, Tessera):
             self._tessera.dec_ref()
 
+    def __await__(self):
+        if self.has_tessera:
+            yield from self._tessera.__await__()
+
+        return self
+
 
 class TesseraProxy(ProxyBase):
     """
@@ -490,6 +538,7 @@ class TesseraProxy(ProxyBase):
     def __init__(self, cls, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self._is_parameter = False
         self._cls = PickleClass(cls)
 
         runtime = kwargs.pop('runtime', None)
@@ -542,9 +591,15 @@ class TesseraProxy(ProxyBase):
         self._runtime_id = await self.select_worker(self._runtime_id)
 
         self.runtime.register(self)
-        cls_attrs = await self.remote_runtime.init_tessera(cls=self._cls,
-                                                           uid=self._uid, args=args,
-                                                           reply=True, **kwargs)
+        if self.is_parameter:
+            cls_attrs = await self.remote_runtime.init_parameter(cls=self._cls,
+                                                                 uid=self._uid, args=args,
+                                                                 reply=True, **kwargs)
+        else:
+            cls_attrs = await self.remote_runtime.init_tessera(cls=self._cls,
+                                                               uid=self._uid, args=args,
+                                                               reply=True, **kwargs)
+
         self._cls_attr_names = cls_attrs
 
         await self.state_changed('listening')
@@ -556,6 +611,10 @@ class TesseraProxy(ProxyBase):
 
         """
         return self._runtime_id
+
+    @property
+    def is_parameter(self):
+        return self._is_parameter
 
     @cached_property
     def remote_runtime(self):
@@ -597,6 +656,26 @@ class TesseraProxy(ProxyBase):
             runtime = await monitor.select_worker(reply=True)
 
         return runtime
+
+    def make_parameter(self, *args, **kwargs):
+        """
+        Transform the proxy into a parameter.
+
+        Returns
+        -------
+        object
+
+        """
+        self._is_parameter = True
+        self._runtime_id = 'warehouse'
+
+        kwargs.pop('max_retries', None)
+        kwargs.pop('runtime', None)
+
+        obj = self._cls.cls(*args, **kwargs)
+        setattr(obj, '_tessera', self)
+
+        return obj
 
     def get_attr(self, item):
         """
@@ -1059,7 +1138,6 @@ def tessera(*args, **cmd_config):
 
             if array_len is None:
                 proxy = TesseraProxy(cls, *args, **kwargs)
-
             else:
                 proxy = ArrayProxy(cls, *args, len=array_len, **kwargs)
 
@@ -1080,12 +1158,34 @@ def tessera(*args, **cmd_config):
 
         @classmethod
         def parameter(_, *args, uid=None, **kwargs):
+            kwargs.update(cmd_config)
+
+            array_len = kwargs.pop('len', None)
+
+            if array_len is None:
+                proxy = TesseraProxy(cls, *args, **kwargs)
+            else:
+                proxy = ArrayProxy(cls, *args, len=array_len, **kwargs)
+
+            param = proxy.make_parameter(*args, **kwargs)
+
+            loop = mosaic.get_event_loop()
+            loop.run(proxy.__init_async__, *args, **kwargs)
+
+            _Parameter = type('_%s' % param.__class__.__name__, (ParameterMixin, param.__class__), {})
+            param.__class__ = _Parameter
+
+            return param
+
+        @classmethod
+        def local_parameter(_, *args, uid=None, **kwargs):
             if uid is None:
                 uid = '%s-%s-%s' % ('tess',
                                     cls.__name__.lower(),
                                     uuid.uuid4().hex)
 
             kwargs.update(cmd_config)
+
             tess = Tessera(cls, uid, *args, **kwargs)
             param = tess.make_parameter()
 
@@ -1097,6 +1197,7 @@ def tessera(*args, **cmd_config):
         cls.remote = remote
         cls.local = local
         cls.parameter = parameter
+        cls.local_parameter = local_parameter
         cls.select_worker = TesseraProxy.select_worker
 
         method_list = [func for func in dir(Base) if not func.startswith("__")]

@@ -1,267 +1,17 @@
 
-import uuid
-import zict
-import struct
+import copy
 import asyncio
-from cached_property import cached_property
 
-import mosaic
-from .. import types
-from ..utils import sizeof
-from ..comms.serialisation import serialise, deserialise
-from ..comms.compression import maybe_compress, decompress
+from .runtime import Runtime
+from .utils import WarehouseObject
+from ..utils import LoggerManager
+from ..profile import global_profiler
 
 
-__all__ = ['Warehouse', 'WarehouseObject']
+__all__ = ['Warehouse']
 
 
-def nbytes(frame, _bytes_like=(bytes, bytearray)):
-    """
-    Secure funtion to get number of bytes.
-
-    """
-    if isinstance(frame, _bytes_like):
-        return len(frame)
-    else:
-        try:
-            return frame.nbytes
-        except AttributeError:
-            return len(frame)
-
-
-def len_frames(frames):
-    """
-    Process frames to generate length header.
-
-    """
-    num_frames = len(frames)
-    nbytes_frames = map(nbytes, frames)
-
-    return struct.pack(f'Q{num_frames}Q', num_frames, *nbytes_frames)
-
-
-def unlen_frames(data):
-    """
-    Process bytes to extract multipart frames.
-
-    """
-    data = memoryview(data)
-
-    fmt_size = struct.calcsize('Q')
-
-    (num_frames,) = struct.unpack_from('Q', data)
-    lengths = struct.unpack_from(f'{num_frames}Q', data, fmt_size)
-
-    frames = []
-    start = fmt_size * (1 + num_frames)
-    for length in lengths:
-        end = start + length
-
-        frames.append(data[start:end])
-
-        start = end
-
-    return frames
-
-
-def serialise_and_compress(data):
-    """
-    Wrapper for serialisation and (maybe) compression.
-
-    """
-    data = serialise(data)
-
-    compression = []
-    compressed_data = []
-
-    _compression, _compressed_data = maybe_compress(data[0])
-    compression.append(_compression)
-    compressed_data.append(_compressed_data)
-
-    if len(data[1]) > 0:
-        _compression, _compressed_data = zip(*map(maybe_compress, data[1]))
-        compression.append(_compression)
-        compressed_data.append(_compressed_data)
-
-    else:
-        compression.append([])
-        compressed_data.append([])
-
-    header = {
-        'compression': compression,
-    }
-
-    header = serialise(header)[0]
-
-    multipart_data = [header]
-    multipart_data += [compressed_data[0]]
-    multipart_data += compressed_data[1]
-
-    multipart_data.insert(0, len_frames(multipart_data))
-
-    return multipart_data
-
-
-def decompress_and_deserialise(multipart_data):
-    """
-    Wrapper for deserialisation and decompression.
-
-    """
-    multipart_data = unlen_frames(multipart_data)
-
-    header = deserialise(multipart_data[0], [])
-
-    if len(multipart_data) > 2:
-        compressed_data = [multipart_data[1], multipart_data[2:]]
-    else:
-        compressed_data = [multipart_data[1], []]
-
-    data = []
-
-    _data = decompress(header['compression'][0], compressed_data[0])
-    data.append(_data)
-
-    _data = [decompress(compression, payload)
-             for compression, payload in zip(header['compression'][1], compressed_data[1])]
-    data.append(_data)
-
-    data = deserialise(data[0], data[1])
-
-    return data
-
-
-class SpillBuffer(zict.Buffer):
-    """
-    MutableMapping that automatically spills out key/value pairs to disk when
-    the total size of the stored data exceeds the target.
-
-    """
-
-    def __init__(self, spill_directory, target):
-        self.spilled_by_key = {}
-        self.spilled_total = 0
-
-        storage = zict.Func(serialise_and_compress,
-                            decompress_and_deserialise,
-                            zict.File(spill_directory, mode='w'))
-
-        super().__init__(dict(), storage, target,
-                         weight=self._weight,
-                         fast_to_slow_callbacks=[self._on_evict],
-                         slow_to_fast_callbacks=[self._on_retrieve])
-
-    @property
-    def memory(self):
-        """
-        Key/value pairs stored in RAM. Alias of zict.Buffer.fast.
-
-        """
-        return self.fast
-
-    @property
-    def disk(self):
-        """
-        Key/value pairs spilled out to disk. Alias of zict.Buffer.slow.
-
-        """
-        return self.slow
-
-    @staticmethod
-    def _weight(key, value):
-        return sizeof(value)
-
-    def _on_evict(self, key, value):
-        b = sizeof(value)
-
-        self.spilled_by_key[key] = b
-        self.spilled_total += b
-
-    def _on_retrieve(self, key, value):
-        self.spilled_total -= self.spilled_by_key.pop(key)
-
-    def __setitem__(self, key, value):
-        self.spilled_total -= self.spilled_by_key.pop(key, 0)
-
-        super().__setitem__(key, value)
-
-        if key in self.slow:
-            # value is individually larger than target so it went directly to slow.
-            # _on_evict was not called.
-            b = sizeof(value)
-
-            self.spilled_by_key[key] = b
-            self.spilled_total += b
-
-    def __delitem__(self, key):
-        self.spilled_total -= self.spilled_by_key.pop(key, 0)
-        super().__delitem__(key)
-
-
-class WarehouseObject:
-    """
-    Represents a reference to an object that is stored into the warehouse.
-
-    Parameters
-    ----------
-    obj : object
-        Object being added.
-
-    """
-
-    def __init__(self, obj):
-        """
-
-        Parameters
-        ----------
-        obj
-        """
-        self._name = obj.__class__.__name__.lower()
-        self._uid = '%s-%s-%s' % ('ware',
-                                  self._name,
-                                  uuid.uuid4().hex)
-
-    @property
-    def state(self):
-        return 'done'
-
-    @property
-    def uid(self):
-        """
-        UID of the object.
-
-        """
-        return self._uid
-
-    @property
-    def warehouse(self):
-        """
-        Current warehouse object.
-
-        """
-        return mosaic.get_warehouse()
-
-    async def value(self):
-        """
-        Pull the underlying value from the warehouse.
-
-        """
-        return await self.warehouse.get(self.uid)
-
-    async def result(self):
-        """
-        Alias for WarehouseObject.value.
-
-        """
-        return await self.value()
-
-    def __await__(self):
-        return self.value().__await__()
-
-    def __repr__(self):
-        return "<warehouse object uid=%s>" % self.uid
-
-
-class Warehouse:
+class Warehouse(Runtime):
     """
     A warehouse represents a key-value storage that is located in a specific runtime,
     and is accessible from all other runtimes.
@@ -273,95 +23,224 @@ class Warehouse:
     When the amount of memory (usually 25% of total memory) used by the warehouse is exceeded, its contents
     will spill to disk, where they can be retrieved later on.
 
-    Parameters
-    ----------
-    spill_directory : str
-        Directory where spillage is saved.
-    target : int
-        Memory limit to start spillage.
-    backend : str
-        UID of the runtime where the warehouse is backed.
-
     """
 
-    def __init__(self, spill_directory, target, backend='monitor'):
-        self._backend = backend
-        self._buffer = SpillBuffer(spill_directory, target)
+    is_warehouse = True
 
-    @cached_property
-    def backend(self):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def set_logger(self):
         """
-        Proxy to the backend.
+        Set up logging.
+
+        Returns
+        -------
 
         """
-        runtime = mosaic.runtime()
+        self.logger = LoggerManager()
 
-        if self._backend == runtime.uid:
-            return
+        if self.mode == 'local':
+            self.logger.set_local(format=self.mode)
         else:
-            return runtime.proxy('monitor')
+            runtime_id = 'head' if self.mode == 'interactive' else 'monitor'
+            self.logger.set_remote(runtime_id=runtime_id, format=self.mode)
+
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        global_profiler.set_remote('monitor')
+        super().set_profiler()
 
     async def put(self, obj, uid=None, publish=False):
+        raise NotImplementedError('Cannot put directly into the warehouse runtime')
+
+    async def get(self, uid):
+        raise NotImplementedError('Cannot get directly from the warehouse runtime')
+
+    async def drop(self, uid):
+        raise NotImplementedError('Cannot drop directly from the warehouse runtime')
+
+    async def force_put(self, sender_id, obj, uid=None):
+        raise NotImplementedError('Cannot force put directly into the warehouse runtime')
+
+    async def put_remote(self, sender_id, obj, uid=None, publish=False):
         """
         Put an object into the warehouse.
 
+        Parameters
+        ----------
+        sender_id
+        obj
+        uid
+        publish
+
+        Returns
+        -------
+
         """
-        if self.backend is None:
-            if uid in self._buffer:
-                raise RuntimeError('Warehouse values are not writable')
+        if uid in self._local_warehouse:
+            raise RuntimeError('Warehouse values are not writable')
 
-            self._buffer[uid] = obj
+        self._local_warehouse[uid] = obj
 
-            if publish:
-                tasks = []
-                workers = mosaic.get_workers()
+        if publish:
+            await self.publish(sender_id, uid)
 
-                for worker in workers.values():
-                    tasks.append(worker.force_put(obj=obj, uid=uid))
-
-                await asyncio.gather(*tasks)
-
-        else:
-            warehouse_obj = WarehouseObject(obj)
-
-            await self.backend.put_remote(obj=obj, uid=warehouse_obj.uid,
-                                          publish=publish, reply=publish)
-
-            return warehouse_obj
-
-    async def get(self, uid):
+    async def get_remote(self, sender_id, uid):
         """
         Retrieve an object from the warehouse.
+
+        Parameters
+        ----------
+        sender_id
+        uid
+
+        Returns
+        -------
 
         """
         if isinstance(uid, WarehouseObject):
             uid = uid.uid
 
-        if uid in self._buffer:
-            return self._buffer[uid]
-
-        if self.backend is None:
+        if uid in self._local_warehouse:
+            return self._local_warehouse[uid]
+        else:
             raise KeyError('%s is not available in the warehouse' % uid)
 
-        obj = await self.backend.get_remote(uid=uid, reply=True)
-        self._buffer[uid] = obj
-
-        return obj
-
-    async def drop(self, uid):
+    async def drop_remote(self, sender_id, uid):
         """
         Delete an object from the warehouse.
 
+        Parameters
+        ----------
+        sender_id
+        uid
+
+        Returns
+        -------
+
         """
-        if uid in self._buffer:
-            del self._buffer[uid]
+        if uid in self._local_warehouse:
+            del self._local_warehouse[uid]
 
-        if self.backend is not None:
-            await self.backend.drop_remote(uid=uid)
+    async def push_remote(self, sender_id, __dict__, uid=None, publish=False):
+        """
+        Push changes into warehouse object.
 
-    async def force_put(self, obj, uid=None):
-        if uid not in self._buffer:
-            self._buffer[uid] = obj
+        Parameters
+        ----------
+        sender_id
+        __dict__
+        uid
+        publish
 
+        Returns
+        -------
 
-types.awaitable_types += (WarehouseObject,)
+        """
+        if isinstance(uid, WarehouseObject):
+            uid = uid.uid
+
+        if uid not in self._local_warehouse:
+            raise KeyError('%s is not available in the warehouse' % uid)
+
+        obj = self._local_warehouse[uid]
+        for key, value in __dict__.items():
+            setattr(obj, key, value)
+
+        if publish:
+            tasks = []
+
+            for worker in self._workers.values():
+                tasks.append(worker.force_push(__dict__=__dict__, uid=uid, reply=True))
+
+            await asyncio.gather(*tasks)
+
+    async def pull_remote(self, sender_id, uid):
+        """
+        Pull changes from warehouse object.
+
+        Parameters
+        ----------
+        sender_id
+        uid
+
+        Returns
+        -------
+
+        """
+        if isinstance(uid, WarehouseObject):
+            uid = uid.uid
+
+        if uid not in self._local_warehouse:
+            raise KeyError('%s is not available in the warehouse' % uid)
+
+        __dict__ = copy.copy(self._local_warehouse[uid].__dict__)
+        try:
+            del __dict__['_tessera']
+        except KeyError:
+            pass
+
+        return __dict__
+
+    async def publish(self, sender_id, uid):
+        """
+        Publish object to all workers.
+
+        Parameters
+        ----------
+        sender_id
+        uid
+
+        Returns
+        -------
+
+        """
+        if isinstance(uid, WarehouseObject):
+            uid = uid.uid
+
+        if uid not in self._local_warehouse:
+            raise KeyError('%s is not available in the warehouse' % uid)
+
+        obj = self._local_warehouse[uid]
+        tasks = []
+
+        for worker in self._workers.values():
+            tasks.append(worker.force_put(obj=obj, uid=uid, reply=True))
+
+        await asyncio.gather(*tasks)
+
+    async def init_parameter(self, sender_id, cls, uid, args, **kwargs):
+        """
+        Create parameter in this worker.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        cls : type
+            Class of the tessera.
+        uid : str
+            UID of the new tessera.
+        args : tuple, optional
+            Arguments for the initialisation of the tessera.
+        kwargs : optional
+            Keyword arguments for the initialisation of the tessera.
+
+        Returns
+        -------
+
+        """
+        param = cls.local_parameter(*args, uid=uid, **kwargs)
+        tessera = param._tessera
+
+        self._local_warehouse[uid] = param
+        tessera.register_proxy(sender_id)
+
+        return tessera._cls_attr_names

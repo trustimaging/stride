@@ -24,5 +24,4 @@ scikit-image
 scipy>=1.6
 sphinx
 sphinx_rtd_theme
-uvloop>=0.16
 zict

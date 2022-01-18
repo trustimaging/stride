@@ -24,7 +24,7 @@ prefork.enable_prefork()
 def _close_prefork_atsignal(signum, frame):
     try:
         prefork.forker._quit()
-    except AttributeError:
+    except (AttributeError, BrokenPipeError):
         pass
 
     os._exit(-1)
@@ -182,6 +182,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                           len=runtime.num_workers)
 
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
+        optimiser.clear_grad()
+
         published_args = [runtime.put(each, publish=True) for each in args]
         published_args = await asyncio.gather(*published_args)
 
@@ -203,8 +205,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
 
-        optimiser.clear_grad()
-
         @runtime.async_for(shot_ids)
         async def loop(worker, shot_id):
             logger.info('\n')
@@ -213,6 +213,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             sub_problem = problem.sub_problem(shot_id)
             wavelets = sub_problem.shot.wavelets
             observed = sub_problem.shot.observed
+
+            if wavelets is None:
+                raise RuntimeError('Shot %d has no wavelet data' % shot_id)
+
+            if observed is None:
+                raise RuntimeError('Shot %d has no observed data' % shot_id)
 
             wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
             modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
@@ -230,6 +236,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         await loop
 
+        await optimiser.variable.pull()
         await optimiser.step()
 
         if dump:

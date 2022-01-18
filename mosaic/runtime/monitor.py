@@ -1,16 +1,14 @@
 
 import os
-import uuid
 import time
-import copy
 import psutil
 import asyncio
 import datetime
-from collections import OrderedDict
 import subprocess as cmd_subprocess
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
+from .utils import MonitoredResource, MonitoredObject
 from .strategies import RoundRobin
 from ..file_manipulation import h5
 from ..utils import subprocess
@@ -18,7 +16,7 @@ from ..utils.logger import LoggerManager, _stdout, _stderr
 from ..profile import profiler, global_profiler
 
 
-__all__ = ['Monitor', 'MonitoredResource', 'MonitoredObject', 'monitor_strategies']
+__all__ = ['Monitor', 'monitor_strategies']
 
 
 monitor_strategies = {
@@ -75,11 +73,37 @@ class Monitor(Runtime):
         #     psutil.Process().cpu_affinity([available_cpus[0]])
 
         # Start local cluster
+        await self.init_warehouse(**kwargs)
+
         if self.mode in ['local', 'interactive']:
             await self.init_local(**kwargs)
 
         else:
             await self.init_cluster(**kwargs)
+
+    async def init_warehouse(self, **kwargs):
+        """
+        Init warehouse process.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
+        def start_warehouse(*args, **extra_kwargs):
+            kwargs.update(extra_kwargs)
+            mosaic.init('warehouse', *args, **kwargs, wait=True)
+
+        warehouse_proxy = RuntimeProxy(name='warehouse')
+        warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)
+        warehouse_subprocess.start_process()
+        warehouse_proxy.subprocess = warehouse_subprocess
+
+        self._remote_warehouse = warehouse_proxy
+        await self._comms.wait_for(warehouse_proxy.uid)
 
     async def init_local(self, **kwargs):
         """
@@ -190,16 +214,6 @@ class Monitor(Runtime):
         node.update(update, **sub_resources)
         self._monitor_strategy.update_node(node)
 
-        # if profiler.tracing:
-        #     node_description = node.append()
-        #     description = {
-        #         'monitored_nodes': {
-        #             sender_id: node_description
-        #         }
-        #     }
-        #
-        #     self._append_description(description)
-
     def add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
@@ -208,16 +222,6 @@ class Monitor(Runtime):
         obj.add_event(sender_id, **kwargs)
         self._monitor_strategy.update_tessera(obj)
         self._dirty_tessera.add(uid)
-
-        # if profiler.tracing:
-        #     obj_description = obj.append()
-        #     description = {
-        #         'monitored_tessera': {
-        #             uid: obj_description
-        #         }
-        #     }
-        #
-        #     self._append_description(description)
 
     def add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
         if uid not in self._monitored_tasks:
@@ -228,16 +232,6 @@ class Monitor(Runtime):
         self._monitor_strategy.update_task(obj)
         self._dirty_tasks.add(uid)
 
-        # if profiler.tracing:
-        #     obj_description = obj.append()
-        #     description = {
-        #         'monitored_tasks': {
-        #             uid: obj_description
-        #         }
-        #     }
-        #
-        #     self._append_description(description)
-
     def add_tessera_profile(self, sender_id, runtime_id, uid, profile):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
@@ -246,16 +240,6 @@ class Monitor(Runtime):
         obj.add_profile(sender_id, profile)
         self._dirty_tessera.add(uid)
 
-        # if profiler.tracing:
-        #     obj_description = obj.append()
-        #     description = {
-        #         'monitored_tessera': {
-        #             uid: obj_description
-        #         }
-        #     }
-        #
-        #     self._append_description(description)
-
     def add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
@@ -263,16 +247,6 @@ class Monitor(Runtime):
         obj = self._monitored_tasks[uid]
         obj.add_profile(sender_id, profile)
         self._dirty_tasks.add(uid)
-
-        # if profiler.tracing:
-        #     obj_description = obj.append()
-        #     description = {
-        #         'monitored_tasks': {
-        #             uid: obj_description
-        #         }
-        #     }
-        #
-        #     self._append_description(description)
 
     def append_description(self):
         if not profiler.tracing:
@@ -343,6 +317,11 @@ class Monitor(Runtime):
 
             self._append_description(description)
 
+        # Close warehouse
+        await self._remote_warehouse.stop()
+        self._remote_warehouse.subprocess.join_process()
+
+        # Close nodes
         for node_id, node in self._nodes.items():
             await node.stop()
 
@@ -408,267 +387,3 @@ class Monitor(Runtime):
 
             if timeout is not None and (time.time() - tic) > timeout:
                 break
-
-
-class MonitoredResource:
-    """
-    Base class for those that keep track of the state of a Mosaic runtime,
-
-    """
-
-    def __init__(self, uid):
-        self.uid = self.name = uid
-        self.history = []
-        self.sub_resources = dict()
-
-        self._last_update = 0
-        self._last_append = 0
-
-    @property
-    def state(self):
-        try:
-            return self.history[-1]['state']
-        except IndexError:
-            return None
-
-    @state.setter
-    def state(self, value):
-        last_event = copy.deepcopy(self.history[-1])
-        last_event['state'] = value
-        self.update(last_event)
-
-    def update(self, update, **kwargs):
-        if not isinstance(update, list):
-            update = [update]
-
-        self.history.extend(update)
-
-        for group_name, group_update in kwargs.items():
-            self.add_group(group_name)
-
-            group = self.sub_resources[group_name]
-
-            for name, resource in group_update.items():
-                self.add_resource(group_name, name)
-
-                group[name].update(resource)
-
-    def get_update(self):
-        history = self.history[self._last_update:]
-        self._last_update = len(self.history)
-
-        sub_resources = OrderedDict()
-        for group_name, group in self.sub_resources.items():
-            sub_resources[group_name] = OrderedDict()
-
-            for name, resource in group.items():
-                sub_resources[group_name][name] = resource.get_update()[0]
-
-        return history, sub_resources
-
-    def append(self, filename=None):
-        history = self.history[self._last_append:]
-
-        node_description = {}
-        for index, item in enumerate(history):
-            label = 'history_%08d' % (self._last_append + index)
-            node_description[label] = item
-
-        self._last_append = len(self.history)
-
-        sub_description = {}
-        for group_name, group in self.sub_resources.items():
-            group_description = dict()
-
-            for name, resource in group.items():
-                resource_description = resource.append()
-                group_description[name] = resource_description
-
-            sub_description[group_name] = group_description
-
-        description = {
-            'history': node_description,
-            'sub_resources': sub_description,
-        }
-
-        if filename is None:
-            return description
-
-        if not h5.file_exists(filename=filename):
-            with h5.HDF5(filename=filename, mode='w') as file:
-                file.dump(description)
-
-        else:
-            with h5.HDF5(filename=filename, mode='a') as file:
-                file.append(description)
-
-    def add_group(self, group_name):
-        if group_name not in self.sub_resources:
-            self.sub_resources[group_name] = OrderedDict()
-
-        return self.sub_resources[group_name]
-
-    def add_resource(self, group_name, name):
-        group = self.sub_resources[group_name]
-
-        if name not in group:
-            group[name] = MonitoredResource(name)
-
-        return group[name]
-
-    def sort_resources(self, group_name, key, desc=False):
-        group = self.sub_resources[group_name]
-
-        self.sub_resources[group_name] = OrderedDict(sorted(group.items(),
-                                                     key=lambda x: x[1].history[-1][key],
-                                                     reverse=desc))
-
-
-class MonitoredObject:
-    """
-    Base class for those that keep track of the state of a Mosaic object,
-
-    """
-
-    def __init__(self, runtime_id, uid, tessera_id=None):
-        self.uid = uid
-        self.runtime_id = runtime_id
-
-        if tessera_id is not None:
-            self.tessera_id = tessera_id
-
-        self.proxy_events = OrderedDict()
-        self.proxy_profiles = OrderedDict()
-        self.remote_events = []
-        self.remote_profiles = []
-
-        self._last_proxy_event = dict()
-        self._last_proxy_profile = dict()
-        self._last_remote_event = 0
-        self._last_remote_profile = 0
-
-    @property
-    def state(self):
-        try:
-            return self.remote_events[-1]['name']
-        except IndexError:
-            return None
-
-    @state.setter
-    def state(self, value):
-        event = {
-            'name': 'collected',
-            'event_t': time.time(),
-        }
-
-        self.remote_events.append(event)
-
-    def collect(self):
-        event = {
-            'name': 'collected',
-            'event_t': time.time(),
-        }
-
-        if self.state != 'collected':
-            self.remote_events.append(event)
-
-        for runtime_id, proxy in self.proxy_events.items():
-            if proxy[-1]['name'] != 'collected':
-                proxy.append(event)
-
-    def add_event(self, runtime_id, event_type, event_name, **kwargs):
-        event_uid = uuid.uuid4().hex
-        event = dict(name=event_name, event_uid=event_uid, **kwargs)
-
-        if event_type == 'proxy':
-            if runtime_id not in self.proxy_events:
-                self.proxy_events[runtime_id] = []
-
-            self.proxy_events[runtime_id].append(event)
-        elif event_type == 'remote':
-            self.remote_events.append(event)
-
-    def add_profile(self, runtime_id, profile_type, profile):
-        if profile_type == 'proxy':
-            if runtime_id not in self.proxy_profiles:
-                self.proxy_profiles[runtime_id] = []
-
-            self.proxy_profiles[runtime_id].append(profile)
-        elif profile_type == 'remote':
-            self.remote_profiles.append(profile)
-
-    def append(self, filename=None):
-        remote_events = self.remote_events[self._last_remote_event:]
-        remote_profiles = self.remote_profiles[self._last_remote_profile:]
-
-        remote_events_description = {}
-        for index, item in enumerate(remote_events):
-            label = 'history_%08d' % (self._last_remote_event + index)
-            remote_events_description[label] = item
-
-        remote_profiles_description = {}
-        for index, item in enumerate(remote_profiles):
-            label = 'history_%08d' % (self._last_remote_profile + index)
-            remote_profiles_description[label] = item
-
-        self._last_remote_event = len(self.remote_events)
-        self._last_remote_profile = len(self.remote_profiles)
-
-        proxy_events_description = {}
-        for proxy_name, proxy in self.proxy_events.items():
-            try:
-                last_event = self._last_proxy_event[proxy_name]
-            except KeyError:
-                last_event = 0
-
-            proxy_events = proxy[last_event:]
-
-            proxy_description = {}
-            for index, item in enumerate(proxy_events):
-                label = 'history_%08d' % (last_event + index)
-                proxy_description[label] = item
-
-            proxy_events_description[proxy_name] = proxy_description
-
-            self._last_proxy_event[proxy_name] = len(proxy)
-
-        proxy_profiles_description = {}
-        for proxy_name, proxy in self.proxy_profiles.items():
-            try:
-                last_profile = self._last_proxy_profile[proxy_name]
-            except KeyError:
-                last_profile = 0
-
-            proxy_profiles = proxy[last_profile:]
-
-            proxy_description = {}
-            for index, item in enumerate(proxy_profiles):
-                label = 'history_%08d' % (last_profile + index)
-                proxy_description[label] = item
-
-            proxy_profiles_description[proxy_name] = proxy_description
-
-            self._last_proxy_profile[proxy_name] = len(proxy)
-
-        description = {
-            'uid': self.uid,
-            'runtime_id': self.runtime_id,
-            'remote_events': remote_events_description,
-            'remote_profiles': remote_profiles_description,
-            'proxy_events': proxy_events_description,
-            'proxy_profiles': proxy_profiles_description,
-        }
-
-        if hasattr(self, 'tessera_id'):
-            description['tessera_id'] = self.tessera_id
-
-        if filename is None:
-            return description
-
-        if not h5.file_exists(filename=filename):
-            with h5.HDF5(filename=filename, mode='w') as file:
-                file.dump(description)
-
-        else:
-            with h5.HDF5(filename=filename, mode='a') as file:
-                file.append(description)

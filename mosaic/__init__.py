@@ -5,7 +5,7 @@ import os
 import asyncio
 
 from .core import tessera
-from .runtime import Head, Monitor, Node, Worker
+from .runtime import Head, Monitor, Node, Worker, Warehouse
 from .utils.subprocess import subprocess
 from .utils import logger as mlogger
 from .utils import gather, default_logger
@@ -19,6 +19,7 @@ _runtime_types = {
     'monitor': Monitor,
     'node': Node,
     'worker': Worker,
+    'warehouse': Warehouse,
 }
 
 

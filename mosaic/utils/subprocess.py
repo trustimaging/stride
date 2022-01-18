@@ -1,9 +1,7 @@
 
 import os
 import sys
-import atexit
 import psutil
-import signal
 import daemon
 import weakref
 import functools
@@ -11,6 +9,7 @@ import threading
 import multiprocessing
 
 import mosaic
+from .at_exit import at_exit
 
 
 __all__ = ['subprocess']
@@ -336,12 +335,4 @@ def _close_processes():
         process.stop_process()
 
 
-def _close_processes_atsignal(signum, frame):
-    _close_processes()
-
-    os._exit(-1)
-
-
-atexit.register(_close_processes)
-signal.signal(signal.SIGINT, _close_processes_atsignal)
-signal.signal(signal.SIGTERM, _close_processes_atsignal)
+at_exit.add(_close_processes)

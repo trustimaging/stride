@@ -8,7 +8,8 @@ import contextlib
 import weakref
 
 import mosaic
-from .warehouse import Warehouse
+from .utils import WarehouseObject
+from ..utils import SpillBuffer
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task
@@ -135,6 +136,7 @@ class Runtime(BaseRPC):
     is_monitor = False
     is_node = False
     is_worker = False
+    is_warehouse = False
 
     def __init__(self, **kwargs):
         runtime_indices = kwargs.pop('runtime_indices', ())
@@ -151,7 +153,8 @@ class Runtime(BaseRPC):
         self._workers = dict()
         self._zmq_context = None
         self._loop = None
-        self._warehouse = None
+        self._remote_warehouse = None
+        self._local_warehouse = None
 
         self.logger = None
 
@@ -182,16 +185,15 @@ class Runtime(BaseRPC):
         self.set_logger()
 
         # Start warehouse
-        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', 'warehouse')
+        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', '%s-storage' % self.uid)
         if not os.path.exists(spill_directory):
             os.makedirs(spill_directory)
 
         warehouse_memory_fraction = kwargs.pop('warehouse_memory_fraction', 0.25)
         warehouse_memory = memory_limit() * warehouse_memory_fraction
 
-        warehouse_backend = kwargs.pop('warehouse_backend', 'monitor')
-
-        self._warehouse = Warehouse(spill_directory, warehouse_memory, backend=warehouse_backend)
+        self._remote_warehouse = self.proxy('warehouse')
+        self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
 
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)
@@ -385,7 +387,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        return self._warehouse
+        return self._remote_warehouse
 
     def get_zmq_context(self):
         """
@@ -767,25 +769,107 @@ class Runtime(BaseRPC):
         global_profiler.send_profile()
 
     async def put(self, obj, publish=False):
-        return await self._warehouse.put(obj, publish=publish)
+        """
+        Put an object into the warehouse.
 
-    async def put_remote(self, sender_id, obj, uid=None, publish=False):
-        await self._warehouse.put(obj, uid=uid, publish=publish)
+        Parameters
+        ----------
+        obj
+        publish
+
+        Returns
+        -------
+
+        """
+        if hasattr(obj, 'has_tessera') and obj.is_proxy:
+            await obj.push(publish=publish)
+
+            return obj.ref
+
+        else:
+            warehouse_obj = WarehouseObject(obj)
+
+            await self._remote_warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
+                                                    publish=publish, reply=publish)
+
+            return warehouse_obj
 
     async def get(self, uid):
-        return await self._warehouse.get(uid)
+        """
+        Retrieve an object from the warehouse.
 
-    async def get_remote(self, sender_id, uid):
-        return await self._warehouse.get(uid)
+        Parameters
+        ----------
+        uid
+
+        Returns
+        -------
+
+        """
+        if isinstance(uid, WarehouseObject):
+            uid = uid.uid
+
+        if uid in self._local_warehouse:
+            return self._local_warehouse[uid]
+
+        obj = await self._remote_warehouse.get_remote(uid=uid, reply=True)
+        self._local_warehouse[uid] = obj
+
+        return obj
 
     async def drop(self, uid):
-        return await self._warehouse.drop(uid)
+        """
+        Delete an object from the warehouse.
 
-    async def drop_remote(self, sender_id, uid):
-        await self._warehouse.drop(uid)
+        Parameters
+        ----------
+        uid
+
+        Returns
+        -------
+
+        """
+        if uid in self._local_warehouse:
+            del self._local_warehouse[uid]
+
+        await self._remote_warehouse.drop_remote(uid=uid)
 
     async def force_put(self, sender_id, obj, uid=None):
-        await self._warehouse.force_put(obj, uid=uid)
+        """
+
+        Parameters
+        ----------
+        sender_id
+        obj
+        uid
+
+        Returns
+        -------
+
+        """
+        if uid not in self._local_warehouse:
+            self._local_warehouse[uid] = obj
+
+    async def force_push(self, sender_id, __dict__, uid=None):
+        """
+
+        Parameters
+        ----------
+        sender_id
+        __dict__
+        uid
+
+        Returns
+        -------
+
+        """
+        if uid in self._local_warehouse:
+            obj = self._local_warehouse[uid]
+            for key, value in __dict__.items():
+                setattr(obj, key, value)
+
+        else:
+            await self.get(uid)
 
     # Command and task management methods
 
@@ -839,6 +923,9 @@ class Runtime(BaseRPC):
 
         if hasattr(obj, 'queue_task'):
             obj.queue_task((None, 'stop', None))
+
+        if obj_uid in self._local_warehouse:
+            del self._local_warehouse[obj_uid]
 
         gc.collect()
 
