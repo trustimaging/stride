@@ -327,10 +327,11 @@ class Variable:
             output_grads = [prev[each] for each in output_names]
 
             # call adjoint method
-            method = getattr(node.op, node.method)
             if hasattr(node.op, 'has_tessera') and node.op.has_tessera and node.op.is_proxy:
-                ret = await method(*output_grads, propagate=True, **kwargs)
+                method = getattr(node.op._tessera, node.method)
+                ret = await method(*output_grads, **kwargs)
             else:
+                method = getattr(node.op, node.method)
                 ret = await method(*output_grads, **kwargs)
 
             if isinstance(ret, TaskProxy):
