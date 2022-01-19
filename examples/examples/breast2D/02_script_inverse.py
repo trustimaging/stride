@@ -67,8 +67,8 @@ async def main(runtime):
 
     max_freqs = [0.3e6, 0.4e6, 0.5e6, 0.6e6]
 
-    num_blocks = 4
-    num_iters = 8
+    num_blocks = 1
+    num_iters = 1
 
     for block, freq in optimisation_loop.blocks(num_blocks, max_freqs):
         await adjoint(problem, pde, loss,

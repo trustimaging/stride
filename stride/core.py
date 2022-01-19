@@ -1,5 +1,6 @@
 
 import uuid
+import asyncio
 import inspect
 from abc import abstractmethod
 from collections import OrderedDict
@@ -317,6 +318,7 @@ class Variable:
 
         prev = dict()
         prev[self.prev_op.name_idx] = grad
+        returns = []
         for node in self.graph.toposort(self.prev_op):
             if node.method == '__noop__':
                 continue
@@ -329,12 +331,14 @@ class Variable:
             # call adjoint method
             if hasattr(node.op, 'has_tessera') and node.op.has_tessera and node.op.is_proxy:
                 method = getattr(node.op._tessera, node.method)
-                ret = await method(*output_grads, **kwargs)
+                ret = method(*output_grads, **kwargs)
             else:
                 method = getattr(node.op, node.method)
-                ret = await method(*output_grads, **kwargs)
+                ret = method(*output_grads, **kwargs)
 
             if isinstance(ret, TaskProxy):
+                if not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy:
+                    returns.append(ret)
                 input_grads = ret.outputs
             else:
                 input_grads = (ret,) if not isinstance(ret, tuple) else ret
@@ -359,6 +363,8 @@ class Variable:
                     prev[nxt.name_idx] = await _maybe_sum(prev[nxt.name_idx], input_grad)
                 else:
                     prev[nxt.name_idx] = input_grad
+
+        await asyncio.gather(*returns)
 
         self.graph = Graph()
         self.prev_op = None
