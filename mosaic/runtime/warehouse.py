@@ -39,12 +39,7 @@ class Warehouse(Runtime):
 
         """
         self.logger = LoggerManager()
-
-        if self.mode == 'local':
-            self.logger.set_local(format=self.mode)
-        else:
-            runtime_id = 'head' if self.mode == 'interactive' else 'monitor'
-            self.logger.set_remote(runtime_id=runtime_id, format=self.mode)
+        self.logger.set_local(format=self.mode)
 
     def set_profiler(self):
         """
