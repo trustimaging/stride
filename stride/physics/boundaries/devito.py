@@ -16,29 +16,20 @@ class SpongeBoundary1(Boundary):
         self.damp = None
 
     def apply(self, field, velocity, direction='forward', **kwargs):
-        # TODO: calculate boundary coefficient
-        parameter = kwargs.pop('parameter') # 0.2763 for homogeneous water, 0.008635 for alpha2D
         space = self._grid.space
         time = self._grid.time
 
-        self.damp = devito.Function(name="damp", grid=self._grid.devito_grid)
-        eqs = [devito.Eq(self.damp, 1.0)]
-        padsizes = [space.absorbing for _ in range(self._grid.devito_grid.dim)]
-        for (nbl, nbr), d in zip(padsizes, self.damp.dimensions):
-            dampcoeff = parameter * space.spacing[0]  # 0.2763102111592855 (water_example)
-            # left
-            dim_l = devito.SubDimension.left(name='abc_%s_l' % d.name, parent=d, thickness=nbl)
-            pos = devito.Abs((nbl - (dim_l - d.symbolic_min) + 1) / float(nbl))
-            val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
-            eqs += [devito.Inc(self.damp.subs({d: dim_l}), val / d.spacing)]
-            # right
-            dampcoeff = parameter * space.spacing[0]  # 0.2763102111592855 (water_example)
-            dim_r = devito.SubDimension.right(name='abc_%s_r' % d.name, parent=d, thickness=nbr)
-            pos = devito.Abs((nbr - (d.symbolic_max - dim_r) + 1) / float(nbr))
-            val = - dampcoeff * (pos - devito.sin(2 * np.pi * pos) / (2 * np.pi))
-            eqs += [devito.Inc(self.damp.subs({d: dim_r}), val / d.spacing)]
-        devito.Operator(eqs, name='initdamp')()
-        return self.damp, [], []
+        reflection_coefficient = 10**(-(np.log10(max(*space.absorbing)) - 1)/np.log10(2) - 3)
+        reflection_coefficient = kwargs.pop('reflection_coefficient', reflection_coefficient)
+
+        if np.max(space.extra) > 0:
+            damp = self._grid.function('damp')
+            damp.data[:] = 1-self.damping(velocity=velocity, reflection_coefficient=reflection_coefficient) * time.step
+        else:
+            damp = 0
+
+        self.damp = damp
+        return [], [], []
 
 
 class SpongeBoundary2(Boundary):

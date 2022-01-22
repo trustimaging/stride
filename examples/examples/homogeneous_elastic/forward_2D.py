@@ -23,7 +23,7 @@ async def main(runtime):
 
     start = 0.  # [s]
     step = 7.855e-8  # [s]
-    end = 0.5e-04  # [s]
+    end = 1.2e-04  # [s]
 
     time = Time(start=start,
                 step=step,
@@ -51,9 +51,14 @@ async def main(runtime):
     problem.transducers.default()  # This generates a single transducer, that's a point source and recevier
 
     # Create geometry
+    position = np.array([extent[0]/10, extent[1]/2])
     problem.geometry.add(id=0,
                          transducer=problem.transducers.get(0),
-                         coordinates=np.array(extent) / 2)  # [m]
+                         coordinates=position)  # [m]
+    position = np.array([extent[0]*(9/10), extent[1]/2])
+    problem.geometry.add(id=1,
+                         transducer=problem.transducers.get(0),
+                         coordinates=position)  # [m]
 
     # Create acquisitions
     source = problem.geometry.locations[0]
@@ -98,7 +103,7 @@ async def main(runtime):
         data_stride /= np.max(np.abs(data_stride))
 
         shot.observed.data[:] = data_stride
-        _, axis = shot.observed.plot(plot=False, skip=5,
+        _, axis = shot.observed.plot(plot=False, skip=1,
                                      colour=config['colour'], line_style=config['line_style'])
         legends[case] = lines.Line2D([0, 1], [1, 0], color=config['colour'], linestyle=config['line_style'])
 
