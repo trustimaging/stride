@@ -149,20 +149,15 @@ class IsoElasticDevito(ProblemTypeBase):
 
             # Compile the operator
             # velocity (first derivative vel w.r.t. time, first order euler method), s: time_spacing
-            u_v = devito.Eq(vel.forward,
-                            self.boundary.damp*
-                            (vel + step * byn_fun * devito.div(tau)),
-                            grid=self.dev_grid,
-                            coefficients=None)
+            u_v = devito.Eq(vel.forward, self.boundary.damp * (vel + step * byn_fun * devito.div(tau)),
+                            grid=self.dev_grid, coefficients=None)
 
             # stress (first derivative tau w.r.t. time, first order euler method)
             u_tau = devito.Eq(tau.forward,
                               self.boundary.damp *
-                              (tau
-                               + step * (
-                                         lam_fun * devito.diag(devito.div(vel.forward))
-                                         + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T)
-                                         )))
+                              (tau + step * (lam_fun * devito.diag(devito.div(vel.forward))
+                              + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T))
+                              ))
 
             self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz + rec_term,
                                              **kwargs)
