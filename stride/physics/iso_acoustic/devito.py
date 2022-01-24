@@ -298,8 +298,6 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-        raise RuntimeError('ERROR')
-
     async def run_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Run the state or forward problem.
