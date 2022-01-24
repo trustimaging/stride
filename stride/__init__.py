@@ -60,6 +60,8 @@ async def forward(problem, pde, *args, **kwargs):
         Whether or not to deallocate the resulting traces after running forward, defaults to False.
     shot_ids : list, optional
         List of specific shots to run, defaults to all remaining shots.
+    safe : bool, optional
+        Whether to discard workers that fail during execution.
     args : optional
         Extra positional arguments for the PDE.
     kwargs : optional
@@ -75,6 +77,7 @@ async def forward(problem, pde, *args, **kwargs):
     dump = kwargs.pop('dump', True)
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
+    safe = kwargs.pop('safe', False)
 
     if dump is True:
         try:
@@ -95,7 +98,7 @@ async def forward(problem, pde, *args, **kwargs):
     published_args = [runtime.put(each, publish=True) for each in args]
     published_args = await asyncio.gather(*published_args)
 
-    @runtime.async_for(shot_ids)
+    @runtime.async_for(shot_ids, safe=safe)
     async def loop(worker, shot_id):
         logger.info('\n')
         logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
@@ -153,6 +156,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     f_max : float, optional
         Max. frequency to filter wavelets and data with. If not given, no low-pass filter
         is applied.
+    safe : bool, optional
+        Whether to discard workers that fail during execution.
     args : optional
         Extra positional arguments for the operators.
     kwargs : optional
@@ -173,6 +178,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     restart_id = kwargs.pop('restart_id', -1)
 
     dump = kwargs.pop('dump', True)
+    safe = kwargs.pop('safe', False)
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
@@ -205,7 +211,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
 
-        @runtime.async_for(shot_ids)
+        @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
             logger.info('\n')
             logger.info('Giving shot %d to %s' % (shot_id, worker.uid))

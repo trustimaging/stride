@@ -250,13 +250,17 @@ class Runtime(BaseRPC):
 
     def async_for(self, *iterables, **kwargs):
 
+        safe = kwargs.pop('safe', False)
+
         async def _async_for(func):
             worker_queue = asyncio.Queue()
             for worker in self._workers.values():
                 await worker_queue.put(worker)
 
             async def call(*iters):
-                async with self._exclusive_proxy(worker_queue) as _worker:
+                res = None
+
+                async with self._exclusive_proxy(worker_queue, safe=safe) as _worker:
                     res = await func(_worker, *iters)
 
                 return res
@@ -270,12 +274,19 @@ class Runtime(BaseRPC):
         return _async_for
 
     @contextlib.asynccontextmanager
-    async def _exclusive_proxy(self, queue):
+    async def _exclusive_proxy(self, queue, safe=False):
         proxy = await queue.get()
 
-        yield proxy
-
-        await queue.put(proxy)
+        try:
+            yield proxy
+        except Exception as exc:
+            if safe:
+                self.logger.info('Runtime %s failed, retiring runtime:\n\n%s'
+                                 % (proxy.uid, exc))
+            else:
+                raise
+        else:
+            await queue.put(proxy)
 
     @property
     def address(self):

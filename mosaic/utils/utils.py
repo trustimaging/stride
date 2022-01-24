@@ -1,10 +1,12 @@
 
 import sys
+import tblib
 import psutil
+import traceback
 import threading
 import numpy as np
 
-__all__ = ['sizeof', 'set_main_thread', 'memory_limit']
+__all__ = ['sizeof', 'set_main_thread', 'memory_limit', 'MultiError']
 
 
 def sizeof(obj, seen=None):
@@ -103,3 +105,33 @@ def memory_limit():
         pass
 
     return limit
+
+
+class MultiError(Exception):
+
+    def __init__(self, exc):
+        self.errors = []
+        self.add(exc)
+        super().__init__(exc)
+
+    def add(self, exc):
+        if isinstance(exc, MultiError):
+            self.errors += exc.errors
+        else:
+            try:
+                raise exc
+            except Exception:
+                et, ev, tb = sys.exc_info()
+                tb = traceback.format_tb(tb)
+                tb = ''.join(tb)
+                self.errors.append((et, ev, tb))
+
+    def __str__(self):
+        error_str = str(self.errors[-1][1]) + '\n\nError stack:\n\n'
+
+        for error in self.errors:
+            et, ev, tb = error
+            error_str += 'Traceback (most recent call last):\n'
+            error_str += f'{tb}{et.__name__}: {str(ev)}\n\n'
+
+        return error_str

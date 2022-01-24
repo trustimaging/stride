@@ -1,12 +1,15 @@
 
+import sys
 import uuid
+import tblib
+import asyncio
 import weakref
 import operator
 from cached_property import cached_property
 
 from .. import types
 from .base import Base, RemoteBase, ProxyBase
-from ..utils import Future
+from ..utils import Future, MultiError
 
 
 __all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone']
@@ -263,7 +266,7 @@ class Task(RemoteBase):
 
                     def callback(_index, _arg):
                         def _callback(fut):
-                            self.loop.run(self._set_arg_done, _index, _arg)
+                            self.loop.run(self._set_arg_done, fut, _index, _arg)
 
                         return _callback
 
@@ -289,7 +292,7 @@ class Task(RemoteBase):
 
                     def callback(_key, _arg):
                         def _callback(fut):
-                            self.loop.run(self._set_kwarg_done, _key, _arg)
+                            self.loop.run(self._set_kwarg_done, fut, _key, _arg)
 
                         return _callback
 
@@ -343,7 +346,10 @@ class Task(RemoteBase):
         # Once done release local copy of the arguments
         self._cleanup()
 
-    async def _set_arg_done(self, index, arg):
+    async def _set_arg_done(self, fut, index, arg):
+        if not (await self._check_exception(fut, arg)):
+            return
+
         result = await arg.result()
 
         self._args_state[index] = 'ready'
@@ -356,7 +362,10 @@ class Task(RemoteBase):
             pass
         await self._check_ready()
 
-    async def _set_kwarg_done(self, index, arg):
+    async def _set_kwarg_done(self, fut, index, arg):
+        if not (await self._check_exception(fut, arg)):
+            return
+
         result = await arg.result()
 
         self._kwargs_state[index] = 'ready'
@@ -368,6 +377,39 @@ class Task(RemoteBase):
         except KeyError:
             pass
         await self._check_ready()
+
+    async def _check_exception(self, fut, arg):
+        try:
+            exc = fut.exception()
+        except asyncio.CancelledError:
+            exc = None
+
+        if exc is not None:
+            exc = MultiError(exc)
+
+            try:
+                raise RuntimeError('Task failed due to failed argument: %s' % arg)
+            except Exception as fail:
+                exc.add(fail)
+
+            try:
+                raise exc
+            except MultiError:
+                et, ev, tb = sys.exc_info()
+
+            tb = tblib.Traceback(tb)
+
+            await self.set_exception((et, ev, tb))
+
+            try:
+                self._ready_future.set_result(True)
+            except asyncio.InvalidStateError:
+                pass
+
+            return False
+
+        else:
+            return True
 
     async def _check_ready(self):
         if not len(self._args_pending) and not len(self._kwargs_pending):
@@ -530,10 +572,13 @@ class TaskProxy(ProxyBase):
         self.state_changed('failed', sync=True)
 
         exc = exc[1].with_traceback(exc[2].as_traceback())
-        self._done_future.set_exception(exc)
-
-        # Once done release local copy of the arguments
-        self._cleanup()
+        try:
+            self._done_future.set_exception(exc)
+        except asyncio.InvalidStateError:
+            pass
+        else:
+            # Once done release local copy of the arguments
+            self._cleanup()
 
     def wait(self):
         """

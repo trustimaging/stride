@@ -263,6 +263,9 @@ class Tessera(RemoteBase):
                 future = await task.prepare_args()
                 await future
 
+                if task.state == 'failed':
+                    continue
+
                 method = getattr(self.obj, task.method, False)
 
                 async with self.send_exception(task=task):
