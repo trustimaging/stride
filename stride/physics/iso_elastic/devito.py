@@ -279,10 +279,6 @@ class IsoElasticDevito(ProblemTypeBase):
         self.dev_grid.deallocate('vp')
         self.dev_grid.deallocate('vp2')
         self.dev_grid.deallocate('inv_vp2')
-        self.dev_grid.deallocate('rho')
-        self.dev_grid.deallocate('buoy')
-        self.dev_grid.deallocate('alpha')
-        self.boundary.deallocate()
 
         return traces
 
