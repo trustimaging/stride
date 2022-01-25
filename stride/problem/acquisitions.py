@@ -963,7 +963,7 @@ class Acquisitions(ProblemBase):
         ax_shot = plt.axes([0.15, 0.1, 0.7, 0.03])
         slider = Slider(ax_shot, 'shot ID',
                         self.shot_ids[0], self.shot_ids[-1],
-                        valinit=self.shot_ids[0], valstep=1)
+                        valinit=self.shot_ids[0], valstep=self.shot_ids[1]-self.shot_ids[0])
 
         update = functools.partial(update, figure, axis)
         update(self.shot_ids[0])
@@ -987,7 +987,7 @@ class Acquisitions(ProblemBase):
         -------
 
         """
-        if not self.num_shots or not self.get(0).wavelets.allocated:
+        if not self.num_shots or not self.get(self.shot_ids[0]).wavelets.allocated:
             return None
 
         kwargs['plot'] = False
@@ -1016,7 +1016,7 @@ class Acquisitions(ProblemBase):
         -------
 
         """
-        if not self.num_shots or not self.get(0).observed.allocated:
+        if not self.num_shots or not self.get(self.shot_ids[0]).observed.allocated:
             return None
 
         kwargs['plot'] = False
