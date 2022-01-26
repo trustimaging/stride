@@ -516,6 +516,28 @@ class ParameterMixin:
 
         return self
 
+    def _serialisation_helper(self):
+        state = dict(
+            uid=self._tessera.uid,
+            tessera=self._tessera
+        )
+
+        return state
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        instance = WarehouseObject(uid=state['uid'])
+        instance._tessera = state['tessera']
+
+        return instance
+
+    def __reduce__(self):
+        if self.is_proxy:
+            state = self._serialisation_helper()
+            return self._deserialisation_helper, (state,)
+        else:
+            return super().__reduce__()
+
 
 class TesseraProxy(ProxyBase):
     """

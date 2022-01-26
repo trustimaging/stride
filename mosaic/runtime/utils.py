@@ -305,6 +305,8 @@ class WarehouseObject:
             self._name = uid
             self._uid = uid
 
+        self._tessera = None
+
     @property
     def state(self):
         return 'done'
@@ -324,6 +326,19 @@ class WarehouseObject:
 
         """
         return mosaic.runtime()
+
+    @property
+    def has_tessera(self):
+        return hasattr(self, '_tessera') \
+               and self._tessera is not None
+
+    @property
+    def is_tessera(self):
+        return False
+
+    @property
+    def is_proxy(self):
+        return True
 
     async def value(self):
         """

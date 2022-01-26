@@ -952,11 +952,16 @@ class Acquisitions(ProblemBase):
         self.plot_wavelets(**kwargs)
         self.plot_observed(**kwargs)
 
-    def _plot(self, update):
+    def _plot(self, update, **kwargs):
         if not ENABLED_2D_PLOTTING:
             return None
 
-        figure, axis = plt.subplots(1, 1)
+        axis = kwargs.pop('axis', None)
+        if axis is not None:
+            figure = axis.get_figure()
+        else:
+            figure, axis = plt.subplots(1, 1)
+
         plt.subplots_adjust(bottom=0.25)
         axis.margins(x=0)
 
@@ -993,6 +998,7 @@ class Acquisitions(ProblemBase):
         kwargs['plot'] = False
 
         def update(figure, axis, shot_id):
+            kwargs.pop('axis', None)
             axis.clear()
 
             self.get(int(shot_id)).plot_wavelets(axis=axis, **kwargs)
@@ -1000,7 +1006,7 @@ class Acquisitions(ProblemBase):
 
             figure.canvas.draw_idle()
 
-        return self._plot(update)
+        return self._plot(update, **kwargs)
 
     @skip_profile(stop_trace=True)
     def plot_observed(self, **kwargs):
@@ -1022,6 +1028,7 @@ class Acquisitions(ProblemBase):
         kwargs['plot'] = False
 
         def update(figure, axis, shot_id):
+            kwargs.pop('axis', None)
             axis.clear()
 
             self.get(int(shot_id)).plot_observed(axis=axis, **kwargs)
@@ -1029,7 +1036,7 @@ class Acquisitions(ProblemBase):
 
             figure.canvas.draw_idle()
 
-        return self._plot(update)
+        return self._plot(update, **kwargs)
 
     def sub_problem(self, shot, sub_problem):
         """

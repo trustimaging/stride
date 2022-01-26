@@ -95,7 +95,7 @@ class Node:
                 (not hasattr(op, 'has_tessera') or not op.has_tessera):
             op = getattr(op, '_tessera')
 
-        self.op = op
+        self.op = op if self.method != '__noop__' else None
 
     @property
     def name(self):

@@ -327,7 +327,7 @@ class StructuredData(Data):
         """
         self.grad = None
 
-    def process_grad(self, prec_scale=1e-6, **kwargs):
+    def process_grad(self, prec_scale=1e-9, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
@@ -347,10 +347,10 @@ class StructuredData(Data):
         prec = grad.prec
 
         if prec is not None:
-            max_prec = np.max(np.abs(prec.data))
+            norm_prec = np.linalg.norm(prec.data)
 
-            if max_prec > 1e-31:
-                prec += prec_scale * max_prec + 1e-31
+            if norm_prec > 1e-31:
+                prec += prec_scale * norm_prec + 1e-31
                 grad /= prec
 
         self.grad = grad
@@ -368,9 +368,13 @@ class StructuredData(Data):
         if self._data is None:
             self._data = np.empty(self._extended_shape, dtype=self._dtype)
 
-    def deallocate(self):
+    def deallocate(self, collect=False):
         """
         Deallocate the data.
+
+        Parameters
+        ----------
+        collect : bool, optional
 
         Returns
         -------
@@ -379,7 +383,9 @@ class StructuredData(Data):
         if self._data is not None:
             del self._data
             self._data = None
-            gc.collect()
+
+            if collect:
+                gc.collect()
 
     def fill(self, value):
         """

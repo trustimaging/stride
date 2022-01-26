@@ -86,10 +86,30 @@ class Problem(Gridded):
         -------
 
         """
+        kwargs['project_name'] = kwargs.get('project_name', self.name)
+        kwargs['path'] = kwargs.get('path', self.input_folder)
+
         self.medium.load(*args, **kwargs)
         self.transducers.load(*args, **kwargs)
         self.geometry.load(*args, **kwargs)
         self.acquisitions.load(*args, **kwargs)
+
+        grid_properties = ['space', 'time', 'slow_time']
+        problem_properties = ['medium', 'transducers', 'geometry', 'acquisitions']
+
+        for problem_property in problem_properties:
+            problem_property = getattr(self, problem_property)
+
+            for grid_property in grid_properties:
+                if getattr(self, grid_property) is None and getattr(problem_property, grid_property) is not None:
+                    setattr(self._grid, grid_property, getattr(problem_property, grid_property))
+
+        for problem_property in problem_properties:
+            problem_property = getattr(self, problem_property)
+
+            for grid_property in grid_properties:
+                if getattr(problem_property, grid_property) is None:
+                    setattr(problem_property._grid, grid_property, getattr(self, grid_property))
 
     def dump(self, *args, **kwargs):
         """
@@ -101,6 +121,9 @@ class Problem(Gridded):
         -------
 
         """
+        kwargs['project_name'] = kwargs.get('project_name', self.name)
+        kwargs['path'] = kwargs.get('path', self.output_folder)
+
         self.medium.dump(*args, **kwargs)
         self.transducers.dump(*args, **kwargs)
         self.geometry.dump(*args, **kwargs)

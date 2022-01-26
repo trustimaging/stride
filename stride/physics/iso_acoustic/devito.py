@@ -655,10 +655,10 @@ class IsoAcousticDevito(ProblemTypeBase):
         p_a = self.dev_grid.vars.p_a
 
         grad = self.dev_grid.function('grad_vp')
-        grad_update = devito.Inc(grad, -p.dt2 * p_a)
+        grad_update = devito.Inc(grad, p.dt2 * p_a)
 
         prec = self.dev_grid.function('prec_vp')
-        prec_update = devito.Inc(prec, +p.dt2 * p.dt2)
+        prec_update = devito.Inc(prec, p.dt2 * p.dt2)
 
         return grad_update, prec_update
 
@@ -704,8 +704,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         variable_prec = self.dev_grid.vars.prec_vp
         variable_prec = np.asarray(variable_prec.data, dtype=np.float32)
 
-        variable_grad *= 2 / vp.extended_data**3
-        variable_prec *= 4 / vp.extended_data**6
+        variable_grad *= -2 / vp.extended_data**3
+        variable_prec *= +4 / vp.extended_data**6
 
         self.dev_grid.deallocate('grad_vp')
         self.dev_grid.deallocate('prec_vp')
