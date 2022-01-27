@@ -907,12 +907,16 @@ class Runtime(BaseRPC):
 
         return obj_store[obj_uid]
 
-    def needs_registering(self, obj):
-        obj_type = obj.type
-        obj_uid = obj.uid
+    def needs_registering(self, obj_type, obj_uid):
         obj_store = getattr(self, '_' + obj_type)
 
-        return obj_uid not in obj_store.keys()
+        obj = None
+        needs_registering = obj_uid not in obj_store.keys()
+
+        if not needs_registering:
+            obj = obj_store[obj_uid]
+
+        return needs_registering, obj
 
     def deregister(self, obj):
         """
@@ -1117,8 +1121,11 @@ class RuntimeProxy(BaseRPC):
     def __init__(self, name=None, indices=(), uid=None, comms=None):
         super().__init__(name=name, indices=indices, uid=uid)
 
-        self._comms = comms or mosaic.get_comms()
         self._subprocess = None
+
+    @property
+    def comms(self):
+        return mosaic.get_comms()
 
     @property
     def address(self):
@@ -1126,7 +1133,7 @@ class RuntimeProxy(BaseRPC):
         Remote runtime IP address.
 
         """
-        return self._comms.uid_address(self.uid)
+        return self.comms.uid_address(self.uid)
 
     @property
     def port(self):
@@ -1134,7 +1141,7 @@ class RuntimeProxy(BaseRPC):
         Remote runtime port.
 
         """
-        return self._comms.uid_port(self.uid)
+        return self.comms.uid_port(self.uid)
 
     @property
     def subprocess(self):
@@ -1181,7 +1188,7 @@ class RuntimeProxy(BaseRPC):
                 if as_async is True:
                     send_method += '_async'
 
-                send_method = getattr(self._comms, send_method)
+                send_method = getattr(self.comms, send_method)
                 return send_method(self.uid, **kwargs)
 
             return remote_method

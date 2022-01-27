@@ -586,6 +586,15 @@ class ProxyBase(CMDBase):
 
     @classmethod
     def _deserialisation_helper(cls, state):
+        obj_type = cls.type
+        obj_uid = state.get('_uid', None)
+
+        runtime = mosaic.runtime()
+        needs_registering, reg_instance = runtime.needs_registering(obj_type, obj_uid)
+
+        if not needs_registering:
+            return reg_instance
+
         instance = super()._deserialisation_helper(state)
         instance._registered = False
 
@@ -594,7 +603,7 @@ class ProxyBase(CMDBase):
 
         obj_type = cls.remote_type()
 
-        reg_instance = instance.runtime.register(instance)
+        reg_instance = runtime.register(instance)
         if instance.is_proxy and instance._registered:
             reg_instance.remote_runtime.inc_ref(uid=reg_instance.uid, type=obj_type, as_async=False)
             reg_instance.state_changed('listening', sync=True)

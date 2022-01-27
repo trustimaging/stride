@@ -370,7 +370,7 @@ class Tessera(RemoteBase):
 
         return _dec_ref
 
-    _serialisation_attrs = RemoteBase._serialisation_attrs + ['_cls_attr_names']
+    _serialisation_attrs = RemoteBase._serialisation_attrs + ['_cls_attr_names', '_is_parameter']
 
     def _serialisation_helper(self):
         state = super()._serialisation_helper()
@@ -806,7 +806,8 @@ class TesseraProxy(ProxyBase):
 
     _serialisation_attrs = ProxyBase._serialisation_attrs + ['_cls',
                                                              '_runtime_id',
-                                                             '_cls_attr_names']
+                                                             '_cls_attr_names',
+                                                             '_is_parameter']
 
     @classmethod
     def _deserialisation_helper(cls, state):
