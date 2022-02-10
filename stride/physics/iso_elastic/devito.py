@@ -132,7 +132,7 @@ class IsoElasticDevito(ProblemTypeBase):
             # Absorbing boundaries
             boundaries_module = boundaries.devito
             self.boundary = getattr(boundaries_module, camel_case(self.boundary_type))(self.dev_grid)
-            _, _, _ = self.boundary.apply(vel, vp.extended_data, parameter=0.008635)
+            _, _, _ = self.boundary.apply(vel, vp.extended_data)
 
             # Define the source injection function using a pressure disturbance
             src_xx = src.inject(field=tau.forward[0, 0], expr=step * src)
@@ -148,7 +148,7 @@ class IsoElasticDevito(ProblemTypeBase):
             byn_fun = self.dev_grid.function('byn_fun')
 
             # Compile the operator
-            # velocity (first derivative vel w.r.t. time, first order euler method), s: time_spacing
+            # velocity (first derivative vel w.r.t. time, first order euler method), step: time_spacing
             u_v = devito.Eq(vel.forward, self.boundary.damp * (vel + step * byn_fun * devito.div(tau)),
                             grid=self.dev_grid, coefficients=None)
 
