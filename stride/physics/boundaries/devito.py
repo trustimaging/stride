@@ -24,12 +24,12 @@ class SpongeBoundary1(Boundary):
 
         if np.max(space.extra) > 0:
             damp = self._grid.function('damp')
-            damp.data[:] = 1-self.damping(velocity=velocity, reflection_coefficient=reflection_coefficient) * time.step
+            damp.data[:] = self.damping(velocity=velocity, reflection_coefficient=reflection_coefficient, mask=True) * time.step
         else:
             damp = 0
 
         self.damp = damp
-        return [], [], []
+        return None, [], []
 
 
 class SpongeBoundary2(Boundary):

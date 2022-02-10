@@ -122,3 +122,4 @@ examples/*/*.png
 
 # Legacy code
 legacy/
+.github/*
