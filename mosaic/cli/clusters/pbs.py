@@ -77,6 +77,7 @@ conda activate stride
 # set number of threads per process
 # use $(ppn) to use one worker per node and as many threads pr worker as cores in the node
 export OMP_NUM_THREADS=$num_threads_per_worker
+export OMP_PLACES=cores
 
 # set any environment variables
 # for example:

@@ -82,12 +82,16 @@ def go(cmd=None, **kwargs):
 
         sge_nodes = clusters.sge.node_list(host_name)
         pbs_nodes = clusters.pbs.node_list(host_name)
+        slurm_nodes = clusters.slurm.node_list(host_name)
 
         if sge_nodes is not None:
             node_list = sge_nodes
 
         elif pbs_nodes is not None:
             node_list = pbs_nodes
+
+        elif slurm_nodes is not None:
+            node_list = slurm_nodes
 
         else:
             local = True

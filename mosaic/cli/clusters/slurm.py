@@ -7,7 +7,7 @@ __all__ = ['node_list', 'submission_script']
 
 def node_list(host_name):
     """
-    Attempt to find a node list for SGE clusters.
+    Attempt to find a node list for SLURM clusters.
 
     Parameters
     ----------
@@ -17,27 +17,20 @@ def node_list(host_name):
     -------
 
     """
-    sge_nodes = os.environ.get('PE_HOSTFILE', None)
+    slurm_nodes = os.environ.get('SLURM_NODELIST', None)
 
-    if sge_nodes is None:
+    if slurm_nodes is None:
         return
 
-    sge_list = []
-    with open(sge_nodes, 'r') as file:
-        lines = file.readlines()
+    slurm_list = [each.strip() for each in slurm_nodes.split('\n')]
+    slurm_list.remove(host_name)
 
-        for line in lines:
-            line = line.strip().split(' ')
-
-            if line[0] != host_name:
-                sge_list.append(line[0])
-
-    return sge_list
+    return slurm_list
 
 
 def submission_script(name, num_nodes, num_workers, num_threads, node_memory):
     """
-    Generate a submission script for SGE clusters.
+    Generate a submission script for SLURM clusters.
 
     Parameters
     ----------
@@ -54,49 +47,34 @@ def submission_script(name, num_nodes, num_workers, num_threads, node_memory):
     """
 
     return f"""#!/bin/bash -l
+#SBATCH --job-name={name}
+#SBATCH --time=48:00:0
+#SBATCH --nodes={num_nodes+1}
+#SBATCH --tasks-per-node=1
+#SBATCH --cpus-per-task={num_workers*num_threads}
+#SBATCH --mem={node_memory}G
+#SBATCH -o out.log
+#SBATCH -e err.log
+
+#SBATCH --account=<budget_allocation>
+#SBATCH --partition=<partition>
+#SBATCH --qos=<quality_of_service>
 
 name={name}
 num_nodes={num_nodes}
 num_workers_per_node={num_workers}
 num_threads_per_worker={num_threads}
 
-#$ -P <project_id>
-#$ -A <sub_project_id>
-
-# only allow C nodes
-#$ -ac allow=C
-
-# wall clock time (format hours:minutes:seconds).
-#$ -l h_rt=48:00:00
-
-# amount of RAM per core (must be an integer)
-# node_memory/(num_threads_per_worker*num_workers_per_node)
-#$ -l mem={int(node_memory/(num_threads*num_workers))}G
-
-# set the name of the job.
-#$ -N {name}
-
-# select the MPI parallel environment and number of cores.
-# num_threads_per_worker*num_workers_per_node*(num_nodes+1)
-#$ -pe mpi {num_threads*num_workers*(num_nodes+1)}
-
-# set the working directory
-#$ -cwd
-
-# set output logs
-#$ -o out.log
-#$ -e err.log
-
 # load any modules before activating the conda env
 # for example:
-# module load compilers/intel/2020/release
+# module load anaconda3/personal
 
 # activate conda environment
 conda activate stride
 
 # set number of threads per process
 # use $(ppn) to use one worker per node and as many threads pr worker as cores in the node
-export OMP_NUM_THREADS=$num_workers_per_node \\* $num_threads_per_worker
+export OMP_NUM_THREADS=$num_threads_per_worker
 export OMP_PLACES=cores
 
 # set any environment variables
@@ -108,6 +86,7 @@ export OMP_PLACES=cores
 # export SSH_FLAGS="source /etc/profile; module load anaconda3/personal; conda activate stride"
 
 # run our job
+cd $SLURM_SUBMIT_DIR
 ls -l
 date
 mrun -n $num_nodes -nw $num_workers_per_node -nth $num_threads_per_worker python forward.py &> $name-output.log
