@@ -38,7 +38,7 @@ class GradientDescent(LocalOptimiser):
         step_size : float, optional
             Step size to use for this application, defaults to instance step.
         direction : Data, optional
-            Direction to use for the step, defaults to variable gradient.
+            Direction to use for the step, defaults to processed variable gradient.
         kwargs
             Extra parameters to be used by the method.
 
@@ -54,7 +54,9 @@ class GradientDescent(LocalOptimiser):
         logger.info('Updating variable %s,' % self.variable.name)
 
         if direction is None:
-            grad = self.variable.process_grad(**kwargs)
+            grad = kwargs.pop('grad', None)
+            if grad is None:
+                grad = self.variable.process_grad(**kwargs)
 
             min_dir = np.min(grad.extended_data)
             max_dir = np.max(grad.extended_data)

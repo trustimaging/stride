@@ -64,11 +64,12 @@ class Pipeline(Operator):
             return next_args
 
     async def adjoint(self, *args, **kwargs):
-        if len(self._steps) < 1:
-            return
+        input_args, input_kwargs = self.inputs
 
-        last_step = self._steps[-1]
-        outputs = last_step.adjoint(*args, **kwargs)
+        outputs = args[:self.num_outputs]
+
+        for step in self._steps:
+            outputs = step.adjoint(*outputs, *input_args, **kwargs)
 
         if len(outputs) == 1:
             return outputs[0]

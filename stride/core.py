@@ -531,6 +531,7 @@ class Operator:
         cls._count += 1
 
         self.inputs = None
+        self.num_outputs = None
 
     @abstractmethod
     async def forward(self, *args, **kwargs):
@@ -645,6 +646,7 @@ class Operator:
 
             output.needs_grad = needs_grad
 
+        self.num_outputs = len(outputs)
         outputs = outputs if len(outputs) > 1 else outputs[0]
 
         return outputs
@@ -677,6 +679,7 @@ class Operator:
 
         # clean up
         self.inputs = None
+        self.num_outputs = None
 
         return input_grads
 

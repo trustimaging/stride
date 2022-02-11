@@ -14,6 +14,9 @@ class FilterTraces(Operator):
         Lower value for the frequency filter, defaults to None (no lower filtering).
     f_max : float, optional
         Upper value for the frequency filter, defaults to None (no upper filtering).
+    filter_type : str, optional
+        Type of filter to apply, from ``butterworth`` (default for band pass and high pass),
+        ``fir``, or ``cos`` (default for low pass).
 
     """
 
@@ -22,6 +25,10 @@ class FilterTraces(Operator):
 
         self.f_min = kwargs.pop('f_min', None)
         self.f_max = kwargs.pop('f_max', None)
+
+        default_filter_type = 'cos' if self.f_min is None else 'butterworth'
+        self.filter_type = kwargs.pop('filter_type', default_filter_type)
+
         self._num_traces = None
 
     def forward(self, *traces, **kwargs):
@@ -42,7 +49,7 @@ class FilterTraces(Operator):
 
         filtered = []
         for each in d_traces:
-            filtered.append(self._apply(each, **kwargs))
+            filtered.append(self._apply(each, adjoint=True, **kwargs))
 
         self._num_traces = None
 
@@ -61,16 +68,21 @@ class FilterTraces(Operator):
         out_traces = traces.alike(name='filtered_%s' % traces.name)
 
         if self.f_min is None and self.f_max is not None:
-            filtered = filters.lowpass_filter_fir(traces.extended_data, f_max)
-
+            pass_type = 'lowpass'
+            args = (f_max,)
         elif self.f_min is not None and self.f_max is None:
-            filtered = filters.highpass_filter_fir(traces.extended_data, f_min)
-
+            pass_type = 'highpass'
+            args = (f_min,)
         elif self.f_min is not None and self.f_max is not None:
-            filtered = filters.bandpass_filter_fir(traces.extended_data, f_min, f_max)
-
+            pass_type = 'bandpass'
+            args = (f_min, f_max)
         else:
-            filtered = traces.extended_data
+            out_traces.extended_data[:] = traces.extended_data
+            return out_traces
+
+        method_name = '%s_filter_%s' % (pass_type, self.filter_type)
+        method = getattr(filters, method_name)
+        filtered = method(traces.extended_data, *args, zero_phase=False, **kwargs)
 
         out_traces.extended_data[:] = filtered
 

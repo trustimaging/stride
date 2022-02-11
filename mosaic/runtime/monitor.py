@@ -158,6 +158,8 @@ class Monitor(Runtime):
         ssh_flags = os.environ.get('SSH_FLAGS', None)
         ssh_flags = ssh_flags + ';' if ssh_flags else ''
 
+        tasks = []
+
         for node_index, node_address in zip(range(num_nodes), node_list):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
@@ -173,11 +175,17 @@ class Monitor(Runtime):
                                                    stdout=_stdout,
                                                    stderr=_stderr)
             node_proxy.subprocess = node_subprocess
-
             self._nodes[node_proxy.uid] = node_proxy
-            await self._comms.wait_for(node_proxy.uid)
 
-            self.logger.info('Started node %d at %s' % (node_index, node_address))
+            async def wait_for(proxy):
+                await self._comms.wait_for(proxy.uid)
+                return proxy
+
+            tasks.append(wait_for(node_proxy))
+
+        for node_proxy in asyncio.as_completed(tasks):
+            node_proxy = await node_proxy
+            self.logger.info('Started node %s' % node_proxy.uid)
 
     def set_logger(self):
         """
