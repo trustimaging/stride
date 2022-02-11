@@ -1,6 +1,8 @@
 
 import os
 
+from .hostlist import expand_hostlist
+
 
 __all__ = ['node_list', 'submission_script']
 
@@ -22,7 +24,8 @@ def node_list(host_name):
     if slurm_nodes is None:
         return
 
-    slurm_list = [each.strip() for each in slurm_nodes.split('\n')]
+    slurm_list = expand_hostlist(slurm_nodes)
+    print(slurm_list)
     slurm_list.remove(host_name)
 
     return slurm_list
