@@ -1,6 +1,7 @@
 
 import os
 import sys
+import numa
 import psutil
 import daemon
 import weakref
@@ -92,6 +93,14 @@ class Subprocess:
 
     def __repr__(self):
         return "<Subprocess for %s, state=%s>" % (self._target, self._state)
+
+    @property
+    def pid(self):
+        """
+        Process PID.
+
+        """
+        return self._mp_process.pid
 
     @property
     def state(self):
@@ -308,6 +317,24 @@ class Subprocess:
                 pass
 
         return 0
+
+    def cpu_affinity(self, cpus):
+        """
+        Set CPU affinity for this process.
+
+        Parameters
+        ----------
+        cpus : list
+            List of pinned CPUs.
+
+        Returns
+        -------
+
+        """
+        if numa.info.numa_available():
+            numa.schedule.run_on_cpus(self.pid, *cpus)
+        else:
+            self._ps_process.cpu_affinity(cpus)
 
 
 def subprocess(target):

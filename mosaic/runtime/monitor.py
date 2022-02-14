@@ -68,10 +68,6 @@ class Monitor(Runtime):
         """
         await super().init(**kwargs)
 
-        # if self.mode == 'local':
-        #     available_cpus = list(range(psutil.cpu_count()))
-        #     psutil.Process().cpu_affinity([available_cpus[0]])
-
         # Start local cluster
         await self.init_warehouse(**kwargs)
 
@@ -156,9 +152,9 @@ class Monitor(Runtime):
         runtime_port = self.port
 
         ssh_flags = os.environ.get('SSH_FLAGS', None)
-        ssh_flags = ssh_flags + ';' if ssh_flags else ''
 
         ssh_commands = os.environ.get('SSH_COMMANDS', '')
+        ssh_commands = ssh_commands + ';' if ssh_commands else ''
 
         tasks = []
 

@@ -1,4 +1,5 @@
 
+import numa
 import psutil
 
 import mosaic
@@ -28,12 +29,10 @@ class Node(Runtime):
 
         num_workers = kwargs.pop('num_workers', None)
         num_workers = num_workers or 1
-        num_threads = kwargs.pop('num_threads', None)
-        num_threads = num_threads or psutil.cpu_count() // num_workers
 
         self._own_workers = dict()
         self._num_workers = num_workers
-        self._num_threads = num_threads
+        self._num_threads = None
         self._memory_limit = memory_limit()
 
         self._monitored_node = MonitoredResource(self.uid)
@@ -67,28 +66,42 @@ class Node(Runtime):
         -------
 
         """
-        num_workers = self._num_workers
-        num_threads = self._num_threads
+        if self.mode == 'cluster':
+            pass
 
-        # available_cpus = list(range(psutil.cpu_count()))
-        #
-        # if self.mode == 'local':
-        #     psutil.Process().cpu_affinity([available_cpus[2]])
-        #     available_cpus = available_cpus[3:]
-        # else:
-        #     psutil.Process().cpu_affinity([available_cpus[0]])
-        #     available_cpus = available_cpus[1:]
-        #
-        # cpus_per_worker = len(available_cpus) // self._num_workers
+        num_logical_cpus = psutil.cpu_count(logical=True)
+        num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
+
+        num_workers = self._num_workers
+        num_threads = kwargs.pop('num_threads', None)
+        num_threads = num_threads or num_cpus // num_workers
+        self._num_threads = num_threads
+
+        if self.mode == 'cluster':
+            if num_workers*num_threads > num_cpus:
+                raise ValueError('Requested number of CPUs per node (%d - num_workers*num_threads) '
+                                 'is greater than the number of available CPUs (%d)' % (num_workers*num_threads, num_cpus))
+
+            # Node process is pinned to first CPU
+            if num_cpus > 1:
+                psutil.Process().cpu_affinity([0])
+
+            # Find all available NUMA nodes and CPUs per node
+            if numa.info.numa_available():
+                available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
+            else:
+                available_cpus = {0: list(range(num_cpus))}
+
+            # Eliminate cores corresponding to hyperthreading
+            for node_index, node_cpus in available_cpus.items():
+                node_cpus = [each for each in node_cpus if each < num_cpus]
+                available_cpus[node_index] = node_cpus
+
+            available_cpus = sum(list(available_cpus.values()), [])
+            available_cpus.remove(0)
 
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
-
-            # if worker_index < num_workers - 1:
-            #     cpu_affinity = available_cpus[worker_index*cpus_per_worker:(worker_index+1)*cpus_per_worker]
-            #
-            # else:
-            #     cpu_affinity = available_cpus[worker_index*cpus_per_worker:]
 
             def start_worker(*args, **extra_kwargs):
                 kwargs.update(extra_kwargs)
@@ -103,6 +116,13 @@ class Node(Runtime):
                                                          daemon=False)
             worker_subprocess.start_process()
             worker_proxy.subprocess = worker_subprocess
+
+            if self.mode == 'cluster':
+                start_cpu = worker_index * num_threads
+                end_cpu = min((worker_index + 1) * num_threads, num_cpus)
+
+                worker_cpus = available_cpus[start_cpu:end_cpu]
+                worker_subprocess.cpu_affinity(worker_cpus)
 
             self._workers[worker_proxy.uid] = worker_proxy
             self._own_workers[worker_proxy.uid] = worker_proxy

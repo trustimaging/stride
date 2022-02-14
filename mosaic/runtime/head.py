@@ -36,10 +36,6 @@ class Head(Runtime):
         """
         await super().init(**kwargs)
 
-        # if self.mode == 'local':
-        #     available_cpus = list(range(psutil.cpu_count()))
-        #     psutil.Process().cpu_affinity([available_cpus[0]])
-
         # Start monitor if necessary and handshake in reverse
         monitor_address = kwargs.get('monitor_address', None)
         if not self.is_monitor and monitor_address is None:
