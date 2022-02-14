@@ -147,9 +147,11 @@ class Monitor(Runtime):
         if node_list is None:
             raise ValueError('No node_list was provided to initialise mosaic in cluster mode')
 
+        num_logical_cpus = psutil.cpu_count(logical=True)
+        num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
         num_nodes = len(node_list)
         num_workers = kwargs.get('num_workers', 1)
-        num_threads = kwargs.get('num_threads', None)
+        num_threads = kwargs.get('num_threads', num_cpus // num_workers)
         log_level = kwargs.get('log_level', 'info')
         runtime_address = self.address
         runtime_port = self.port
@@ -160,27 +162,27 @@ class Monitor(Runtime):
         ssh_commands = ssh_commands + ';' if ssh_commands else ''
 
         in_slurm = os.environ.get('SLURM_NODELIST', None) is not None
-        num_logical_cpus = psutil.cpu_count(logical=True)
-        num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
 
         tasks = []
 
         for node_index, node_address in zip(range(num_nodes), node_list):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
+            remote_cmd = (f'{ssh_commands} ' 
+                          f'mrun --node -i {node_index} '
+                          f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
+                          f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
+                          f'--cluster --{log_level}')
+
             if in_slurm:
                 cmd = (f'srun {ssh_flags} --nodes=1 --ntasks=1 --tasks-per-node={num_cpus} '
-                       f'--oversubscribe --mem={self._memory_limit/1024**2}M '
-                       f'--nodelist={node_address} ')
-            else:
-                cmd = f'ssh {ssh_flags} {node_address} '
+                       f'--oversubscribe --mem={int(self._memory_limit / 1024**2)}M '
+                       f'--nodelist={node_address} '
+                       f'{remote_cmd}')
 
-            cmd = (f'{cmd} '
-                   f'"{ssh_commands} ' 
-                   f'mrun --node -i {node_index} '
-                   f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
-                   f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
-                   f'--cluster --{log_level}"')
+            else:
+                cmd = (f'ssh {ssh_flags} {node_address} '
+                       f'"{remote_cmd}"')
 
             print(cmd)
 
