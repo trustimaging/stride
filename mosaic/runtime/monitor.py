@@ -158,13 +158,15 @@ class Monitor(Runtime):
         ssh_flags = os.environ.get('SSH_FLAGS', None)
         ssh_flags = ssh_flags + ';' if ssh_flags else ''
 
+        ssh_commands = os.environ.get('SSH_COMMANDS', '')
+
         tasks = []
 
         for node_index, node_address in zip(range(num_nodes), node_list):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
-            cmd = (f'ssh {node_address} '
-                   f'"{ssh_flags} ' 
+            cmd = (f'ssh {ssh_flags} {node_address} '
+                   f'"{ssh_commands} ' 
                    f'mrun --node -i {node_index} '
                    f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
                    f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '

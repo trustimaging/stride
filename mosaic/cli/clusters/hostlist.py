@@ -9,7 +9,7 @@ __all__ = ['expand_hostlist']
 MAX_SIZE = 100000
 
 
-def expand_hostlist(hostlist, allow_duplicates=False, sort=False):
+def expand_hostlist(hostlist):
     """
     Expand a hostlist expression string to a Python list.
 
@@ -27,7 +27,8 @@ def expand_hostlist(hostlist, allow_duplicates=False, sort=False):
     for c in hostlist + ",":
         if c == "," and bracket_level == 0:
             # Comma at top level, split!
-            if part: results.extend(expand_part(part))
+            if part:
+                results.extend(expand_part(part))
             part = ""
             bad_part = False
         else:
@@ -44,10 +45,6 @@ def expand_hostlist(hostlist, allow_duplicates=False, sort=False):
     if bracket_level > 0:
         raise RuntimeError("unbalanced brackets")
 
-    if not allow_duplicates:
-        results = remove_duplicates(results)
-    if sort:
-        results = numerically_sorted(results)
     return results
 
 
@@ -66,7 +63,7 @@ def expand_part(s):
     # 3) the rest
 
     m = re.match(r'([^,\[]*)(\[[^\]]*\])?(.*)', s)
-    (prefix, rangelist, rest) = m.group(1 ,2 ,3)
+    (prefix, rangelist, rest) = m.group(1, 2, 3)
 
     # Expand the rest first (here is where we recurse!)
     rest_expanded = expand_part(rest)
@@ -130,55 +127,3 @@ def expand_range(prefix, range_):
     for i in range(low, high + 1):
         results.append("%s%0*d" % (prefix, width, i))
     return results
-
-
-def remove_duplicates(l):
-    """
-    Remove duplicates from a list (but keep the order).
-    """
-    seen = set()
-    results = []
-    for e in l:
-        if e not in seen:
-            results.append(e)
-            seen.add(e)
-    return results
-
-
-def numerically_sorted(l):
-    """
-    Sort a list of hosts numerically.
-
-    E.g. sorted order should be n1, n2, n10; not n1, n10, n2.
-    """
-
-    return sorted(l, key=numeric_sort_key)
-
-
-numeric_sort_key_regexp = re.compile("([0-9]+)|([^0-9]+)")
-
-
-def numeric_sort_key(x):
-    """
-    Compose a sorting key to compare strings "numerically":
-
-    We split numerical (integer) and non-numerical parts into a list,
-    making sure that the numerical parts are converted to Python ints,
-    and then sort on the lists. Thus, if we sort x10y and x9z8, we will
-    compare ["x", 10, "y"] with ["x", 9, "x", "8"] and return x9z8
-    before x10y".
-
-    Python 3 complication: We cannot compare int and str, so while we can
-    compare x10y and x9z8, we cannot compare x10y and 9z8. Kludge: insert
-    a blank string first if the list would otherwise start with an integer.
-    This will give the same ordering as before, as integers seem to compare
-    smaller than strings in Python 2.
-    """
-
-    keylist = [int(i_ni[0]) if i_ni[0] else i_ni[1]
-               for i_ni in numeric_sort_key_regexp.findall(x)]
-    if keylist and isinstance(keylist[0], int):
-        keylist.insert(0, "")
-    return keylist
-
-
