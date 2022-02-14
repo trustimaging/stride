@@ -12,6 +12,7 @@ from .utils import MonitoredResource, MonitoredObject
 from .strategies import RoundRobin
 from ..file_manipulation import h5
 from ..utils import subprocess
+from ..utils.utils import memory_limit
 from ..utils.logger import LoggerManager, _stdout, _stderr
 from ..profile import profiler, global_profiler
 
@@ -37,6 +38,8 @@ class Monitor(Runtime):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        self._memory_limit = memory_limit()
 
         self.strategy_name = kwargs.get('monitor_strategy', 'round-robin')
         self._monitor_strategy = monitor_strategies[self.strategy_name](self)
@@ -156,17 +159,30 @@ class Monitor(Runtime):
         ssh_commands = os.environ.get('SSH_COMMANDS', '')
         ssh_commands = ssh_commands + ';' if ssh_commands else ''
 
+        in_slurm = os.environ.get('SLURM_NODELIST', None) is not None
+        num_logical_cpus = psutil.cpu_count(logical=True)
+        num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
+
         tasks = []
 
         for node_index, node_address in zip(range(num_nodes), node_list):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
-            cmd = (f'ssh {ssh_flags} {node_address} '
+            if in_slurm:
+                cmd = (f'srun {ssh_flags} --nodes=1 --ntasks=1 --tasks-per-node={num_cpus} '
+                       f'--oversubscribe --mem={self._memory_limit/1024**2}M '
+                       f'--nodelist={node_address} ')
+            else:
+                cmd = f'ssh {ssh_flags} {node_address} '
+
+            cmd = (f'{cmd} '
                    f'"{ssh_commands} ' 
                    f'mrun --node -i {node_index} '
                    f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
                    f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
                    f'--cluster --{log_level}"')
+
+            print(cmd)
 
             node_subprocess = cmd_subprocess.Popen(cmd,
                                                    shell=True,
