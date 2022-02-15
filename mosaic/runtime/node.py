@@ -119,7 +119,7 @@ class Node(Runtime):
 
             if self.mode == 'cluster':
                 start_cpu = worker_index * num_threads
-                end_cpu = min((worker_index + 1) * num_threads, num_cpus-1)
+                end_cpu = min((worker_index + 1) * num_threads, len(available_cpus))
 
                 worker_cpus = available_cpus[start_cpu:end_cpu]
                 worker_subprocess.cpu_affinity(worker_cpus)

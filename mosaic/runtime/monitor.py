@@ -25,6 +25,33 @@ monitor_strategies = {
 }
 
 
+def _cpu_mask(num_workers, worker_index, num_threads):
+    # Work out the first core ID for this subjob
+    startid = (worker_index - 1) * num_threads
+
+    # This is the process CPU ID
+    valsum = {}
+    for j in range(0, num_threads):
+        # Thread CPU ID
+        threadid = startid + j
+        # Convert to bitmask components
+        pos = int(threadid / 4)
+        offset = threadid - pos * 4
+        val = 2 ** offset
+        # This is a fat bitmask so add up the thread values in the right position
+        valsum[pos] = valsum.get(pos, 0) + val
+
+    valmask = ''
+    # Generate the hex repreesntation of the fat bitmask
+    for j in range(max(valsum.keys()), -1, -1):
+        valmask = f'{valmask}{valsum.get(j, 0):X}'
+
+    # Append to the list of masks in the appropriate way for this subjob
+    mask = '0x' + f'{valmask}'
+
+    return mask
+
+
 class Monitor(Runtime):
     """
     The monitor takes care of keeping track of the state of the network
@@ -175,7 +202,10 @@ class Monitor(Runtime):
                           f'--cluster --{log_level}')
 
             if in_slurm:
+                cpu_mask = _cpu_mask(1, 1, num_cpus)
+
                 cmd = (f'srun {ssh_flags} --nodes=1 --ntasks=1 --tasks-per-node={num_cpus} '
+                       f'--cpu-bind=mask_cpu:{cpu_mask} '
                        f'--oversubscribe --mem={int(self._memory_limit / 1024**2)}M '
                        f'--nodelist={node_address} '
                        f'{remote_cmd}')
