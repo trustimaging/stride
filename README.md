@@ -64,7 +64,7 @@ A Python version above 3.7 is recommended to run Stride.
 To install Stride, follow these steps:
 
 ```sh
-git clone git@github.com:trustimaging/stride.git
+git clone https://github.com/trustimaging/stride.git
 cd stride
 conda env create -f environment.yml
 conda activate stride
@@ -90,7 +90,7 @@ mrun python 01_script_foward.py
 You can control the number of workers and threads per worker by running:
 
 ```sh
-mrun -nw 2 -nth 5 python 01_script_foward.py
+mrun -nw 2 -nth 5 python 01_script_forward.py
 ```
 
 You can configure the devito solvers using environment variables. For example, to run the same code on a GPU with OpenACC you can:
@@ -99,7 +99,7 @@ You can configure the devito solvers using environment variables. For example, t
 export DEVITO_COMPILER=pgcc
 export DEVITO_LANGUAGE=openacc
 export DEVITO_PLATFORM=nvidiaX
-mrun -nw 1 -nth 5 python 01_script_foward.py
+mrun -nw 1 -nth 5 python 01_script_forward.py
 ```
 
 Once you've run it forward, you can run the corresponding inverse problem by doing:
