@@ -151,14 +151,14 @@ class Monitor(Runtime):
         num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
         num_nodes = len(node_list)
         num_workers = kwargs.get('num_workers', 1)
-        num_threads = kwargs.get('num_threads', num_cpus // num_workers)
+        num_threads = kwargs.get('num_threads', None) or num_cpus // num_workers
         log_level = kwargs.get('log_level', 'info')
         runtime_address = self.address
         runtime_port = self.port
 
-        ssh_flags = os.environ.get('SSH_FLAGS', None)
+        ssh_flags = os.environ.get('SSH_FLAGS', '')
 
-        ssh_commands = os.environ.get('SSH_COMMANDS', '')
+        ssh_commands = os.environ.get('SSH_COMMANDS', None)
         ssh_commands = ssh_commands + ';' if ssh_commands else ''
 
         in_slurm = os.environ.get('SLURM_NODELIST', None) is not None
@@ -183,8 +183,6 @@ class Monitor(Runtime):
             else:
                 cmd = (f'ssh {ssh_flags} {node_address} '
                        f'"{remote_cmd}"')
-
-            print(cmd)
 
             node_subprocess = cmd_subprocess.Popen(cmd,
                                                    shell=True,

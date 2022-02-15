@@ -84,7 +84,7 @@ class Node(Runtime):
 
             # Node process is pinned to first CPU
             if num_cpus > 1:
-                psutil.Process().cpu_affinity([0])
+                psutil.Process().cpu_affinity([num_cpus-1])
 
             # Find all available NUMA nodes and CPUs per node
             if numa.info.numa_available():
@@ -98,7 +98,7 @@ class Node(Runtime):
                 available_cpus[node_index] = node_cpus
 
             available_cpus = sum(list(available_cpus.values()), [])
-            available_cpus.remove(0)
+            available_cpus.remove(num_cpus-1)
 
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
@@ -119,7 +119,7 @@ class Node(Runtime):
 
             if self.mode == 'cluster':
                 start_cpu = worker_index * num_threads
-                end_cpu = min((worker_index + 1) * num_threads, num_cpus)
+                end_cpu = min((worker_index + 1) * num_threads, num_cpus-1)
 
                 worker_cpus = available_cpus[start_cpu:end_cpu]
                 worker_subprocess.cpu_affinity(worker_cpus)

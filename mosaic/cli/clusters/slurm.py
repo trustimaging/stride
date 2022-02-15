@@ -25,7 +25,6 @@ def node_list(host_name):
         return
 
     slurm_list = expand_hostlist(slurm_nodes)
-    print(slurm_list)
     slurm_list.remove(host_name)
 
     return slurm_list
