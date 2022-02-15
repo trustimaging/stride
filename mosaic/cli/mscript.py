@@ -24,7 +24,7 @@ def go(cluster_type, name, **kwargs):
     num_threads = kwargs.get('nthreads', None)
     node_memory = kwargs.get('memory', None)
 
-    valid_clusters = ['sge', 'pbs']
+    valid_clusters = ['sge', 'pbs', 'slurm']
 
     if cluster_type not in valid_clusters:
         raise ValueError('Cluster type %s is not valid (%s).' % (cluster_type, ', '.join(valid_clusters)))
