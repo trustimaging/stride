@@ -49,6 +49,13 @@ class Node(Runtime):
         -------
 
         """
+        if self.mode == 'cluster':
+            num_cpus = cpu_count()
+
+            # Node process is pinned to first CPU
+            if num_cpus > 1:
+                psutil.Process().cpu_affinity([num_cpus-1])
+
         await super().init(**kwargs)
 
         # Start local workers
@@ -81,10 +88,6 @@ class Node(Runtime):
                 raise ValueError('Requested number of CPUs per node (%d - num_workers*num_threads) '
                                  'is greater than the number of available CPUs (%d)' % (num_workers*num_threads, num_cpus))
 
-            # Node process is pinned to first CPU
-            if num_cpus > 1:
-                psutil.Process().cpu_affinity([num_cpus-1])
-
             # Find all available NUMA nodes and CPUs per node
             if numa.info.numa_available():
                 available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
@@ -110,18 +113,19 @@ class Node(Runtime):
 
                 mosaic.init('worker', *args, **kwargs, wait=True)
 
-            worker_proxy = RuntimeProxy(name='worker', indices=indices)
-            worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
-                                                         daemon=False)
-            worker_subprocess.start_process()
-            worker_proxy.subprocess = worker_subprocess
-
+            worker_cpus = None
             if self.mode == 'cluster':
                 start_cpu = worker_index * num_threads
                 end_cpu = min((worker_index + 1) * num_threads, len(available_cpus))
 
                 worker_cpus = available_cpus[start_cpu:end_cpu]
-                worker_subprocess.cpu_affinity(worker_cpus)
+
+            worker_proxy = RuntimeProxy(name='worker', indices=indices)
+            worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
+                                                         daemon=False,
+                                                         cpu_affinity=worker_cpus)
+            worker_subprocess.start_process()
+            worker_proxy.subprocess = worker_subprocess
 
             self._workers[worker_proxy.uid] = worker_proxy
             self._own_workers[worker_proxy.uid] = worker_proxy
