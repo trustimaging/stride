@@ -3,6 +3,7 @@ import os
 import gc
 import zmq
 import zmq.asyncio
+import psutil
 import asyncio
 import contextlib
 import weakref
@@ -412,8 +413,11 @@ class Runtime(BaseRPC):
             self._zmq_context = zmq.asyncio.Context()
 
             # Set thread pool for ZMQ
-            num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', cpu_count())
-            self._zmq_context.set(zmq.IO_THREADS, int(num_cpus))
+            num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())
+            num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', num_cpus)
+            num_cpus = max(1, int(num_cpus))
+
+            self._zmq_context.set(zmq.IO_THREADS, num_cpus)
 
         return self._zmq_context
 
