@@ -154,6 +154,7 @@ def go(cmd=None, **kwargs):
         file.write('PRT=%s\n' % runtime_port)
         file.write('[ARGS]\n')
         file.write('profile=%s\n' % profile)
+        file.write('mode=%s\n' % runtime_config['mode'])
 
     def _rm_dirs():
         os.remove(filename)

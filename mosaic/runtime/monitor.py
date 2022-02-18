@@ -96,6 +96,15 @@ class Monitor(Runtime):
         -------
 
         """
+        if self.mode == 'cluster':
+            num_cpus = cpu_count()
+
+            monitor_cpus = max(1, max(int(num_cpus // 8), 8))
+            available_cpus = list(range(num_cpus))
+            psutil.Process().cpu_affinity(available_cpus[-monitor_cpus:])
+
+            print('monitor', psutil.Process().cpu_affinity())
+
         await super().init(**kwargs)
 
         # Start local cluster
@@ -183,7 +192,6 @@ class Monitor(Runtime):
         runtime_port = self.port
 
         ssh_flags = os.environ.get('SSH_FLAGS', '')
-
         ssh_commands = os.environ.get('SSH_COMMANDS', None)
         ssh_commands = ssh_commands + ';' if ssh_commands else ''
 

@@ -1,11 +1,12 @@
 
-import os
+import psutil
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
 from ..utils import LoggerManager
 from ..utils import subprocess
 from ..profile import profiler, global_profiler
+from ..utils.utils import cpu_count
 
 
 __all__ = ['Head']
@@ -34,6 +35,16 @@ class Head(Runtime):
         -------
 
         """
+        if self.mode == 'cluster':
+            num_cpus = cpu_count()
+
+            monitor_cpus = max(1, max(int(num_cpus // 8), 8))
+            warehouse_cpus = max(1, max(int(num_cpus // 8), 8))
+            available_cpus = list(range(num_cpus))
+            psutil.Process().cpu_affinity(available_cpus[:-(monitor_cpus+warehouse_cpus)])
+
+            print('head', psutil.Process().cpu_affinity())
+
         await super().init(**kwargs)
 
         # Start monitor if necessary and handshake in reverse

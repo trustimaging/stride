@@ -330,9 +330,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         if 'p_saved' in self.dev_grid.vars:
             functions['p_saved'] = self.dev_grid.vars.p_saved
 
-        self.state_operator.run(dt=self.time.step,
-                                **functions,
-                                **kwargs.pop('devito_args', {}))
+        import time
+        time.sleep(10)
+        # self.state_operator.run(dt=self.time.step,
+        #                         **functions,
+        #                         **kwargs.pop('devito_args', {}))
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -588,9 +590,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         if wavelets.needs_grad:
             functions['src'] = self.dev_grid.vars.src
 
-        self.adjoint_operator.run(dt=self.time.step,
-                                  **functions,
-                                  **kwargs.pop('devito_args', {}))
+        import time
+        time.sleep(10)
+        # self.adjoint_operator.run(dt=self.time.step,
+        #                           **functions,
+        #                           **kwargs.pop('devito_args', {}))
 
     async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
