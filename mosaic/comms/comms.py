@@ -1,4 +1,5 @@
 
+import os
 import sys
 import uuid
 import asyncio
@@ -26,8 +27,8 @@ __all__ = ['CommsManager', 'get_hostname']
 _protocol_version = '0.1'
 
 
-def join_address(address, port, protocol='tcp'):
-    return '%s://%s:%d' % (protocol, address, port)
+def join_address(address, port, interface='tcp'):
+    return '%s://%s:%d' % (interface, address, port)
 
 
 def validate_address(address, port=False):
@@ -149,6 +150,7 @@ class Connection:
         self._zmq_context = context or mosaic.get_zmq_context()
 
         self._uid = uid
+        self._interface = os.environ.get('MOSAIC_ZMQ_INTERFACE', 'tcp')
         self._address = address
         self._port = port
         self._in_node = in_node
@@ -158,9 +160,9 @@ class Connection:
         self._state = 'disconnected'
 
     def __repr__(self):
-        return "<%s object at %s, address=%s, port=%d, state=%s>" % \
+        return "<%s object at %s, interface=%s, address=%s, port=%d, state=%s>" % \
                (self.__class__.__name__, id(self),
-                self.address, self.port, self.state)
+                self.interface, self.address, self.port, self.state)
 
     @property
     def uid(self):
@@ -169,6 +171,14 @@ class Connection:
 
         """
         return self._uid
+
+    @property
+    def interface(self):
+        """
+        Connection interface.
+
+        """
+        return self._interface
 
     @property
     def address(self):
@@ -209,10 +219,10 @@ class Connection:
 
         """
         if self._in_node is True:
-            return join_address('127.0.0.1', self.port)
+            return join_address('127.0.0.1', self.port, interface=self.interface)
 
         else:
-            return join_address(self.address, self.port)
+            return join_address(self.address, self.port, interface=self.interface)
 
     @property
     def bind_address(self):
@@ -220,7 +230,7 @@ class Connection:
         Full formatted address for binding.
 
         """
-        return join_address('*', self.port)
+        return join_address('*', self.port, interface=self.interface)
 
     @property
     def logger(self):
@@ -905,8 +915,9 @@ class CommsManager:
         self._state = 'disconnected'
 
     def __repr__(self):
-        return "<CommsManager object at %s, uid=%s, address=%s, port=%d, state=%s>" % \
-               (id(self), self._runtime.uid, self._recv_socket.address, self._recv_socket.port, self._state)
+        return "<CommsManager object at %s, uid=%s, interface=%s, address=%s, port=%d, state=%s>" % \
+               (id(self), self._runtime.uid, self._recv_socket.interface,
+                self._recv_socket.address, self._recv_socket.port, self._state)
 
     def __await__(self):
         if self._listen_future is None:

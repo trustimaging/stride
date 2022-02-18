@@ -7,7 +7,7 @@ from .runtime import Runtime, RuntimeProxy
 from .monitor import MonitoredResource
 from ..utils import LoggerManager
 from ..utils import subprocess
-from ..utils.utils import memory_limit
+from ..utils.utils import memory_limit, cpu_count
 from ..profile import profiler, global_profiler
 
 
@@ -69,8 +69,7 @@ class Node(Runtime):
         if self.mode == 'cluster':
             pass
 
-        num_logical_cpus = psutil.cpu_count(logical=True)
-        num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
+        num_cpus = cpu_count()
 
         num_workers = self._num_workers
         num_threads = kwargs.pop('num_threads', None)

@@ -14,7 +14,7 @@ from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task
 from ..profile import profiler, global_profiler
-from ..utils.utils import memory_limit
+from ..utils.utils import memory_limit, cpu_count
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -410,6 +410,10 @@ class Runtime(BaseRPC):
         """
         if self._zmq_context is None:
             self._zmq_context = zmq.asyncio.Context()
+
+            # Set thread pool for ZMQ
+            num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', cpu_count())
+            self._zmq_context.set(zmq.IO_THREADS, int(num_cpus))
 
         return self._zmq_context
 

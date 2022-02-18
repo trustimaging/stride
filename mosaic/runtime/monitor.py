@@ -12,7 +12,7 @@ from .utils import MonitoredResource, MonitoredObject
 from .strategies import RoundRobin
 from ..file_manipulation import h5
 from ..utils import subprocess
-from ..utils.utils import memory_limit
+from ..utils.utils import memory_limit, cpu_count
 from ..utils.logger import LoggerManager, _stdout, _stderr
 from ..profile import profiler, global_profiler
 
@@ -174,8 +174,7 @@ class Monitor(Runtime):
         if node_list is None:
             raise ValueError('No node_list was provided to initialise mosaic in cluster mode')
 
-        num_logical_cpus = psutil.cpu_count(logical=True)
-        num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
+        num_cpus = cpu_count()
         num_nodes = len(node_list)
         num_workers = kwargs.get('num_workers', 1)
         num_threads = kwargs.get('num_threads', None) or num_cpus // num_workers

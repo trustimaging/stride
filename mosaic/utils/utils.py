@@ -6,7 +6,7 @@ import traceback
 import threading
 import numpy as np
 
-__all__ = ['sizeof', 'set_main_thread', 'memory_limit', 'MultiError']
+__all__ = ['sizeof', 'set_main_thread', 'memory_limit', 'cpu_count', 'MultiError']
 
 
 def sizeof(obj, seen=None):
@@ -105,6 +105,22 @@ def memory_limit():
         pass
 
     return limit
+
+
+def cpu_count():
+    """
+    Get the number of available cores in the node.
+
+    Returns
+    -------
+        int
+            Number of CPUs.
+
+    """
+    num_logical_cpus = psutil.cpu_count(logical=True)
+    num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
+
+    return num_cpus
 
 
 class MultiError(Exception):
