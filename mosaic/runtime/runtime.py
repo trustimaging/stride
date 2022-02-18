@@ -419,6 +419,8 @@ class Runtime(BaseRPC):
 
             self._zmq_context.set(zmq.IO_THREADS, num_cpus)
 
+            print(self.uid, 'IO_THREADS', num_cpus, self._zmq_context.get(zmq.IO_THREADS))
+
         return self._zmq_context
 
     def get_event_loop(self, asyncio_loop=None):
