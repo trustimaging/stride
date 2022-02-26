@@ -291,7 +291,8 @@ class Profiler:
         -------
 
         """
-        for trace_id in self.active_traces.keys():
+        active_traces = list(self.active_traces.keys())
+        for trace_id in active_traces:
             self.stop_trace(trace_id)
 
         self.t_end = time.time()
@@ -886,10 +887,12 @@ class GlobalProfiler:
         self.mode = None
 
     def start(self):
-        self.profiler.start()
+        if self.profiler is not None:
+            self.profiler.start()
         
     def stop(self):
-        self.profiler.stop()
+        if self.profiler is not None:
+            self.profiler.stop()
 
     def set_local(self):
         self.profiler = LocalProfiler()

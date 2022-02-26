@@ -319,7 +319,7 @@ class Tessera(RemoteBase):
 
                 result = await future
                 # TODO Dodgy
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0)
 
                 task.set_result(result)
                 await task.set_done()

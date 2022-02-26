@@ -438,7 +438,7 @@ class Monitor(Runtime):
 
         tic = time.time()
         while pending_tasks:
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.1)
 
             for task in pending_tasks:
                 if task.state in ['done', 'failed', 'collected']:

@@ -165,6 +165,9 @@ class Runtime(BaseRPC):
         self._task = dict()
         self._task_proxy = weakref.WeakValueDictionary()
 
+        self._inside_async_for = False
+        self._async_for_tmp_storage = dict()
+
     async def init(self, **kwargs):
         """
         Asynchronous counterpart of ``__init__``.
@@ -250,10 +253,13 @@ class Runtime(BaseRPC):
         await monitor.barrier(timeout=timeout, reply=True)
 
     def async_for(self, *iterables, **kwargs):
+        assert not self._inside_async_for
 
         safe = kwargs.pop('safe', False)
 
         async def _async_for(func):
+            self._inside_async_for = True
+
             worker_queue = asyncio.Queue()
             for worker in self._workers.values():
                 await worker_queue.put(worker)
@@ -269,6 +275,9 @@ class Runtime(BaseRPC):
             tasks = [call(*each) for each in zip(*iterables)]
             gather = await asyncio.gather(*tasks)
             await self.barrier()
+
+            self._inside_async_for = False
+            self._async_for_tmp_storage = dict()
 
             return gather
 
@@ -914,6 +923,10 @@ class Runtime(BaseRPC):
         if obj_uid not in obj_store.keys():
             obj_store[obj_uid] = obj
             obj._registered = True
+
+        # prevent gc slowdown during async for loop
+        if obj_type == 'task_proxy' and self._inside_async_for:
+            self._async_for_tmp_storage[obj_uid] = obj
 
         return obj_store[obj_uid]
 

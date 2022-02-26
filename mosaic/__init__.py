@@ -269,8 +269,12 @@ def run(main, *args, **kwargs):
 
     loop = _runtime.get_event_loop()
 
+    async def _main():
+        await asyncio.sleep(1)
+        await main(_runtime)
+
     try:
-        loop.run(main, _runtime)
+        loop.run(_main)
 
     finally:
         stop()
@@ -316,3 +320,5 @@ async def interactive(switch, *args, **kwargs):
 
         finally:
             clear_runtime()
+
+    await asyncio.sleep(1)

@@ -155,6 +155,7 @@ def go(cmd=None, **kwargs):
         file.write('[ARGS]\n')
         file.write('profile=%s\n' % profile)
         file.write('mode="%s"\n' % runtime_config['mode'])
+        file.write('log_level="%s"\n' % runtime_config['log_level'])
 
     def _rm_dirs():
         os.remove(filename)
