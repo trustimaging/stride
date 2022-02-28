@@ -422,7 +422,7 @@ class Runtime(BaseRPC):
             self._zmq_context = zmq.asyncio.Context()
 
             # Set thread pool for ZMQ
-            num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())
+            num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())-1
             num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', num_cpus)
             num_cpus = max(1, int(num_cpus))
 
@@ -925,8 +925,8 @@ class Runtime(BaseRPC):
             obj._registered = True
 
         # prevent gc slowdown during async for loop
-        if obj_type == 'task_proxy' and self._inside_async_for:
-            self._async_for_tmp_storage[obj_uid] = obj
+        # if obj_type == 'task_proxy' and self._inside_async_for:
+        #     self._async_for_tmp_storage[obj_uid] = obj
 
         return obj_store[obj_uid]
 
