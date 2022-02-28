@@ -341,13 +341,16 @@ class Variable:
                     returns.append(ret)
                 input_grads = ret.outputs
             else:
+                ret = await ret
                 input_grads = (ret,) if not isinstance(ret, tuple) else ret
 
             try:
                 if len(input_grads) < len(node.next):
+                    print(input_grads)
+                    print(len(input_grads))
+                    print(method, node.op)
                     raise RuntimeError('Provided %d outputs for the adjoint of operator %s, '
                                        'but %d were expected' % (len(input_grads), node.op.uname, len(node.next)))
-
             except TypeError:
                 pass
 
