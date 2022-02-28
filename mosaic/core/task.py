@@ -552,7 +552,10 @@ class TaskProxy(ProxyBase):
         """
         self.state_changed('done', sync=True)
 
-        self._done_future.set_result(True)
+        try:
+            self._done_future.set_result(True)
+        except asyncio.InvalidStateError:
+            pass
 
         # Once done release local copy of the arguments
         self._cleanup()
@@ -609,7 +612,10 @@ class TaskProxy(ProxyBase):
         self.kwargs = None
         # Release the strong reference to the tessera proxy once the task is complete
         # so that it can be garbage collected if necessary
-        self._tessera_proxy = weakref.proxy(self._tessera_proxy)
+        try:
+            self._tessera_proxy = weakref.proxy(self._tessera_proxy)
+        except TypeError:
+            pass
 
     def add_event(self, event_name, sync=False, **kwargs):
         kwargs['tessera_id'] = self.tessera_id
