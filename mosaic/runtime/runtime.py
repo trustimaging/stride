@@ -164,9 +164,9 @@ class Runtime(BaseRPC):
         self._tessera_proxy_array = weakref.WeakValueDictionary()
         self._task = dict()
         self._task_proxy = weakref.WeakValueDictionary()
+        self._dealloc_queue = []
 
         self._inside_async_for = False
-        self._async_for_tmp_storage = dict()
 
     async def init(self, **kwargs):
         """
@@ -198,6 +198,9 @@ class Runtime(BaseRPC):
 
         self._remote_warehouse = self.proxy('warehouse')
         self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
+
+        # Start maintenance loop
+        self._loop.interval(self.maintenance, interval=5)
 
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)
@@ -924,10 +927,6 @@ class Runtime(BaseRPC):
             obj_store[obj_uid] = obj
             obj._registered = True
 
-        # prevent gc slowdown during async for loop
-        # if obj_type == 'task_proxy' and self._inside_async_for:
-        #     self._async_for_tmp_storage[obj_uid] = obj
-
         return obj_store[obj_uid]
 
     def needs_registering(self, obj_type, obj_uid):
@@ -959,11 +958,28 @@ class Runtime(BaseRPC):
 
         obj = obj_store.pop(obj_uid, None)
 
-        if hasattr(obj, 'queue_task'):
-            obj.queue_task((None, 'stop', None))
+        self._dealloc_queue.append(obj)
 
-        if obj_uid in self._local_warehouse:
-            del self._local_warehouse[obj_uid]
+    async def maintenance(self):
+        """
+
+        Returns
+        -------
+
+        """
+        if not len(self._dealloc_queue):
+            return
+
+        for obj in self._dealloc_queue:
+            if hasattr(obj, 'queue_task'):
+                obj.queue_task((None, 'stop', None))
+
+            if obj.uid in self._local_warehouse:
+                del self._local_warehouse[obj.uid]
+
+            await obj.deregister()
+
+        self._dealloc_queue = []
 
         gc.collect()
 

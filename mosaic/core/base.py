@@ -351,10 +351,12 @@ class CMDBase(Base):
                      event_t=event_t, **kwargs)
 
         def add_event_sync():
-            method(**event, as_async=False)
+            pass
+            # method(**event, as_async=False)
 
         async def add_event_async():
-            await method(**event, as_async=True)
+            pass
+            # await method(**event, as_async=True)
 
         if sync:
             return add_event_sync()
@@ -383,10 +385,12 @@ class CMDBase(Base):
                               **kwargs)
 
         def add_profile_sync():
-            method(**profile_update, as_async=False)
+            pass
+            # method(**profile_update, as_async=False)
 
         async def add_profile_async():
-            await method(**profile_update, as_async=True)
+            pass
+            # await method(**profile_update, as_async=True)
 
         if sync:
             return add_profile_sync()
@@ -608,6 +612,8 @@ class ProxyBase(CMDBase):
 
     def __del__(self):
         if self._registered and self.runtime:
-            self.state_changed('collected', sync=True)
-            # self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type(), as_async=False)
-            # self.runtime.deregister(self)
+            self.runtime.deregister(self)
+
+    async def deregister(self):
+        await self.state_changed('collected', sync=False)
+        await self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type())
