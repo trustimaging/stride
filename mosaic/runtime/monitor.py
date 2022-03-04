@@ -103,8 +103,6 @@ class Monitor(Runtime):
             available_cpus = list(range(num_cpus))
             psutil.Process().cpu_affinity(available_cpus[-monitor_cpus:])
 
-            print('monitor', psutil.Process().cpu_affinity())
-
         await super().init(**kwargs)
 
         # Start local cluster
@@ -395,7 +393,7 @@ class Monitor(Runtime):
 
                 ps_process.kill()
 
-        super().stop(sender_id)
+        await super().stop(sender_id)
 
     async def select_worker(self, sender_id):
         """

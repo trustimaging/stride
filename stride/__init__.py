@@ -62,6 +62,8 @@ async def forward(problem, pde, *args, **kwargs):
         List of specific shots to run, defaults to all remaining shots.
     safe : bool, optional
         Whether to discard workers that fail during execution.
+    perf : bool, optional
+        Whether to prioritise initiating comms before traversing loop.
     args : optional
         Extra positional arguments for the PDE.
     kwargs : optional
@@ -78,6 +80,7 @@ async def forward(problem, pde, *args, **kwargs):
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
     safe = kwargs.pop('safe', False)
+    perf = kwargs.pop('perf', False)
 
     if dump is True:
         try:
@@ -105,9 +108,15 @@ async def forward(problem, pde, *args, **kwargs):
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
-        traces = await pde(wavelets, *published_args,
-                           problem=sub_problem,
-                           runtime=worker, **kwargs).result()
+
+        if perf:
+            traces = await (await pde(wavelets, *published_args,
+                                      problem=sub_problem,
+                                      runtime=worker, **kwargs)).result()
+        else:
+            traces = await pde(wavelets, *published_args,
+                               problem=sub_problem,
+                               runtime=worker, **kwargs).result()
 
         logger.info('Shot %d retrieved' % sub_problem.shot_id)
 
@@ -158,6 +167,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         is applied.
     safe : bool, optional
         Whether to discard workers that fail during execution.
+    perf : bool, optional
+        Whether to prioritise initiating comms before traversing loop.
     args : optional
         Extra positional arguments for the operators.
     kwargs : optional
@@ -179,6 +190,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     dump = kwargs.pop('dump', True)
     safe = kwargs.pop('safe', False)
+    perf = kwargs.get('perf', False)
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
@@ -226,12 +238,21 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             if observed is None:
                 raise RuntimeError('Shot %d has no observed data' % shot_id)
 
-            wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
-            modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
+            if perf:
+                wavelets = await process_wavelets(wavelets, runtime=worker, **kwargs)
+                modelled = await pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
 
-            traces = process_traces(modelled, observed, runtime=worker, **kwargs)
-            fun = await loss(traces.outputs[0], traces.outputs[1],
-                             problem=sub_problem, runtime=worker, **kwargs).result()
+                traces = await process_traces(modelled, observed, runtime=worker, **kwargs)
+                fun = await (await loss(traces.outputs[0], traces.outputs[1],
+                                        problem=sub_problem, runtime=worker, **kwargs)).result()
+
+            else:
+                wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
+                modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
+
+                traces = process_traces(modelled, observed, runtime=worker, **kwargs)
+                fun = await loss(traces.outputs[0], traces.outputs[1],
+                                 problem=sub_problem, runtime=worker, **kwargs).result()
 
             iteration.add_fun(fun)
             logger.info('Functional value for shot %d: %s' % (shot_id, fun))

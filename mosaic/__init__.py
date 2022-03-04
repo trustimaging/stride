@@ -27,7 +27,7 @@ def init(runtime_type='head', runtime_indices=(),
          address=None, port=None,
          parent_id=None, parent_address=None, parent_port=None,
          monitor_address=None, monitor_port=None,
-         num_workers=None, num_threads=None,
+         num_workers=1, num_threads=None,
          mode='local', monitor_strategy='round-robin',
          log_level='info', profile=False, node_list=None,
          asyncio_loop=None, wait=False,
@@ -270,7 +270,6 @@ def run(main, *args, **kwargs):
     loop = _runtime.get_event_loop()
 
     async def _main():
-        await asyncio.sleep(1)
         await main(_runtime)
 
     try:
@@ -320,5 +319,3 @@ async def interactive(switch, *args, **kwargs):
 
         finally:
             clear_runtime()
-
-    await asyncio.sleep(1)

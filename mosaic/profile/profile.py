@@ -582,6 +582,9 @@ def skip_profile(*args, **kwargs):
     """
 
     def make_wrapper(func, stop_trace):
+        if not profiler.tracing:
+            return func
+
         profiler._del_node()
 
         @functools.wraps(func)
@@ -634,6 +637,9 @@ class no_profiler:
         self._frame_id = None
 
     def __enter__(self):
+        if not profiler.tracing:
+            return
+
         trace_id, outer_frame_id, curr_frame_id = profiler._del_node(level=self._level)
 
         if outer_frame_id:
@@ -651,6 +657,9 @@ class no_profiler:
             del profiler.active_nodes[outer_frame_id]
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if not profiler.tracing:
+            return
+
         if self._frame_id is not None:
             if self._stop_trace:
                 profiler.maybe_trace()
@@ -849,7 +858,6 @@ class RemoteProfiler:
     def update(self):
         # start = time.time()
         profiler_update = self.get_update()
-        # print(mosaic.runtime().uid, 1, time.time()-start)
 
         if not len(profiler_update.keys()):
             return

@@ -184,6 +184,11 @@ class LoggerManager:
         """
         self._log_location = 'local'
 
+        logging._srcfile = None
+        logging.logThreads = False
+        logging.logProcesses = False
+        logging.logMultiprocessing = False
+
         sys.stdout = self._stdout
         sys.stderr = self._stderr
 
@@ -219,6 +224,11 @@ class LoggerManager:
 
         """
         self._log_location = 'local'
+
+        logging._srcfile = None
+        logging.logThreads = False
+        logging.logProcesses = False
+        logging.logMultiprocessing = False
 
         sys.stdout = self._stdout
         sys.stderr = self._stderr
@@ -264,6 +274,11 @@ class LoggerManager:
 
         """
         self._log_location = 'remote'
+
+        logging._srcfile = None
+        logging.logThreads = False
+        logging.logProcesses = False
+        logging.logMultiprocessing = False
 
         sys.stdout = self._stdout
         sys.stderr = self._stderr

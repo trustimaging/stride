@@ -33,6 +33,7 @@ dependencies:
   - sphinx_rtd_theme
   - tornado>=6.1
   - traitsui
+  - uvloop
   - wxPython
   - zlib
   - zict

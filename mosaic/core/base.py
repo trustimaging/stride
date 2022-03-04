@@ -306,7 +306,7 @@ class CMDBase(Base):
     async def stop_trace(self):
         profiler.stop_trace(self._uid)
 
-    def state_changed(self, state, sync=False):
+    def state_changed(self, state):
         """
         Signal state changed.
 
@@ -314,8 +314,6 @@ class CMDBase(Base):
         ----------
         state : str
             New state.
-        sync : bool, optional
-            Whether to execute synchronously
 
         Returns
         -------
@@ -325,9 +323,10 @@ class CMDBase(Base):
             return
 
         self._state = state
-        return self.add_event(state, sync=sync)
+        return self.add_event(state)
 
-    def add_event(self, event_name, sync=False, **kwargs):
+    def add_event(self, event_name, **kwargs):
+        return
         if self.runtime.uid == 'monitor':
             return
 
@@ -350,20 +349,14 @@ class CMDBase(Base):
                      event_name=event_name,
                      event_t=event_t, **kwargs)
 
-        def add_event_sync():
-            pass
-            # method(**event, as_async=False)
-
         async def add_event_async():
-            pass
-            # await method(**event, as_async=True)
+            await method(**event, as_async=True)
 
-        if sync:
-            return add_event_sync()
-        else:
-            return add_event_async()
+        runtime = mosaic.runtime()
+        runtime.maintenance_queue(add_event_async)
 
-    def add_profile(self, profile, sync=False, **kwargs):
+    def add_profile(self, profile, **kwargs):
+        return
         if self.runtime.uid == 'monitor':
             return
 
@@ -384,18 +377,11 @@ class CMDBase(Base):
                               profile=profile,
                               **kwargs)
 
-        def add_profile_sync():
-            pass
-            # method(**profile_update, as_async=False)
-
         async def add_profile_async():
-            pass
-            # await method(**profile_update, as_async=True)
+            await method(**profile_update, as_async=True)
 
-        if sync:
-            return add_profile_sync()
-        else:
-            return add_profile_async()
+        runtime = mosaic.runtime()
+        runtime.maintenance_queue(add_profile_async)
 
     _serialisation_attrs = ['_uid', '_state']
 
@@ -428,6 +414,13 @@ class CMDBase(Base):
 
     def __deepcopy__(self, memo):
         return self
+
+    async def deregister(self):
+        try:
+            self.logger.debug('Garbage collected object %s' % self)
+            self.state_changed('collected')
+        except AttributeError:
+            pass
 
 
 class RemoteBase(CMDBase):
@@ -606,7 +599,7 @@ class ProxyBase(CMDBase):
         reg_instance = runtime.register(instance)
         if instance.is_proxy and instance._registered:
             reg_instance.remote_runtime.inc_ref(uid=reg_instance.uid, type=obj_type, as_async=False)
-            reg_instance.state_changed('listening', sync=True)
+            reg_instance.state_changed('listening')
 
         return reg_instance
 
@@ -615,5 +608,5 @@ class ProxyBase(CMDBase):
             self.runtime.deregister(self)
 
     async def deregister(self):
-        await self.state_changed('collected', sync=False)
+        await super().deregister()
         await self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type())

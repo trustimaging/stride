@@ -1389,6 +1389,9 @@ class CommsManager:
             Depending on whether a reply is expected or not.
 
         """
+        if self._state == 'disconnected':
+            return
+
         return await self._send_any(send_uid, *args, **kwargs, sync=False)
 
     async def cmd_async(self, *args, **kwargs):
@@ -1408,6 +1411,9 @@ class CommsManager:
             Depending on whether a reply is expected or not.
 
         """
+        if self._state == 'disconnected':
+            return
+
         return await self._cmd_any(*args, **kwargs, sync=False)
 
     async def recv_async(self):
@@ -1422,6 +1428,9 @@ class CommsManager:
             Received message.
 
         """
+        if self._state == 'disconnected':
+            return
+
         return await self._recv_any(sync=False)
 
     async def send_recv_async(self, send_uid, *args, **kwargs):
@@ -1444,6 +1453,9 @@ class CommsManager:
             Result of the reply
 
         """
+        if self._state == 'disconnected':
+            return
+
         return await self._send_recv_any(send_uid, *args, **kwargs, sync=False)
 
     async def cmd_recv_async(self, *args, **kwargs):
@@ -1464,6 +1476,9 @@ class CommsManager:
             Result of the reply
 
         """
+        if self._state == 'disconnected':
+            return
+
         return await self._cmd_recv_any(*args, **kwargs, sync=False)
 
     @contextlib.asynccontextmanager

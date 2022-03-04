@@ -260,7 +260,7 @@ class Node(Runtime):
             await worker.stop()
             worker.subprocess.join_process()
 
-        super().stop(sender_id)
+        await super().stop(sender_id)
 
     async def update_monitored_node(self):
         """

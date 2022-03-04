@@ -91,7 +91,7 @@ class Tessera(RemoteBase):
         self._set_cls()
 
         self.runtime.register(self)
-        self.state_changed('init', sync=True)
+        self.state_changed('init')
         self.listen()
 
     def _set_cls(self):
@@ -248,9 +248,9 @@ class Tessera(RemoteBase):
             return
 
         while True:
-            await self.state_changed('listening')
+            self.state_changed('listening')
 
-            sender_id, task, frame_info = await self._task_queue.get()
+            sender_id, task = await self._task_queue.get()
             # Make sure that the loop does not keep implicit references to the task until the
             # next task arrives in the queue
             self._task_queue.task_done()
@@ -258,34 +258,32 @@ class Tessera(RemoteBase):
             if type(task) is str and task == 'stop':
                 break
 
-            with use_trace(*frame_info):
-                await asyncio.sleep(0)
-                future = await task.prepare_args()
-                await future
+            future = await task.prepare_args()
+            await future
 
-                if task.state == 'failed':
-                    continue
+            if task.state == 'failed':
+                continue
 
-                method = getattr(self.obj, task.method, False)
+            method = getattr(self.obj, task.method, False)
 
-                async with self.send_exception(task=task):
-                    if method is False:
-                        raise AttributeError('Class %s does not have method %s' % (self.obj.__class__.__name__,
-                                                                                   task.method))
+            async with self.send_exception(task=task):
+                if method is False:
+                    raise AttributeError('Class %s does not have method %s' % (self.obj.__class__.__name__,
+                                                                               task.method))
 
-                    if not callable(method):
-                        raise ValueError('Method %s of class %s is not callable' % (task.method,
-                                                                                    self.obj.__class__.__name__))
+                if not callable(method):
+                    raise ValueError('Method %s of class %s is not callable' % (task.method,
+                                                                                self.obj.__class__.__name__))
 
-                await asyncio.sleep(0)
-                await self.state_changed('running')
-                await task.state_changed('running')
-                await self.call_safe(sender_id, method, task)
+            await asyncio.sleep(0)
+            self.state_changed('running')
+            task.state_changed('running')
+            await self.call_safe(sender_id, method, task)
 
             del task
             del method
 
-        await self.state_changed('stopped')
+        self.state_changed('stopped')
 
     async def call_safe(self, sender_id, method, task):
         """
@@ -378,13 +376,6 @@ class Tessera(RemoteBase):
         state['_runtime_id'] = mosaic.runtime().uid
 
         return state
-
-    def __del__(self):
-        try:
-            self.logger.debug('Garbage collected object %s' % self)
-            self.state_changed('collected', sync=True)
-        except AttributeError:
-            pass
 
 
 class ParameterMixin:
@@ -576,7 +567,7 @@ class TesseraProxy(ProxyBase):
         self._cls_attr_names = None
         self._set_cls()
 
-        self.state_changed('pending', sync=True)
+        self.state_changed('pending')
 
     def _set_cls(self):
         if self.__class__.__name__ == '_TesseraProxy':
@@ -608,7 +599,7 @@ class TesseraProxy(ProxyBase):
         Asynchronous correlate of ``__init__``.
 
         """
-        await self.state_changed('init')
+        self.state_changed('init')
 
         kwargs = self._fill_config(**kwargs)
         kwargs.pop('runtime', None)
@@ -627,7 +618,7 @@ class TesseraProxy(ProxyBase):
 
         self._cls_attr_names = cls_attrs
 
-        await self.state_changed('listening')
+        self.state_changed('listening')
 
     @property
     def runtime_id(self):
@@ -749,12 +740,16 @@ class TesseraProxy(ProxyBase):
 
     def _get_remote_method(self, item):
         def remote_method(*args, **kwargs):
+            perf = kwargs.pop('perf', False)
             task_proxy = TaskProxy(self, item, *args, **kwargs)
 
-            loop = mosaic.get_event_loop()
-            loop.run(self._init_task, task_proxy, *args, **kwargs)
+            if perf:
+                return self._init_task(task_proxy, *args, **kwargs)
+            else:
+                loop = mosaic.get_event_loop()
+                loop.run(self._init_task, task_proxy, *args, **kwargs)
 
-            return task_proxy
+                return task_proxy
 
         return remote_method
 

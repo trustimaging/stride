@@ -164,7 +164,9 @@ class Runtime(BaseRPC):
         self._tessera_proxy_array = weakref.WeakValueDictionary()
         self._task = dict()
         self._task_proxy = weakref.WeakValueDictionary()
+
         self._dealloc_queue = []
+        self._maintenance_queue = []
 
         self._inside_async_for = False
 
@@ -268,6 +270,7 @@ class Runtime(BaseRPC):
                 await worker_queue.put(worker)
 
             async def call(*iters):
+                print('called with', iters)
                 res = None
 
                 async with self._exclusive_proxy(worker_queue, safe=safe) as _worker:
@@ -430,8 +433,6 @@ class Runtime(BaseRPC):
             num_cpus = max(1, int(num_cpus))
 
             self._zmq_context.set(zmq.IO_THREADS, num_cpus)
-
-            print(self.uid, 'IO_THREADS', num_cpus, self._zmq_context.get(zmq.IO_THREADS))
 
         return self._zmq_context
 
@@ -741,7 +742,7 @@ class Runtime(BaseRPC):
         """
         pass
 
-    def stop(self, sender_id=None):
+    async def stop(self, sender_id=None):
         """
         Stop runtime.
 
@@ -755,6 +756,8 @@ class Runtime(BaseRPC):
         """
         if profiler.tracing:
             profiler.stop()
+
+        await self.maintenance()
 
         if self._comms is not None:
             self._loop.run(self._comms.stop, sender_id)
@@ -958,30 +961,57 @@ class Runtime(BaseRPC):
 
         obj = obj_store.pop(obj_uid, None)
 
-        self._dealloc_queue.append(obj)
+        if obj is not None:
+            self._dealloc_queue.append(obj)
 
     async def maintenance(self):
         """
+        Task handling maintenance processes such as object
+        deallocation.
 
         Returns
         -------
 
         """
-        if not len(self._dealloc_queue):
-            return
+        if len(self._dealloc_queue):
+            deregisters = []
+            for obj in self._dealloc_queue:
+                if hasattr(obj, 'queue_task'):
+                    obj.queue_task((None, 'stop', None))
 
-        for obj in self._dealloc_queue:
-            if hasattr(obj, 'queue_task'):
-                obj.queue_task((None, 'stop', None))
+                if obj.uid in self._local_warehouse:
+                    del self._local_warehouse[obj.uid]
 
-            if obj.uid in self._local_warehouse:
-                del self._local_warehouse[obj.uid]
+                deregisters.append(obj.deregister())
 
-            await obj.deregister()
+            self._dealloc_queue = []
 
-        self._dealloc_queue = []
+            gc.collect()
 
-        gc.collect()
+            await asyncio.gather(*deregisters)
+
+        if len(self._maintenance_queue):
+            funs = []
+            for fun in self._maintenance_queue:
+                funs.append(fun())
+
+            self._maintenance_queue = []
+
+            await asyncio.gather(*funs)
+
+    def maintenance_queue(self, fun):
+        """
+        Add callable to maintenance queue
+
+        Parameters
+        ----------
+        fun : callable
+
+        Returns
+        -------
+
+        """
+        self._maintenance_queue.append(fun)
 
     def cmd(self, sender_id, cmd):
         """
@@ -1128,10 +1158,8 @@ class Runtime(BaseRPC):
         task = Task(uid, sender_id, tessera,
                     task['method'], *task['args'], **task['kwargs'])
 
-        frame_info = profiler.frame_info()
-
-        tessera.queue_task((sender_id, task, frame_info))
-        await task.state_changed('pending')
+        tessera.queue_task((sender_id, task))
+        task.state_changed('pending')
 
 
 class RuntimeProxy(BaseRPC):

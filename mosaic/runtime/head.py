@@ -1,5 +1,6 @@
 
 import psutil
+import asyncio
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
@@ -43,14 +44,17 @@ class Head(Runtime):
             available_cpus = list(range(num_cpus))
             psutil.Process().cpu_affinity(available_cpus[:-(monitor_cpus+warehouse_cpus)])
 
-            print('head', psutil.Process().cpu_affinity())
-
         await super().init(**kwargs)
 
         # Start monitor if necessary and handshake in reverse
         monitor_address = kwargs.get('monitor_address', None)
         if not self.is_monitor and monitor_address is None:
             await self.init_monitor(**kwargs)
+
+        # Wait for workers to be ready
+        num_workers = kwargs.pop('num_workers')
+        while len(self.workers) < num_workers:
+            await asyncio.sleep(0.1)
 
     async def init_monitor(self, **kwargs):
         """
@@ -97,7 +101,7 @@ class Head(Runtime):
             await self._monitor.stop()
             self._monitor.subprocess.join_process()
 
-        super().stop(sender_id)
+        await super().stop(sender_id)
         # os._exit(0)
 
     def set_logger(self):

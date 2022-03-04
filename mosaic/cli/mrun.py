@@ -153,9 +153,15 @@ def go(cmd=None, **kwargs):
         file.write('ADD=%s\n' % runtime_address)
         file.write('PRT=%s\n' % runtime_port)
         file.write('[ARGS]\n')
-        file.write('profile=%s\n' % profile)
-        file.write('mode="%s"\n' % runtime_config['mode'])
-        file.write('log_level="%s"\n' % runtime_config['log_level'])
+
+        for key, value in runtime_config.items():
+            if key in ['runtime_indices', 'address', 'port',
+                       'monitor_address', 'monitor_port', 'node_list']:
+                continue
+            if isinstance(value, str):
+                file.write('%s="%s"\n' % (key, value))
+            else:
+                file.write('%s=%s\n' % (key, value))
 
     def _rm_dirs():
         os.remove(filename)

@@ -336,6 +336,9 @@ class Variable:
                 method = getattr(node.op, node.method)
                 ret = method(*output_grads, **kwargs)
 
+            if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
+                ret = await ret
+
             if isinstance(ret, TaskProxy):
                 if not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy:
                     returns.append(ret)
@@ -346,9 +349,6 @@ class Variable:
 
             try:
                 if len(input_grads) < len(node.next):
-                    print(input_grads)
-                    print(len(input_grads))
-                    print(method, node.op)
                     raise RuntimeError('Provided %d outputs for the adjoint of operator %s, '
                                        'but %d were expected' % (len(input_grads), node.op.uname, len(node.next)))
             except TypeError:
