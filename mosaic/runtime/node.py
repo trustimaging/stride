@@ -135,8 +135,8 @@ class Node(Runtime):
 
         await self.update_monitored_node()
 
-        self._loop.interval(self.resource_monitor, interval=1)
-        self._loop.interval(self.update_monitored_node, interval=10)
+        self._loop.interval(self.resource_monitor, interval=0.1)
+        self._loop.interval(self.update_monitored_node, interval=1)
 
     def set_logger(self):
         """
@@ -148,7 +148,7 @@ class Node(Runtime):
         """
         self.logger = LoggerManager()
 
-        if self.mode == 'local' or True:
+        if self.mode == 'local':
             self.logger.set_local(format=self.mode)
         else:
             runtime_id = 'head' if self.mode == 'interactive' else 'monitor'

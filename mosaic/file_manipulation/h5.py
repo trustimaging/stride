@@ -6,7 +6,6 @@ from datetime import datetime
 
 from ..utils.change_case import camel_case
 from ..types import Struct
-from ..profile import skip_profile
 
 
 __all__ = ['HDF5', 'file_exists']
@@ -278,18 +277,15 @@ class HDF5:
     def close(self):
         self._file.close()
 
-    @skip_profile(stop_trace=True)
     def load(self, lazy=True):
         group = self._file['/']
         description = read(group, lazy=lazy)
 
         return Struct(description)
 
-    @skip_profile(stop_trace=True)
     def dump(self, description):
         write('/', description, self._file)
 
-    @skip_profile(stop_trace=True)
     def append(self, description):
         append('/', description, self._file)
 

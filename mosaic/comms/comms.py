@@ -160,9 +160,9 @@ class Connection:
         self._state = 'disconnected'
 
     def __repr__(self):
-        return "<%s object at %s, interface=%s, address=%s, port=%d, state=%s>" % \
+        return "<%s object at %s, address=%s, port=%d, state=%s>" % \
                (self.__class__.__name__, id(self),
-                self.interface, self.address, self.port, self.state)
+                self.address, self.port, self.state)
 
     @property
     def uid(self):
@@ -915,8 +915,8 @@ class CommsManager:
         self._state = 'disconnected'
 
     def __repr__(self):
-        return "<CommsManager object at %s, uid=%s, interface=%s, address=%s, port=%d, state=%s>" % \
-               (id(self), self._runtime.uid, self._recv_socket.interface,
+        return "<CommsManager object at %s, uid=%s, address=%s, port=%d, state=%s>" % \
+               (id(self), self._runtime.uid,
                 self._recv_socket.address, self._recv_socket.port, self._state)
 
     def __await__(self):

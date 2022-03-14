@@ -3,7 +3,7 @@ import time
 
 import mosaic
 from ..utils import Future
-from ..profile import profiler, skip_profile
+from ..profile import profiler
 
 
 __all__ = ['RemoteBase', 'ProxyBase']
@@ -44,7 +44,6 @@ class Base:
         return mosaic.get_worker()
 
     @property
-    @skip_profile
     def logger(self):
         if self.runtime:
             return self.runtime.logger
@@ -126,6 +125,14 @@ class CMDBase(Base):
 
         """
         raise NotImplementedError('Unimplemented CMDBase property runtime_id')
+
+    @property
+    def collectable(self):
+        """
+        Whether the object is ready for collection.
+
+        """
+        return True
 
     @classmethod
     def remote_type(cls):
@@ -326,7 +333,6 @@ class CMDBase(Base):
         return self.add_event(state)
 
     def add_event(self, event_name, **kwargs):
-        return
         if self.runtime.uid == 'monitor':
             return
 
@@ -356,7 +362,6 @@ class CMDBase(Base):
         runtime.maintenance_queue(add_event_async)
 
     def add_profile(self, profile, **kwargs):
-        return
         if self.runtime.uid == 'monitor':
             return
 

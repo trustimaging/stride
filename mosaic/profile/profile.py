@@ -23,7 +23,7 @@ __all__ = ['Profiler', 'GlobalProfiler', 'profiler',
            'use_trace']
 
 
-filter_modules = ['devito', 'sympy', 'matplotlib', 'traits', 'numpy', 'scipy', 'tkinter']
+filter_modules = []
 profiler = None
 global_profiler = None
 
@@ -277,8 +277,8 @@ class Profiler:
         runtime = mosaic.runtime()
         self._runtime_id = runtime.uid if runtime is not None else 'head'
 
-        loop = asyncio.get_event_loop()
-        loop.set_task_factory(profiled_task_factory)
+        # loop = asyncio.get_event_loop()
+        # loop.set_task_factory(profiled_task_factory)
 
         if global_profiler is not None:
             global_profiler.start()

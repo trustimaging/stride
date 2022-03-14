@@ -342,9 +342,12 @@ class Variable:
             if isinstance(ret, TaskProxy):
                 if not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy:
                     returns.append(ret)
+
                 input_grads = ret.outputs
             else:
-                ret = await ret
+                if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
+                    ret = await ret
+
                 input_grads = (ret,) if not isinstance(ret, tuple) else ret
 
             try:

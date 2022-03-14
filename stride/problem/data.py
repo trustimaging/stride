@@ -16,7 +16,6 @@ except ModuleNotFoundError:
 
 import mosaic
 from mosaic.comms.compression import maybe_compress, decompress
-from mosaic.profile import skip_profile
 
 from .base import GriddedSaved
 from ..core import Variable
@@ -939,7 +938,6 @@ class ScalarField(StructuredData):
 
         return interp
 
-    @skip_profile(stop_trace=True)
     def plot(self, **kwargs):
         """
         Plot the inner domain of the field.
@@ -984,7 +982,6 @@ class ScalarField(StructuredData):
 
         return axis
 
-    @skip_profile(stop_trace=True)
     def extended_plot(self, **kwargs):
         """
         Plot the extended domain of the field.
@@ -1195,7 +1192,6 @@ class VectorField(ScalarField):
         """
         return self._dim
 
-    @skip_profile(stop_trace=True)
     def plot_dims(self, **kwargs):
         """
         Plot separated dimensions of the field.
@@ -1409,7 +1405,6 @@ class Traces(StructuredData):
         index = list(self._transducer_ids).index(id)
         return self.extended_data[index, :]
 
-    @skip_profile(stop_trace=True)
     def plot(self, **kwargs):
         """
         Plot the inner domain of the traces as a shot gather.
@@ -1437,7 +1432,6 @@ class Traces(StructuredData):
 
         return axis
 
-    @skip_profile(stop_trace=True)
     def plot_one(self, id, **kwargs):
         """
         Plot the the inner domain of one of the traces.

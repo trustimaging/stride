@@ -4,12 +4,12 @@ import glob
 import shutil
 import tempfile
 import devito
+import warnings
 import numpy as np
 import scipy.signal
 
 import mosaic
 from mosaic.utils import camel_case, at_exit
-from mosaic.profile import skip_profile
 
 from stride.utils import fft
 from stride.problem import StructuredData
@@ -19,6 +19,9 @@ from .. import boundaries
 
 
 __all__ = ['IsoAcousticDevito']
+
+
+warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 
 
 @mosaic.tessera
@@ -79,6 +82,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         kernel : str, optional
             Type of time kernel to use (``OT2`` for 2nd order in time or ``OT4`` for 4th
             order in time). If not given, it is automatically decided given the time spacing.
+        diff_source : bool, optional
+            Whether the source should be injected as is, or as its 1st time derivative. Defaults to
+            False, leaving it unchanged.
         platform : str, optional
             Platform on which to run the operator, ``None`` to run on the CPU or ``nvidia-acc`` to run on
             the GPU with OpenACC. Defaults to ``None``.
@@ -105,8 +111,6 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.wavefield = None
 
-        self._max_wavelet = 0.
-        self._src_scale = 0.
         self._bandwidth = 0.
 
         config_devito(**kwargs)
@@ -174,6 +178,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         kernel : str, optional
             Type of time kernel to use (``OT2`` for 2nd order in time or ``OT4`` for 4th
             order in time). If not given, it is automatically decided given the time spacing.
+        diff_source : bool, optional
+            Whether the source should be injected as is, or as its 1st time derivative. Defaults to
+            False, leaving it unchanged.
         platform : str, optional
             Platform on which to run the operator, ``None`` to run on the CPU or ``nvidia-acc`` to run on
             the GPU with OpenACC. Defaults to ``None``.
@@ -203,6 +210,8 @@ class IsoAcousticDevito(ProblemTypeBase):
             if alpha is not None:
                 save_wavefield |= alpha.needs_grad
 
+        diff_source = kwargs.pop('diff_source', False)
+
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
             # Define variables
@@ -219,10 +228,16 @@ class IsoAcousticDevito(ProblemTypeBase):
             stencil = self._stencil(p, wavelets, vp, rho=rho, alpha=alpha, direction='forward')
 
             # Define the source injection function to generate the corresponding code
-            # pressure_to_mass_acc = time.step / (vp * space.spacing**3)
-            # solve_p_dt = time.step**2 * vp**2
-            vp2 = self.dev_grid.vars.vp2
-            src_term = src.inject(field=p.forward, expr=src * self.time.step**2 * vp2)
+            # pressure_to_density = 1 / vp**2
+            # density_to_density_rate = 2 * vp / spacing
+            # FDTD_scale = step**2 * vp**2
+            vp_fun = self.dev_grid.vars.vp
+            src_scale = 2 * self.time.step**2 * vp_fun / max(*self.space.spacing)
+
+            if not diff_source:
+                src_scale /= self.time.step
+
+            src_term = src.inject(field=p.forward, expr=src * src_scale)
             rec_term = rec.interpolate(expr=p)
 
             # Define the saving of the wavefield
@@ -286,13 +301,13 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set geometry and wavelet
         wavelets = wavelets.data
 
-        self._src_scale = 1000
-        self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
+        if diff_source:
+            wavelets = np.gradient(wavelets, self.time.step, axis=-1)
 
-        window = scipy.signal.get_window(('tukey', 0.01), self.time.num, False)
+        window = scipy.signal.get_window(('tukey', 0.001), self.time.num, False)
         window = window.reshape((self.time.num, 1))
 
-        self.dev_grid.vars.src.data[:] = wavelets.T * self._src_scale / self._max_wavelet * window
+        self.dev_grid.vars.src.data[:] = wavelets.T * window
 
         if self.interpolation_type == 'linear':
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
@@ -319,8 +334,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
-        import warnings
-        warnings.filterwarnings('error', category=np.VisibleDeprecationWarning)
 
         functions = dict(
             src=self.dev_grid.vars.src,
@@ -330,11 +343,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         if 'p_saved' in self.dev_grid.vars:
             functions['p_saved'] = self.dev_grid.vars.p_saved
 
-        import time
-        time.sleep(2)
-        # self.state_operator.run(dt=self.time.step,
-        #                         **functions,
-        #                         **kwargs.pop('devito_args', {}))
+        self.state_operator.run(dt=self.time.step,
+                                **functions,
+                                **kwargs.pop('devito_args', {}))
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -377,8 +388,6 @@ class IsoAcousticDevito(ProblemTypeBase):
             if wavefield_slice is not None:
                 wavefield_data = wavefield_data[wavefield_slice]
 
-            wavefield_data *= self._max_wavelet / self._src_scale
-
             self.wavefield = StructuredData(name='p',
                                             data=wavefield_data,
                                             shape=wavefield_data.shape)
@@ -418,7 +427,6 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.wavefield = None
 
         traces_data = np.asarray(self.dev_grid.vars.rec.data, dtype=np.float32).T
-        traces_data *= self._max_wavelet / self._src_scale
         traces = shot.observed.alike(name='modelled', data=traces_data)
 
         self.boundary.deallocate()
@@ -550,7 +558,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.alpha.data_with_halo[:] = alpha_with_halo
 
         # Set geometry and adjoint source
-        window = scipy.signal.get_window(('tukey', 0.01), self.time.num, False)
+        window = scipy.signal.get_window(('tukey', 0.001), self.time.num, False)
         window = window.reshape((self.time.num, 1))
 
         self.dev_grid.vars.rec.data[:] = adjoint_source.data.T * window
@@ -590,11 +598,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         if wavelets.needs_grad:
             functions['src'] = self.dev_grid.vars.src
 
-        import time
-        time.sleep(2)
-        # self.adjoint_operator.run(dt=self.time.step,
-        #                           **functions,
-        #                           **kwargs.pop('devito_args', {}))
+        self.adjoint_operator.run(dt=self.time.step,
+                                  **functions,
+                                  **kwargs.pop('devito_args', {}))
 
     async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -709,7 +715,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         variable_prec = np.asarray(variable_prec.data, dtype=np.float32)
 
         variable_grad *= -2 / vp.extended_data**3
-        variable_prec *= +4 / vp.extended_data**6
+        variable_prec *= +4 / vp.extended_data**6 * self.time.step**2
 
         self.dev_grid.deallocate('grad_vp')
         self.dev_grid.deallocate('prec_vp')
@@ -946,7 +952,6 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.state_operator.operator = None
             self.adjoint_operator.operator = None
 
-    @skip_profile(stop_trace=True)
     def _stencil(self, field, wavelets, vp, rho=None, alpha=None, direction='forward', **kwargs):
         # Prepare medium functions
         vp_fun, vp2_fun, inv_vp2_fun, rho_fun, buoy_fun, alpha_fun = self._medium_functions(vp, rho, alpha, **kwargs)

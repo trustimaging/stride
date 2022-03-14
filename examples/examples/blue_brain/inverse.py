@@ -15,7 +15,7 @@ format for easy access, and can be loaded easily through the problem. The
 experimental data has been band-pass filtered to fit the relevant frequency
 range.
 
-Data to run the script can be downloaded from <>.
+Data to run the script can be downloaded from <TBC>.
 
 This script can be used to reproduce results presented in https://arxiv.org/abs/2110.03345.
 

@@ -122,6 +122,14 @@ class Task(RemoteBase):
         """
         return {self.proxy(each) for each in list(self._proxies)}
 
+    @property
+    def collectable(self):
+        """
+        Whether the object is ready for collection.
+
+        """
+        return self._state in ['failed', 'done']
+
     @classmethod
     def remote_cls(cls):
         """
@@ -471,7 +479,8 @@ class TaskProxy(ProxyBase):
         await self.remote_runtime.init_task(task=task, uid=self._uid,
                                             reply=True)
 
-        self.state_changed('queued')
+        if self._state == 'init':
+            self.state_changed('queued')
 
     @cached_property
     def runtime_id(self):
@@ -541,10 +550,21 @@ class TaskProxy(ProxyBase):
         Access individual outputs of the task.
 
         """
-        if self._outputs is None:
-            self._outputs = TaskOutputGenerator(self)
+        if self._outputs is None or self._outputs() is None:
+            outputs = TaskOutputGenerator(self)
+            self._outputs = weakref.ref(outputs)
+        else:
+            outputs = self._outputs()
 
-        return self._outputs
+        return outputs
+
+    @property
+    def collectable(self):
+        """
+        Whether the object is ready for collection.
+
+        """
+        return self._state in ['failed', 'done']
 
     def set_done(self):
         """

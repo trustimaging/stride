@@ -254,6 +254,7 @@ class Runtime(BaseRPC):
         -------
 
         """
+        await self.maintenance()
         monitor = self.get_monitor()
         await monitor.barrier(timeout=timeout, reply=True)
 
@@ -270,7 +271,6 @@ class Runtime(BaseRPC):
                 await worker_queue.put(worker)
 
             async def call(*iters):
-                print('called with', iters)
                 res = None
 
                 async with self._exclusive_proxy(worker_queue, safe=safe) as _worker:
@@ -283,7 +283,6 @@ class Runtime(BaseRPC):
             await self.barrier()
 
             self._inside_async_for = False
-            self._async_for_tmp_storage = dict()
 
             return gather
 
@@ -849,7 +848,9 @@ class Runtime(BaseRPC):
             return self._local_warehouse[uid]
 
         obj = await self._remote_warehouse.get_remote(uid=uid, reply=True)
-        self._local_warehouse[uid] = obj
+
+        if not hasattr(obj, 'cached') or obj.cached:
+            self._local_warehouse[uid] = obj
 
         return obj
 
@@ -955,12 +956,6 @@ class Runtime(BaseRPC):
         -------
 
         """
-        obj_type = obj.type
-        obj_uid = obj.uid
-        obj_store = getattr(self, '_' + obj_type)
-
-        obj = obj_store.pop(obj_uid, None)
-
         if obj is not None:
             self._dealloc_queue.append(obj)
 
@@ -974,21 +969,37 @@ class Runtime(BaseRPC):
 
         """
         if len(self._dealloc_queue):
+            uncollectables = []
             deregisters = []
             for obj in self._dealloc_queue:
+                # If not collectable, defer until next cycle
+                if not obj.collectable:
+                    uncollectables.append(obj)
+                    continue
+
+                # Remove from internal storage
+                obj_type = obj.type
+                obj_uid = obj.uid
+                obj_store = getattr(self, '_' + obj_type)
+                obj = obj_store.pop(obj_uid, None)
+
+                # Stop tessera loop
                 if hasattr(obj, 'queue_task'):
-                    obj.queue_task((None, 'stop', None))
+                    obj.queue_task((None, 'stop'))
 
-                if obj.uid in self._local_warehouse:
-                    del self._local_warehouse[obj.uid]
+                # Remove from local warehouse
+                if obj_uid in self._local_warehouse:
+                    del self._local_warehouse[obj_uid]
 
-                deregisters.append(obj.deregister())
+                # Execute object deregister
+                if obj is not None:
+                    deregisters.append(obj.deregister())
 
-            self._dealloc_queue = []
-
-            gc.collect()
+            self._dealloc_queue = uncollectables
 
             await asyncio.gather(*deregisters)
+
+            gc.collect()
 
         if len(self._maintenance_queue):
             funs = []

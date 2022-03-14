@@ -141,10 +141,21 @@ class Tessera(RemoteBase):
     def is_parameter(self):
         return self._is_parameter
 
+    @property
+    def collectable(self):
+        """
+        Whether the object is ready for collection.
+
+        """
+        return self._state != 'init'
+
     def _init_cls(self, *args, **kwargs):
+        cached = kwargs.pop('cached', False)
+
         try:
             self._obj = self._cls(*args, **kwargs)
             setattr(self._obj, '_tessera', self)
+            setattr(self._obj, '_cached', cached)
 
         except Exception:
             self.retries += 1
@@ -414,6 +425,10 @@ class ParameterMixin:
         warehouse_obj = WarehouseObject(uid=self._tessera.uid)
         return warehouse_obj
 
+    @property
+    def cached(self):
+        return self._cached
+
     async def publish(self):
         if self.has_tessera:
             await self
@@ -632,6 +647,14 @@ class TesseraProxy(ProxyBase):
     def is_parameter(self):
         return self._is_parameter
 
+    @property
+    def collectable(self):
+        """
+        Whether the object is ready for collection.
+
+        """
+        return self._state == 'listening'
+
     @cached_property
     def remote_runtime(self):
         """
@@ -687,9 +710,11 @@ class TesseraProxy(ProxyBase):
 
         kwargs.pop('max_retries', None)
         kwargs.pop('runtime', None)
+        cached = kwargs.pop('cached', False)
 
         obj = self._cls.cls(*args, **kwargs)
         setattr(obj, '_tessera', self)
+        setattr(obj, '_cached', cached)
 
         return obj
 
@@ -740,10 +765,10 @@ class TesseraProxy(ProxyBase):
 
     def _get_remote_method(self, item):
         def remote_method(*args, **kwargs):
-            perf = kwargs.pop('perf', False)
+            eager = kwargs.pop('eager', False)
             task_proxy = TaskProxy(self, item, *args, **kwargs)
 
-            if perf:
+            if eager:
                 return self._init_task(task_proxy, *args, **kwargs)
             else:
                 loop = mosaic.get_event_loop()
@@ -930,6 +955,22 @@ class ArrayProxy(CMDBase):
 
     def _remotes(self):
         return self.remote_runtime
+
+    def make_parameter(self, *args, **kwargs):
+        """
+        Transform the proxy into a parameter.
+
+        Returns
+        -------
+        list
+
+        """
+        params = []
+        for proxy in self._proxies:
+            param = proxy.make_parameter(*args, **kwargs)
+            params.append(param)
+
+        return params
 
     def get_attr(self, item):
         """
@@ -1193,8 +1234,13 @@ def tessera(*args, **cmd_config):
             loop = mosaic.get_event_loop()
             loop.run(proxy.__init_async__, *args, **kwargs)
 
-            _Parameter = type('_%s' % param.__class__.__name__, (ParameterMixin, param.__class__), {})
-            param.__class__ = _Parameter
+            if array_len is None:
+                _Parameter = type('_%s' % param.__class__.__name__, (ParameterMixin, param.__class__), {})
+                param.__class__ = _Parameter
+            else:
+                for _param in param:
+                    _Parameter = type('_%s' % _param.__class__.__name__, (ParameterMixin, _param.__class__), {})
+                    _param.__class__ = _Parameter
 
             return param
 
