@@ -445,6 +445,10 @@ class ParameterMixin:
             except KeyError:
                 pass
 
+            # Force publish when the parameter is being cached
+            if self.cached:
+                publish = True
+
             warehouse = mosaic.get_warehouse()
             await warehouse.push_remote(__dict__=__dict__,
                                         uid=self._tessera.uid,
