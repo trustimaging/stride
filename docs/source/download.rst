@@ -16,7 +16,7 @@ To install Stride, follow these steps:
 
 .. code-block:: shell
 
-    git clone https://github.com/trustimaging/stride
+    git clone https://github.com/trustimaging/stride.git
     cd stride
     conda env create -f environment.yml
     conda activate stride

@@ -51,13 +51,6 @@ jobs:
         cd stride
         pip install -e .
 
-    - name: Manually install devito
-      shell: bash -l {0}
-      run: |
-        cd devito
-        pip uninstall -y devito
-        pip install -e .
-
     - name: Tutorials
       shell: bash -l {0}
       run: |

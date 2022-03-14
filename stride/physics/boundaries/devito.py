@@ -5,6 +5,33 @@ import numpy as np
 from .boundary import Boundary
 
 
+class SpongeBoundary1(Boundary):
+
+    def __init__(self, grid):
+        """
+        Sponge boundary for elastic codes
+        """
+        super().__init__(grid)
+
+        self.damp = None
+
+    def apply(self, field, velocity, direction='forward', **kwargs):
+        space = self._grid.space
+        time = self._grid.time
+
+        reflection_coefficient = 10**(-(np.log10(max(*space.absorbing)) - 1)/np.log10(2) - 3)
+        reflection_coefficient = kwargs.pop('reflection_coefficient', reflection_coefficient)
+
+        if np.max(space.extra) > 0:
+            damp = self._grid.function('damp')
+            damp.data[:] = self.damping(velocity=velocity, reflection_coefficient=reflection_coefficient, mask=True) * time.step
+        else:
+            damp = 0
+
+        self.damp = damp
+        return None, [], []
+
+
 class SpongeBoundary2(Boundary):
     """
     Sponge boundary layer for a second-order equation as proposed in

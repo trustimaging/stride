@@ -3,7 +3,6 @@ import os
 import sys
 import numa
 import psutil
-import daemon
 import weakref
 import functools
 import threading
@@ -11,6 +10,13 @@ import multiprocessing
 
 import mosaic
 from .at_exit import at_exit
+
+try:
+    import daemon
+except (ModuleNotFoundError, ImportError):
+    DAEMON_AVAILABLE = False
+else:
+    DAEMON_AVAILABLE = True
 
 
 __all__ = ['subprocess']
@@ -43,7 +49,7 @@ class Subprocess:
         name = kwargs.pop('name', None)
         target = kwargs.pop('target', None)
         cpu_affinity = kwargs.pop('cpu_affinity', None)
-        daemon = kwargs.pop('daemon', False)
+        is_daemon = kwargs.pop('daemon', False)
 
         if target is None or not callable(target):
             raise ValueError('A subprocess needs to be provided a target function.')
@@ -75,7 +81,7 @@ class Subprocess:
         self._mp_process = multiprocessing.Process(target=self._start_process,
                                                    name=name,
                                                    args=(target,
-                                                         daemon,
+                                                         is_daemon,
                                                          child_start_pipe,
                                                          parent_alive_pipe,
                                                          self._keep_child_alive,
@@ -195,13 +201,17 @@ class Subprocess:
             psutil.Process().cpu_affinity(cpu_affinity)
 
         keep_child_alive.close()
-        if not daemon:
+        if not is_daemon:
             self._immediate_exit_when_closed(parent_alive_pipe)
 
         mosaic.clear_runtime()
 
         try:
             if is_daemon:
+                if not DAEMON_AVAILABLE:
+                    raise RuntimeError('Tried to create a daemon subprocess with '
+                                       'no "python-daemon" available')
+
                 from .logger import _stdout, _stderr
                 daemon_context = daemon.DaemonContext(detach_process=True,
                                                       stdout=_stdout,

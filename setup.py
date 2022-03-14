@@ -37,7 +37,7 @@ setup(
     author_email='c.cueto@imperial.ac.uk',
     license='',
     python_requires=">=3.7",
-    packages=find_packages(exclude=['docs', 'tests']),
+    packages=find_packages(exclude=['docs', 'tests', 'legacy*']),
     package_data={},
     include_package_data=True,
     install_requires=requirements,
@@ -47,12 +47,13 @@ setup(
         Extension('_profile',
                   sources=['mosaic/profile/_profile.c'])
     ],
-    entry_points='''
-        [console_scripts]
-        mrun=mosaic.cli.mrun:go
-        mscript=mosaic.cli.mscript:go
-        mprof=mosaic.cli.mprof:go
-    ''',
+    entry_points={
+        'console_scripts': [
+            'mrun=mosaic.cli.mrun:go',
+            'mscript=mosaic.cli.mscript:go',
+            'mprof=mosaic.cli.mprof:go',
+        ]
+    },
     zip_safe=False,
     test_suite='tests'
 )

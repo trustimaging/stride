@@ -1,4 +1,4 @@
-matplotlib>=3.4
+matplotlib
 wxPython
 traitsui
 mayavi
