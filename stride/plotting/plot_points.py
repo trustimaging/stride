@@ -17,7 +17,6 @@ try:
         raise ModuleNotFoundError
 
     from mayavi import mlab
-    from mayavi.core.ui.api import MlabSceneModel
 
     ENABLED_3D_PLOTTING = True
 

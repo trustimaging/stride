@@ -31,12 +31,6 @@ jobs:
         repository: trustimaging/stride
         path: "stride"
 
-    - name: Checkout devito
-      uses: actions/checkout@v2
-      with:
-        repository: devitocodes/devito
-        path: "devito"
-
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
@@ -62,8 +56,8 @@ jobs:
       shell: bash -l {0}
       run: |
         cd stride
-        mrun -nw 1 -nth 2 python examples/examples/homogeneous/forward_2D.py
-        mrun -nw 1 -nth 2 python examples/examples/homogeneous/forward_3D.py
+        mrun -nw 1 -nth 2 python examples/examples/homogeneous_acoustic/forward_2D.py
+        mrun -nw 1 -nth 2 python examples/examples/homogeneous_acoustic/forward_3D.py
     - name: Breast 2D
       shell: bash -l {0}
       run: |

@@ -300,7 +300,7 @@ class Profiler:
         self._tracing = False
 
         sys.settrace(None)
-        
+
         if global_profiler is not None:
             global_profiler.stop()
 
@@ -897,7 +897,7 @@ class GlobalProfiler:
     def start(self):
         if self.profiler is not None:
             self.profiler.start()
-        
+
     def stop(self):
         if self.profiler is not None:
             self.profiler.stop()

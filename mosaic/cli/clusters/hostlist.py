@@ -13,7 +13,7 @@ def expand_hostlist(hostlist):
     """
     Expand a hostlist expression string to a Python list.
 
-    Example: expand_hostlist("n[9-11],d[01-02]") ==> 
+    Example: expand_hostlist("n[9-11],d[01-02]") ==>
              ['n9', 'n10', 'n11', 'd01', 'd02']
 
     Unless allow_duplicates is true, duplicates will be purged
@@ -34,8 +34,10 @@ def expand_hostlist(hostlist):
         else:
             part += c
 
-        if c == "[": bracket_level += 1
-        elif c == "]": bracket_level -= 1
+        if c == "[":
+            bracket_level += 1
+        elif c == "]":
+            bracket_level -= 1
 
         if bracket_level > 1:
             raise RuntimeError("nested brackets")
@@ -113,7 +115,7 @@ def expand_range(prefix, range_):
     if not m:
         raise RuntimeError("bad range")
 
-    (s_low, s_high) = m.group(1 ,2)
+    (s_low, s_high) = m.group(1, 2)
     low = int(s_low)
     high = int(s_high)
     width = len(s_low)

@@ -16,7 +16,6 @@ from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase
 from ..runtime import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
-from ..profile import use_trace
 
 
 __all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'ParameterMixin', 'tessera']

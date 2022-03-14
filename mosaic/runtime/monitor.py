@@ -200,7 +200,7 @@ class Monitor(Runtime):
         for node_index, node_address in zip(range(num_nodes), node_list):
             node_proxy = RuntimeProxy(name='node', indices=node_index)
 
-            remote_cmd = (f'{ssh_commands} ' 
+            remote_cmd = (f'{ssh_commands} '
                           f'mrun --node -i {node_index} '
                           f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
                           f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
