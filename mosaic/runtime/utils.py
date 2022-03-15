@@ -354,6 +354,13 @@ class WarehouseObject:
         """
         return await self.value()
 
+    async def drop(self):
+        """
+        Delete object from the warehouse.
+
+        """
+        return await self.runtime.drop(self.uid)
+
     def __await__(self):
         return self.value().__await__()
 
