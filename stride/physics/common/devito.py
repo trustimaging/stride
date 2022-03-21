@@ -230,12 +230,23 @@ class GridDevito(Gridded):
 
         self.pml = self.pml_partials
 
+        dimensions = None
+        time_dimension = None
+
+        parent_grid = kwargs.pop('parent_grid', None)
+        if parent_grid is not None:
+            dimensions = parent_grid.dimensions
+            time_dimension = devito.TimeDimension(name='time_inner',
+                                                  spacing=devito.types.Scalar(name='dt_inner', is_const=True))
+
         self.devito_grid = devito.Grid(extent=extended_extent,
                                        shape=space.extended_shape,
                                        origin=space.pml_origin,
                                        subdomains=(self.full, self.interior,) +
                                                    self.pml + self.pml_left + self.pml_right +
                                                    self.pml_centres + self.pml_corners,
+                                       dimensions=dimensions,
+                                       time_dimension=time_dimension,
                                        dtype=np.float32)
 
     @_cached
@@ -487,13 +498,13 @@ class GridDevito(Gridded):
         time_order = time_order or self.time_order
 
         # Define variables
-        p_dim = devito.Dimension(name='p_%s' % name)
+        p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
         sparse_kwargs = dict(name=name,
                              grid=self.devito_grid,
-                             dimensions=(self.devito_grid.time_dim, p_dim),
+                             dimensions=kwargs.get('dimensions', (self.devito_grid.time_dim, p_dim)),
                              npoint=num,
-                             nt=self.time.extended_num,
+                             nt=kwargs.get('nt', self.time.extended_num),
                              space_order=space_order,
                              time_order=time_order,
                              dtype=np.float32)
@@ -549,11 +560,11 @@ class GridDevito(Gridded):
         space_order = space_order or self.space_order
 
         # Define variables
-        p_dim = devito.Dimension(name='p_%s' % name)
+        p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
         sparse_kwargs = dict(name=name,
                              grid=self.devito_grid,
-                             dimensions=(p_dim,),
+                             dimensions=kwargs.get('dimensions', (p_dim,)),
                              npoint=num,
                              space_order=space_order,
                              dtype=np.float32)

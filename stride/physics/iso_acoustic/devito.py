@@ -115,7 +115,8 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         config_devito(**kwargs)
 
-        self.dev_grid = GridDevito(self.space_order, self.time_order, **kwargs)
+        dev_grid = kwargs.pop('dev_grid', None)
+        self.dev_grid = dev_grid or GridDevito(self.space_order, self.time_order, **kwargs)
 
         kwargs.pop('grid', None)
         self.state_operator = OperatorDevito(self.space_order, self.time_order,
@@ -129,6 +130,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.boundary = None
 
         self._cache_folder = None
+
+        self._sub_ops = []
 
     def clear_operators(self):
         self.state_operator.devito_operator = None
@@ -225,7 +228,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             p = self.dev_grid.time_function('p', coefficients='symbolic' if self.drp else 'standard')
 
             # Create stencil
-            stencil = self._stencil(p, wavelets, vp, rho=rho, alpha=alpha, direction='forward')
+            stencil = self._stencil(p, wavelets, vp, rho=rho, alpha=alpha, direction='forward', **kwargs)
 
             # Define the source injection function to generate the corresponding code
             # pressure_to_density = 1 / vp**2
@@ -487,7 +490,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             p_a = self.dev_grid.time_function('p_a', coefficients='symbolic' if self.drp else 'standard')
 
             # Create stencil
-            stencil = self._stencil(p_a, wavelets, vp, rho=rho, alpha=alpha, direction='backward')
+            stencil = self._stencil(p_a, wavelets, vp, rho=rho, alpha=alpha, direction='backward', **kwargs)
 
             # Define the source injection function to generate the corresponding code
             vp2 = self.dev_grid.vars.vp2
@@ -846,8 +849,8 @@ class IsoAcousticDevito(ProblemTypeBase):
                                preferred_kernel, preferred_undersampling,
                                **kwargs)
 
-        # Recompile every time if using hicks
-        if self.interpolation_type == 'hicks' or recompile:
+        # Recompile every time if using hicks or if there are sub ops
+        if self.interpolation_type == 'hicks' or len(self._sub_ops) or recompile:
             self.state_operator.devito_operator = None
             self.adjoint_operator.devito_operator = None
 
@@ -1011,9 +1014,27 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                  direction=direction, subs=subs,
                                                                  f_centre=self._bandwidth[1])
 
+        sub_befores = []
+        sub_afters = []
+        sub_exprs = []
+
+        for sub_op in self._sub_ops:
+            sub_op = sub_op(grid=self.grid, parent_grid=self.dev_grid.devito_grid)
+            sub_term, sub_before, sub_after = sub_op.sub_stencil(p=field,
+                                                                 wavelets=wavelets, vp=vp, rho=rho,
+                                                                 dev_grid=self.dev_grid,
+                                                                 **kwargs)
+
+            sub_befores += sub_before
+            sub_afters += sub_after
+            if sub_term is not None:
+                sub_exprs.append(sub_term)
+
+        sub_exprs = sum(sub_exprs)
+
         # Define PDE and update rule
-        eq_interior = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term, u_next)
-        eq_boundary = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term + vp2_fun*boundary_term, u_next)
+        eq_interior = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term - vp2_fun*sub_exprs, u_next)
+        eq_boundary = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term + vp2_fun*boundary_term - vp2_fun*sub_exprs, u_next)
 
         # Time-stepping stencil
         stencils = []
@@ -1034,7 +1055,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                       coefficients=subs) for dom in self.dev_grid.pml]
         stencils += stencil_boundary
 
-        return eq_before + stencils + eq_after
+        return sub_befores + eq_before + stencils + eq_after + sub_afters
 
     def _medium_functions(self, vp, rho=None, alpha=None, **kwargs):
         _kwargs = dict(coefficients='symbolic' if self.drp else 'standard')

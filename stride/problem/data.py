@@ -316,6 +316,9 @@ class StructuredData(Data):
         self.grad.fill(0.)
         self.grad.prec.fill(0.)
 
+        if hasattr(self, 'is_proxy') and self.is_proxy:
+            self.set('grad', self.grad)
+
     def release_grad(self):
         """
         Release the internal buffers for the gradient and preconditioner.

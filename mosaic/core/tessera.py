@@ -454,12 +454,12 @@ class ParameterMixin:
                                         uid=self._tessera.uid,
                                         publish=publish, reply=publish)
 
-    async def pull(self):
+    async def pull(self, attr=None):
         if self.has_tessera:
             await self
 
             warehouse = mosaic.get_warehouse()
-            __dict__ = await warehouse.pull_remote(uid=self._tessera.uid, reply=True)
+            __dict__ = await warehouse.pull_remote(uid=self._tessera.uid, attr=attr, reply=True)
 
             for key, value in __dict__.items():
                 setattr(self, key, value)
@@ -541,7 +541,7 @@ class ParameterMixin:
         return instance
 
     def __reduce__(self):
-        if self.is_proxy:
+        if self.is_proxy and self.cached:
             state = self._serialisation_helper()
             return self._deserialisation_helper, (state,)
         else:
@@ -795,7 +795,8 @@ class TesseraProxy(ProxyBase):
             await self._init_future
             await self.cmd_recv_async(method='set_attr', item=item, value=value)
 
-        return remote_attr()
+        loop = mosaic.get_event_loop()
+        return loop.run(remote_attr)
 
     def _get_method_getter(self, method):
         def method_getter(*args, **kwargs):

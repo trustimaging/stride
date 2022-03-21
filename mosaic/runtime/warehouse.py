@@ -169,7 +169,7 @@ class Warehouse(Runtime):
 
             await asyncio.gather(*tasks)
 
-    async def pull_remote(self, sender_id, uid):
+    async def pull_remote(self, sender_id, uid, attr=None):
         """
         Pull changes from warehouse object.
 
@@ -177,6 +177,7 @@ class Warehouse(Runtime):
         ----------
         sender_id
         uid
+        attr
 
         Returns
         -------
@@ -188,7 +189,17 @@ class Warehouse(Runtime):
         if uid not in self._local_warehouse:
             raise KeyError('%s is not available in the warehouse' % uid)
 
-        __dict__ = copy.copy(self._local_warehouse[uid].__dict__)
+        obj = self._local_warehouse[uid]
+        if attr is None:
+            __dict__ = copy.copy(obj.__dict__)
+        else:
+            if not isinstance(attr, list):
+                attr = [attr]
+
+            __dict__ = dict()
+            for key in attr:
+                __dict__[key] = getattr(obj, key)
+
         try:
             del __dict__['_tessera']
         except KeyError:
