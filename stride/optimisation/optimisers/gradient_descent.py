@@ -1,7 +1,4 @@
 
-import numpy as np
-
-import mosaic
 
 from .optimiser import LocalOptimiser
 

@@ -1033,8 +1033,13 @@ class IsoAcousticDevito(ProblemTypeBase):
         sub_exprs = sum(sub_exprs)
 
         # Define PDE and update rule
-        eq_interior = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term - vp2_fun*sub_exprs, u_next)
-        eq_boundary = devito.solve(field.dt2 - laplacian_term - vp2_fun*attenuation_term + vp2_fun*boundary_term - vp2_fun*sub_exprs, u_next)
+        eq_interior = devito.solve(field.dt2 - laplacian_term
+                                   - vp2_fun*attenuation_term
+                                   - vp2_fun*sub_exprs, u_next)
+        eq_boundary = devito.solve(field.dt2 - laplacian_term
+                                   - vp2_fun*attenuation_term
+                                   + vp2_fun*boundary_term
+                                   - vp2_fun*sub_exprs, u_next)
 
         # Time-stepping stencil
         stencils = []
