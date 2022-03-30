@@ -960,19 +960,20 @@ class ScalarField(StructuredData):
         origin = kwargs.pop('origin', self.space.origin)
         limit = kwargs.pop('limit', self.space.limit)
 
-        if self.slow_time_dependent and self.space.dim == 2:
+        if (self.time_dependent or self.slow_time_dependent) and self.space.dim == 2:
             def update(figure, axis, step):
                 if len(axis.images):
                     axis.images[-1].colorbar.remove()
                 axis.clear()
 
+                kwargs.pop('time_range', None)
                 self._plot(self.data[int(step)], origin=origin, limit=limit, axis=axis,
                            **kwargs)
-                axis.set_title(axis.get_title() + ' - slow time step %d' % step)
+                axis.set_title(axis.get_title() + ' - time step %d' % step)
 
                 figure.canvas.draw_idle()
 
-            axis = self._plot_time(update)
+            axis = self._plot_time(update, **kwargs)
 
         elif self.slow_time_dependent:
             axis = self._plot(self.data[0], origin=origin, limit=limit, **kwargs)
@@ -1018,7 +1019,7 @@ class ScalarField(StructuredData):
 
         return axis
 
-    def _plot_time(self, update):
+    def _plot_time(self, update, **kwargs):
         if not ENABLED_2D_PLOTTING:
             return None
 
@@ -1027,8 +1028,9 @@ class ScalarField(StructuredData):
         axis.margins(x=0)
 
         ax_shot = plt.axes([0.15, 0.1, 0.7, 0.03])
+        time_range = kwargs.get('time_range', (0, self._data.shape[0]))
         slider = Slider(ax_shot, 'time',
-                        0, self.slow_time.num-1,
+                        time_range[0], time_range[1]-1,
                         valinit=0, valstep=1)
 
         update = functools.partial(update, figure, axis)

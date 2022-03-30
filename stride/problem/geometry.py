@@ -276,7 +276,12 @@ class Geometry(ProblemBase):
         coordinates = geometry_fun(*args, **kwargs)
 
         for index in range(coordinates.shape[0]):
-            self.add(index, self._transducers.get(0), coordinates[index, :])
+            _coordinates = coordinates[index, :]
+            if len(_coordinates) != self.space.dim:
+                _coordinates = np.pad(_coordinates, ((0, 1),))
+                _coordinates[-1] = self.space.limit[2] / 2
+
+            self.add(index, self._transducers.get(0), _coordinates)
 
     @property
     def transducers(self):

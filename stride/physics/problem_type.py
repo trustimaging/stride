@@ -67,17 +67,18 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         -------
 
         """
+        pre_str = ''
         problem = kwargs.get('problem', None)
-        if problem is None:
-            raise ValueError('A problem or sub-problem needs to be provided to the problem type')
+        if problem is not None:
+            pre_str = '(ShotID %d) ' % problem.shot_id
 
-        self.logger.info('(ShotID %d) Preparing to run state for shot' % problem.shot_id)
+        self.logger.info('%sPreparing to run state for shot' % pre_str)
         await self.before_forward(*args, **kwargs)
 
-        self.logger.info('(ShotID %d) Running state equation for shot' % problem.shot_id)
+        self.logger.info('%sRunning state equation for shot' % pre_str)
         await self.run_forward(*args, **kwargs)
 
-        self.logger.info('(ShotID %d) Completed state equation run for shot' % problem.shot_id)
+        self.logger.info('%sCompleted state equation run for shot' % pre_str)
         output = await self.after_forward(*args, **kwargs)
 
         return output
@@ -93,17 +94,18 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         -------
 
         """
+        pre_str = ''
         problem = kwargs.get('problem', None)
-        if problem is None:
-            raise ValueError('A problem or sub-problem needs to be provided to the problem type')
+        if problem is not None:
+            pre_str = '(ShotID %d) ' % problem.shot_id
 
-        self.logger.info('(ShotID %d) Preparing to run adjoint for shot' % problem.shot_id)
+        self.logger.info('%sPreparing to run adjoint for shot' % pre_str)
         await self.before_adjoint(*args, **kwargs)
 
-        self.logger.info('(ShotID %d) Running adjoint equation for shot' % problem.shot_id)
+        self.logger.info('%sRunning adjoint equation for shot' % pre_str)
         await self.run_adjoint(*args, **kwargs)
 
-        self.logger.info('(ShotID %d) Completed adjoint equation run for shot' % problem.shot_id)
+        self.logger.info('%sCompleted adjoint equation run for shot' % pre_str)
         output = await self.after_adjoint(*args, **kwargs)
 
         return output

@@ -40,3 +40,4 @@ dependencies:
   - pip:
       - devito>=4.6
       - python-daemon
+      - py-libnuma

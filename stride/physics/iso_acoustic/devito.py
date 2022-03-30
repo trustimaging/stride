@@ -137,6 +137,10 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.state_operator.devito_operator = None
         self.adjoint_operator.devito_operator = None
 
+    def add_sub_op(self, sub_op):
+        sub_op = sub_op(grid=self.grid, parent_grid=self.dev_grid.devito_grid, dtype=self.dev_grid.dtype)
+        self._sub_ops.append(sub_op)
+
     # forward
 
     async def before_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
@@ -1019,7 +1023,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         sub_exprs = []
 
         for sub_op in self._sub_ops:
-            sub_op = sub_op(grid=self.grid, parent_grid=self.dev_grid.devito_grid)
             sub_term, sub_before, sub_after = sub_op.sub_stencil(p=field,
                                                                  wavelets=wavelets, vp=vp, rho=rho,
                                                                  dev_grid=self.dev_grid,
