@@ -81,7 +81,7 @@ class RoundRobin(MonitorStrategy):
         self._last_worker = -1
 
     def update_node(self, updated):
-        for worker_id in updated.worker_info.keys():
+        for worker_id in updated.sub_resources['workers'].keys():
             self._worker_list.add(worker_id)
 
         self._num_workers = len(self._worker_list)

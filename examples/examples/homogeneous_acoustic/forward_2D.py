@@ -106,7 +106,7 @@ async def main(runtime):
         shot_wavelets = sub_problem.shot.wavelets
 
         await pde.clear_operators()
-        traces = await pde(shot_wavelets, vp, problem=sub_problem, **config).result()
+        traces = await pde(shot_wavelets, vp, problem=sub_problem, diff_source=True, **config).result()
 
         # Check consistency with analytical solution
         data_stride = traces.data.copy()

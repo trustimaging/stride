@@ -1,15 +1,21 @@
 
+import os
 import gc
 import zmq
 import zmq.asyncio
+import psutil
 import asyncio
 import contextlib
 import weakref
 
 import mosaic
+from .utils import WarehouseObject
+from ..utils import SpillBuffer
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task
+from ..profile import profiler, global_profiler
+from ..utils.utils import memory_limit, cpu_count
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -131,6 +137,7 @@ class Runtime(BaseRPC):
     is_monitor = False
     is_node = False
     is_worker = False
+    is_warehouse = False
 
     def __init__(self, **kwargs):
         runtime_indices = kwargs.pop('runtime_indices', ())
@@ -147,6 +154,8 @@ class Runtime(BaseRPC):
         self._workers = dict()
         self._zmq_context = None
         self._loop = None
+        self._remote_warehouse = None
+        self._local_warehouse = None
 
         self.logger = None
 
@@ -155,6 +164,11 @@ class Runtime(BaseRPC):
         self._tessera_proxy_array = weakref.WeakValueDictionary()
         self._task = dict()
         self._task_proxy = weakref.WeakValueDictionary()
+
+        self._dealloc_queue = []
+        self._maintenance_queue = []
+
+        self._inside_async_for = False
 
     async def init(self, **kwargs):
         """
@@ -176,6 +190,20 @@ class Runtime(BaseRPC):
         # Start logger
         self.set_logger()
 
+        # Start warehouse
+        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', '%s-storage' % self.uid)
+        if not os.path.exists(spill_directory):
+            os.makedirs(spill_directory)
+
+        warehouse_memory_fraction = kwargs.pop('warehouse_memory_fraction', 0.25)
+        warehouse_memory = memory_limit() * warehouse_memory_fraction
+
+        self._remote_warehouse = self.proxy('warehouse')
+        self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
+
+        # Start maintenance loop
+        self._loop.interval(self.maintenance, interval=5)
+
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)
         parent_address = kwargs.pop('parent_address', None)
@@ -191,6 +219,11 @@ class Runtime(BaseRPC):
 
         # Start listening
         self._comms.listen()
+
+        # Set up profiling
+        profile = kwargs.get('profile', False)
+        if profile:
+            self.set_profiler()
 
     def wait(self, wait=False):
         """
@@ -221,18 +254,26 @@ class Runtime(BaseRPC):
         -------
 
         """
+        await self.maintenance()
         monitor = self.get_monitor()
         await monitor.barrier(timeout=timeout, reply=True)
 
     def async_for(self, *iterables, **kwargs):
+        assert not self._inside_async_for
+
+        safe = kwargs.pop('safe', False)
 
         async def _async_for(func):
+            self._inside_async_for = True
+
             worker_queue = asyncio.Queue()
             for worker in self._workers.values():
                 await worker_queue.put(worker)
 
             async def call(*iters):
-                async with self._exclusive_proxy(worker_queue) as _worker:
+                res = None
+
+                async with self._exclusive_proxy(worker_queue, safe=safe) as _worker:
                     res = await func(_worker, *iters)
 
                 return res
@@ -241,17 +282,26 @@ class Runtime(BaseRPC):
             gather = await asyncio.gather(*tasks)
             await self.barrier()
 
+            self._inside_async_for = False
+
             return gather
 
         return _async_for
 
     @contextlib.asynccontextmanager
-    async def _exclusive_proxy(self, queue):
+    async def _exclusive_proxy(self, queue, safe=False):
         proxy = await queue.get()
 
-        yield proxy
-
-        await queue.put(proxy)
+        try:
+            yield proxy
+        except Exception as exc:
+            if safe:
+                self.logger.info('Runtime %s failed, retiring runtime:\n\n%s'
+                                 % (proxy.uid, exc))
+            else:
+                raise
+        else:
+            await queue.put(proxy)
 
     @property
     def address(self):
@@ -313,6 +363,17 @@ class Runtime(BaseRPC):
         """
         pass
 
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        pass
+        # self._loop.interval(self.send_profile, interval=25)
+
     def set_comms(self, address=None, port=None):
         """
         Set up comms manager.
@@ -344,6 +405,16 @@ class Runtime(BaseRPC):
         """
         return self._comms
 
+    def get_warehouse(self):
+        """
+        Access warehouse.
+
+        Returns
+        -------
+
+        """
+        return self._remote_warehouse
+
     def get_zmq_context(self):
         """
         Access ZMQ socket context.
@@ -354,6 +425,13 @@ class Runtime(BaseRPC):
         """
         if self._zmq_context is None:
             self._zmq_context = zmq.asyncio.Context()
+
+            # Set thread pool for ZMQ
+            num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())-1
+            num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', num_cpus)
+            num_cpus = max(1, int(num_cpus))
+
+            self._zmq_context.set(zmq.IO_THREADS, num_cpus)
 
         return self._zmq_context
 
@@ -663,7 +741,7 @@ class Runtime(BaseRPC):
         """
         pass
 
-    def stop(self, sender_id=None):
+    async def stop(self, sender_id=None):
         """
         Stop runtime.
 
@@ -675,11 +753,160 @@ class Runtime(BaseRPC):
         -------
 
         """
+        if profiler.tracing:
+            profiler.stop()
+
+        await self.maintenance()
+
         if self._comms is not None:
             self._loop.run(self._comms.stop, sender_id)
 
         if self._loop is not None:
             self._loop._stop.set()
+
+    def recv_profile(self, sender_id, profiler_update):
+        """
+        Process a profiler update.
+
+        Parameters
+        ----------
+        sender_id : str
+        profiler_update : dict
+
+        Returns
+        -------
+
+        """
+        global_profiler.recv_profile(sender_id, profiler_update)
+
+    def request_profile(self, sender_id):
+        """
+        Return a profiler update.
+
+        Parameters
+        ----------
+        sender_id : str
+
+        Returns
+        -------
+
+        """
+        return global_profiler.get_profile()
+
+    async def send_profile(self):
+        """
+        Send profiler update to monitor.
+
+        Returns
+        -------
+
+        """
+        global_profiler.send_profile()
+
+    async def put(self, obj, publish=False):
+        """
+        Put an object into the warehouse.
+
+        Parameters
+        ----------
+        obj
+        publish
+
+        Returns
+        -------
+
+        """
+        if hasattr(obj, 'has_tessera') and obj.is_proxy:
+            await obj.push(publish=publish)
+
+            return obj.ref
+
+        else:
+            warehouse_obj = WarehouseObject(obj)
+
+            await self._remote_warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
+                                                    publish=publish, reply=publish)
+
+            return warehouse_obj
+
+    async def get(self, uid):
+        """
+        Retrieve an object from the warehouse.
+
+        Parameters
+        ----------
+        uid
+
+        Returns
+        -------
+
+        """
+        if isinstance(uid, WarehouseObject):
+            uid = uid.uid
+
+        if uid in self._local_warehouse:
+            return self._local_warehouse[uid]
+
+        obj = await self._remote_warehouse.get_remote(uid=uid, reply=True)
+
+        if not hasattr(obj, 'cached') or obj.cached:
+            self._local_warehouse[uid] = obj
+
+        return obj
+
+    async def drop(self, uid):
+        """
+        Delete an object from the warehouse.
+
+        Parameters
+        ----------
+        uid
+
+        Returns
+        -------
+
+        """
+        if uid in self._local_warehouse:
+            del self._local_warehouse[uid]
+
+        await self._remote_warehouse.drop_remote(uid=uid)
+
+    async def force_put(self, sender_id, obj, uid=None):
+        """
+
+        Parameters
+        ----------
+        sender_id
+        obj
+        uid
+
+        Returns
+        -------
+
+        """
+        if uid not in self._local_warehouse:
+            self._local_warehouse[uid] = obj
+
+    async def force_push(self, sender_id, __dict__, uid=None):
+        """
+
+        Parameters
+        ----------
+        sender_id
+        __dict__
+        uid
+
+        Returns
+        -------
+
+        """
+        if uid in self._local_warehouse:
+            obj = self._local_warehouse[uid]
+            for key, value in __dict__.items():
+                setattr(obj, key, value)
+
+        else:
+            await self.get(uid)
 
     # Command and task management methods
 
@@ -706,12 +933,16 @@ class Runtime(BaseRPC):
 
         return obj_store[obj_uid]
 
-    def needs_registering(self, obj):
-        obj_type = obj.type
-        obj_uid = obj.uid
+    def needs_registering(self, obj_type, obj_uid):
         obj_store = getattr(self, '_' + obj_type)
 
-        return obj_uid not in obj_store.keys()
+        obj = None
+        needs_registering = obj_uid not in obj_store.keys()
+
+        if not needs_registering:
+            obj = obj_store[obj_uid]
+
+        return needs_registering, obj
 
     def deregister(self, obj):
         """
@@ -725,16 +956,73 @@ class Runtime(BaseRPC):
         -------
 
         """
-        obj_type = obj.type
-        obj_uid = obj.uid
-        obj_store = getattr(self, '_' + obj_type)
+        if obj is not None:
+            self._dealloc_queue.append(obj)
 
-        obj = obj_store.pop(obj_uid, None)
+    async def maintenance(self):
+        """
+        Task handling maintenance processes such as object
+        deallocation.
 
-        if hasattr(obj, 'queue_task'):
-            obj.queue_task((None, 'stop'))
+        Returns
+        -------
 
-        gc.collect()
+        """
+        if len(self._dealloc_queue):
+            uncollectables = []
+            deregisters = []
+            for obj in self._dealloc_queue:
+                # If not collectable, defer until next cycle
+                if not obj.collectable:
+                    uncollectables.append(obj)
+                    continue
+
+                # Remove from internal storage
+                obj_type = obj.type
+                obj_uid = obj.uid
+                obj_store = getattr(self, '_' + obj_type)
+                obj = obj_store.pop(obj_uid, None)
+
+                # Stop tessera loop
+                if hasattr(obj, 'queue_task'):
+                    obj.queue_task((None, 'stop'))
+
+                # Remove from local warehouse
+                if obj_uid in self._local_warehouse:
+                    del self._local_warehouse[obj_uid]
+
+                # Execute object deregister
+                if obj is not None:
+                    deregisters.append(obj.deregister())
+
+            self._dealloc_queue = uncollectables
+
+            await asyncio.gather(*deregisters)
+
+            gc.collect()
+
+        if len(self._maintenance_queue):
+            funs = []
+            for fun in self._maintenance_queue:
+                funs.append(fun())
+
+            self._maintenance_queue = []
+
+            await asyncio.gather(*funs)
+
+    def maintenance_queue(self, fun):
+        """
+        Add callable to maintenance queue
+
+        Parameters
+        ----------
+        fun : callable
+
+        Returns
+        -------
+
+        """
+        self._maintenance_queue.append(fun)
 
     def cmd(self, sender_id, cmd):
         """
@@ -754,7 +1042,8 @@ class Runtime(BaseRPC):
         obj_store = getattr(self, '_' + obj_type)
 
         if obj_uid not in obj_store.keys():
-            self.logger.warning('Runtime %s does not own object %s of type %s' % (self.uid, obj_uid, obj_type))
+            self.logger.warning('cmd %s: Runtime %s does not own object %s of type %s' %
+                                (cmd.method, self.uid, obj_uid, obj_type))
             return
 
         obj = obj_store[obj_uid]
@@ -788,7 +1077,7 @@ class Runtime(BaseRPC):
         obj_store = getattr(self, '_' + obj_type)
 
         if obj_uid not in obj_store.keys():
-            self.logger.warning('Runtime %s does not own object %s of type %s' % (self.uid, obj_uid, obj_type))
+            self.logger.warning('inc_ref: Runtime %s does not own object %s of type %s' % (self.uid, obj_uid, obj_type))
             return
 
         obj = obj_store[obj_uid]
@@ -881,41 +1170,7 @@ class Runtime(BaseRPC):
                     task['method'], *task['args'], **task['kwargs'])
 
         tessera.queue_task((sender_id, task))
-        await task.state_changed('pending')
-
-    async def tessera_state_changed(self, tessera):
-        """
-        Notify change in tessera state.
-
-        Parameters
-        ----------
-        tessera : Tessera
-
-        Returns
-        -------
-
-        """
-        monitor = self.get_monitor()
-        await monitor.tessera_state_changed(uid=tessera.uid,
-                                            state=tessera.state)
-
-    async def task_state_changed(self, task, elapsed=None):
-        """
-        Notify change in task state.
-
-        Parameters
-        ----------
-        task : Task
-        elapsed : float, optional
-
-        Returns
-        -------
-
-        """
-        monitor = self.get_monitor()
-        await monitor.task_state_changed(uid=task.uid,
-                                         state=task.state,
-                                         elapsed=elapsed)
+        task.state_changed('pending')
 
 
 class RuntimeProxy(BaseRPC):
@@ -944,8 +1199,11 @@ class RuntimeProxy(BaseRPC):
     def __init__(self, name=None, indices=(), uid=None, comms=None):
         super().__init__(name=name, indices=indices, uid=uid)
 
-        self._comms = comms or mosaic.get_comms()
         self._subprocess = None
+
+    @property
+    def comms(self):
+        return mosaic.get_comms()
 
     @property
     def address(self):
@@ -953,7 +1211,7 @@ class RuntimeProxy(BaseRPC):
         Remote runtime IP address.
 
         """
-        return self._comms.uid_address(self.uid)
+        return self.comms.uid_address(self.uid)
 
     @property
     def port(self):
@@ -961,7 +1219,7 @@ class RuntimeProxy(BaseRPC):
         Remote runtime port.
 
         """
-        return self._comms.uid_port(self.uid)
+        return self.comms.uid_port(self.uid)
 
     @property
     def subprocess(self):
@@ -1008,7 +1266,7 @@ class RuntimeProxy(BaseRPC):
                 if as_async is True:
                     send_method += '_async'
 
-                send_method = getattr(self._comms, send_method)
+                send_method = getattr(self.comms, send_method)
                 return send_method(self.uid, **kwargs)
 
             return remote_method

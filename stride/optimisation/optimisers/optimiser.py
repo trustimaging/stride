@@ -1,5 +1,8 @@
 
+import numpy as np
 from abc import ABC, abstractmethod
+
+import mosaic
 
 
 __all__ = ['LocalOptimiser']
@@ -62,3 +65,76 @@ class LocalOptimiser(ABC):
 
         """
         pass
+
+    async def pre_process(self, grad=None, processed_grad=None, **kwargs):
+        """
+        Pre-process the variable gradient before using it to take the step.
+
+        Parameters
+        ----------
+        grad : Data, optional
+            Gradient to use for the step, defaults to variable gradient.
+        processed_grad : Data, optional
+            Processed gradient to use for the step, defaults to processed variable gradient.
+        kwargs
+            Extra parameters to be used by the method.
+
+        Returns
+        -------
+        Variable
+            Updated variable.
+
+        """
+        logger = mosaic.logger()
+        logger.info('Updating variable %s,' % self.variable.name)
+
+        if processed_grad is None:
+            if grad is None:
+                if hasattr(self.variable, 'is_proxy') and self.variable.is_proxy:
+                    await self.variable.pull(attr='grad')
+
+                grad = self.variable.process_grad(**kwargs)
+
+            min_dir = np.min(grad.extended_data)
+            max_dir = np.max(grad.extended_data)
+
+            logger.info('\t grad before processing in range [%e, %e]' %
+                        (min_dir, max_dir))
+
+            processed_grad = await self._process_grad(grad, **kwargs)
+
+        min_dir = np.min(processed_grad.extended_data)
+        max_dir = np.max(processed_grad.extended_data)
+
+        min_var = np.min(self.variable.extended_data)
+        max_var = np.max(self.variable.extended_data)
+
+        logger.info('\t grad after processing in range [%e, %e]' %
+                    (min_dir, max_dir))
+        logger.info('\t variable range before update [%e, %e]' %
+                    (min_var, max_var))
+
+        return processed_grad
+
+    async def post_process(self, **kwargs):
+        """
+        Perform any necessary post-processing of the variable.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+
+        """
+        processed_variable = await self._process_model(self.variable, **kwargs)
+        self.variable.extended_data[:] = processed_variable.extended_data[:]
+
+        min_var = np.min(self.variable.extended_data)
+        max_var = np.max(self.variable.extended_data)
+
+        logger = mosaic.logger()
+        logger.info('\t variable range after update [%e, %e]' %
+                    (min_var, max_var))
+
+        self.variable.release_grad()

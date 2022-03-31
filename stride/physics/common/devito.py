@@ -230,13 +230,29 @@ class GridDevito(Gridded):
 
         self.pml = self.pml_partials
 
+        dimensions = None
+        time_dimension = None
+
+        parent_grid = kwargs.pop('parent_grid', None)
+        if parent_grid is not None:
+            dimensions = parent_grid.dimensions
+            time_dimension = devito.TimeDimension(name='time_inner',
+                                                  spacing=devito.types.Scalar(name='dt_inner', is_const=True))
+            self.num_inner = kwargs.pop('num_inner', 1)
+        else:
+            self.num_inner = None
+
+        self.dtype = kwargs.pop('dtype', np.float32)
+
         self.devito_grid = devito.Grid(extent=extended_extent,
                                        shape=space.extended_shape,
                                        origin=space.pml_origin,
                                        subdomains=(self.full, self.interior,) +
                                                    self.pml + self.pml_left + self.pml_right +
                                                    self.pml_centres + self.pml_corners,
-                                       dtype=np.float32)
+                                       dimensions=dimensions,
+                                       time_dimension=time_dimension,
+                                       dtype=self.dtype)
 
     @_cached
     def function(self, name, space_order=None, **kwargs):
@@ -263,7 +279,7 @@ class GridDevito(Gridded):
         fun = devito.Function(name=name,
                               grid=self.devito_grid,
                               space_order=space_order,
-                              dtype=np.float32,
+                              dtype=kwargs.pop('dtype', self.dtype),
                               **kwargs)
 
         return fun
@@ -297,7 +313,7 @@ class GridDevito(Gridded):
                                   grid=self.devito_grid,
                                   time_order=time_order,
                                   space_order=space_order,
-                                  dtype=np.float32,
+                                  dtype=kwargs.pop('dtype', self.dtype),
                                   **kwargs)
 
         return fun
@@ -327,7 +343,7 @@ class GridDevito(Gridded):
         fun = devito.VectorFunction(name=name,
                                     grid=self.devito_grid,
                                     space_order=space_order,
-                                    dtype=np.float32,
+                                    dtype=kwargs.pop('dtype', self.dtype),
                                     **kwargs)
 
         return fun
@@ -361,7 +377,7 @@ class GridDevito(Gridded):
                                         grid=self.devito_grid,
                                         time_order=time_order,
                                         space_order=space_order,
-                                        dtype=np.float32,
+                                        dtype=kwargs.pop('dtype', self.dtype),
                                         **kwargs)
 
         return fun
@@ -395,7 +411,7 @@ class GridDevito(Gridded):
                                         grid=self.devito_grid,
                                         time_order=time_order,
                                         space_order=space_order,
-                                        dtype=np.float32,
+                                        dtype=kwargs.pop('dtype', self.dtype),
                                         **kwargs)
 
         return fun
@@ -446,6 +462,7 @@ class GridDevito(Gridded):
                                  time_order=time_order,
                                  time_dim=time_under,
                                  save=buffer_size,
+                                 dtype=kwargs.pop('dtype', np.float32),
                                  **kwargs)
 
         space_dims = fun.dimensions[1:]
@@ -487,16 +504,16 @@ class GridDevito(Gridded):
         time_order = time_order or self.time_order
 
         # Define variables
-        p_dim = devito.Dimension(name='p_%s' % name)
+        p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
         sparse_kwargs = dict(name=name,
                              grid=self.devito_grid,
-                             dimensions=(self.devito_grid.time_dim, p_dim),
+                             dimensions=kwargs.get('dimensions', (self.devito_grid.time_dim, p_dim)),
                              npoint=num,
-                             nt=self.time.extended_num,
+                             nt=kwargs.get('nt', self.time.extended_num),
                              space_order=space_order,
                              time_order=time_order,
-                             dtype=np.float32)
+                             dtype=kwargs.pop('dtype', self.dtype))
         sparse_kwargs.update(kwargs)
 
         if interpolation_type == 'linear':
@@ -549,14 +566,14 @@ class GridDevito(Gridded):
         space_order = space_order or self.space_order
 
         # Define variables
-        p_dim = devito.Dimension(name='p_%s' % name)
+        p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
         sparse_kwargs = dict(name=name,
                              grid=self.devito_grid,
-                             dimensions=(p_dim,),
+                             dimensions=kwargs.get('dimensions', (p_dim,)),
                              npoint=num,
                              space_order=space_order,
-                             dtype=np.float32)
+                             dtype=kwargs.pop('dtype', self.dtype))
         sparse_kwargs.update(kwargs)
 
         if interpolation_type == 'linear':
@@ -784,6 +801,11 @@ class OperatorDevito:
             default_kwargs['dt'] = default_kwargs.get('dt', time.step)
             default_kwargs['time_m'] = default_kwargs.get('time_m', 1)
             default_kwargs['time_M'] = default_kwargs.get('time_M', time.extended_num - 1)
+
+            if self.grid.num_inner is not None:
+                default_kwargs['dt_inner'] = default_kwargs.get('dt_inner', time.step/self.grid.num_inner)
+                default_kwargs['time_inner_m'] = default_kwargs.get('time_inner_m', 0)
+                default_kwargs['time_inner_M'] = default_kwargs.get('time_inner_M', self.grid.num_inner-1)
 
         self.devito_operator.apply(**default_kwargs)
 

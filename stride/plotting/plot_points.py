@@ -17,7 +17,6 @@ try:
         raise ModuleNotFoundError
 
     from mayavi import mlab
-    from mayavi.core.ui.api import MlabSceneModel
 
     ENABLED_3D_PLOTTING = True
 
@@ -109,28 +108,51 @@ def plot_points_3d(coordinates, axis=None, colour='red', size=15, title=None, **
     if not ENABLED_3D_PLOTTING:
         return None
 
-    if axis is None:
-        axis = MlabSceneModel()
-
     colour_map = {
         'red': (1., 0., 0.),
         'green': (0., 1., 0.),
         'blue': (0., 0., 1.),
+        'black': (0., 0., 0.),
+        'r': (1., 0., 0.),
+        'g': (0., 1., 0.),
+        'b': (0., 0., 1.),
+        'k': (0., 0., 0.),
     }
 
-    scale_factor = 100 * size / np.max(coordinates)
+    scale_factor = kwargs.pop('scale_factor', 100 * size / np.max(coordinates))
 
-    transducers = mlab.pipeline.scalar_scatter(coordinates[:, 0],
-                                               coordinates[:, 1],
-                                               coordinates[:, 2],
-                                               figure=axis.scene3d.mayavi_scene)
+    kwargs.pop('origin', None)
+    kwargs.pop('limit', None)
 
-    default_kwargs = dict(mode='sphere', color=colour_map[colour], scale_factor=scale_factor)
-    default_kwargs.update(kwargs)
+    if axis is None:
+        pts = mlab.points3d(coordinates[:, 0],
+                            coordinates[:, 1],
+                            coordinates[:, 2],
+                            color=colour_map[colour],
+                            scale_factor=scale_factor,
+                            **kwargs)
 
-    mlab.pipeline.glyph(transducers,
-                        figure=axis.scene3d.mayavi_scene,
-                        **default_kwargs)
+        mlab.show()
+
+        return pts.scene
+
+    else:
+        try:
+            scene = axis.scene3d.mayavi_scene
+        except AttributeError:
+            return axis
+
+        transducers = mlab.pipeline.scalar_scatter(coordinates[:, 0],
+                                                   coordinates[:, 1],
+                                                   coordinates[:, 2],
+                                                   figure=scene)
+
+        default_kwargs = dict(mode='sphere', color=colour_map[colour], scale_factor=scale_factor)
+        default_kwargs.update(kwargs)
+
+        mlab.pipeline.glyph(transducers,
+                            figure=scene,
+                            **default_kwargs)
 
     return axis
 

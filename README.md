@@ -84,7 +84,7 @@ To perform a forward run on the breast2D example, you can execute from any termi
 
 ```sh
 cd examples/examples/breast2D
-mrun python 01_script_foward.py
+mrun python 01_script_forward.py
 ```
 
 You can control the number of workers and threads per worker by running:

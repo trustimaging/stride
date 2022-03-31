@@ -4,6 +4,7 @@ import psutil
 
 from .runtime import Runtime
 from ..utils import LoggerManager
+from ..profile import global_profiler
 
 
 __all__ = ['Worker']
@@ -46,3 +47,14 @@ class Worker(Runtime):
         else:
             runtime_id = 'head' if self.mode == 'interactive' else 'monitor'
             self.logger.set_remote(runtime_id=runtime_id, format=self.mode)
+
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        global_profiler.set_remote('monitor')
+        super().set_profiler()

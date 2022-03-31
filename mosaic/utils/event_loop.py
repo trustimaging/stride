@@ -1,6 +1,6 @@
 
-import os
 import uuid
+import uvloop
 import asyncio
 import inspect
 import weakref
@@ -173,11 +173,11 @@ class EventLoop:
     """
 
     def __init__(self, loop=None):
+        uvloop.install()
         self._loop = loop or asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
 
         # TODO Figure out the best way to set this
-        num_workers = int(os.environ.get('OMP_NUM_THREADS', 2))
         self._executor = concurrent.futures.ThreadPoolExecutor(1)
 
         self._stop = asyncio.Event()

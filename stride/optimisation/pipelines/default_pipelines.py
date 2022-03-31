@@ -23,7 +23,6 @@ class ProcessWavelets(Pipeline):
 
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
-        steps.append('filter_wavelets')
 
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
@@ -43,16 +42,19 @@ class ProcessTraces(Pipeline):
 
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
-        steps.append('mute_traces')
+
+        if kwargs.pop('mute_traces', True):
+            steps.append('mute_traces')
+
         steps.append('filter_traces')
 
         norm_per_shot = kwargs.pop('norm_per_shot', True)
         norm_per_trace = kwargs.pop('norm_per_trace', False)
 
-        if norm_per_shot:
-            steps.append('norm_per_shot')
-        elif norm_per_trace:
+        if norm_per_trace:
             steps.append('norm_per_trace')
+        elif norm_per_shot:
+            steps.append('norm_per_shot')
 
         super().__init__(steps, no_grad=no_grad, **kwargs)
 

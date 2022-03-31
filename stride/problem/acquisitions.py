@@ -951,18 +951,27 @@ class Acquisitions(ProblemBase):
         self.plot_wavelets(**kwargs)
         self.plot_observed(**kwargs)
 
-    def _plot(self, update):
+    def _plot(self, update, **kwargs):
         if not ENABLED_2D_PLOTTING:
             return None
 
-        figure, axis = plt.subplots(1, 1)
+        axis = kwargs.pop('axis', None)
+        if axis is not None:
+            figure = axis.get_figure()
+        else:
+            figure, axis = plt.subplots(1, 1)
+
         plt.subplots_adjust(bottom=0.25)
         axis.margins(x=0)
 
         ax_shot = plt.axes([0.15, 0.1, 0.7, 0.03])
+        if self.num_shots > 1:
+            step = self.shot_ids[1]-self.shot_ids[0]
+        else:
+            step = 1
         slider = Slider(ax_shot, 'shot ID',
                         self.shot_ids[0], self.shot_ids[-1],
-                        valinit=self.shot_ids[0], valstep=1)
+                        valinit=self.shot_ids[0], valstep=step)
 
         update = functools.partial(update, figure, axis)
         update(self.shot_ids[0])
@@ -985,12 +994,13 @@ class Acquisitions(ProblemBase):
         -------
 
         """
-        if not self.num_shots or not self.get(0).wavelets.allocated:
+        if not self.num_shots or not self.get(self.shot_ids[0]).wavelets.allocated:
             return None
 
         kwargs['plot'] = False
 
         def update(figure, axis, shot_id):
+            kwargs.pop('axis', None)
             axis.clear()
 
             self.get(int(shot_id)).plot_wavelets(axis=axis, **kwargs)
@@ -998,7 +1008,7 @@ class Acquisitions(ProblemBase):
 
             figure.canvas.draw_idle()
 
-        return self._plot(update)
+        return self._plot(update, **kwargs)
 
     def plot_observed(self, **kwargs):
         """
@@ -1013,12 +1023,13 @@ class Acquisitions(ProblemBase):
         -------
 
         """
-        if not self.num_shots or not self.get(0).observed.allocated:
+        if not self.num_shots or not self.get(self.shot_ids[0]).observed.allocated:
             return None
 
         kwargs['plot'] = False
 
         def update(figure, axis, shot_id):
+            kwargs.pop('axis', None)
             axis.clear()
 
             self.get(int(shot_id)).plot_observed(axis=axis, **kwargs)
@@ -1026,7 +1037,7 @@ class Acquisitions(ProblemBase):
 
             figure.canvas.draw_idle()
 
-        return self._plot(update)
+        return self._plot(update, **kwargs)
 
     def sub_problem(self, shot, sub_problem):
         """

@@ -1,10 +1,13 @@
 
-import os
+import psutil
+import asyncio
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
 from ..utils import LoggerManager
 from ..utils import subprocess
+from ..profile import profiler, global_profiler
+from ..utils.utils import cpu_count
 
 
 __all__ = ['Head']
@@ -33,35 +36,25 @@ class Head(Runtime):
         -------
 
         """
-        monitor_address = kwargs.get('monitor_address', None)
-        if not self.is_monitor and monitor_address is None:
-            path = os.path.join(os.getcwd(), 'mosaic-workspace')
-            if not os.path.exists(path):
-                os.makedirs(path)
+        if self.mode == 'cluster':
+            num_cpus = cpu_count()
 
-            filename = os.path.join(path, 'monitor.key')
-
-            if os.path.exists(filename):
-                with open(filename, 'r') as file:
-                    file.readline()
-
-                    _ = file.readline().split('=')[1].strip()
-                    parent_address = file.readline().split('=')[1].strip()
-                    parent_port = file.readline().split('=')[1].strip()
-
-                    kwargs['monitor_address'] = parent_address
-                    kwargs['monitor_port'] = int(parent_port)
+            monitor_cpus = max(1, min(int(num_cpus // 8), 8))
+            warehouse_cpus = max(1, min(int(num_cpus // 8), 8))
+            available_cpus = list(range(num_cpus))
+            psutil.Process().cpu_affinity(available_cpus[:-(monitor_cpus+warehouse_cpus)])
 
         await super().init(**kwargs)
-
-        # if self.mode == 'local':
-        #     available_cpus = list(range(psutil.cpu_count()))
-        #     psutil.Process().cpu_affinity([available_cpus[0]])
 
         # Start monitor if necessary and handshake in reverse
         monitor_address = kwargs.get('monitor_address', None)
         if not self.is_monitor and monitor_address is None:
             await self.init_monitor(**kwargs)
+
+        # Wait for workers to be ready
+        num_workers = kwargs.pop('num_workers')
+        while len(self.workers) < num_workers:
+            await asyncio.sleep(0.1)
 
     async def init_monitor(self, **kwargs):
         """
@@ -100,11 +93,15 @@ class Head(Runtime):
         -------
 
         """
+        # Send final profile updates before closing
+        if profiler.tracing:
+            await self.send_profile()
+
         if self._monitor.subprocess is not None:
             await self._monitor.stop()
             self._monitor.subprocess.join_process()
 
-        super().stop(sender_id)
+        await super().stop(sender_id)
         # os._exit(0)
 
     def set_logger(self):
@@ -117,3 +114,14 @@ class Head(Runtime):
         """
         self.logger = LoggerManager()
         self.logger.set_local(format=self.mode)
+
+    def set_profiler(self):
+        """
+        Set up profiling.
+
+        Returns
+        -------
+
+        """
+        global_profiler.set_remote('monitor')
+        super().set_profiler()

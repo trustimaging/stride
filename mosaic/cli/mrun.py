@@ -1,12 +1,13 @@
 
 import os
 import click
+import shutil
 import subprocess as cmd_subprocess
 
 from . import clusters
 from .. import init, stop, runtime
 from ..comms import get_hostname
-from ..utils import subprocess
+from ..utils import subprocess, at_exit
 from ..utils.logger import _stdout, _stderr
 
 
@@ -49,6 +50,9 @@ from ..utils.logger import _stdout, _stderr
               help='set log level to DEBUG')
 @click.option('--error', 'log_level', flag_value='error', show_default=True,
               help='set log level to ERROR')
+# profiling
+@click.option('--profile/--perf', default=False, required=False, show_default=True,
+              help='whether to profile the mosaic run')
 @click.version_option()
 def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
@@ -65,6 +69,7 @@ def go(cmd=None, **kwargs):
     num_workers = kwargs.get('nworkers', 1)
     num_threads = kwargs.get('nthreads', None)
     log_level = kwargs.get('log_level', 'info')
+    profile = kwargs.get('profile', False)
 
     # If not in local mode, find the node list
     node_list = None
@@ -76,12 +81,23 @@ def go(cmd=None, **kwargs):
         host_name = get_hostname()
 
         sge_nodes = clusters.sge.node_list(host_name)
+        pbs_nodes = clusters.pbs.node_list(host_name)
+        slurm_nodes = clusters.slurm.node_list(host_name)
+
         if sge_nodes is not None:
             node_list = sge_nodes
-            num_nodes = len(node_list)
+
+        elif pbs_nodes is not None:
+            node_list = pbs_nodes
+
+        elif slurm_nodes is not None:
+            node_list = slurm_nodes
 
         else:
             local = True
+
+        if node_list is not None and num_nodes != len(node_list):
+            node_list = node_list[:num_nodes]
 
     runtime_config = {
         'runtime_indices': runtime_indices,
@@ -94,6 +110,7 @@ def go(cmd=None, **kwargs):
         'num_threads': num_threads,
         'mode': 'local' if local is True else 'cluster',
         'log_level': log_level,
+        'profile': profile,
         'node_list': node_list,
     }
 
@@ -135,6 +152,22 @@ def go(cmd=None, **kwargs):
         file.write('UID=%s\n' % runtime_id)
         file.write('ADD=%s\n' % runtime_address)
         file.write('PRT=%s\n' % runtime_port)
+        file.write('[ARGS]\n')
+
+        for key, value in runtime_config.items():
+            if key in ['runtime_indices', 'address', 'port',
+                       'monitor_address', 'monitor_port', 'node_list']:
+                continue
+            if isinstance(value, str):
+                file.write('%s="%s"\n' % (key, value))
+            else:
+                file.write('%s=%s\n' % (key, value))
+
+    def _rm_dirs():
+        os.remove(filename)
+        shutil.rmtree(path, ignore_errors=True)
+
+    at_exit.add(_rm_dirs)
 
     def run_head():
         process = cmd_subprocess.run(cmd,
@@ -158,7 +191,7 @@ def go(cmd=None, **kwargs):
 
         try:
             os.remove(filename)
-            os.rmdir(path)
+            shutil.rmtree(path)
 
         except Exception:
             pass

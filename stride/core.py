@@ -1,22 +1,24 @@
 
 import uuid
+import asyncio
 import inspect
 from abc import abstractmethod
 from collections import OrderedDict
 
 import mosaic
+from mosaic import types
 from mosaic.core.base import CMDBase
-from mosaic.core import TaskProxy, TaskOutput, TaskDone
+from mosaic.core import TaskProxy
 
 
 __all__ = ['Variable', 'Operator']
 
 
 async def _maybe_sum(a, b):
-    if isinstance(a, TaskOutput):
+    if isinstance(a, types.awaitable_types):
         a = await a.result()
 
-    if isinstance(b, TaskOutput):
+    if isinstance(b, types.awaitable_types):
         b = await b.result()
 
     if b is None:
@@ -93,7 +95,7 @@ class Node:
                 (not hasattr(op, 'has_tessera') or not op.has_tessera):
             op = getattr(op, '_tessera')
 
-        self.op = op
+        self.op = op if self.method != '__noop__' else None
 
     @property
     def name(self):
@@ -316,6 +318,7 @@ class Variable:
 
         prev = dict()
         prev[self.prev_op.name_idx] = grad
+        returns = []
         for node in self.graph.toposort(self.prev_op):
             if node.method == '__noop__':
                 continue
@@ -326,22 +329,31 @@ class Variable:
             output_grads = [prev[each] for each in output_names]
 
             # call adjoint method
-            method = getattr(node.op, node.method)
             if hasattr(node.op, 'has_tessera') and node.op.has_tessera and node.op.is_proxy:
-                ret = await method(*output_grads, propagate=True, **kwargs)
+                method = getattr(node.op._tessera, node.method)
+                ret = method(*output_grads, **kwargs)
             else:
-                ret = await method(*output_grads, **kwargs)
+                method = getattr(node.op, node.method)
+                ret = method(*output_grads, **kwargs)
+
+            if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
+                ret = await ret
 
             if isinstance(ret, TaskProxy):
+                if not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy:
+                    returns.append(ret)
+
                 input_grads = ret.outputs
             else:
+                if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
+                    ret = await ret
+
                 input_grads = (ret,) if not isinstance(ret, tuple) else ret
 
             try:
                 if len(input_grads) < len(node.next):
                     raise RuntimeError('Provided %d outputs for the adjoint of operator %s, '
                                        'but %d were expected' % (len(input_grads), node.op.uname, len(node.next)))
-
             except TypeError:
                 pass
 
@@ -357,6 +369,8 @@ class Variable:
                     prev[nxt.name_idx] = await _maybe_sum(prev[nxt.name_idx], input_grad)
                 else:
                     prev[nxt.name_idx] = input_grad
+
+        await asyncio.gather(*returns)
 
         self.graph = Graph()
         self.prev_op = None
@@ -428,7 +442,9 @@ class Variable:
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
 
-        if hasattr(self, 'has_tessera') and self.has_tessera:
+        propagate_tessera = kwargs.pop('propagate_tessera', True)
+
+        if propagate_tessera and hasattr(self, 'has_tessera') and self.has_tessera:
             return self.__class__.parameter(*args, **kwargs)
         else:
             return self.__class__(*args, **kwargs)
@@ -491,7 +507,7 @@ class Operator:
     construct an adjoint graph that can then be executed in an adjoint run
     to calculate necessary gradients.
 
-    Parameters0
+    Parameters
     ----------
     name : str, optional
         Name of the varible, defaults to automatic name.
@@ -521,6 +537,7 @@ class Operator:
         cls._count += 1
 
         self.inputs = None
+        self.num_outputs = None
 
     @abstractmethod
     async def forward(self, *args, **kwargs):
@@ -635,6 +652,7 @@ class Operator:
 
             output.needs_grad = needs_grad
 
+        self.num_outputs = len(outputs)
         outputs = outputs if len(outputs) > 1 else outputs[0]
 
         return outputs
@@ -667,6 +685,7 @@ class Operator:
 
         # clean up
         self.inputs = None
+        self.num_outputs = None
 
         return input_grads
 
@@ -674,13 +693,11 @@ class Operator:
         processed_args = []
         processed_kwargs = dict()
 
-        waitable_types = [TaskProxy, TaskOutput, TaskDone]
-
         for arg in args:
-            if type(arg) in waitable_types:
+            if type(arg) in types.awaitable_types:
                 await arg
 
-                if isinstance(arg, TaskDone):
+                if isinstance(arg, types.awaitable_types):
                     continue
 
                 arg = await arg.result()
@@ -688,10 +705,10 @@ class Operator:
             processed_args.append(arg)
 
         for key, arg in kwargs.items():
-            if type(arg) in waitable_types:
+            if type(arg) in types.awaitable_types:
                 await arg
 
-                if isinstance(arg, TaskDone):
+                if isinstance(arg, types.awaitable_types):
                     continue
 
                 arg = await arg.result()

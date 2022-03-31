@@ -126,7 +126,7 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
     signal_under = signal[0:num_traces:skip, time_range[0]:time_range[1]]
     num_under_traces = signal_under.shape[0]
 
-    shift = np.arange(0, num_under_traces) * 1.10
+    shift = np.arange(0, num_under_traces) * 2.00
     shift = np.reshape(shift, (shift.shape[0], 1))
 
     signal_shifted = np.transpose(signal_under + shift)

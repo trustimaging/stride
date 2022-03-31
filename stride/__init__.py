@@ -1,10 +1,8 @@
 
 
-__version__ = '1.1'
-
-
 import os
 import signal
+import asyncio
 import warnings
 from pytools import prefork
 
@@ -26,7 +24,7 @@ prefork.enable_prefork()
 def _close_prefork_atsignal(signum, frame):
     try:
         prefork.forker._quit()
-    except AttributeError:
+    except (AttributeError, BrokenPipeError):
         pass
 
     os._exit(-1)
@@ -62,6 +60,8 @@ async def forward(problem, pde, *args, **kwargs):
         Whether or not to deallocate the resulting traces after running forward, defaults to False.
     shot_ids : list, optional
         List of specific shots to run, defaults to all remaining shots.
+    safe : bool, optional
+        Whether to discard workers that fail during execution.
     args : optional
         Extra positional arguments for the PDE.
     kwargs : optional
@@ -77,6 +77,8 @@ async def forward(problem, pde, *args, **kwargs):
     dump = kwargs.pop('dump', True)
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
+    safe = kwargs.pop('safe', False)
+    eager = kwargs.pop('eager', False)
 
     if dump is True:
         try:
@@ -94,14 +96,18 @@ async def forward(problem, pde, *args, **kwargs):
     if not isinstance(shot_ids, list):
         shot_ids = [shot_ids]
 
-    @runtime.async_for(shot_ids)
+    published_args = [runtime.put(each, publish=True) for each in args]
+    published_args = await asyncio.gather(*published_args)
+
+    @runtime.async_for(shot_ids, safe=safe)
     async def loop(worker, shot_id):
         logger.info('\n')
         logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
-        traces = await pde(wavelets, *args,
+
+        traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
                            runtime=worker, **kwargs).result()
 
@@ -152,6 +158,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     f_max : float, optional
         Max. frequency to filter wavelets and data with. If not given, no low-pass filter
         is applied.
+    safe : bool, optional
+        Whether to discard workers that fail during execution.
     args : optional
         Extra positional arguments for the operators.
     kwargs : optional
@@ -172,6 +180,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     restart_id = kwargs.pop('restart_id', -1)
 
     dump = kwargs.pop('dump', True)
+    safe = kwargs.pop('safe', False)
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
@@ -181,6 +190,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                           len=runtime.num_workers)
 
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
+        optimiser.clear_grad()
+
+        published_args = [runtime.put(each, publish=True) for each in args]
+        published_args = await asyncio.gather(*published_args)
+
         logger.info('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
                     (iteration.id, block.num_iterations, block.id,
@@ -199,9 +213,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
 
-        optimiser.clear_grad()
-
-        @runtime.async_for(shot_ids)
+        @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
             logger.info('\n')
             logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
@@ -210,10 +222,19 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             wavelets = sub_problem.shot.wavelets
             observed = sub_problem.shot.observed
 
+            if wavelets is None:
+                raise RuntimeError('Shot %d has no wavelet data' % shot_id)
+
+            if observed is None:
+                raise RuntimeError('Shot %d has no observed data' % shot_id)
+
             wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
-            modelled = pde(wavelets, *args, problem=sub_problem, runtime=worker, **kwargs)
+            await wavelets.init_future
+            modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
+            await modelled.init_future
 
             traces = process_traces(modelled, observed, runtime=worker, **kwargs)
+            await traces.init_future
             fun = await loss(traces.outputs[0], traces.outputs[1],
                              problem=sub_problem, runtime=worker, **kwargs).result()
 

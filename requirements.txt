@@ -3,6 +3,7 @@ cached-property
 click
 cloudpickle>=1.6
 cython
+dash>=2.0.0
 devito>=4.6
 flake8
 gputil
@@ -13,8 +14,10 @@ pickle5
 pre_commit
 psutil
 pyflakes
+py-libnuma
 pytest
 pytest-cov
+pytest-runner
 pyyaml>=5.4
 pyzmq>=22.1
 python-daemon
@@ -22,4 +25,5 @@ scikit-image
 scipy>=1.6
 sphinx
 sphinx_rtd_theme
-pytest-runner
+uvloop
+zict

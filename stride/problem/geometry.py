@@ -35,9 +35,9 @@ class TransducerLocation(GriddedSaved):
     """
 
     def __init__(self, id, transducer=None, coordinates=None, orientation=None,
-                 name=None, *args, **kwargs):
+                 name=None, **kwargs):
         name = name or 'transducer_instance_%05d' % id
-        super().__init__(*args, name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
 
         if id < 0:
             raise ValueError('The transducer location needs a positive ID')
@@ -75,16 +75,7 @@ class TransducerLocation(GriddedSaved):
             Newly created TransducerLocation instance.
 
         """
-        sub_location = TransducerLocation(self.id,
-                                          name=self.name, grid=self.grid)
-
-        transducer = sub_problem.transducers.get(self.transducer.id)
-        sub_location.transducer = transducer
-
-        sub_location.coordinates = self.coordinates
-        sub_location.orientation = self.orientation
-
-        return sub_location
+        return self
 
     def __get_desc__(self, **kwargs):
         description = {
@@ -285,7 +276,12 @@ class Geometry(ProblemBase):
         coordinates = geometry_fun(*args, **kwargs)
 
         for index in range(coordinates.shape[0]):
-            self.add(index, self._transducers.get(0), coordinates[index, :])
+            _coordinates = coordinates[index, :]
+            if len(_coordinates) != self.space.dim:
+                _coordinates = np.pad(_coordinates, ((0, 1),))
+                _coordinates[-1] = self.space.limit[2] / 2
+
+            self.add(index, self._transducers.get(0), _coordinates)
 
     @property
     def transducers(self):

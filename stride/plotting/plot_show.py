@@ -69,6 +69,7 @@ def show_3d(figure):
 
         else:
             mlab.show()
+        mlab.close(all=True)
 
 
 def show(figure=None):

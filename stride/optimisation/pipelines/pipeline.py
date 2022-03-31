@@ -1,14 +1,17 @@
 
 from mosaic.utils import camel_case
 
+from mosaic import tessera
+
 from . import steps as steps_module
-from ...core import no_grad
+from ...core import Operator, no_grad
 
 
 __all__ = ['Pipeline']
 
 
-class Pipeline:
+@tessera
+class Pipeline(Operator):
     """
     A pipeline represents a series of processing steps that will be applied
     in order to a series of inputs. Pipelines encode pre-processing or
@@ -23,6 +26,8 @@ class Pipeline:
     """
 
     def __init__(self, steps=None, **kwargs):
+        super().__init__(**kwargs)
+
         self._no_grad = kwargs.pop('no_grad', False)
 
         steps = steps or []
@@ -37,7 +42,7 @@ class Pipeline:
             else:
                 self._steps.append(step)
 
-    async def __call__(self, *args, **kwargs):
+    async def forward(self, *args, **kwargs):
         """
         Apply all steps in the pipeline in order.
 
@@ -57,3 +62,17 @@ class Pipeline:
 
         else:
             return next_args
+
+    async def adjoint(self, *args, **kwargs):
+        input_args, input_kwargs = self.inputs
+
+        outputs = args[:self.num_outputs]
+
+        for step in self._steps:
+            outputs = step.adjoint(*outputs, *input_args, **kwargs)
+
+        if len(outputs) == 1:
+            return outputs[0]
+
+        else:
+            return outputs

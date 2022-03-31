@@ -9,6 +9,7 @@ dependencies:
   - click
   - cloudpickle>=1.6
   - cython
+  - dash>=2.0.0
   - flake8
   - gputil
   - h5py>=3.2
@@ -32,8 +33,11 @@ dependencies:
   - sphinx_rtd_theme
   - tornado>=6.1
   - traitsui
+  - uvloop
   - wxPython
   - zlib
+  - zict
   - pip:
       - devito>=4.6
       - python-daemon
+      - py-libnuma

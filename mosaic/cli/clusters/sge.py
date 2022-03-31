@@ -27,7 +27,7 @@ def node_list(host_name):
         lines = file.readlines()
 
         for line in lines:
-            line = line.split(' ')
+            line = line.strip().split(' ')
 
             if line[0] != host_name:
                 sge_list.append(line[0])
@@ -97,10 +97,15 @@ conda activate stride
 # set number of threads per process
 # use $(ppn) to use one worker per node and as many threads pr worker as cores in the node
 export OMP_NUM_THREADS=$num_workers_per_node \\* $num_threads_per_worker
+export OMP_PLACES=cores
 
 # set any environment variables
 # for example:
 # export DEVITO_COMPILER=icc
+
+# add any commands to be executed in the remote node before starting the runtime
+# for example:
+# export SSH_FLAGS="source /etc/profile; module load anaconda3/personal; conda activate stride"
 
 # run our job
 ls -l

@@ -1,7 +1,7 @@
 
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 
-import stride
+import version
 
 with open('requirements.txt') as f:
     required = f.read().splitlines()
@@ -29,7 +29,7 @@ for requirement in optionals:
 
 setup(
     name='stride',
-    version=stride.__version__,
+    version=version.__version__,
     description='A (somewhat) general optimisation framework for ultrasound medical imaging',
     long_description='A (somewhat) general optimisation framework for ultrasound medical imaging',
     url='https://github.com/trustimaging/stride',
@@ -43,10 +43,15 @@ setup(
     install_requires=requirements,
     extras_require={'extras': optional_requirements},
     dependency_links=links,
+    ext_modules=[
+        Extension('_profile',
+                  sources=['mosaic/profile/_profile.c'])
+    ],
     entry_points={
         'console_scripts': [
             'mrun=mosaic.cli.mrun:go',
             'mscript=mosaic.cli.mscript:go',
+            'mprof=mosaic.cli.mprof:go',
         ]
     },
     zip_safe=False,

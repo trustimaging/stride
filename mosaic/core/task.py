@@ -1,15 +1,18 @@
 
+import sys
 import uuid
-import time
+import tblib
+import asyncio
 import weakref
 import operator
 from cached_property import cached_property
 
-from .base import Base, RemoteBase, ProxyBase, MonitoredBase
-from ..utils import Future
+from .. import types
+from .base import Base, RemoteBase, ProxyBase
+from ..utils import Future, MultiError
 
 
-__all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone', 'MonitoredTask']
+__all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone']
 
 
 class Task(RemoteBase):
@@ -87,8 +90,9 @@ class Task(RemoteBase):
         self._result = None
         self._exception = None
 
-        self._state = 'init'
+        self._state = None
         self.runtime.register(self)
+        self.state_changed('init')
         self.register_proxy(self._sender_id)
 
     @property
@@ -100,12 +104,31 @@ class Task(RemoteBase):
         return self._sender_id
 
     @cached_property
+    def tessera_id(self):
+        """
+        Tessera UID.
+
+        """
+        try:
+            return self._tessera.uid
+        except ReferenceError:
+            return None
+
+    @cached_property
     def remote_runtime(self):
         """
          Proxies that have references to this task.
 
         """
         return {self.proxy(each) for each in list(self._proxies)}
+
+    @property
+    def collectable(self):
+        """
+        Whether the object is ready for collection.
+
+        """
+        return self._state in ['failed', 'done']
 
     @classmethod
     def remote_cls(cls):
@@ -219,6 +242,14 @@ class Task(RemoteBase):
         self._args_state = dict()
         self._kwargs_state = dict()
 
+    def add_event(self, event_name, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_event(event_name, **kwargs)
+
+    def add_profile(self, profile, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_profile(profile, **kwargs)
+
     # TODO Await all of the remote results together using gather
     async def prepare_args(self):
         """
@@ -229,12 +260,11 @@ class Task(RemoteBase):
         Future
 
         """
-        waitable_types = [TaskProxy, TaskOutput, TaskDone]
 
         for index in range(len(self.args)):
             arg = self.args[index]
 
-            if type(arg) in waitable_types:
+            if type(arg) in types.awaitable_types:
                 self._args_state[index] = arg.state
 
                 if arg.state != 'done':
@@ -244,7 +274,7 @@ class Task(RemoteBase):
 
                     def callback(_index, _arg):
                         def _callback(fut):
-                            self.loop.run(self._set_arg_done, _index, _arg)
+                            self.loop.run(self._set_arg_done, fut, _index, _arg)
 
                         return _callback
 
@@ -260,7 +290,7 @@ class Task(RemoteBase):
                 self._args_value[index] = arg
 
         for key, value in self.kwargs.items():
-            if type(value) in waitable_types:
+            if type(value) in types.awaitable_types:
                 self._kwargs_state[key] = value.state
 
                 if value.state != 'done':
@@ -270,7 +300,7 @@ class Task(RemoteBase):
 
                     def callback(_key, _arg):
                         def _callback(fut):
-                            self.loop.run(self._set_kwarg_done, _key, _arg)
+                            self.loop.run(self._set_kwarg_done, fut, _key, _arg)
 
                         return _callback
 
@@ -301,7 +331,7 @@ class Task(RemoteBase):
         -------
 
         """
-        await self.state_changed('failed')
+        self.state_changed('failed')
         self._exception = exc
 
         await self.cmd_async(method='set_exception', exc=exc)
@@ -317,14 +347,17 @@ class Task(RemoteBase):
         -------
 
         """
-        await self.state_changed('done')
+        self.state_changed('done')
 
         await self.cmd_async(method='set_done')
 
         # Once done release local copy of the arguments
         self._cleanup()
 
-    async def _set_arg_done(self, index, arg):
+    async def _set_arg_done(self, fut, index, arg):
+        if not (await self._check_exception(fut, arg)):
+            return
+
         result = await arg.result()
 
         self._args_state[index] = 'ready'
@@ -337,7 +370,10 @@ class Task(RemoteBase):
             pass
         await self._check_ready()
 
-    async def _set_kwarg_done(self, index, arg):
+    async def _set_kwarg_done(self, fut, index, arg):
+        if not (await self._check_exception(fut, arg)):
+            return
+
         result = await arg.result()
 
         self._kwargs_state[index] = 'ready'
@@ -350,40 +386,45 @@ class Task(RemoteBase):
             pass
         await self._check_ready()
 
+    async def _check_exception(self, fut, arg):
+        try:
+            exc = fut.exception()
+        except asyncio.CancelledError:
+            exc = None
+
+        if exc is not None:
+            exc = MultiError(exc)
+
+            try:
+                raise RuntimeError('Task failed due to failed argument: %s' % arg)
+            except Exception as fail:
+                exc.add(fail)
+
+            try:
+                raise exc
+            except MultiError:
+                et, ev, tb = sys.exc_info()
+
+            tb = tblib.Traceback(tb)
+
+            await self.set_exception((et, ev, tb))
+
+            try:
+                self._ready_future.set_result(True)
+            except asyncio.InvalidStateError:
+                pass
+
+            return False
+
+        else:
+            return True
+
     async def _check_ready(self):
         if not len(self._args_pending) and not len(self._kwargs_pending):
-            await self.state_changed('ready')
+            self.state_changed('ready')
 
             if not self._ready_future.done():
                 self._ready_future.set_result(True)
-
-    async def state_changed(self, state):
-        """
-        Signal change in task state.
-
-        Parameters
-        ----------
-        state : str
-            New state of the task.
-
-        Returns
-        -------
-
-        """
-        self._state = state
-
-        if state == 'running':
-            self._tic = time.time()
-
-        elapsed = None
-        if state == 'done' or state == 'failed':
-            self._elapsed = elapsed = time.time() - self._tic
-
-        await self.runtime.task_state_changed(self, elapsed=elapsed)
-
-    def __del__(self):
-        self.logger.debug('Garbage collected object %s' % self)
-        self.loop.run(self.state_changed, 'collected')
 
 
 class TaskProxy(ProxyBase):
@@ -409,10 +450,12 @@ class TaskProxy(ProxyBase):
         self.args = args
         self.kwargs = kwargs
 
-        self._state = 'pending'
+        self._state = None
         self._result = None
         self._done_future = Future()
         self._outputs = None
+
+        self.state_changed('pending')
 
     async def init(self):
         """
@@ -422,9 +465,7 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        await self.monitor.init_task(uid=self._uid,
-                                     tessera_id=self._tessera_proxy.uid,
-                                     runtime_id=self.runtime_id)
+        self.state_changed('init')
 
         self.runtime.register(self)
 
@@ -438,15 +479,30 @@ class TaskProxy(ProxyBase):
         await self.remote_runtime.init_task(task=task, uid=self._uid,
                                             reply=True)
 
-        self._state = 'queued'
+        if self._state == 'init':
+            self.state_changed('queued')
 
-    @property
+    @cached_property
     def runtime_id(self):
         """
         UID of the runtime where the task lives.
 
         """
-        return self._tessera_proxy.runtime_id
+        try:
+            return self._tessera_proxy.runtime_id
+        except ReferenceError:
+            return None
+
+    @cached_property
+    def tessera_id(self):
+        """
+        Tessera UID.
+
+        """
+        try:
+            return self._tessera_proxy.uid
+        except ReferenceError:
+            return None
 
     @cached_property
     def remote_runtime(self):
@@ -455,6 +511,14 @@ class TaskProxy(ProxyBase):
 
         """
         return self._tessera_proxy.remote_runtime
+
+    @property
+    def init_future(self):
+        """
+        Future that will be completed when the remote task is initiated remotely.
+
+        """
+        return self._init_future
 
     @property
     def done_future(self):
@@ -486,10 +550,21 @@ class TaskProxy(ProxyBase):
         Access individual outputs of the task.
 
         """
-        if self._outputs is None:
-            self._outputs = TaskOutputGenerator(self)
+        if self._outputs is None or self._outputs() is None:
+            outputs = TaskOutputGenerator(self)
+            self._outputs = weakref.ref(outputs)
+        else:
+            outputs = self._outputs()
 
-        return self._outputs
+        return outputs
+
+    @property
+    def collectable(self):
+        """
+        Whether the object is ready for collection.
+
+        """
+        return self._state in ['failed', 'done']
 
     def set_done(self):
         """
@@ -499,9 +574,12 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        self._state = 'done'
+        self.state_changed('done')
 
-        self._done_future.set_result(True)
+        try:
+            self._done_future.set_result(True)
+        except asyncio.InvalidStateError:
+            pass
 
         # Once done release local copy of the arguments
         self._cleanup()
@@ -518,13 +596,16 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        self._state = 'failed'
+        self.state_changed('failed')
 
         exc = exc[1].with_traceback(exc[2].as_traceback())
-        self._done_future.set_exception(exc)
-
-        # Once done release local copy of the arguments
-        self._cleanup()
+        try:
+            self._done_future.set_exception(exc)
+        except asyncio.InvalidStateError:
+            pass
+        else:
+            # Once done release local copy of the arguments
+            self._cleanup()
 
     def wait(self):
         """
@@ -555,7 +636,18 @@ class TaskProxy(ProxyBase):
         self.kwargs = None
         # Release the strong reference to the tessera proxy once the task is complete
         # so that it can be garbage collected if necessary
-        self._tessera_proxy = weakref.proxy(self._tessera_proxy)
+        try:
+            self._tessera_proxy = weakref.proxy(self._tessera_proxy)
+        except TypeError:
+            pass
+
+    def add_event(self, event_name, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_event(event_name, **kwargs)
+
+    def add_profile(self, profile, **kwargs):
+        kwargs['tessera_id'] = self.tessera_id
+        return super().add_profile(profile, **kwargs)
 
     async def result(self):
         """
@@ -571,7 +663,11 @@ class TaskProxy(ProxyBase):
         if self._result is not None:
             return self._result
 
+        self.state_changed('result')
+
         self._result = await self.cmd_recv_async(method='get_result')
+
+        self.state_changed('done')
 
         return self._result
 
@@ -684,7 +780,7 @@ class TaskOutputBase(Base):
     def state(self):
         return self._task_proxy.state
 
-    @property
+    @cached_property
     def runtime_id(self):
         return self._task_proxy.runtime_id
 
@@ -754,7 +850,11 @@ class TaskOutput(TaskOutputBase):
         if self._result is not None:
             return self._result
 
+        self._task_proxy.state_changed('result')
+
         self._result = await self._task_proxy.cmd_recv_async(method='get_result', key=self._key)
+
+        self._task_proxy.state_changed('done')
 
         return self._result
 
@@ -787,14 +887,4 @@ class TaskDone(TaskOutputBase):
         return self._result
 
 
-class MonitoredTask(MonitoredBase):
-    """
-    Information container on the state of a task.
-
-    """
-
-    def __init__(self, uid, tessera_id, runtime_id):
-        super().__init__(uid, runtime_id)
-
-        self.tessera_id = tessera_id
-        self.elapsed = None
+types.awaitable_types += (TaskProxy, TaskOutput, TaskDone)

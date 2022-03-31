@@ -1,15 +1,15 @@
 
 import os
 import sys
-import atexit
+import numa
 import psutil
-import signal
 import weakref
 import functools
 import threading
 import multiprocessing
 
 import mosaic
+from .at_exit import at_exit
 
 try:
     import daemon
@@ -99,6 +99,14 @@ class Subprocess:
 
     def __repr__(self):
         return "<Subprocess for %s, state=%s>" % (self._target, self._state)
+
+    @property
+    def pid(self):
+        """
+        Process PID.
+
+        """
+        return self._mp_process.pid
 
     @property
     def state(self):
@@ -320,6 +328,24 @@ class Subprocess:
 
         return 0
 
+    def cpu_affinity(self, cpus):
+        """
+        Set CPU affinity for this process.
+
+        Parameters
+        ----------
+        cpus : list
+            List of pinned CPUs.
+
+        Returns
+        -------
+
+        """
+        if numa.info.numa_available():
+            numa.schedule.run_on_cpus(self.pid, *cpus)
+        else:
+            self._ps_process.cpu_affinity(cpus)
+
 
 def subprocess(target):
     """
@@ -346,12 +372,4 @@ def _close_processes():
         process.stop_process()
 
 
-def _close_processes_atsignal(signum, frame):
-    _close_processes()
-
-    os._exit(-1)
-
-
-atexit.register(_close_processes)
-signal.signal(signal.SIGINT, _close_processes_atsignal)
-signal.signal(signal.SIGTERM, _close_processes_atsignal)
+at_exit.add(_close_processes)
