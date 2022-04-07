@@ -1,5 +1,4 @@
 
-import numa
 import psutil
 
 import mosaic
@@ -89,7 +88,13 @@ class Node(Runtime):
                                  'is greater than the number of available CPUs (%d)' % (num_workers*num_threads, num_cpus))
 
             # Find all available NUMA nodes and CPUs per node
-            if numa.info.numa_available():
+            try:
+                import numa
+                numa_available = numa.info.numa_available()
+            except Exception:
+                numa_available = False
+
+            if numa_available:
                 available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
             else:
                 available_cpus = {0: list(range(num_cpus))}

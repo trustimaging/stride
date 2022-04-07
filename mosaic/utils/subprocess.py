@@ -1,7 +1,6 @@
 
 import os
 import sys
-import numa
 import psutil
 import weakref
 import functools
@@ -341,7 +340,13 @@ class Subprocess:
         -------
 
         """
-        if numa.info.numa_available():
+        try:
+            import numa
+            numa_available = numa.info.numa_available()
+        except Exception:
+            numa_available = False
+
+        if numa_available:
             numa.schedule.run_on_cpus(self.pid, *cpus)
         else:
             self._ps_process.cpu_affinity(cpus)
