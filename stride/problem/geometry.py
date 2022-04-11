@@ -406,7 +406,9 @@ class Geometry(ProblemBase):
 
     def __set_desc__(self, description):
         for location_desc in description.locations:
-            instance = TransducerLocation(location_desc.id)
-            instance.__set_desc__(location_desc, self._transducers)
+            if location_desc.id not in self.location_ids:
+                instance = TransducerLocation(location_desc.id)
+                self.add_location(instance)
 
-            self.add_location(instance)
+            instance = self.get(location_desc.id)
+            instance.__set_desc__(location_desc, self._transducers)

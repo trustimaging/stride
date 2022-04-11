@@ -406,7 +406,7 @@ def lowpass_filter_cos(data, f_max, order=2,
         filtered = scipy.ndimage.convolve1d(filtered, table, mode='nearest', axis=axis)
 
     if not zero_phase:
-        filtered = filtered[:, :-period]
+        filtered = filtered.take(range(0, filtered.shape[-1]-period), axis=-1)
 
     if adjoint:
         filtered = np.flip(filtered, axis=axis)
