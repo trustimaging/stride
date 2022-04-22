@@ -2,6 +2,7 @@
 import functools
 import numpy as np
 from collections import OrderedDict
+from cached_property import cached_property
 
 try:
     import matplotlib.pyplot as plt
@@ -84,6 +85,8 @@ class Shot(ProblemBase):
         Sources with which to initialise the shot, defaults to empty.
     receivers : list
         Receivers with which to initialise the shot, defaults to empty.
+    delays : ndarray, optional
+        Array of delays (in seconds) for each source in the shot.
     grid : Grid or any of Space or Time
         Grid on which the Acquisitions is defined
 
@@ -116,6 +119,7 @@ class Shot(ProblemBase):
 
         sources = kwargs.pop('sources', None)
         receivers = kwargs.pop('receivers', None)
+        delays = kwargs.pop('delays', None)
 
         if sources is not None and receivers is not None:
             for source in sources:
@@ -126,6 +130,10 @@ class Shot(ProblemBase):
 
             self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
             self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
+            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1), grid=self.grid)
+
+            if delays is not None:
+                self.delays.data[:, 0] = delays
 
     @property
     def geometry(self):
@@ -162,6 +170,32 @@ class Shot(ProblemBase):
 
         """
         return list(self._receivers.values())
+
+    @cached_property
+    def delayed_wavelets(self):
+        """
+        Get wavelets with delays applied to them.
+
+        """
+        delays = np.round(self.delays.data[:, 0] / self.time.step).astype(int)
+        wavelets = self.wavelets.data.copy()
+
+        for source_idx in range(self.num_sources):
+            delay = delays[source_idx]
+
+            if delay < 0:
+                continue
+
+            wavelet = wavelets[source_idx, :self.time.num - delay]
+            wavelet = np.pad(wavelet, ((delay, 0),),
+                             mode='constant', constant_values=0)
+
+            wavelets[source_idx, :] = wavelet
+
+        delayed_wavelets = self.wavelets.alike(name='wavelets')
+        delayed_wavelets.data[:] = wavelets
+
+        return delayed_wavelets
 
     @property
     def num_sources(self):
@@ -249,6 +283,9 @@ class Shot(ProblemBase):
         if self.observed is not None:
             shot.observed = self.observed
 
+        if self.delays is not None:
+            shot.delays = self.delays
+
         shot.start = self.start
         shot.sequence_id = self.sequence_id
 
@@ -295,7 +332,7 @@ class Shot(ProblemBase):
 
         """
         if self.wavelets is not None and self.wavelets.allocated:
-            return self.wavelets.plot(**kwargs)
+            return self.delayed_wavelets.plot(**kwargs)
 
     def plot_observed(self, **kwargs):
         """
@@ -356,6 +393,9 @@ class Shot(ProblemBase):
         if self.observed is not None and self.observed.allocated:
             description['observed'] = self.observed.__get_desc__()
 
+        if self.delays is not None and self.delays.allocated:
+            description['delays'] = self.delays.__get_desc__()
+
         return description
 
     def __set_desc__(self, description):
@@ -382,6 +422,10 @@ class Shot(ProblemBase):
         if 'observed' in description:
             self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
             self.observed.__set_desc__(description.observed)
+
+        self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
+        if 'delays' in description:
+            self.delays.__set_desc__(description.delays)
 
 
 class Sequence(ProblemBase):
@@ -966,12 +1010,14 @@ class Acquisitions(ProblemBase):
 
         ax_shot = plt.axes([0.15, 0.1, 0.7, 0.03])
         if self.num_shots > 1:
-            step = self.shot_ids[1]-self.shot_ids[0]
+            shot_step = self.shot_ids[1]-self.shot_ids[0]
         else:
-            step = 1
+            shot_step = 1
+        shot_range = kwargs.pop('shot_range', (self.shot_ids[0], self.shot_ids[-1]))
+        shot_step = kwargs.pop('shot_step', shot_step)
         slider = Slider(ax_shot, 'shot ID',
-                        self.shot_ids[0], self.shot_ids[-1],
-                        valinit=self.shot_ids[0], valstep=step)
+                        shot_range[0], shot_range[1],
+                        valinit=self.shot_ids[0], valstep=shot_step)
 
         update = functools.partial(update, figure, axis)
         update(self.shot_ids[0])
@@ -1001,6 +1047,8 @@ class Acquisitions(ProblemBase):
 
         def update(figure, axis, shot_id):
             kwargs.pop('axis', None)
+            kwargs.pop('shot_range', None)
+            kwargs.pop('shot_step', None)
             axis.clear()
 
             self.get(int(shot_id)).plot_wavelets(axis=axis, **kwargs)
@@ -1030,6 +1078,8 @@ class Acquisitions(ProblemBase):
 
         def update(figure, axis, shot_id):
             kwargs.pop('axis', None)
+            kwargs.pop('shot_range', None)
+            kwargs.pop('shot_step', None)
             axis.clear()
 
             self.get(int(shot_id)).plot_observed(axis=axis, **kwargs)
