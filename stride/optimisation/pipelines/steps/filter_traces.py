@@ -62,25 +62,29 @@ class FilterTraces(Operator):
     def _apply(self, traces, **kwargs):
         time = traces.time
 
-        f_min = self.f_min*time.step if self.f_min is not None else 0
-        f_max = self.f_max*time.step if self.f_max is not None else 0
+        f_min = kwargs.pop('f_min', self.f_min)
+        f_max = kwargs.pop('f_max', self.f_max)
+
+        f_min_dim_less = f_min*time.step if f_min is not None else 0
+        f_max_dim_less = f_max*time.step if f_max is not None else 0
 
         out_traces = traces.alike(name='filtered_%s' % traces.name)
 
-        if self.f_min is None and self.f_max is not None:
+        if f_min is None and f_max is not None:
             pass_type = 'lowpass'
-            args = (f_max,)
-        elif self.f_min is not None and self.f_max is None:
+            args = (f_max_dim_less,)
+        elif f_min is not None and f_max is None:
             pass_type = 'highpass'
-            args = (f_min,)
-        elif self.f_min is not None and self.f_max is not None:
+            args = (f_min_dim_less,)
+        elif f_min is not None and f_max is not None:
             pass_type = 'bandpass'
-            args = (f_min, f_max)
+            args = (f_min_dim_less, f_max_dim_less)
         else:
             out_traces.extended_data[:] = traces.extended_data
             return out_traces
 
-        method_name = '%s_filter_%s' % (pass_type, self.filter_type)
+        filter_type = kwargs.pop('filter_type', self.filter_type)
+        method_name = '%s_filter_%s' % (pass_type, filter_type)
         method = getattr(filters, method_name)
         filtered = method(traces.extended_data, *args, zero_phase=False, **kwargs)
 

@@ -2,8 +2,11 @@
 import os
 
 if os.environ.get('DISPLAY', None):
-    import matplotlib
-    matplotlib.use('TkAgg')
+    try:
+        import matplotlib
+        matplotlib.use('TkAgg')
+    except ImportError:
+        pass
 
 from .plot_scalar_fields import *
 from .plot_vector_fields import *
