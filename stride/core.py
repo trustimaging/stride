@@ -454,6 +454,7 @@ class Variable:
         Alias for a copy.
 
         """
+        kwargs['propagate_tessera'] = kwargs.pop('propagate_tessera', False)
         return self.copy(*args, **kwargs)
 
     def clear_grad(self):

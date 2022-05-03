@@ -419,9 +419,9 @@ class IsoAcousticDevito(ProblemTypeBase):
                     at_exit.add(_rm_tmpdir)
 
                 try:
-                    self.wavefield.dump(path=self._cache_folder,
-                                        version=shot.id,
-                                        project_name=problem.name)
+                    filename = os.path.join(self._cache_folder,
+                                            '%s-%s-%05d.npy' % (problem.name, 'P', shot.id))
+                    np.save(filename, self.wavefield.extended_data)
 
                     self.dev_grid.deallocate('p_saved')
                     del self.wavefield
@@ -533,19 +533,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set wavefield if necessary
         cache_forward = kwargs.pop('cache_forward', False)
         if cache_forward:
-            wavefield = StructuredData(name='p')
+            filename = os.path.join(self._cache_folder,
+                                    '%s-%s-%05d.npy' % (problem.name, 'P', shot.id))
+            self.dev_grid.vars.p_saved.data_with_halo[:] = np.load(filename)
 
-            wavefield.load(path=self._cache_folder,
-                           version=shot.id,
-                           project_name=problem.name)
-
-            self.dev_grid.vars.p_saved.data_with_halo[:] = wavefield.data
-
-            wavefield.rm(path=self._cache_folder,
-                         version=shot.id,
-                         project_name=problem.name)
-
-            del wavefield
+            os.remove(filename)
 
         # Set medium parameters
         vp_with_halo = self.dev_grid.with_halo(vp.extended_data)

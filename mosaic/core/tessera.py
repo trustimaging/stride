@@ -435,11 +435,20 @@ class ParameterMixin:
             warehouse = mosaic.get_warehouse()
             await warehouse.publish(uid=self._tessera.uid, reply=True)
 
-    async def push(self, publish=False):
+    async def push(self, attr=None, publish=False):
         if self.has_tessera:
             await self
 
-            __dict__ = copy.copy(self.__dict__)
+            if attr is None:
+                __dict__ = copy.copy(self.__dict__)
+            else:
+                if not isinstance(attr, list):
+                    attr = [attr]
+
+                __dict__ = dict()
+                for key in attr:
+                    __dict__[key] = getattr(self, key)
+
             try:
                 del __dict__['_tessera']
             except KeyError:

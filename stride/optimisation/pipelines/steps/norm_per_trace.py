@@ -37,16 +37,6 @@ class NormPerTrace(Operator):
     def adjoint(self, d_modelled, d_observed, modelled, observed, **kwargs):
         return d_modelled, d_observed
 
-    def _norm(self, traces, **kwargs):
-        norm_value = 0.
-
-        for index in range(traces.extended_shape[0]):
-            norm_value += np.sum(traces.extended_data[index] ** 2)
-
-        norm_value = np.sqrt(norm_value / traces.extended_shape[0]) + 1e-31
-
-        return norm_value
-
     def _apply(self, traces, scaling, **kwargs):
         out_traces = traces.alike(name='normed_%s' % traces.name)
 
