@@ -58,7 +58,7 @@ class FilterWavelets(Operator):
             out_wavelets.extended_data[:] = wavelets.extended_data
             return out_wavelets
 
-        default_filter_type = 'cos' if self.f_min is None else 'butterworth'
+        default_filter_type = 'cos' if f_min is None else 'butterworth'
         filter_type = kwargs.pop('filter_type', self.filter_type or default_filter_type)
 
         method_name = '%s_filter_%s' % (pass_type, filter_type)
