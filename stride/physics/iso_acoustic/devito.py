@@ -852,7 +852,10 @@ class IsoAcousticDevito(ProblemTypeBase):
         recompile = False
 
         cached_name = self.__class__.__name__.lower()
-        warehouse = mosaic.get_local_warehouse()
+        try:
+            warehouse = mosaic.get_local_warehouse()
+        except AttributeError:
+            warehouse = {}
 
         if not self._cached_operator or ('%s_boundary' % cached_name) not in warehouse:
             boundary_type = kwargs.get('boundary_type', 'sponge_boundary_2')
