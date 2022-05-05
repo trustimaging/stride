@@ -26,8 +26,7 @@ class FilterWavelets(Operator):
         self.f_min = kwargs.pop('f_min', None)
         self.f_max = kwargs.pop('f_max', None)
 
-        default_filter_type = 'cos' if self.f_min is None else 'butterworth'
-        self.filter_type = kwargs.pop('filter_type', default_filter_type)
+        self.filter_type = kwargs.pop('filter_type', None)
 
     def forward(self, wavelets, **kwargs):
         return self._apply(wavelets, **kwargs)
@@ -59,9 +58,12 @@ class FilterWavelets(Operator):
             out_wavelets.extended_data[:] = wavelets.extended_data
             return out_wavelets
 
-        filter_type = kwargs.pop('filter_type', self.filter_type)
+        default_filter_type = 'cos' if self.f_min is None else 'butterworth'
+        filter_type = kwargs.pop('filter_type', self.filter_type or default_filter_type)
+
         method_name = '%s_filter_%s' % (pass_type, filter_type)
         method = getattr(filters, method_name)
+
         filtered = method(wavelets.extended_data, *args, zero_phase=False, **kwargs)
 
         out_wavelets.extended_data[:] = filtered

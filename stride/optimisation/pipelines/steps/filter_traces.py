@@ -26,8 +26,7 @@ class FilterTraces(Operator):
         self.f_min = kwargs.pop('f_min', None)
         self.f_max = kwargs.pop('f_max', None)
 
-        default_filter_type = 'cos' if self.f_min is None else 'butterworth'
-        self.filter_type = kwargs.pop('filter_type', default_filter_type)
+        self.filter_type = kwargs.pop('filter_type', None)
 
         self._num_traces = None
 
@@ -83,9 +82,12 @@ class FilterTraces(Operator):
             out_traces.extended_data[:] = traces.extended_data
             return out_traces
 
-        filter_type = kwargs.pop('filter_type', self.filter_type)
+        default_filter_type = 'cos' if self.f_min is None else 'butterworth'
+        filter_type = kwargs.pop('filter_type', self.filter_type or default_filter_type)
+
         method_name = '%s_filter_%s' % (pass_type, filter_type)
         method = getattr(filters, method_name)
+
         filtered = method(traces.extended_data, *args, zero_phase=False, **kwargs)
 
         out_traces.extended_data[:] = filtered
