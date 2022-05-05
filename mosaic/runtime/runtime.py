@@ -415,6 +415,16 @@ class Runtime(BaseRPC):
         """
         return self._remote_warehouse
 
+    def get_local_warehouse(self):
+        """
+        Access local warehouse.
+
+        Returns
+        -------
+
+        """
+        return self._local_warehouse
+
     def get_zmq_context(self):
         """
         Access ZMQ socket context.

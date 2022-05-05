@@ -26,8 +26,3 @@ Task
     :members:
     :undoc-members:
     :show-inheritance:
-
-.. autoclass:: mosaic.core.task.MonitoredTask
-    :members:
-    :undoc-members:
-    :show-inheritance:
