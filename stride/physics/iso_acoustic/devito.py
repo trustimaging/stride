@@ -116,7 +116,10 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self._cached_operator = kwargs.pop('cached_operator', False)
         cached_name = self.__class__.__name__.lower()
-        warehouse = mosaic.get_local_warehouse()
+        try:
+            warehouse = mosaic.get_local_warehouse()
+        except AttributeError:
+            self._cached_operator = False
 
         if not self._cached_operator or ('%s_dev_grid' % cached_name) not in warehouse:
             config_devito(**kwargs)
