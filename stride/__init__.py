@@ -78,7 +78,6 @@ async def forward(problem, pde, *args, **kwargs):
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
     safe = kwargs.pop('safe', False)
-    eager = kwargs.pop('eager', False)
 
     if dump is True:
         try:

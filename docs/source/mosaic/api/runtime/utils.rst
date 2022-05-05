@@ -1,8 +1,8 @@
 ==================
-Imported function
+Utils
 ==================
 
-.. automodule:: mosaic.types.imported_function
+.. automodule:: mosaic.runtime.utils
     :members:
     :undoc-members:
     :show-inheritance:

@@ -26,13 +26,15 @@ class L2DistanceLoss(Operator):
 
     async def forward(self, modelled, observed, **kwargs):
         problem = kwargs.pop('problem', None)
+        shot_id = problem.shot_id if problem is not None \
+            else kwargs.pop('shot_id', 0)
 
         residual_data = modelled.data-observed.data
         residual = observed.alike(name='residual', data=residual_data)
         self.residual = residual
 
         fun_data = 0.5 * np.sum(residual.data ** 2)
-        fun = FunctionalValue(fun_data, problem.shot_id, residual)
+        fun = FunctionalValue(fun_data, shot_id, residual)
 
         return fun
 

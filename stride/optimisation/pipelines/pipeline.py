@@ -29,6 +29,7 @@ class Pipeline(Operator):
         super().__init__(**kwargs)
 
         self._no_grad = kwargs.pop('no_grad', False)
+        self._kwargs = kwargs
 
         steps = steps or []
         self._steps = []
@@ -52,9 +53,9 @@ class Pipeline(Operator):
         for step in self._steps:
             if self._no_grad:
                 with no_grad(*next_args, **kwargs):
-                    next_args = await step(*next_args, **kwargs)
+                    next_args = await step(*next_args, **{**self._kwargs, **kwargs})
             else:
-                next_args = await step(*next_args, **kwargs)
+                next_args = await step(*next_args, **{**self._kwargs, **kwargs})
             next_args = (next_args,) if len(args) == 1 else next_args
 
         if len(args) == 1:
@@ -69,7 +70,7 @@ class Pipeline(Operator):
         outputs = args[:self.num_outputs]
 
         for step in self._steps:
-            outputs = step.adjoint(*outputs, *input_args, **kwargs)
+            outputs = step.adjoint(*outputs, *input_args, **{**self._kwargs, **kwargs})
 
         if len(outputs) == 1:
             return outputs[0]

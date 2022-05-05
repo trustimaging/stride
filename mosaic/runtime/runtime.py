@@ -415,6 +415,16 @@ class Runtime(BaseRPC):
         """
         return self._remote_warehouse
 
+    def get_local_warehouse(self):
+        """
+        Access local warehouse.
+
+        Returns
+        -------
+
+        """
+        return self._local_warehouse
+
     def get_zmq_context(self):
         """
         Access ZMQ socket context.
@@ -427,11 +437,14 @@ class Runtime(BaseRPC):
             self._zmq_context = zmq.asyncio.Context()
 
             # Set thread pool for ZMQ
-            num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())-1
-            num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', num_cpus)
-            num_cpus = max(1, int(num_cpus))
+            try:
+                num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())-1
+                num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', num_cpus)
+                num_cpus = max(1, int(num_cpus))
 
-            self._zmq_context.set(zmq.IO_THREADS, num_cpus)
+                self._zmq_context.set(zmq.IO_THREADS, num_cpus)
+            except AttributeError:
+                pass
 
         return self._zmq_context
 
@@ -981,7 +994,7 @@ class Runtime(BaseRPC):
                 obj_type = obj.type
                 obj_uid = obj.uid
                 obj_store = getattr(self, '_' + obj_type)
-                obj = obj_store.pop(obj_uid, None)
+                obj_store.pop(obj_uid, None)
 
                 # Stop tessera loop
                 if hasattr(obj, 'queue_task'):
@@ -992,7 +1005,7 @@ class Runtime(BaseRPC):
                     del self._local_warehouse[obj_uid]
 
                 # Execute object deregister
-                if obj is not None:
+                if hasattr(obj, 'deregister'):
                     deregisters.append(obj.deregister())
 
             self._dealloc_queue = uncollectables

@@ -10,6 +10,7 @@ import scipy.signal
 
 import mosaic
 from mosaic.utils import camel_case, at_exit
+from mosaic.comms.compression import maybe_compress, decompress
 
 from stride.utils import fft
 from stride.problem import StructuredData
@@ -113,20 +114,39 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self._bandwidth = 0.
 
-        config_devito(**kwargs)
+        self._cached_operator = kwargs.pop('cached_operator', False)
+        cached_name = self.__class__.__name__.lower()
+        try:
+            warehouse = mosaic.get_local_warehouse()
+        except AttributeError:
+            self._cached_operator = False
 
-        dev_grid = kwargs.pop('dev_grid', None)
-        self.dev_grid = dev_grid or GridDevito(self.space_order, self.time_order, **kwargs)
+        if not self._cached_operator or ('%s_dev_grid' % cached_name) not in warehouse:
+            config_devito(**kwargs)
 
-        kwargs.pop('grid', None)
-        self.state_operator = OperatorDevito(self.space_order, self.time_order,
-                                             name='acoustic_iso_state',
-                                             grid=self.dev_grid,
-                                             **kwargs)
-        self.adjoint_operator = OperatorDevito(self.space_order, self.time_order,
-                                               name='acoustic_iso_adjoint',
-                                               grid=self.dev_grid,
-                                               **kwargs)
+            dev_grid = kwargs.pop('dev_grid', None)
+            self.dev_grid = dev_grid or GridDevito(self.space_order, self.time_order, **kwargs)
+
+            kwargs.pop('grid', None)
+            self.state_operator = OperatorDevito(self.space_order, self.time_order,
+                                                 name='acoustic_iso_state',
+                                                 grid=self.dev_grid,
+                                                 **kwargs)
+            self.adjoint_operator = OperatorDevito(self.space_order, self.time_order,
+                                                   name='acoustic_iso_adjoint',
+                                                   grid=self.dev_grid,
+                                                   **kwargs)
+
+            if self._cached_operator:
+                warehouse['%s_dev_grid' % cached_name] = self.dev_grid
+                warehouse['%s_state_operator' % cached_name] = self.state_operator
+                warehouse['%s_adjoint_operator' % cached_name] = self.adjoint_operator
+
+        else:
+            self.dev_grid = warehouse['%s_dev_grid' % cached_name]
+            self.state_operator = warehouse['%s_state_operator' % cached_name]
+            self.adjoint_operator = warehouse['%s_adjoint_operator' % cached_name]
+
         self.boundary = None
 
         self._cache_folder = None
@@ -258,14 +278,9 @@ class IsoAcousticDevito(ProblemTypeBase):
                 update_saved = []
 
             # Compile the operator
-            cached_operator = kwargs.pop('cached_operator', None)
-
-            if cached_operator is not None:
-                self.state_operator.devito_operator = cached_operator
-            else:
-                self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
-                                                 **kwargs)
-                self.state_operator.compile()
+            self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
+                                             **kwargs)
+            self.state_operator.compile()
 
         else:
             # If the source/receiver size has changed, then create new functions for them
@@ -404,31 +419,46 @@ class IsoAcousticDevito(ProblemTypeBase):
                                     project_name=problem.name)
 
             cache_forward = kwargs.pop('cache_forward', False)
-            cache_location = kwargs.pop('cache_location', os.getcwd())
+            cache_location = kwargs.pop('cache_location', None)
             if cache_forward:
-                prev_cache = glob.glob(os.path.join(cache_location, 'stride-*'))
-                if len(prev_cache):
-                    self._cache_folder = prev_cache[0]
 
-                if self._cache_folder is None:
-                    self._cache_folder = tempfile.mkdtemp(prefix='stride-', dir=cache_location)
+                slices = [slice(self.space_order + extra, -self.space_order - extra)
+                          for extra in self.space.extra]
+                slices = (slice(0, None),) + tuple(slices)
+                inner_wavefield = self.wavefield.data[slices]
 
-                    def _rm_tmpdir():
+                if cache_location is None:
+                    inner_wavefield = [maybe_compress(inner_wavefield[t].copy())
+                                       for t in range(inner_wavefield.shape[0])]
+
+                    self.wavefield.deallocate()
+                    self.wavefield = inner_wavefield
+
+                else:
+                    prev_cache = glob.glob(os.path.join(cache_location, 'stride-*'))
+                    if len(prev_cache):
+                        self._cache_folder = prev_cache[0]
+
+                    if self._cache_folder is None:
+                        self._cache_folder = tempfile.mkdtemp(prefix='stride-', dir=cache_location)
+
+                        def _rm_tmpdir():
+                            shutil.rmtree(self._cache_folder, ignore_errors=True)
+
+                        at_exit.add(_rm_tmpdir)
+
+                    try:
+                        filename = os.path.join(self._cache_folder,
+                                                '%s-%s-%05d.npy' % (problem.name, 'P', shot.id))
+                        np.save(filename, inner_wavefield)
+                    except:
                         shutil.rmtree(self._cache_folder, ignore_errors=True)
+                        raise
 
-                    at_exit.add(_rm_tmpdir)
-
-                try:
-                    self.wavefield.dump(path=self._cache_folder,
-                                        version=shot.id,
-                                        project_name=problem.name)
-
-                    self.dev_grid.deallocate('p_saved')
                     del self.wavefield
                     self.wavefield = None
-                except:
-                    shutil.rmtree(self._cache_folder, ignore_errors=True)
-                    raise
+
+                self.dev_grid.deallocate('p_saved')
 
         else:
             self.wavefield = None
@@ -509,14 +539,9 @@ class IsoAcousticDevito(ProblemTypeBase):
             gradient_update = await self.prepare_grad(wavelets, vp, rho, alpha)
 
             # Compile the operator
-            cached_operator = kwargs.pop('cached_operator', None)
-
-            if cached_operator is not None:
-                self.adjoint_operator.devito_operator = cached_operator
-            else:
-                self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
-                                                   **kwargs)
-                self.adjoint_operator.compile()
+            self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
+                                               **kwargs)
+            self.adjoint_operator.compile()
 
         else:
             # If the receiver size has changed, then create new functions for it
@@ -532,20 +557,27 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         # Set wavefield if necessary
         cache_forward = kwargs.pop('cache_forward', False)
+        cache_location = kwargs.pop('cache_location', None)
         if cache_forward:
-            wavefield = StructuredData(name='p')
+            slices = [slice(self.space_order + extra, -self.space_order - extra)
+                      for extra in self.space.extra]
+            slices = (slice(0, None),) + tuple(slices)
 
-            wavefield.load(path=self._cache_folder,
-                           version=shot.id,
-                           project_name=problem.name)
+            if cache_location is None:
+                inner_wavefield = np.asarray([np.frombuffer(decompress(*each), dtype=np.float32)
+                                              for each in self.wavefield])
+                inner_wavefield = inner_wavefield.reshape((inner_wavefield.shape[0],) + self.space.shape)
+                self.dev_grid.vars.p_saved.data_with_halo[slices] = inner_wavefield
 
-            self.dev_grid.vars.p_saved.data_with_halo[:] = wavefield.data
+                del self.wavefield
+                self.wavefield = None
 
-            wavefield.rm(path=self._cache_folder,
-                         version=shot.id,
-                         project_name=problem.name)
+            else:
+                filename = os.path.join(self._cache_folder,
+                                        '%s-%s-%05d.npy' % (problem.name, 'P', shot.id))
+                self.dev_grid.vars.p_saved.data_with_halo[slices] = np.load(filename)
 
-            del wavefield
+                os.remove(filename)
 
         # Set medium parameters
         vp_with_halo = self.dev_grid.with_halo(vp.extended_data)
@@ -819,32 +851,45 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         recompile = False
 
-        boundary_type = kwargs.get('boundary_type', 'sponge_boundary_2')
-        if boundary_type != self.boundary_type or self.boundary is None:
-            recompile = True
-            self.boundary_type = boundary_type
+        cached_name = self.__class__.__name__.lower()
+        try:
+            warehouse = mosaic.get_local_warehouse()
+        except AttributeError:
+            warehouse = {}
 
-            if isinstance(self.boundary_type, str):
-                boundaries_module = boundaries.devito
-                self.boundary = getattr(boundaries_module, camel_case(self.boundary_type))(self.dev_grid)
+        if not self._cached_operator or ('%s_boundary' % cached_name) not in warehouse:
+            boundary_type = kwargs.get('boundary_type', 'sponge_boundary_2')
+            if boundary_type != self.boundary_type or self.boundary is None:
+                recompile = True
+                self.boundary_type = boundary_type
 
-            else:
-                self.boundary = self.boundary_type
+                if isinstance(self.boundary_type, str):
+                    boundaries_module = boundaries.devito
+                    self.boundary = getattr(boundaries_module, camel_case(self.boundary_type))(self.dev_grid)
 
-        interpolation_type = kwargs.get('interpolation_type', 'linear')
-        if interpolation_type != self.interpolation_type:
-            recompile = True
-            self.interpolation_type = interpolation_type
+                else:
+                    self.boundary = self.boundary_type
 
-        attenuation_power = kwargs.get('attenuation_power', 0)
-        if attenuation_power != self.attenuation_power:
-            recompile = True
-            self.attenuation_power = attenuation_power
+            if self._cached_operator:
+                warehouse['%s_boundary' % cached_name] = self.boundary
 
-        drp = kwargs.get('drp', False)
-        if drp != self.drp:
-            recompile = True
-            self.drp = drp
+            interpolation_type = kwargs.get('interpolation_type', 'linear')
+            if interpolation_type != self.interpolation_type:
+                recompile = True
+                self.interpolation_type = interpolation_type
+
+            attenuation_power = kwargs.get('attenuation_power', 0)
+            if attenuation_power != self.attenuation_power:
+                recompile = True
+                self.attenuation_power = attenuation_power
+
+            drp = kwargs.get('drp', False)
+            if drp != self.drp:
+                recompile = True
+                self.drp = drp
+
+        else:
+            self.boundary = warehouse['%s_boundary' % cached_name]
 
         preferred_kernel = kwargs.get('kernel', None)
         preferred_undersampling = kwargs.get('save_undersampling', None)

@@ -16,8 +16,3 @@ Base
     :members:
     :undoc-members:
     :show-inheritance:
-
-.. autoclass:: mosaic.core.base.MonitoredBase
-    :members:
-    :undoc-members:
-    :show-inheritance:

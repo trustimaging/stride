@@ -23,8 +23,3 @@ Tessera
     :members:
     :undoc-members:
     :show-inheritance:
-
-.. autoclass:: mosaic.core.tessera.MonitoredTessera
-    :members:
-    :undoc-members:
-    :show-inheritance:
