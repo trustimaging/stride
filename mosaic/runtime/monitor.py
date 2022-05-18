@@ -211,7 +211,7 @@ class Monitor(Runtime):
 
                 cmd = (f'srun {ssh_flags} --nodes=1 --ntasks=1 --tasks-per-node={num_cpus} '
                        f'--cpu-bind=mask_cpu:{cpu_mask} '
-                       f'--oversubscribe --mem={int(self._memory_limit / 1024**2)}M '
+                       f'--oversubscribe '
                        f'--nodelist={node_address} '
                        f'{remote_cmd}')
 
