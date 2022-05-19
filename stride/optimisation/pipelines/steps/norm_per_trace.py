@@ -33,7 +33,7 @@ class NormPerTrace(Operator):
         else:
             scaling = 1.
 
-        normed = [self._apply(each, scaling=scaling, **kwargs) for each in traces]
+        normed = tuple([self._apply(each, scaling=scaling, **kwargs) for each in traces])
 
         if len(normed) == 1:
             normed = normed[0]
