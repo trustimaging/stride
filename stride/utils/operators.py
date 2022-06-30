@@ -37,7 +37,7 @@ class Concatenate(Operator):
         concat_data = [np.array(each.data) for each in args]
         concat_data = np.stack(concat_data, axis=axis)
 
-        concat = StructuredData(name='concat', data=concat_data)
+        concat = StructuredData(name='concat', data=concat_data, grid=args[0].grid)
 
         return concat
 

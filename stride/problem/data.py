@@ -1293,7 +1293,10 @@ class Traces(StructuredData):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        transducer_ids = kwargs.pop('transducer_ids', None)
+        data = kwargs.get('data', None)
+
+        transducer_ids = kwargs.pop('transducer_ids',
+                                    list(range(data.shape[0])) if data is not None else None)
         self._transducer_ids = transducer_ids
 
         if self._transducer_ids is not None and self._shape is None:
