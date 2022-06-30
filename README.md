@@ -15,7 +15,7 @@
 together with production-grade performance.
 
 [**Quickstart**](#quickstart)
-| [**Tutorials**](https://github.com/trustimaging/stride/tree/master/examples/tutorials)
+| [**Tutorials**](https://github.com/trustimaging/stride/tree/master/stride_examples/tutorials)
 | [**Other examples**](#running-the-examples)
 | [**Additional packages**](#additional-packages)
 | [**GPU support**](#gpu-support)
@@ -75,15 +75,15 @@ pip install -e .
 ## Running the examples
 
 The easiest way to start working with Stride is to open the Jupyter notebooks under 
-[examples/tutorials](https://github.com/trustimaging/stride/tree/master/examples/tutorials). 
+[stride_examples/tutorials](https://github.com/trustimaging/stride/tree/master/examples/tutorials). 
 
 You can also check fully worked examples of breast imaging in 2D and 3D under 
-[examples/breast2D](https://github.com/trustimaging/stride/tree/master/examples/examples/breast2D) and 
-[examples/breast2D](https://github.com/trustimaging/stride/tree/master/examples/examples/breast3D).
+[stride_examples/breast2D](https://github.com/trustimaging/stride/tree/master/stride_examples/examples/breast2D) and 
+[stride_examples/breast2D](https://github.com/trustimaging/stride/tree/master/stride_examples/examples/breast3D).
 To perform a forward run on the breast2D example, you can execute from any terminal:
 
 ```sh
-cd examples/examples/breast2D
+cd stride_examples/examples/breast2D
 mrun python 01_script_forward.py
 ```
 

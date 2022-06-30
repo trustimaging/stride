@@ -54,6 +54,6 @@ jobs:
     - name: Tutorials
       shell: bash -l {0}
       run: |
-        cd stride/examples/tutorials/
+        cd stride/stride_examples/tutorials/
         mrun -nw 1 -nth 2 python 07_script_running.py
         py.test -p no:python --nbval-lax

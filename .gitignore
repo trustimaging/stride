@@ -117,8 +117,8 @@ venv.bak/
 
 # Example outputs
 *.h5
-!examples/examples/breast2D/data/*.h5
-examples/*/*.png
+!stride_examples/examples/breast2D/data/*.h5
+stride_examples/*/*.png
 
 # Legacy code
 legacy/
