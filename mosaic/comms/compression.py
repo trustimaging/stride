@@ -3,7 +3,7 @@ import random
 import numpy as np
 import functools
 import contextlib
-import pickle5
+import pickle
 
 
 __all__ = ['maybe_compress', 'decompress']
@@ -217,7 +217,7 @@ def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
 
     """
 
-    if isinstance(payload, pickle5.PickleBuffer):
+    if isinstance(payload, pickle.PickleBuffer):
         payload = memoryview(payload)
 
     if type(payload) is memoryview or hasattr(payload, 'nbytes'):

@@ -1,32 +1,28 @@
 
 import os
-import warnings
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    os.environ['ETS_TOOLKIT'] = 'qt4'
-    from wx import wxPyDeprecationWarning
-    warnings.simplefilter(action='ignore', category=wxPyDeprecationWarning)
-
-    from traits.api import HasTraits, Instance, Array, on_trait_change
-    from traitsui.api import View, Item, HGroup, Group
-
-    from tvtk.api import tvtk
-    from tvtk.util import ctf
-    from tvtk.pyface.scene import Scene
-
-    from mayavi import mlab
-    from mayavi.core.api import PipelineBase, Source
-    from mayavi.core.ui.api import SceneEditor, MayaviScene, MlabSceneModel
-
-    ENABLED_3D_PLOTTING = True
-
-except (ModuleNotFoundError, RuntimeError):
-    ENABLED_3D_PLOTTING = False
 
 
-if ENABLED_3D_PLOTTING:
+def volume_slicer(*args, **kwargs):
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+
+        from traits.api import HasTraits, Instance, Array, on_trait_change
+        from traitsui.api import View, Item, HGroup, Group
+
+        from tvtk.api import tvtk
+        from tvtk.util import ctf
+        from tvtk.pyface.scene import Scene
+
+        from mayavi import mlab
+        from mayavi.core.api import PipelineBase, Source
+        from mayavi.core.ui.api import SceneEditor, MayaviScene, MlabSceneModel
+    except (ModuleNotFoundError, RuntimeError):
+        class VolumeSlicer:
+            pass
+
+        return VolumeSlicer()
+
     class VolumeSlicer(HasTraits):
         # The data to plot
         data = Array()
@@ -214,6 +210,4 @@ if ENABLED_3D_PLOTTING:
                  height=250, width=300),
             show_labels=True)), resizable=True, title='VolumeSlicer')
 
-else:
-    class VolumeSlicer:
-        pass
+    return VolumeSlicer(*args, **kwargs)

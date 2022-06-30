@@ -1,29 +1,6 @@
 
 import os
 
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    from mayavi import mlab
-    from mayavi.core.ui.api import MlabSceneModel
-
-    ENABLED_3D_PLOTTING = True
-
-except ModuleNotFoundError:
-    ENABLED_3D_PLOTTING = False
-
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    import matplotlib.pyplot as plt
-
-    ENABLED_2D_PLOTTING = True
-
-except ModuleNotFoundError:
-    ENABLED_2D_PLOTTING = False
-
 
 def show_2d(figure=None):
     """
@@ -38,7 +15,11 @@ def show_2d(figure=None):
     -------
 
     """
-    if not ENABLED_2D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
         return None
 
     plt.show()
@@ -57,7 +38,11 @@ def show_3d(figure):
     -------
 
     """
-    if not ENABLED_3D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        from mayavi import mlab
+    except ModuleNotFoundError:
         return None
 
     if not isinstance(figure, list):
@@ -85,12 +70,21 @@ def show(figure=None):
     -------
 
     """
+    plot_3d = True
+
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        from mayavi.core.ui.api import MlabSceneModel
+    except ModuleNotFoundError:
+        plot_3d = False
+
     if isinstance(figure, list):
         _figure = figure[0]
     else:
         _figure = figure
 
-    if ENABLED_3D_PLOTTING and (isinstance(_figure, MlabSceneModel) or hasattr(_figure, 'scene3d')):
+    if plot_3d and (isinstance(_figure, MlabSceneModel) or hasattr(_figure, 'scene3d')):
         show_3d(figure)
 
     else:
