@@ -21,21 +21,42 @@ class NormPerTrace(Operator):
 
         self.amplitude = kwargs.pop('amplitude', False)
 
-    def forward(self, modelled, observed, **kwargs):
+        self._num_traces = None
+
+    def forward(self, *traces, **kwargs):
+        self._num_traces = len(traces)
+
         amplitude = kwargs.pop('amplitude', self.amplitude)
 
         if amplitude:
-            scaling = self._norm(modelled, **kwargs)
+            scaling = self._norm(traces[0], **kwargs)
         else:
             scaling = 1.
 
-        modelled = self._apply(modelled, scaling=scaling, **kwargs)
-        observed = self._apply(observed, scaling=scaling, **kwargs)
+        normed = tuple([self._apply(each, scaling=scaling, **kwargs) for each in traces])
 
-        return modelled, observed
+        if len(normed) == 1:
+            normed = normed[0]
 
-    def adjoint(self, d_modelled, d_observed, modelled, observed, **kwargs):
-        return d_modelled, d_observed
+        return normed
+
+    def adjoint(self, *d_traces, **kwargs):
+        d_traces = d_traces[:self._num_traces]
+
+        if len(d_traces) == 1:
+            d_traces = d_traces[0]
+
+        return d_traces
+
+    def _norm(self, traces, **kwargs):
+        norm_value = 0.
+
+        for index in range(traces.extended_shape[0]):
+            norm_value += np.sum(traces.extended_data[index] ** 2)
+
+        norm_value = np.sqrt(norm_value / traces.extended_shape[0]) + 1e-31
+
+        return norm_value
 
     def _apply(self, traces, scaling, **kwargs):
         out_traces = traces.alike(name='normed_%s' % traces.name)
