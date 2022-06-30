@@ -3,18 +3,6 @@ import os
 import numpy as np
 
 
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    import matplotlib.pyplot as plt
-
-    ENABLED_2D_PLOTTING = True
-
-except ModuleNotFoundError:
-    ENABLED_2D_PLOTTING = False
-
-
 __all__ = ['plot_trace', 'plot_gather']
 
 
@@ -41,7 +29,11 @@ def plot_trace(*args, axis=None, colour='black', line_style='solid', title=None,
         Generated matplotlib figure
 
     """
-    if not ENABLED_2D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
         return None
 
     if axis is None:
@@ -91,7 +83,11 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
 
     """
 
-    if not ENABLED_2D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
         return None, None
 
     if len(args) > 2:

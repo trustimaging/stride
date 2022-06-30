@@ -1,4 +1,5 @@
 matplotlib
-wxPython
+pyface
+pyqt5
 traitsui
 mayavi

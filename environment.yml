@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.7
+  - python>=3.8
   - blosc
   - cached-property
   - click
@@ -17,14 +17,15 @@ dependencies:
   - nbval
   - numpy>=1.20
   - notebook>=6.4
-  - pickle5
   - pip
   - pre-commit>=2.13
   - psutil
+  - pyface
   - pyflakes
   - pytest
   - pytest-cov
   - pyyaml>=5.4
+  - pyqt5-sip
   - pytest-runner
   - pyzmq>=22.1
   - scikit-image
@@ -34,7 +35,6 @@ dependencies:
   - tornado>=6.1
   - traitsui
   - uvloop
-  - wxPython
   - zlib
   - zict
   - pip:

@@ -2,27 +2,6 @@
 import os
 import numpy as np
 
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    import matplotlib.pyplot as plt
-
-    ENABLED_2D_PLOTTING = True
-except ModuleNotFoundError:
-    ENABLED_2D_PLOTTING = False
-
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    from mayavi import mlab
-
-    ENABLED_3D_PLOTTING = True
-
-except ModuleNotFoundError:
-    ENABLED_3D_PLOTTING = False
-
 
 __all__ = ['plot_points', 'plot_points_2d', 'plot_points_3d']
 
@@ -55,7 +34,11 @@ def plot_points_2d(coordinates, axis=None, colour='red', size=15, title=None,
         Generated matplotlib axis
 
     """
-    if not ENABLED_2D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
         return None
 
     if axis is None:
@@ -105,7 +88,11 @@ def plot_points_3d(coordinates, axis=None, colour='red', size=15, title=None, **
         Generated MayaVi figure
 
     """
-    if not ENABLED_3D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        from mayavi import mlab
+    except ModuleNotFoundError:
         return None
 
     colour_map = {

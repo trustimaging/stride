@@ -2,30 +2,7 @@ import os
 import functools
 import numpy as np
 
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    from mayavi.core.ui.api import MlabSceneModel
-
-    ENABLED_3D_PLOTTING = True
-
-except (ModuleNotFoundError, RuntimeError):
-    ENABLED_3D_PLOTTING = False
-
-try:
-    if not os.environ.get('DISPLAY', None):
-        raise ModuleNotFoundError
-
-    import matplotlib.pyplot as plt
-    from matplotlib.colors import ListedColormap
-
-    ENABLED_2D_PLOTTING = True
-
-except ModuleNotFoundError:
-    ENABLED_2D_PLOTTING = False
-
-from .volume_slicer import VolumeSlicer
+from .volume_slicer import volume_slicer
 
 __all__ = ['plot_vector_field', 'plot_vector_field_2d', 'plot_vector_field_3d']
 
@@ -90,7 +67,12 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
         Generated axis.
 
     """
-    if not ENABLED_2D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import ListedColormap
+    except ModuleNotFoundError:
         return None
 
     if axis is None:
@@ -218,7 +200,11 @@ def plot_vector_field_3d(field, data_range=(None, None), origin=None, limit=None
         Generated MayaVi figure
 
     """
-    if not ENABLED_3D_PLOTTING:
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        from mayavi.core.ui.api import MlabSceneModel
+    except ModuleNotFoundError:
         return None
 
     if axis is None:
@@ -229,9 +215,9 @@ def plot_vector_field_3d(field, data_range=(None, None), origin=None, limit=None
                           data_range=data_range)
     default_kwargs.update(kwargs)
 
-    window = VolumeSlicer(data=field,
-                          is_vector=True,
-                          **default_kwargs)
+    window = volume_slicer(data=field,
+                           is_vector=True,
+                           **default_kwargs)
 
     return window
 
