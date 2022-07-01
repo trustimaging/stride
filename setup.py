@@ -23,7 +23,7 @@ optional_links = []
 for requirement in optionals:
     if requirement[0:3] == 'git':
         optional_links += [requirement + '#egg=' + requirement.split('/')[-1] + '-0']
-        optional_requirements += [requirement.split('/')[-1]]
+        optional_requirements += [requirement.split('/')[-1].split('#')[0]]
     else:
         optional_requirements += [requirement]
 
@@ -35,7 +35,7 @@ setup(
     url='https://github.com/trustimaging/stride',
     author='TRUST',
     author_email='c.cueto@imperial.ac.uk',
-    license='',
+    license='AGPL-3.0',
     python_requires=">=3.8",
     packages=find_packages(exclude=['docs', 'tests', 'legacy*']),
     package_data={},
