@@ -49,12 +49,12 @@ jobs:
       shell: bash -l {0}
       run: |
         cd stride
-        mrun -nw 1 -nth 2 python examples/examples/homogeneous_acoustic/forward_2D.py
-        mrun -nw 1 -nth 2 python examples/examples/homogeneous_acoustic/forward_3D.py
-        mrun -nw 1 -nth 2 python examples/examples/homogeneous_elastic/forward_2D.py
+        mrun -nw 1 -nth 2 python stride_examples/examples/homogeneous_acoustic/forward_2D.py
+        mrun -nw 1 -nth 2 python stride_examples/examples/homogeneous_acoustic/forward_3D.py
+        mrun -nw 1 -nth 2 python stride_examples/examples/homogeneous_elastic/forward_2D.py
     - name: Breast 2D
       shell: bash -l {0}
       run: |
         cd stride
-        mrun -nw 1 -nth 2 python examples/examples/breast2D/01_script_forward.py
-        mrun -nw 1 -nth 2 python examples/examples/breast2D/02_script_inverse.py
+        mrun -nw 1 -nth 2 python stride_examples/examples/breast2D/01_script_forward.py
+        mrun -nw 1 -nth 2 python stride_examples/examples/breast2D/02_script_inverse.py
