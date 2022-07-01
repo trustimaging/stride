@@ -36,7 +36,7 @@ setup(
     author='TRUST',
     author_email='c.cueto@imperial.ac.uk',
     license='',
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     packages=find_packages(exclude=['docs', 'tests', 'legacy*']),
     package_data={},
     include_package_data=True,
