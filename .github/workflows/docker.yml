@@ -54,6 +54,15 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            stridecodes/stride
+          tags: |
+            type=ref,event=push,value=${{ matrix.tag }}-latest
+
       - name: Build and push image
         if: github.event_name == 'push'
         uses: docker/build-push-action@v3
@@ -61,6 +70,5 @@ jobs:
           context: .
           file: ./docker/Dockerfile.devito
           push: true
-          tags: |
-            type=ref,event=push,value=${{ matrix.tag }}-latest
+          tags: ${{ steps.meta.outputs.tags }}
           build-args: base=devitocodes/${{ matrix.base }}
