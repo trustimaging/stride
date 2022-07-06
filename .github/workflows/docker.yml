@@ -61,7 +61,7 @@ jobs:
           images: |
             stridecodes/stride
           tags: |
-            type=ref,event=push,value=${{ matrix.tag }}-latest
+            type=raw,value=${{ matrix.tag }}-latest
 
       - name: Build and push image
         if: github.event_name == 'push'
