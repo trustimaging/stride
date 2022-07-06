@@ -1,0 +1,72 @@
+##############################################################
+# This Dockerfile contains the Stride codes and can be built
+# using different base images created by the Devito team.
+##############################################################
+
+# Arguments
+ARG base=devitocodes/bases:cpu-gcc
+
+# Get Anaconda3
+FROM continuumio/miniconda3:latest as anaconda
+
+##################  Install Stride ############################################
+FROM $base as builder
+
+# Copy and prepare Anaconda3
+COPY --from=anaconda /opt/conda /opt/conda
+
+# Copy Stride
+ADD . /app/stride
+# Remove git files
+RUN rm -rf /app/stride/.git && rm -rf /app/stride/legacy
+
+# Switch shell sh (default in Linux) to bash
+SHELL ["/bin/bash", "-c"]
+
+# Create environment and install Stride
+RUN . /opt/conda/etc/profile.d/conda.sh && \
+    conda update -n base -c defaults conda && \
+    conda env create -f /app/stride/environment.yml && \
+    conda activate stride && \
+    /opt/conda/envs/stride/bin/pip install -e /app/stride/ && \
+    conda install -c conda-forge mayavi
+
+# Cleanup
+RUN apt-get clean && apt-get autoclean && apt-get autoremove && \
+    rm -rf /var/lib/apt/lists/* && \
+    . /opt/conda/etc/profile.d/conda.sh && \
+    conda clean --all
+
+##################  Set up user ################################################
+FROM $base as user
+
+# Set up new user
+ENV HOME=/app
+ENV APP_HOME=/app
+RUN mkdir -p /app && groupadd -r app && useradd -r -g app app && chown -R app:app /app
+
+# Copy Anaconda3
+COPY --from=builder --chown=app:app /opt/conda /opt/conda
+# Make "conda activate" available
+RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
+    echo "conda activate stride" >> ~/.bashrc
+
+# Copy code
+COPY --from=builder --chown=app:app /app /app
+
+# Switch shell sh (default in Linux) to bash
+SHELL ["/bin/bash", "-c"]
+
+# Add scripts
+ADD --chown=app:app docker/jupyter.sh /jupyter
+RUN chmod +x /jupyter
+
+# Make Stride the default environment
+ENV CONDA_DEFAULT_ENV stride
+
+# Finalise
+WORKDIR /app/stride
+USER app
+
+EXPOSE 8888
+CMD ["/jupyter"]
