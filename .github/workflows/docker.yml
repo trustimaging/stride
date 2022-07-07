@@ -39,9 +39,6 @@ jobs:
 #          repository: trustimaging/stride
 #          path: "stride"
 
-      - name: Check event name
-        run: echo ${{ github.event_name }}
-
       - name: Login to DockerHub
         uses: docker/login-action@v2
         with:
@@ -59,6 +56,11 @@ jobs:
 #            stridecodes/stride
 #          tags: |
 #            type=raw,value=${{ matrix.tag }}-latest
+
+      - name: Install dependencies
+          shell: bash -l {0}
+          run: |
+            /usr/bin/docker buildx build --file ./docker/Dockerfile.stride --iidfile /tmp/docker-build-push-xYhiHL/iidfile --tag ***/stride:test-latest --metadata-file /tmp/docker-build-push-xYhiHL/metadata-file --push .
 
       - name: Build and push image
         uses: docker/build-push-action@v3
