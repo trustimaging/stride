@@ -60,7 +60,7 @@ jobs:
       - name: Test
         shell: bash -l {0}
         run: |
-          /usr/bin/docker buildx build --file ./docker/Dockerfile.stride --iidfile /tmp/docker-build-push-xYhiHL/iidfile --tag ***/stride:test-latest --metadata-file /tmp/docker-build-push-xYhiHL/metadata-file --push .
+          /usr/bin/docker buildx build --file ./docker/Dockerfile.stride --iidfile /tmp/docker-build-push-xYhiHL/iidfile --tag stridecodes/stride:test-latest --metadata-file /tmp/docker-build-push-xYhiHL/metadata-file --push .
 
       - name: Build and push image
         uses: docker/build-push-action@v3
