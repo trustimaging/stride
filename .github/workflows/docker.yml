@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master         # Push events on master branch
-      - docker
+      - docker-setup
 
 jobs:
   deploy-stride:
@@ -56,7 +56,7 @@ jobs:
 #            stridecodes/stride
 #          tags: |
 #            type=raw,value=${{ matrix.tag }}-latest
-      
+
       - name: Build and push image
         uses: docker/build-push-action@v3
         with:
