@@ -64,11 +64,10 @@ jobs:
             type=raw,value=${{ matrix.tag }}-latest
 
       - name: Build and push image
-        if: github.event_name == 'push'
         uses: docker/build-push-action@v3
         with:
           context: .
-          file: ./docker/Dockerfile.devito
+          file: ./docker/Dockerfile.stride
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           build-args: base=devitocodes/${{ matrix.base }}
