@@ -56,12 +56,7 @@ jobs:
 #            stridecodes/stride
 #          tags: |
 #            type=raw,value=${{ matrix.tag }}-latest
-
-      - name: Test
-        shell: bash -l {0}
-        run: |
-          /usr/bin/docker buildx build --file ./docker/Dockerfile.stride --iidfile /tmp/docker-build-push-xYhiHL/iidfile --tag stridecodes/stride:test-latest --metadata-file /tmp/docker-build-push-xYhiHL/metadata-file --push .
-
+      
       - name: Build and push image
         uses: docker/build-push-action@v3
         with:
