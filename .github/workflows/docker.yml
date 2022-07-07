@@ -69,5 +69,6 @@ jobs:
           context: .
           file: ./docker/Dockerfile.stride
           push: true
+          tags: test-latest
 #          tags: ${{ steps.meta.outputs.tags }}
           build-args: base=devitocodes/${{ matrix.base }}
