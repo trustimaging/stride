@@ -33,11 +33,11 @@ jobs:
             tag: "icc"
 
     steps:
-      - name: Checkout Stride
-        uses: actions/checkout@v3
-        with:
-          repository: trustimaging/stride
-          path: "stride"
+#      - name: Checkout Stride
+#        uses: actions/checkout@v3
+#        with:
+#          repository: trustimaging/stride
+#          path: "stride"
 
       - name: Check event name
         run: echo ${{ github.event_name }}
@@ -62,11 +62,6 @@ jobs:
             stridecodes/stride
           tags: |
             type=raw,value=${{ matrix.tag }}-latest
-
-      - name: List
-        shell: bash -l {0}
-        run: |
-          ls -l /usr/bin/docker
 
       - name: Build and push image
         uses: docker/build-push-action@v3
