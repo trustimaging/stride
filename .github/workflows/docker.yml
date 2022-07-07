@@ -63,6 +63,11 @@ jobs:
           tags: |
             type=raw,value=${{ matrix.tag }}-latest
 
+      - name: List
+        shell: bash -l {0}
+        run: |
+          ls -l /usr/bin/docker
+
       - name: Build and push image
         uses: docker/build-push-action@v3
         with:
