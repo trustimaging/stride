@@ -9,11 +9,11 @@ on:
 jobs:
   deploy-stride:
     runs-on: ubuntu-latest
-    env:
-      DOCKER_BUILDKIT: "1"
+#    env:
+#      DOCKER_BUILDKIT: "1"
 
-    strategy:
-      fail-fast: false
+#    strategy:
+#      fail-fast: false
 
 #      matrix:
 #        include:
@@ -66,6 +66,6 @@ jobs:
           context: .
           file: ./docker/Dockerfile.stride
           push: true
-          tags: test-latest
+          tags: stridecodes/stride:test-latest
 #          tags: ${{ steps.meta.outputs.tags }}
 #          build-args: base=devitocodes/${{ matrix.base }}
