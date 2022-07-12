@@ -41,7 +41,7 @@ jobs:
         run: |
           cd docker
           chmod +x free_space.sh
-          free_space.sh
+          ./free_space.sh
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
