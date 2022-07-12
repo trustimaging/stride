@@ -39,7 +39,7 @@ jobs:
       - name: Free space
         shell: bash -l {0}
         run: |
-          cd stride/docker
+          cd docker
           chmod +x free_space.sh
           free_space.sh
 
