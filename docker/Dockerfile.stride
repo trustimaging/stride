@@ -59,7 +59,8 @@ SHELL ["/bin/bash", "-c"]
 
 # Add scripts
 ADD --chown=app:app docker/jupyter.sh /jupyter
-RUN chmod +x /jupyter
+ADD --chown=app:app docker/entrypoint.sh /entrypoint
+RUN chmod +x /jupyter /entrypoint
 
 # Make Stride the default environment
 ENV CONDA_DEFAULT_ENV stride
@@ -69,4 +70,5 @@ WORKDIR /app/stride
 USER app
 
 EXPOSE 8888
+ENTRYPOINT ["/entrypoint"]
 CMD ["/jupyter"]
