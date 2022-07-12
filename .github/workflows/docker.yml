@@ -33,15 +33,15 @@ jobs:
             tag: "icc"
 
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-
       - name: Checkout Stride
         uses: actions/checkout@v3
+
+      - name: Free space
+        shell: bash -l {0}
+        run: |
+          cd stride/docker
+          chmod +x free_space.sh
+          free_space.sh
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
