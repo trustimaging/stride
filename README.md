@@ -59,7 +59,7 @@ Jump right in using a Jupyter notebook directly in your browser, using [binder](
 
 Otherwise, the recommended way to install Stride is through Anaconda's package manager (version >=4.9), which can be downloaded
 in [Anaconda](https://www.continuum.io/downloads) or [Miniconda](https://conda.io/miniconda.html).
-A Python version above 3.7 is recommended to run Stride.
+A Python version above 3.8 is recommended to run Stride.
 
 To install Stride, follow these steps:
 
@@ -70,6 +70,18 @@ conda env create -f environment.yml
 conda activate stride
 pip install -e .
 ```
+
+You can also start using Stride through Docker:
+
+```sh
+git clone https://github.com/trustimaging/stride.git
+cd stride
+docker-compose up stride
+```
+
+which will start a Jupyter server within the Docker container and display a URL on 
+your terminal that looks something like `https://127.0.0.1:8888/?token=XXX`. 
+To access the server, copy-paste the URL shown on the terminal into your browser to start a new Jupyter session.
 
 
 ## Running the examples

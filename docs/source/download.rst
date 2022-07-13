@@ -10,7 +10,7 @@ in:
 .. _Anaconda: https://www.continuum.io/downloads
 .. _Miniconda: https://conda.io/miniconda.html
 
-A Python version above 3.7 is recommended to run Stride.
+A Python version above 3.8 is recommended to run Stride.
 
 To install Stride, follow these steps:
 
@@ -21,6 +21,17 @@ To install Stride, follow these steps:
     conda env create -f environment.yml
     conda activate stride
     pip install -e .
+
+You can also start using Stride through Docker:
+
+.. code-block:: shell
+    git clone https://github.com/trustimaging/stride.git
+    cd stride
+    docker-compose up stride
+
+which will start a Jupyter server within the Docker container and display a URL on
+your terminal that looks something like `https://127.0.0.1:8888/?token=XXX`.
+To access the server, copy-paste the URL shown on the terminal into your browser to start a new Jupyter session.
 
 
 Additional packages
