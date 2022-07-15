@@ -227,7 +227,7 @@ class EventLoop:
                 if not task.done():
                     task.cancel()
 
-            tasks = asyncio.Task.all_tasks()
+            tasks = asyncio.all_tasks()
             pending = [task for task in tasks if not task.done()]
 
             for task in pending:
