@@ -1,0 +1,27 @@
+version: '2'
+
+services:
+  stride:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.stride
+      args:
+        base: devitocodes/bases:cpu-gcc
+    volumes:
+      - ./stride:/app/stride/stride
+      - ./stride_examples:/app/stride/stride_examples
+    ports:
+      - 8888:8888
+
+  stride.nvidia:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.stride
+      args:
+        base: devitocodes/bases:nvidia-nvc
+    volumes:
+      - ./stride:/app/stride/stride
+      - ./stride_examples:/app/stride/stride_examples
+    ports:
+      - 8888:8888
+    runtime: nvidia
