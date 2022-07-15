@@ -20,7 +20,7 @@ services:
       args:
         base: devitocodes/bases:nvidia-nvc
     volumes:
-      - ./stride:/app/devito/devito
+      - ./stride:/app/stride/stride
       - ./stride_examples:/app/stride/stride_examples
     ports:
       - 8888:8888

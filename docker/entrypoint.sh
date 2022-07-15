@@ -4,8 +4,6 @@ source ~/.bashrc
 
 find /app -type f -name '*.pyc' -delete
 
-export PATH=/venv/bin:$PATH
-
 # HPC SDK entrypoint
 if [ "x$MPIVER" = "xHPCX" ]; then \
    echo "Loading HPCX"

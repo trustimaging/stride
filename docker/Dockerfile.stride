@@ -20,9 +20,6 @@ ADD . /app/stride
 # Remove git files
 RUN rm -rf /app/stride/.git && rm -rf /app/stride/legacy
 
-# Switch shell sh (default in Linux) to bash
-SHELL ["/bin/bash", "-c"]
-
 # Create environment and install Stride
 RUN . /opt/conda/etc/profile.d/conda.sh && \
     conda update -n base -c defaults conda && \
@@ -43,16 +40,19 @@ FROM $base as user
 # Set up new user
 ENV HOME=/app
 ENV APP_HOME=/app
-RUN mkdir -p /app && groupadd -r app && useradd -r -g app app && chown -R app:app /app
+RUN mkdir -p /app && \
+    groupadd -r -g 1000 app && \
+    useradd -r -u 1000 -g app -d /app -s /sbin/nologin -c "Docker image user" app && \
+    chown -R app:app $APP_HOME
+
+# Copy code
+COPY --from=builder --chown=app:app /app /app
 
 # Copy Anaconda3
 COPY --from=builder --chown=app:app /opt/conda /opt/conda
 # Make "conda activate" available
 RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate stride" >> ~/.bashrc
-
-# Copy code
-COPY --from=builder --chown=app:app /app /app
 
 # Switch shell sh (default in Linux) to bash
 SHELL ["/bin/bash", "-c"]
