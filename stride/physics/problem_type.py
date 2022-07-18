@@ -69,7 +69,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         """
         pre_str = ''
         problem = kwargs.get('problem', None)
-        if problem is not None:
+        if problem is not None and hasattr(problem, 'shot_id'):
             pre_str = '(ShotID %d) ' % problem.shot_id
 
         self.logger.info('%sPreparing to run state for shot' % pre_str)
@@ -96,7 +96,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         """
         pre_str = ''
         problem = kwargs.get('problem', None)
-        if problem is not None:
+        if problem is not None and hasattr(problem, 'shot_id'):
             pre_str = '(ShotID %d) ' % problem.shot_id
 
         self.logger.info('%sPreparing to run adjoint for shot' % pre_str)
