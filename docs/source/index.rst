@@ -30,7 +30,7 @@ For information on the parallelisation library Mosaic, check the specific docume
    :hidden:
 
    Download <download>
-   Tutorials <https://github.com/trustimaging/stride/tree/master/examples/tutorials>
-   Examples <https://github.com/trustimaging/stride/tree/master/examples/examples>
+   Tutorials <https://github.com/trustimaging/stride/tree/master/stride_examples/tutorials>
+   Examples <https://github.com/trustimaging/stride/tree/master/stride_examples/examples>
    Stride API Reference <stride/api/api_index>
    Mosaic API Reference <mosaic/api/api_index>

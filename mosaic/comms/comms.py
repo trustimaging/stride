@@ -1290,16 +1290,15 @@ class CommsManager:
             if msg.cmd is not None:
                 msg.kwargs['cmd'] = msg.cmd
 
-            method_name = msg.method
-            if method_name == 'cmd':
-                method_name = '%s:%s.%s' % (method_name, msg.cmd.type, msg.cmd.method)
-
             future = self._loop.run(call,
                                     sender_id, method, msg.reply,
                                     **msg.kwargs)
 
             if comms_method is not False:
-                await future
+                try:
+                    await future
+                except asyncio.CancelledError:
+                    pass
 
         if comms_method is not False and msg.method in self._comms_methods:
             self._loop.run(call,
@@ -1330,7 +1329,10 @@ class CommsManager:
 
         args = (sender_id,)
 
-        await self._loop.run(method, *args, **kwargs)
+        try:
+            await self._loop.run(method, *args, **kwargs)
+        except asyncio.CancelledError:
+            pass
 
     async def call_safe(self, sender_id, method, reply, **kwargs):
         """
