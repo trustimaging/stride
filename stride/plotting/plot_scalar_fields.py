@@ -81,7 +81,7 @@ def plot_scalar_field_2d(field, data_range=(None, None), origin=None, limit=None
 
     default_kwargs = dict(cmap=palette,
                           vmin=data_range[0], vmax=data_range[1],
-                          aspect='equal',
+                          aspect='auto',
                           origin='lower',
                           interpolation='bicubic')
 

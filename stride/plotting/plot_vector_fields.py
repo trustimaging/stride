@@ -91,28 +91,31 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
         start = origin
         stop = limit
 
-    undersampling = kwargs.pop('undersampling', 1)
+    undersampling = kwargs.pop('undersampling', (1, 1))
     equal_arrows = kwargs.pop('equal_arrows', False)
+
+    if not isinstance(undersampling, tuple):
+        undersampling = (undersampling,)*2
 
     x = np.linspace(start[0], stop[0], field.shape[1], endpoint=True)
     y = np.linspace(start[1], stop[1], field.shape[2], endpoint=True)
-    x = x[::undersampling]
-    y = y[::undersampling]
+    x = x[::undersampling[0]]
+    y = y[::undersampling[1]]
     x, y = np.meshgrid(x, y)
 
     mag = np.sqrt(field[0].astype(np.float64) ** 2 + field[1].astype(np.float64) ** 2).T
-    undersampled_mag = mag[::undersampling, ::undersampling]
+    undersampled_mag = mag[::undersampling[1], ::undersampling[0]]
     max_mag = np.max(undersampled_mag)
 
-    u = [field[0, ::undersampling, ::undersampling].T,
-         field[1, ::undersampling, ::undersampling].T]
+    u = [field[0, ::undersampling[0], ::undersampling[1]].T,
+         field[1, ::undersampling[0], ::undersampling[1]].T]
 
     if equal_arrows:
-        u[0] = undersampling * u[0] / (undersampled_mag + 1e-31)
-        u[1] = undersampling * u[1] / (undersampled_mag + 1e-31)
+        u[0] = np.mean(undersampling) * u[0] / (undersampled_mag + 1e-31)
+        u[1] = np.mean(undersampling) * u[1] / (undersampled_mag + 1e-31)
     else:
-        u[0] = undersampling * u[0] / (max_mag + 1e-31)
-        u[1] = undersampling * u[1] / (max_mag + 1e-31)
+        u[0] = np.mean(undersampling) * u[0] / (max_mag + 1e-31)
+        u[1] = np.mean(undersampling) * u[1] / (max_mag + 1e-31)
 
     cmap_name = 'Rainbow_Blended_Black'
     cmap_filename = os.path.join(os.path.dirname(__file__), 'cmaps/' + cmap_name + '.txt')
@@ -127,7 +130,7 @@ def plot_vector_field_2d(field, data_range=(None, None), origin=None, limit=None
 
     default_kwargs = dict(cmap=cmap,
                           vmin=data_range[0], vmax=data_range[1],
-                          aspect='equal',
+                          aspect='auto',
                           origin='lower',
                           interpolation='bicubic')
 

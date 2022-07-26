@@ -274,6 +274,14 @@ class StructuredData(Data):
         return self._extended_shape
 
     @property
+    def ndim(self):
+        """
+        Number of data dimensions.
+
+        """
+        return len(self._shape)
+
+    @property
     def inner(self):
         """
         Slices that determine the location of the inner domain with respect to the extended domain,
