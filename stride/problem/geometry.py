@@ -1,4 +1,6 @@
 
+from logging import warning
+import mosaic
 import numpy as np
 from collections import OrderedDict
 
@@ -282,6 +284,72 @@ class Geometry(ProblemBase):
                 _coordinates[-1] = self.space.limit[2] / 2
 
             self.add(index, self._transducers.get(0), _coordinates)
+
+    def from_fullwave(self, fullwave_pgy, **kwargs):
+        """
+        Populates geometry container based from a Fullwave geometry pgy file
+
+        Parameters
+        ----------
+        fullwave_pgy : Path
+            Path to .pgy Fullwave geometry file
+
+        scale: float, optional
+            Value to each scale the location values in all dimensions. Useful for unit conversion. Default 1.
+
+        disp: tuple or float, optional
+            Amount to displace in each dimension. Applied after scale. Default (0., 0., 0.)
+
+        dropdims: tuple or int, optional
+            Coordinate dimensions of .pgy file to drop (count from 0). Default ()
+
+        Returns
+        -------
+        """
+        num_locations, n1, n2, n3 = -1, -1, -1, -1
+        scale = kwargs.get('scale', 1.)
+        disp = kwargs.get('disp', (0., 0., 0.))
+        dropdims = kwargs.get('dropdims', ())
+
+        # Read coordinates and IDs from pgy file
+        with open(fullwave_pgy, 'r') as f:
+            for i, line in enumerate(f):
+                line = line.split()
+                
+                # Header line
+                if i == 0:
+                    num_locations, n1, n2, n3 = [int(h) for h in line] # nz, ny, nx in fullwave format
+                    coordinates = np.zeros((num_locations, len(line)-1))
+                    ids = np.zeros((num_locations))
+                    
+                    while len(disp) < coordinates.shape[1]:
+                        disp = list(disp)
+                        disp.append(0.)
+                        disp = tuple(disp)    
+
+                # Transducer IDs and Coordinates
+                else:
+                    ids[i-1] = int(line[0]) - 1
+                    _coordinates = [scale*float(c) + float(disp[i]) for i, c in enumerate(line[1:])]
+                    coordinates[i-1] = _coordinates
+        assert len(coordinates) == len(ids) == num_locations
+
+        # Drop dimensions if prompted
+        coordinates = np.delete(coordinates, obj=dropdims, axis=1)
+
+        # Trim coordinates to match problem dimension if needed. Raise warning if so
+        if coordinates.shape[1] != self.space.dim:
+            mosaic.logger().warn("Warning: trimming {} dimensions found on .pgy file to match {} dimensions in Space object".format(coordinates.shape[1], self.space.dim))
+            for i in range(coordinates.shape[1] - self.space.dim):
+                coordinates = np.delete(coordinates, obj=1, axis=1)
+
+        # Add transducer locations to geometry object
+        for index in ids:
+            _coordinates = coordinates[index, :]
+            self.add(index, self._transducers.get(0), _coordinates)
+
+    # plot 3d mayavi
+    # acquisition below default
 
     @property
     def transducers(self):
