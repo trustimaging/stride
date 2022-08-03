@@ -320,7 +320,7 @@ class Geometry(ProblemBase):
                 if i == 0:
                     num_locations, n1, n2, n3 = [int(h) for h in line] # nz, ny, nx in fullwave format
                     coordinates = np.zeros((num_locations, len(line)-1))
-                    ids = np.zeros((num_locations))
+                    ids = np.zeros((num_locations), dtype=np.int8) - 1
                     
                     while len(disp) < coordinates.shape[1]:
                         disp = list(disp)
@@ -338,7 +338,7 @@ class Geometry(ProblemBase):
         coordinates = np.delete(coordinates, obj=dropdims, axis=1)
 
         # Trim coordinates to match problem dimension if needed. Raise warning if so
-        if coordinates.shape[1] != self.space.dim:
+        if coordinates.shape[1] > self.space.dim:
             mosaic.logger().warn("Warning: trimming {} dimensions found on .pgy file to match {} dimensions in Space object".format(coordinates.shape[1], self.space.dim))
             for i in range(coordinates.shape[1] - self.space.dim):
                 coordinates = np.delete(coordinates, obj=1, axis=1)
