@@ -331,7 +331,7 @@ class Geometry(ProblemBase):
 
                 # Transducer IDs and Coordinates
                 else:
-                    ids[i-1] = int(line[0]) - 1
+                    ids[i-1] = int(line[0]) - 1     # Fullwave starts count from 1, stride from 0
                     _coordinates = [scale*float(c) + float(disp[i]) for i, c in enumerate(line[1:])]
                     coordinates[i-1] = _coordinates
         assert len(coordinates) == len(ids) == num_locations
