@@ -285,13 +285,13 @@ class Geometry(ProblemBase):
 
             self.add(index, self._transducers.get(0), _coordinates)
 
-    def from_fullwave(self, fullwave_pgy, **kwargs):
+    def from_fullwave(self, geompgy, **kwargs):
         """
         Populates geometry container based from a Fullwave geometry pgy file
 
         Parameters
         ----------
-        fullwave_pgy : Path
+        geompgy : Path
             Path to .pgy Fullwave geometry file
 
         scale: float, optional
@@ -306,13 +306,15 @@ class Geometry(ProblemBase):
         Returns
         -------
         """
+        assert geompgy.lower().split(".")[-1] == "pgy", "Expected .pgy extension but found .%s"%geompgy.lower().split(".")[-1]
+
         num_locations, n1, n2, n3 = -1, -1, -1, -1
         scale = kwargs.get('scale', 1.)
         disp = kwargs.get('disp', (0., 0., 0.))
         dropdims = kwargs.get('dropdims', ())
 
         # Read coordinates and IDs from pgy file
-        with open(fullwave_pgy, 'r') as f:
+        with open(geompgy, 'r') as f:
             for i, line in enumerate(f):
                 line = line.split()
                 
