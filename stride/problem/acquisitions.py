@@ -1,6 +1,7 @@
 
 import functools
 import numpy as np
+import struct
 from collections import OrderedDict
 from cached_property import cached_property
 
@@ -976,6 +977,78 @@ class Acquisitions(ProblemBase):
             receivers = self._geometry.locations
 
             self.add(Shot(source.id,
+                          sources=[source], receivers=receivers,
+                          geometry=self._geometry, problem=self.problem))
+
+    def from_fullwave(self, acquisitionttr, sourcettr=None, **kwargs):
+        """
+        Populates acquisition container with shot and receiver ids as described 
+        by a Fullwave .ttr acquisition file and an optional source .ttr file 
+        describing the wavelets for each shot. Assumes that each source id is shot
+        individually
+        
+        Parameters
+        ----------
+        acquisitionttr : Path
+            Path to .ttr acquisition Fullwave file (ideally Observed-Trace.ttr)
+        
+        sourcettr: Path, optional
+            Path to .ttr source Fullwave file. Default None
+            (Method not implemented)
+
+        Returns
+        -------
+
+        """
+
+        assert acquisitionttr.lower().split(".")[-1] == "ttr", "Expected .ttr extension in acquisitionttr but found .%s"%acquisitionttr.lower().split(".")[-1]
+        if sourcettr is not None:
+            assert sourcettr.lower().split(".")[-1] == "ttr", "Expected .ttr extension in sourcettr but found .%s"%sourcettr.lower().split(".")[-1]
+            raise NotImplementedError
+
+        # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
+        with open(acquisitionttr, mode='rb') as file:
+
+            # List to store source and receivers ids
+            sources_ids, receiver_ids = [], []
+            tmp_receiver_ids = []
+
+            # Read header
+            nheader = 1 + 4 + 1 # number of variables in header with trailing integers
+            headers=file.read(4 * nheader)
+            headers=struct.unpack('iiiifi', headers)
+            _ , ncomp, maxrecnum, nt, ttime, _ = headers
+
+            # Read rows
+            nrow = 1 + 2 + nt + 1 # number of variables in row with trailing integers
+            while True:
+                row = file.read(4*nrow) 
+                if not row:
+                    break # End of file
+                row=struct.unpack('<iii' + nt*'f' +'i', row)
+                csref=row[1] - 1    # Fullwave starts count from 1, stride from 0
+                pntref=row[2] - 1   # Fullwave starts count from 1, stride from 0
+                
+                if len(sources_ids) > 0 and sources_ids[-1] != csref:
+                    receiver_ids.append(tmp_receiver_ids)
+                    tmp_receiver_ids = []
+                    tmp_receiver_ids.append(pntref)
+                else:
+                    tmp_receiver_ids.append(pntref)
+                sources_ids.append(csref)
+        
+        # Adjustments to source and receiver ids
+        receiver_ids.append(tmp_receiver_ids)      # append last receivers list  
+        sources_ids = list(set(sources_ids))       # unique source ids only
+        
+        # Check every source has an assigned list of receivers
+        assert len(sources_ids) == len(receiver_ids), (len(sources_ids) , len(receiver_ids))
+
+        # Add each source and correspondent receivers as a shot
+        for i, sid in enumerate(sources_ids):
+            source = self._geometry.get(sid)
+            receivers = [self._geometry.get(rid) for rid in receiver_ids[i]]
+            self.add(Shot(sid,
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
