@@ -320,7 +320,7 @@ class Geometry(ProblemBase):
                 if i == 0:
                     num_locations, n1, n2, n3 = [int(h) for h in line] # nz, ny, nx in fullwave format
                     coordinates = np.zeros((num_locations, len(line)-1))
-                    ids = np.zeros((num_locations), dtype=np.int8) - 1
+                    ids = np.zeros((num_locations), dtype=int) - 1
                     
                     while len(disp) < coordinates.shape[1]:
                         disp = list(disp)
@@ -347,9 +347,6 @@ class Geometry(ProblemBase):
         for index in ids:
             _coordinates = coordinates[index, :]
             self.add(index, self._transducers.get(0), _coordinates)
-
-    # plot 3d mayavi
-    # acquisition below default
 
     @property
     def transducers(self):
