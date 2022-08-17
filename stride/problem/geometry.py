@@ -303,15 +303,19 @@ class Geometry(ProblemBase):
         dropdims: tuple or int, optional
             Coordinate dimensions of .pgy file to drop (count from 0). Default ()
 
+        swapaxes: bool, optional
+            Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line, depth, cross-line). Default False
+
         Returns
         -------
         """
         assert geompgy.lower().split(".")[-1] == "pgy", "Expected .pgy extension but found .%s"%geompgy.lower().split(".")[-1]
 
-        num_locations, n1, n2, n3 = -1, -1, -1, -1
+        num_locations, n3, n2, n1 = -1, -1, -1, -1
         scale = kwargs.get('scale', 1.)
         disp = kwargs.get('disp', (0., 0., 0.))
         dropdims = kwargs.get('dropdims', ())
+        swapaxes = kwargs.get('swapaxes', False)
 
         # Read coordinates and IDs from pgy file
         with open(geompgy, 'r') as f:
@@ -320,7 +324,7 @@ class Geometry(ProblemBase):
                 
                 # Header line
                 if i == 0:
-                    num_locations, n1, n2, n3 = [int(h) for h in line] # nz, ny, nx in fullwave format
+                    num_locations, n3, n2, n1 = [int(h) for h in line] # nz (depth), ny (cross-line), nx (inline) in fullwave format
                     coordinates = np.zeros((num_locations, len(line)-1))
                     ids = np.zeros((num_locations), dtype=int) - 1
                     
@@ -333,6 +337,7 @@ class Geometry(ProblemBase):
                 else:
                     ids[i-1] = int(line[0]) - 1     # Fullwave starts count from 1, stride from 0
                     _coordinates = [scale*float(c) + float(disp[i]) for i, c in enumerate(line[1:])]
+                    if swapaxes: _coordinates = [_coordinates[nx] for nx in (2, 0, 1)]
                     coordinates[i-1] = _coordinates
         assert len(coordinates) == len(ids) == num_locations
 
@@ -343,7 +348,7 @@ class Geometry(ProblemBase):
         if coordinates.shape[1] > self.space.dim:
             mosaic.logger().warn("Warning: trimming {} dimensions found on .pgy file to match {} dimensions in Space object".format(coordinates.shape[1], self.space.dim))
             for i in range(coordinates.shape[1] - self.space.dim):
-                coordinates = np.delete(coordinates, obj=1, axis=1)
+                coordinates = np.delete(coordinates, obj=-1, axis=1)
 
         # Add transducer locations to geometry object
         for index in ids:
