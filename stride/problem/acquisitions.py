@@ -4,6 +4,7 @@ import numpy as np
 import struct
 from collections import OrderedDict
 from cached_property import cached_property
+import mosaic
 
 try:
     import matplotlib.pyplot as plt
@@ -1005,7 +1006,6 @@ class Acquisitions(ProblemBase):
         assert acquisitionttr.lower().split(".")[-1] == "ttr", "Expected .ttr extension in acquisitionttr but found .%s"%acquisitionttr.lower().split(".")[-1]
         if sourcettr is not None:
             assert sourcettr.lower().split(".")[-1] == "ttr", "Expected .ttr extension in sourcettr but found .%s"%sourcettr.lower().split(".")[-1]
-            raise NotImplementedError
 
         # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
         with open(acquisitionttr, mode='rb') as file:
@@ -1045,6 +1045,45 @@ class Acquisitions(ProblemBase):
         # Check every source has an assigned list of receivers
         assert len(sources_ids) == len(receiver_ids), (len(sources_ids) , len(receiver_ids))
 
+        # Read source signature file
+        if sourcettr is not None:
+            with open(sourcettr, mode='rb') as file:
+                # Read header
+                nheader = 1 + 4 + 1 # number of variables in header with trailing integers
+                headers=file.read(4 * nheader)
+                headers=struct.unpack('iiiifi', headers)
+                _ , nsrc, maxptsrc, nt, ttime, _ = headers
+
+                # Assert not composite source for code assumptions later on
+                comp = True if maxptsrc > 1 else False
+                if comp:
+                    raise NotImplementedError(" Files with composite sources are not yet supported. ")
+
+                # Max number of wavelets is the total number of comp shots x max number of pt sources per comp shot
+                nwavelets = nsrc * maxptsrc
+
+                # List to store source ids and wavelets
+                wavelets = np.empty((nwavelets, nt))
+
+                # Read rows
+                nrow = 1 + 2 + nt + 1 # number of variables in row with trailing integers
+
+                for i in range(nwavelets):
+                    row = file.read(4*nrow) 
+                    if not row:
+                        break # End of file
+                    row=struct.unpack('<iii' + nt*'f' +'i', row)
+                    csref=row[1] - 1    # Fullwave starts count from 1, stride from 0
+                    pntref=row[2] - 1   # Fullwave starts count from 1, stride from 0
+                    data = np.array(row[3:-1])
+                    if i == 3:
+                        data = data * (-1)
+                    wavelets[i] = data    
+
+            if len(wavelets) > len(sources_ids):
+                mosaic.logger().warn("Warning: trimming {} wavelets found in {} to match {} source ids in {}".format(len(wavelets), sourcettr, len(sources_ids), acquisitionttr))
+                wavelets = wavelets[:len(sources_ids)]
+
         # Add each source and correspondent receivers as a shot
         for i, sid in enumerate(sources_ids):
             source = self._geometry.get(sid)
@@ -1052,6 +1091,10 @@ class Acquisitions(ProblemBase):
             self.add(Shot(sid,
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
+            try:
+                self.shots[i].wavelets.data[0, :] = wavelets[i]
+            except UnboundLocalError:
+                pass
 
     def plot(self, **kwargs):
         """
