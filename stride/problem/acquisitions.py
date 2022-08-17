@@ -1076,8 +1076,6 @@ class Acquisitions(ProblemBase):
                     csref=row[1] - 1    # Fullwave starts count from 1, stride from 0
                     pntref=row[2] - 1   # Fullwave starts count from 1, stride from 0
                     data = np.array(row[3:-1])
-                    if i == 3:
-                        data = data * (-1)
                     wavelets[i] = data    
 
             if len(wavelets) > len(sources_ids):
