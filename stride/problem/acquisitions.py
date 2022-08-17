@@ -984,8 +984,9 @@ class Acquisitions(ProblemBase):
         """
         Populates acquisition container with shot and receiver ids as described 
         by a Fullwave .ttr acquisition file and an optional source .ttr file 
-        describing the wavelets for each shot. Assumes that each source id is shot
-        individually
+        describing the wavelets for each shot. Assumes point-source scheme, i.e.,
+        that each source id is an individual shot. Composite sources are yet to be
+        added to functionality
         
         Parameters
         ----------
@@ -1027,14 +1028,14 @@ class Acquisitions(ProblemBase):
                     break # End of file
                 row=struct.unpack('<iii' + nt*'f' +'i', row)
                 csref=row[1] - 1    # Fullwave starts count from 1, stride from 0
-                pntref=row[2] - 1   # Fullwave starts count from 1, stride from 0
+                rcvref=row[2] - 1   # Fullwave starts count from 1, stride from 0
                 
                 if len(sources_ids) > 0 and sources_ids[-1] != csref:
                     receiver_ids.append(tmp_receiver_ids)
                     tmp_receiver_ids = []
-                    tmp_receiver_ids.append(pntref)
+                    tmp_receiver_ids.append(rcvref)
                 else:
-                    tmp_receiver_ids.append(pntref)
+                    tmp_receiver_ids.append(rcvref)
                 sources_ids.append(csref)
         
         # Adjustments to source and receiver ids
