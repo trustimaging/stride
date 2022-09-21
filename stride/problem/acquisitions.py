@@ -1020,8 +1020,6 @@ class Acquisitions(ProblemBase):
         assert len(sources_ids) == len(receiver_ids), (len(sources_ids) , len(receiver_ids))
         if len(shottraces) > 1: assert len(shottraces) == len(sources_ids), (len(shottraces), len(sources_ids))
 
-        print(sources_ids[0], len(receiver_ids[0]), len(shottraces[0]))
-
         # Read source signature file
         if sourcettr is not None:
             _, _, wavelets = read_observed_ttr(sourcettr, storetraces=True)   
@@ -1038,9 +1036,9 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem)
             if sourcettr is not None:
-                shot.wavelets.data[0, :] = np.array(wavelets[i][0])
+                shot.wavelets.data[0, :] = np.array(wavelets[i][0], dtype=np.float32)
             if readtraces:
-                shot.observed.data[:] = np.array(shottraces[i])
+                shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
             self.add(shot)
 
     def plot(self, **kwargs):

@@ -104,9 +104,8 @@ def read_observed_ttr(ttrfile, storetraces=True):
 
                 csref = row[1] - 1    # Fullwave starts count from 1, stride from 0
                 rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
-                trace = row[3:-1]
+                trace = np.array(row[3:-1], dtype=np.float32)
                 
-                print(csref, rcvref)
                 if len(sources_ids) > 0 and sources_ids[-1] != csref:
                     receiver_ids.append(tmp_receiver_ids)
                     tmp_receiver_ids = []
