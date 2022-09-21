@@ -1,5 +1,3 @@
-
-from logging import warning
 import mosaic
 import numpy as np
 from collections import OrderedDict
@@ -7,6 +5,7 @@ from collections import OrderedDict
 from .base import GriddedSaved, ProblemBase
 from .. import plotting
 from ..utils import geometries
+from ..utils.fullwave import read_geometry_pgy
 
 
 __all__ = ['Geometry']
@@ -295,7 +294,9 @@ class Geometry(ProblemBase):
             Path to .pgy Fullwave geometry file
 
         scale: float, optional
-            Value to each scale the location values in all dimensions. Useful for unit conversion. Default 1.
+            Value to each scale the location values in all dimensions. Useful for unit conversion. 
+            To transform cell units from Fullwave to metric units in Stride, scale should be the 
+            same value as the model grid-spacing. Default 1.
 
         disp: tuple or float, optional
             Amount to displace in each dimension. Applied after scale. Default (0., 0., 0.)
@@ -305,44 +306,13 @@ class Geometry(ProblemBase):
 
         swapaxes: bool, optional
             Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line, depth, cross-line). Default False
-
+            
         Returns
         -------
         """
         assert geompgy.lower().split(".")[-1] == "pgy", "Expected .pgy extension but found .%s"%geompgy.lower().split(".")[-1]
 
-        num_locations, n3, n2, n1 = -1, -1, -1, -1
-        scale = kwargs.get('scale', 1.)
-        disp = kwargs.get('disp', (0., 0., 0.))
-        dropdims = kwargs.get('dropdims', ())
-        swapaxes = kwargs.get('swapaxes', False)
-
-        # Read coordinates and IDs from pgy file
-        with open(geompgy, 'r') as f:
-            for i, line in enumerate(f):
-                line = line.split()
-                
-                # Header line
-                if i == 0:
-                    num_locations, n3, n2, n1 = [int(h) for h in line] # nz (depth), ny (cross-line), nx (inline) in fullwave format
-                    coordinates = np.zeros((num_locations, len(line)-1))
-                    ids = np.zeros((num_locations), dtype=int) - 1
-                    
-                    while len(disp) < coordinates.shape[1]:
-                        disp = list(disp)
-                        disp.append(0.)
-                        disp = tuple(disp)    
-
-                # Transducer IDs and Coordinates
-                else:
-                    ids[i-1] = int(line[0]) - 1     # Fullwave starts count from 1, stride from 0
-                    _coordinates = [scale*float(c) + float(disp[i]) for i, c in enumerate(line[1:])]
-                    if swapaxes: _coordinates = [_coordinates[nx] for nx in (2, 0, 1)]
-                    coordinates[i-1] = _coordinates
-        assert len(coordinates) == len(ids) == num_locations
-
-        # Drop dimensions if prompted
-        coordinates = np.delete(coordinates, obj=dropdims, axis=1)
+        ids, coordinates = read_geometry_pgy(geompgy, **kwargs)
 
         # Trim coordinates to match problem dimension if needed. Raise warning if so
         if coordinates.shape[1] > self.space.dim:
