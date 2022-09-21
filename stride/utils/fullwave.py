@@ -88,7 +88,6 @@ def read_observed_ttr(ttrfile, storetraces=True):
         headers=struct.unpack('iiiifi', headers)
         _ , ncomp, maxrecnum, nt, ttime, _ = headers
 
-        print(nt, ttime)
 
         # Read rows
         nrow = 1 + 2 + nt + 1 # number of variables in row with trailing integers
