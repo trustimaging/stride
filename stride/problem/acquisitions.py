@@ -1038,7 +1038,10 @@ class Acquisitions(ProblemBase):
             if sourcettr is not None:
                 shot.wavelets.data[0, :] = np.array(wavelets[i][0], dtype=np.float32)
             if readtraces:
-                shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
+                try:
+                    shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
+                except Exception as e:
+                    mosaic.logger().warn("Warning shot id %g trace loading: %s"%(sid,e))
             self.add(shot)
 
     def plot(self, **kwargs):
