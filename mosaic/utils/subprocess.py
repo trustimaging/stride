@@ -5,7 +5,7 @@ import psutil
 import weakref
 import functools
 import threading
-import multiprocessing
+import multiprocess as multiprocessing
 
 import mosaic
 from .at_exit import at_exit

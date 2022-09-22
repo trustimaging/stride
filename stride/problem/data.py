@@ -361,7 +361,9 @@ class StructuredData(Data):
 
             if norm_prec > 1e-31:
                 prec += prec_scale * norm_prec + 1e-31
-                grad /= prec
+                prec /= np.max(np.abs(prec.data))
+                non_zero = np.abs(prec.data) > 0.
+                grad.data[non_zero] /= prec.data[non_zero]
 
         self.grad = grad
 
