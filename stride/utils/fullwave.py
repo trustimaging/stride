@@ -132,7 +132,15 @@ def read_observed_ttr(ttrfile, storetraces=True):
 
     return sources_ids, receiver_ids, shottraces
 
-def read_signature_ttr(ttrfile):
+def read_signature_ttr(ttrfile):    
+    """
+    Reads ttr signature data from Fullwave's Signature.ttr binary
+    file. Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
+    consortium.
+
+    ttrfile: Path
+        Path to .ttr file 
+     """
     with open(ttrfile, mode='rb') as file:
         # Read header
         nheader = 1 + 4 + 1 # number of variables in header with trailing integers
@@ -164,6 +172,20 @@ def read_signature_ttr(ttrfile):
             data = np.array(row[3:-1])
             wavelets[i] = data 
     return wavelets
+
+def read_signature_txt(txtfile):
+    """
+    Reads .txt signature data from Fullwave's Signature.txt file.
+    Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
+    consortium.
+
+    txtfile: Path
+        Path to .txt file 
+     """
+    with open(txtfile, "r+") as f:
+        wavelet = f.read().splitlines()
+    wavelet = [float(w) for w in wavelet]
+    return wavelet
 
 def read_geometry_pgy(pgyfile, **kwargs):   
     """
