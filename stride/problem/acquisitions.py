@@ -995,8 +995,7 @@ class Acquisitions(ProblemBase):
             Path to .ttr acquisition Fullwave file (ideally Observed-Trace.ttr)
         
         sourcettr: Path, optional
-            Path to .ttr source Fullwave file. Default None
-            (Method not implemented)
+            Path to .ttr or .txt source Fullwave file. Default None
 
         readtraces: bool, optional
             If flagged, data from acquisitionttr file is read and for each source id 
@@ -1009,9 +1008,10 @@ class Acquisitions(ProblemBase):
 
         assert acquisitionttr.lower().split(".")[-1] == "ttr", "Expected .ttr extension in acquisitionttr but found .%s"%acquisitionttr.lower().split(".")[-1]
         if sourcettr is not None:
-            assert sourcettr.lower().split(".")[-1] == "ttr", "Expected .ttr extension in sourcettr but found .%s"%sourcettr.lower().split(".")[-1]
+            assert sourcettr.lower().split(".")[-1] in ("ttr", "txt") , "Expected .ttr or .txt extension in sourcettr but found .%s"%sourcettr.lower().split(".")[-1]
 
-        from ..utils.fullwave import read_observed_ttr, read_signature_ttr
+        # Import of fullwave module at the top is throwing circular import error, needs debugging
+        from ..utils.fullwave import read_observed_ttr, read_signature_ttr, read_signature_txt
 
         # Read acquisition file
         sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisitionttr, readtraces)
@@ -1022,11 +1022,14 @@ class Acquisitions(ProblemBase):
 
         # Read source signature file
         if sourcettr is not None:
-            _, _, wavelets = read_observed_ttr(sourcettr, storetraces=True)   
-
-            if len(wavelets) > len(sources_ids):
-                mosaic.logger().warn("Warning: trimming {} wavelets found in {} to match {} source ids in {}".format(len(wavelets), sourcettr, len(sources_ids), acquisitionttr))
-                wavelets = wavelets[:len(sources_ids)]
+            srcext = sourcettr.lower().split(".")[-1]
+            if srcext == "ttr":
+                wavelets = read_signature_ttr(sourcettr)
+            
+            elif srcext == "txt":
+                wavelet = read_signature_txt(sourcettr)
+                wavelet = np.array(wavelet, dtype=np.float32)
+                wavelets = np.broadcast_to(wavelet, (len(sources_ids), len(wavelet)))
 
         # Add each source and correspondent receivers as a shot
         for i, sid in enumerate(sources_ids):
@@ -1035,8 +1038,12 @@ class Acquisitions(ProblemBase):
             shot = Shot(sid,
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem)
+            
+            # Add wavelet to shot object
             if sourcettr is not None:
-                shot.wavelets.data[0, :] = np.array(wavelets[i][0], dtype=np.float32)
+                shot.wavelets.data[0, :] = wavelets[i, :]
+            
+            # Add observed data to shot object
             if readtraces:
                 try:
                     shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
