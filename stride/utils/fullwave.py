@@ -1,10 +1,12 @@
+from typing import Type
 import numpy as np
 import struct
 import mosaic
 
-__all__ = ['read_vtr_model3D', 'read_observed_ttr', 'read_signature_ttr', 'read_geometry_pgy']
+__all__ = ['read_vtr_model3D', 'read_observed_ttr', 'read_signature_ttr', 
+            'read_signature_txt', 'read_geometry_pgy']
 
-def read_vtr_model3D(vtrpath, swapaxes=False):
+def read_vtr_model3D(vtr_path, swapaxes=False):
     '''
     Function to read 3D .vtr low kernel
     binary data (model files) and returns the data as an as ndarray.
@@ -15,14 +17,18 @@ def read_vtr_model3D(vtrpath, swapaxes=False):
     Clues as to the structure of the binary file were provided by
     Oscar Agudo from Imperial College of London's FULLWAVE consortium
 
-    vtrpath: Path
+    Parameters
+    ----------
+    vtr_path: str
         .vtr file containing the 3D model
-
     swapaxes: bool, optional
         Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line, depth, cross-line). Default False
     
+    Returns
+    -------
+    model: ndarray as read from vtr
     '''
-    with open(vtrpath, 'rb') as f:
+    with open(vtr_path, 'rb') as f:
         #Read headers from binary file.
         rec_len=np.fromfile(f,dtype='int32',count=1)
         ncomp=np.fromfile(f,dtype='int32',count=1)
@@ -62,20 +68,32 @@ def read_vtr_model3D(vtrpath, swapaxes=False):
     return model
 
 
-def read_observed_ttr(ttrfile, storetraces=True):
+def read_observed_ttr(ttr_path, store_traces=True):
     """
     Function to read acquisition parameters and data from Fullwave's Observed.ttr binary
     file. Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
     consortium.
 
-    ttrfile: Path
+    Parameters
+    ----------
+    ttr_path: str
         Path to .ttr file 
-    storetraces: bool, optional
+    store_traces: bool, optional
         Flag to store the data inside the .ttr. If true, data is saved in memory and returned
         by function. If False, only the source and receiver IDs are returned. Default False
+    
+    Returns
+    -------
+    sources_ids: list
+        List of sources ID numbers
+    receiver_ids: list
+        Nested lists containing receiver IDs for each source ID as read from .ttr file
+    shottraces: list
+        Nested lists containing the trace for each receiver ID of every source ID as
+        read from .tt file. Will be empty if store_traces is False.
     """
     # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
-    with open(ttrfile, mode='rb') as file:
+    with open(ttr_path, mode='rb') as file:
         
         # List to store source and receivers ids
         sources_ids, receiver_ids = [], []
@@ -106,24 +124,26 @@ def read_observed_ttr(ttrfile, storetraces=True):
                 rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
                 trace = np.array(row[3:-1], dtype=np.float32)
                 
+                sources_ids.append(csref)
+
+                # Append all data from single csref id
                 if len(sources_ids) > 0 and sources_ids[-1] != csref:
                     receiver_ids.append(tmp_receiver_ids)
                     tmp_receiver_ids = []
-                    tmp_receiver_ids.append(rcvref)
 
                     # Store traces to memory -- ! need to add option to save to file instead
-                    if storetraces:
+                    if store_traces:
                         shottraces.append(tmp_traces)
                         tmp_traces = []
-                        tmp_traces.append(trace)
-                else:
-                    tmp_receiver_ids.append(rcvref)
-                    if storetraces:
-                        tmp_traces.append(trace)
-                sources_ids.append(csref)
+                
+                # Append data from single csref id to temp lists
+                tmp_receiver_ids.append(rcvref)
+                if store_traces:
+                    tmp_traces.append(trace)
+
 
             except struct.error as e:
-                mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked"%(cnt, ttrfile.split("/")[-1]))
+                mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked"%(cnt, ttr_path.split("/")[-1]))
 
         # Adjustments to source and receiver ids
         receiver_ids.append(tmp_receiver_ids)      # append last receivers list
@@ -132,16 +152,24 @@ def read_observed_ttr(ttrfile, storetraces=True):
 
     return sources_ids, receiver_ids, shottraces
 
-def read_signature_ttr(ttrfile):    
+
+def read_signature_ttr(ttr_path):    
     """
     Reads ttr signature data from Fullwave's Signature.ttr binary
     file. Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
     consortium.
-
-    ttrfile: Path
+    
+    Parameters
+    ----------
+    ttr_path: str
         Path to .ttr file 
+
+    Returns
+    -------
+    wavelets: list
+        List of wavelet for every source ID
      """
-    with open(ttrfile, mode='rb') as file:
+    with open(ttr_path, mode='rb') as file:
         # Read header
         nheader = 1 + 4 + 1 # number of variables in header with trailing integers
         headers=file.read(4 * nheader)
@@ -173,40 +201,56 @@ def read_signature_ttr(ttrfile):
             wavelets[i] = data 
     return wavelets
 
-def read_signature_txt(txtfile):
+
+def read_signature_txt(txt_path):
     """
     Reads .txt signature data from Fullwave's Signature.txt file.
     Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
     consortium.
 
-    txtfile: Path
+    Parameters
+    ----------
+    txt_path: str
         Path to .txt file 
+
+    Returns
+    -------
+    wavelet: list
+        List of the wavelet data as read from txt_path
      """
-    with open(txtfile, "r+") as f:
+    with open(txt_path, "r+") as f:
         wavelet = f.read().splitlines()
     wavelet = [float(w) for w in wavelet]
     return wavelet
 
-def read_geometry_pgy(pgyfile, **kwargs):   
+
+def read_geometry_pgy(geom_path, **kwargs):   
     """
     Function to read geometry coordinates and data from Fullwave's .pgy file. 
     Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
     consortium.
 
-    pgyfile: Path
+    Parameters
+    ----------
+    geom_path: str
         Path to Fullwave .pgy geometry file 
-
     scale: float, optional
         Value to each scale the location values in all dimensions. Useful for unit conversion. Default 1.
-
     disp: tuple or float, optional
-        Amount to displace in each dimension. Applied after scale. Default (0., 0., 0.)
-
+        Amount to displace in each dimension. Applied after scale and before swapaxes. Default (0., 0., 0.)
     dropdims: tuple or int, optional
         Coordinate dimensions of .pgy file to drop (count from 0). Default ()
-
     swapaxes: bool, optional
         Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line, depth, cross-line). Default False
+    
+    Returns
+    -------
+    ids: ndarray
+        ID number of every transducer
+    coordinates:
+        Coordinate of each transducer with format (num_transducers, x, y, z). Coordinates will match
+        format specified by ``swapaxes``
+
     """
     num_locations, n3, n2, n1 = -1, -1, -1, -1
     scale = kwargs.get('scale', 1.)
@@ -214,22 +258,27 @@ def read_geometry_pgy(pgyfile, **kwargs):
     dropdims = kwargs.get('dropdims', ())
     swapaxes = kwargs.get('swapaxes', False)
 
+
     # Read coordinates and IDs from pgy file
-    with open(pgyfile, 'r') as f:
+    with open(geom_path, 'r') as f:
         for i, line in enumerate(f):
             line = line.split()
             
             # Header line
             if i == 0:
                 num_locations, n3, n2, n1 = [int(h) for h in line] # nz (depth), ny (cross-line), nx (inline) in fullwave format
-                coordinates = np.zeros((num_locations, len(line)-1))
-                ids = np.zeros((num_locations), dtype=int) - 1
-                
-                while len(disp) < coordinates.shape[1]:
+                dim = len(line)-1
+                coordinates = np.zeros((num_locations, dim))
+                ids = np.zeros((num_locations), dtype=int)                  
+ 
+                # Reformating displacement array to match coordinate dimensions
+                try:
                     disp = list(disp)
-                    disp.append(0.)
-                    disp = tuple(disp)    
-
+                    while len(disp) < dim:
+                        disp.append(0.)
+                except TypeError: # if disp variable does not have length
+                    disp = list(np.full((dim, ), disp))
+                
             # Transducer IDs and Coordinates
             else:
                 ids[i-1] = int(line[0]) - 1     # Fullwave starts count from 1, stride from 0
