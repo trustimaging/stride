@@ -981,7 +981,7 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
-    def from_fullwave(self, acquisitionttr, sourcettr=None, readtraces=False):
+    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False):
         """
         Populates acquisition container with shot and receiver ids as described 
         by a Fullwave .ttr acquisition file and an optional source .ttr file 
@@ -991,14 +991,12 @@ class Acquisitions(ProblemBase):
         
         Parameters
         ----------
-        acquisitionttr : Path
+        acquisition_path : str
             Path to .ttr acquisition Fullwave file (ideally Observed-Trace.ttr)
-        
-        sourcettr: Path, optional
+        source_path: str, optional
             Path to .ttr or .txt source Fullwave file. Default None
-
-        readtraces: bool, optional
-            If flagged, data from acquisitionttr file is read and for each source id 
+        read_traces: bool, optional
+            If flagged, data from acquisition_path file is read and for each source id 
             and added to its correspondent Stride ``Shot`` object. Default False.
 
         Returns
@@ -1006,28 +1004,30 @@ class Acquisitions(ProblemBase):
 
         """
 
-        assert acquisitionttr.lower().split(".")[-1] == "ttr", "Expected .ttr extension in acquisitionttr but found .%s"%acquisitionttr.lower().split(".")[-1]
-        if sourcettr is not None:
-            assert sourcettr.lower().split(".")[-1] in ("ttr", "txt") , "Expected .ttr or .txt extension in sourcettr but found .%s"%sourcettr.lower().split(".")[-1]
+        assert acquisition_path.lower().split(".")[-1] == "ttr", "Expected .ttr extension in\
+             acquisition_path but found .%s"%acquisition_path.lower().split(".")[-1]
+        if source_path is not None:
+            assert source_path.lower().split(".")[-1] in ("ttr", "txt") , "Expected .ttr or .\
+                txt extension in source_path but found .%s"%source_path.lower().split(".")[-1]
 
         # Import of fullwave module at the top is throwing circular import error, needs debugging
         from ..utils.fullwave import read_observed_ttr, read_signature_ttr, read_signature_txt
 
         # Read acquisition file
-        sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisitionttr, readtraces)
+        sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisition_path, read_traces)
 
         # Check every source has an assigned list of receivers and a trace
         assert len(sources_ids) == len(receiver_ids), (len(sources_ids) , len(receiver_ids))
         if len(shottraces) > 1: assert len(shottraces) == len(sources_ids), (len(shottraces), len(sources_ids))
 
         # Read source signature file
-        if sourcettr is not None:
-            srcext = sourcettr.lower().split(".")[-1]
+        if source_path is not None:
+            srcext = source_path.lower().split(".")[-1]
             if srcext == "ttr":
-                wavelets = read_signature_ttr(sourcettr)
+                wavelets = read_signature_ttr(source_path)
             
             elif srcext == "txt":
-                wavelet = read_signature_txt(sourcettr)
+                wavelet = read_signature_txt(source_path)
                 wavelet = np.array(wavelet, dtype=np.float32)
                 wavelets = np.broadcast_to(wavelet, (len(sources_ids), len(wavelet)))
 
@@ -1040,11 +1040,11 @@ class Acquisitions(ProblemBase):
                           geometry=self._geometry, problem=self.problem)
             
             # Add wavelet to shot object
-            if sourcettr is not None:
+            if source_path is not None:
                 shot.wavelets.data[0, :] = wavelets[i, :]
             
             # Add observed data to shot object
-            if readtraces:
+            if read_traces:
                 try:
                     shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
                 except Exception as e:
