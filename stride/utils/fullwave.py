@@ -125,8 +125,6 @@ def read_observed_ttr(ttr_path, store_traces=True):
                 rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
                 trace = np.array(row[3:-1], dtype=np.float32)
 
-                sources_ids.append(csref)
-
                 # Append all data from single csref id
                 if len(sources_ids) > 0 and sources_ids[-1] != csref:
                     receiver_ids.append(tmp_receiver_ids)
@@ -141,6 +139,9 @@ def read_observed_ttr(ttr_path, store_traces=True):
                 tmp_receiver_ids.append(rcvref)
                 if store_traces:
                     tmp_traces.append(trace)
+
+                # Append shot id
+                sources_ids.append(csref)
 
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
