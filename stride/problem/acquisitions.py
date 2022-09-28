@@ -1,7 +1,6 @@
 
 import functools
 import numpy as np
-import struct
 from collections import OrderedDict
 from cached_property import cached_property
 import mosaic
@@ -983,12 +982,12 @@ class Acquisitions(ProblemBase):
 
     def from_fullwave(self, acquisition_path, source_path=None, read_traces=False):
         """
-        Populates acquisition container with shot and receiver ids as described 
-        by a Fullwave .ttr acquisition file and an optional source .ttr file 
+        Populates acquisition container with shot and receiver ids as described
+        by a Fullwave .ttr acquisition file and an optional source .ttr file
         describing the wavelets for each shot. Assumes point-source scheme, i.e.,
         that each source id is an individual shot. Composite sources are yet to be
         added to functionality
-        
+
         Parameters
         ----------
         acquisition_path : str
@@ -996,7 +995,7 @@ class Acquisitions(ProblemBase):
         source_path: str, optional
             Path to .ttr or .txt source Fullwave file. Default None
         read_traces: bool, optional
-            If flagged, data from acquisition_path file is read and for each source id 
+            If flagged, data from acquisition_path file is read and for each source id
             and added to its correspondent Stride ``Shot`` object. Default False.
 
         Returns
@@ -1005,10 +1004,10 @@ class Acquisitions(ProblemBase):
         """
 
         assert acquisition_path.lower().split(".")[-1] == "ttr", "Expected .ttr extension in\
-             acquisition_path but found .%s"%acquisition_path.lower().split(".")[-1]
+             acquisition_path but found .%s " % acquisition_path.lower().split(".")[-1]
         if source_path is not None:
-            assert source_path.lower().split(".")[-1] in ("ttr", "txt") , "Expected .ttr or .\
-                txt extension in source_path but found .%s"%source_path.lower().split(".")[-1]
+            assert source_path.lower().split(".")[-1] in ("ttr", "txt"), "Expected .ttr or .\
+                txt extension in source_path but found .%s" % source_path.lower().split(".")[-1]
 
         # Import of fullwave module at the top is throwing circular import error, needs debugging
         from ..utils.fullwave import read_observed_ttr, read_signature_ttr, read_signature_txt
@@ -1017,15 +1016,16 @@ class Acquisitions(ProblemBase):
         sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisition_path, read_traces)
 
         # Check every source has an assigned list of receivers and a trace
-        assert len(sources_ids) == len(receiver_ids), (len(sources_ids) , len(receiver_ids))
-        if len(shottraces) > 1: assert len(shottraces) == len(sources_ids), (len(shottraces), len(sources_ids))
+        assert len(sources_ids) == len(receiver_ids), (len(sources_ids), len(receiver_ids))
+        if len(shottraces) > 1:
+            assert len(shottraces) == len(sources_ids), (len(shottraces), len(sources_ids))
 
         # Read source signature file
         if source_path is not None:
             srcext = source_path.lower().split(".")[-1]
             if srcext == "ttr":
                 wavelets = read_signature_ttr(source_path)
-            
+
             elif srcext == "txt":
                 wavelet = read_signature_txt(source_path)
                 wavelet = np.array(wavelet, dtype=np.float32)
@@ -1038,17 +1038,17 @@ class Acquisitions(ProblemBase):
             shot = Shot(sid,
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem)
-            
+
             # Add wavelet to shot object
             if source_path is not None:
                 shot.wavelets.data[0, :] = wavelets[i, :]
-            
+
             # Add observed data to shot object
             if read_traces:
                 try:
                     shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
                 except Exception as e:
-                    mosaic.logger().warn("Warning shot id %g trace loading: %s"%(sid,e))
+                    mosaic.logger().warn("Warning shot id %g trace loading: %s" % (sid, e))
             self.add(shot)
 
     def plot(self, **kwargs):

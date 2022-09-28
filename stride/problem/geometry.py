@@ -293,26 +293,29 @@ class Geometry(ProblemBase):
         geom_path : str
             Path to .pgy Fullwave geometry file
         scale: float, optional
-            Value to each scale the location values in all dimensions. Useful for unit conversion. 
-            To transform cell units from Fullwave to metric units in Stride, scale should be the 
+            Value to each scale the location values in all dimensions. Useful for unit conversion.
+            To transform cell units from Fullwave to metric units in Stride, scale should be the
             same value as the model grid-spacing. Default 1.
         disp: tuple or float, optional
             Amount to displace in each dimension. Applied after scale. Default (0., 0., 0.)
         dropdims: tuple or int, optional
             Coordinate dimensions of .pgy file to drop (count from 0). Default ()
         swapaxes: bool, optional
-            Permutes Fullwave storing format (depth, cross-line, in-line) to stride format 
-            (in-line, depth, cross-line). Default False 
+            Permutes Fullwave storing format (depth, cross-line, in-line) to stride format
+            (in-line, depth, cross-line). Default False.
         Returns
         -------
         """
-        assert geom_path.lower().split(".")[-1] == "pgy", "Expected .pgy extension but found .%s"%geom_path.lower().split(".")[-1]
+        assert geom_path.lower().split(".")[-1] == "pgy", "Expected .pgy extension but \found .%s" \
+             % geom_path.lower().split(".")[-1]
 
         ids, coordinates = read_geometry_pgy(geom_path, **kwargs)
 
         # Trim coordinates to match problem dimension if needed. Raise warning if so
         if coordinates.shape[1] > self.space.dim:
-            mosaic.logger().warn("Warning: trimming {} dimensions found on .pgy file to match {} dimensions in Space object".format(coordinates.shape[1], self.space.dim))
+            mosaic.logger().warn("Warning: trimming {} dimensions found on .pgy file to match {} dimensions \
+                in Space object".format(coordinates.shape[1], self.space.dim))
+
             for i in range(coordinates.shape[1] - self.space.dim):
                 coordinates = np.delete(coordinates, obj=-1, axis=1)
 
