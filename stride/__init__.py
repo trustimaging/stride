@@ -35,6 +35,7 @@ signal.signal(signal.SIGTERM, _close_prefork_atsignal)
 
 
 import mosaic
+from mosaic.utils import gpu_count
 
 from .core import *
 from .problem import *
@@ -98,6 +99,12 @@ async def forward(problem, pde, *args, **kwargs):
     published_args = [runtime.put(each, publish=True) for each in args]
     published_args = await asyncio.gather(*published_args)
 
+    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    if using_gpu:
+        devices = kwargs.pop('devices', None)
+        num_gpus = gpu_count() if devices is None else len(devices)
+        devices = list(range(num_gpus)) if devices is None else devices
+
     @runtime.async_for(shot_ids, safe=safe)
     async def loop(worker, shot_id):
         logger.info('\n')
@@ -105,6 +112,9 @@ async def forward(problem, pde, *args, **kwargs):
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
+
+        if using_gpu:
+            kwargs['devito_args'] = dict(deviceid=devices[worker.indices[1] % num_gpus])
 
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
