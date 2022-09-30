@@ -54,7 +54,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool, optional
@@ -176,7 +176,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
         save_wavefield : bool, optional
@@ -348,7 +348,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -382,7 +382,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -497,7 +497,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -621,7 +621,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
 
@@ -656,7 +656,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
-            Attenuation coefficient of the medium, defaults to 0, in [Np/m].
+            Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
 

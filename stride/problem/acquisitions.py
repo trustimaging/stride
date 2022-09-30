@@ -415,12 +415,12 @@ class Shot(ProblemBase):
                 receiver = None
             self._receivers[receiver_id] = receiver
 
+        self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
         if 'wavelets' in description:
-            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
             self.wavelets.__set_desc__(description.wavelets)
 
+        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
         if 'observed' in description:
-            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
             self.observed.__set_desc__(description.observed)
 
         self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
