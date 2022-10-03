@@ -1211,10 +1211,10 @@ class CommsManager:
             try:
                 exception = fut.exception()
 
-            except Exception:
+            except asyncio.CancelledError:
                 return
 
-            if exception is not None and not isinstance(exception, asyncio.exceptions.CancelledError):
+            if exception is not None:
                 raise exception
 
         self._listen_future = self._loop.run(self.listen_async)
