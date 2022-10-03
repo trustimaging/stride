@@ -115,7 +115,7 @@ async def forward(problem, pde, *args, **kwargs):
 
         if using_gpu:
             devito_args = kwargs.get('devito_args', {})
-            devito_args['device_id'] = devices[worker.indices[1] % num_gpus]
+            devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
             kwargs['devito_args'] = devito_args
 
         traces = await pde(wavelets, *published_args,
@@ -247,7 +247,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             if using_gpu:
                 devito_args = kwargs.get('devito_args', {})
-                devito_args['device_id'] = devices[worker.indices[1] % num_gpus]
+                devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
                 kwargs['devito_args'] = devito_args
 
             wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
