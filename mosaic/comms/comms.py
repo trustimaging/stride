@@ -1214,7 +1214,7 @@ class CommsManager:
             except Exception:
                 return
 
-            if exception is not None:
+            if exception is not None and not isinstance(exception, asyncio.exceptions.CancelledError):
                 raise exception
 
         self._listen_future = self._loop.run(self.listen_async)

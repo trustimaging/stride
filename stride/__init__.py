@@ -114,7 +114,9 @@ async def forward(problem, pde, *args, **kwargs):
         wavelets = sub_problem.shot.wavelets
 
         if using_gpu:
-            kwargs['devito_args'] = dict(deviceid=devices[worker.indices[1] % num_gpus])
+            devito_args = kwargs.get('devito_args', {})
+            devito_args['device_id'] = devices[worker.indices[1] % num_gpus]
+            kwargs['devito_args'] = devito_args
 
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
@@ -198,6 +200,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
                                           len=runtime.num_workers)
 
+    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    if using_gpu:
+        devices = kwargs.pop('devices', None)
+        num_gpus = gpu_count() if devices is None else len(devices)
+        devices = list(range(num_gpus)) if devices is None else devices
+
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         optimiser.clear_grad()
 
@@ -236,6 +244,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             if observed is None:
                 raise RuntimeError('Shot %d has no observed data' % shot_id)
+
+            if using_gpu:
+                devito_args = kwargs.get('devito_args', {})
+                devito_args['device_id'] = devices[worker.indices[1] % num_gpus]
+                kwargs['devito_args'] = devito_args
 
             wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
             await wavelets.init_future
