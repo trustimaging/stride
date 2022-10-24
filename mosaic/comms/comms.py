@@ -1211,7 +1211,7 @@ class CommsManager:
             try:
                 exception = fut.exception()
 
-            except Exception:
+            except asyncio.CancelledError:
                 return
 
             if exception is not None:

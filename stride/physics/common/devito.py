@@ -462,7 +462,7 @@ class GridDevito(Gridded):
                                  time_order=time_order,
                                  time_dim=time_under,
                                  save=buffer_size,
-                                 dtype=kwargs.pop('dtype', np.float32),
+                                 dtype=kwargs.pop('dtype', self.dtype),
                                  **kwargs)
 
         space_dims = fun.dimensions[1:]

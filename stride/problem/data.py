@@ -361,7 +361,9 @@ class StructuredData(Data):
 
             if norm_prec > 1e-31:
                 prec += prec_scale * norm_prec + 1e-31
-                grad /= prec
+                prec /= np.max(np.abs(prec.data))
+                non_zero = np.abs(prec.data) > 0.
+                grad.data[non_zero] /= prec.data[non_zero]
 
         self.grad = grad
 
@@ -1013,7 +1015,26 @@ class ScalarField(StructuredData):
         origin = kwargs.pop('origin', self.space.pml_origin)
         limit = kwargs.pop('limit', self.space.extended_limit)
 
-        axis = self._plot(self.extended_data, origin=origin, limit=limit, **kwargs)
+        if (self.time_dependent or self.slow_time_dependent) and self.space.dim == 2:
+            def update(figure, axis, step):
+                if len(axis.images):
+                    axis.images[-1].colorbar.remove()
+                axis.clear()
+
+                kwargs.pop('time_range', None)
+                self._plot(self.extended_data[int(step)], origin=origin, limit=limit, axis=axis,
+                           **kwargs)
+                axis.set_title(axis.get_title() + ' - time step %d' % step)
+
+                figure.canvas.draw_idle()
+
+            axis = self._plot_time(update, **kwargs)
+
+        elif self.slow_time_dependent:
+            axis = self._plot(self.extended_data[0], origin=origin, limit=limit, **kwargs)
+
+        else:
+            axis = self._plot(self.extended_data, origin=origin, limit=limit, **kwargs)
 
         if plot is True:
             plotting.show(axis)

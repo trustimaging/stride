@@ -169,18 +169,20 @@ export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/lib/:
 
 ## Citing Stride
 
-If you use Stride in your research, please cite our [paper](https://arxiv.org/abs/2110.03345):
+If you use Stride in your research, please cite our [paper](https://doi.org/10.1016/j.cmpb.2022.106855):
 
 ```
 @misc{cueto2021-stride,
 	title          =    { Stride: a flexible platform for high-performance ultrasound computed tomography  },
 	author         =    { Carlos Cueto and Oscar Bates and George Strong and Javier Cudeiro and Fabio Luporini
 				and Oscar Calderon Agudo and Gerard Gorman and Lluis Guasch and Meng-Xing Tang },
-	year           =    { 2021 },
-	eprint         =    { 2110.03345 },
-	archivePrefix  =    { arXiv },
-	primaryClass   =    { physics.med-ph },
-	url            =    { https://arxiv.org/abs/2110.03345 }
+	journal        =    {Computer Methods and Programs in Biomedicine},
+	volume         =    {221},
+	pages          =    {106855},
+	year           =    {2022},
+	issn           =    {0169-2607},
+	doi            =    {https://doi.org/10.1016/j.cmpb.2022.106855},
+	url            =    {https://www.sciencedirect.com/science/article/pii/S0169260722002371},
 }
 ```
 

@@ -10,6 +10,7 @@ gputil
 h5py>=3.2
 nbval
 numpy>=1.20
+multiprocess
 pre_commit
 psutil
 pyflakes
