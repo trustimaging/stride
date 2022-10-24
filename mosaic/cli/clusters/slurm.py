@@ -25,7 +25,10 @@ def node_list(host_name):
         return
 
     slurm_list = expand_hostlist(slurm_nodes)
-    slurm_list.remove(host_name)
+    try:
+        slurm_list.remove(host_name)
+    except ValueError:
+        slurm_list.remove(host_name.split('.')[0])
 
     return slurm_list
 
