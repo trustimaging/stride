@@ -25,6 +25,7 @@ To install Stride, follow these steps:
 You can also start using Stride through Docker:
 
 .. code-block:: shell
+
     git clone https://github.com/trustimaging/stride.git
     cd stride
     docker-compose up stride

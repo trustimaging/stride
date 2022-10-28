@@ -110,7 +110,6 @@ class ProblemTypeBase(ABC, Gridded, Operator):
 
         return output
 
-    @abstractmethod
     async def before_forward(self, *args, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
@@ -122,9 +121,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         -------
 
         """
-        pass
+        raise NotImplementedError('before_forward has not been implemented '
+                                  'for objects of type %s' % self.__class__.__name__)
 
-    @abstractmethod
     async def run_forward(self, *args, **kwargs):
         """
         Run the state or forward problem.
@@ -136,9 +135,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         -------
 
         """
-        pass
+        raise NotImplementedError('run_forward has not been implemented '
+                                  'for objects of type %s' % self.__class__.__name__)
 
-    @abstractmethod
     async def after_forward(self, *args, **kwargs):
         """
         Clean up after the state run and retrieve the outputs.
@@ -152,9 +151,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             Time traces produced by the state run.
 
         """
-        pass
+        raise NotImplementedError('after_forward has not been implemented '
+                                  'for objects of type %s' % self.__class__.__name__)
 
-    @abstractmethod
     async def before_adjoint(self, *args, **kwargs):
         """
         Prepare the problem type to run the adjoint problem.
@@ -166,9 +165,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         -------
 
         """
-        pass
+        raise NotImplementedError('before_adjoint has not been implemented '
+                                  'for objects of type %s' % self.__class__.__name__)
 
-    @abstractmethod
     async def run_adjoint(self, *args, **kwargs):
         """
         Run the adjoint problem.
@@ -180,9 +179,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         -------
 
         """
-        pass
+        raise NotImplementedError('run_adjoint has not been implemented '
+                                  'for objects of type %s' % self.__class__.__name__)
 
-    @abstractmethod
     async def after_adjoint(self, *args, **kwargs):
         """
         Clean up after the adjoint run and retrieve the gradients (if needed).
@@ -196,7 +195,8 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             Gradients wrt to the problem inputs.
 
         """
-        pass
+        raise NotImplementedError('after_adjoint has not been implemented '
+                                  'for objects of type %s' % self.__class__.__name__)
 
     async def prepare_grad(self, *wrt, **kwargs):
         """
