@@ -14,7 +14,7 @@ def plot_wavefields(wavefields, kwargs):
         first = None
         for wavefield, kwarg in zip(wavefields, kwargs):
             _wavefield = wavefield[step][30:-30, 30:-30]
-            im = axis.imshow(_wavefield.T, **kwarg)
+            im = axis.imshow(_wavefield.T, origin='lower', **kwarg)
 
             cb = plt.colorbar(im, ax=axis, shrink=0.75, format='%.0e')
             if first is None:
