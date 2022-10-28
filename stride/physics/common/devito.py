@@ -203,32 +203,46 @@ class GridDevito(Gridded):
 
         self.time_dim = time_dim if time_dim is not None else self.time
 
+        grid_kwargs = dict()
+
         space = self.space
-        extra = space.absorbing
 
-        extended_extent = tuple(np.array(space.spacing) * (np.array(space.extended_shape) - 1))
+        if space is None:
+            origin = (0,)
+            extended_shape = (1,)
+            extended_extent = (1,)
+        else:
+            extra = space.absorbing
 
-        self.full = FullDomain(space_order, extra)
-        self.interior = InteriorDomain(space_order, extra)
-        self.pml_left = tuple()
-        self.pml_right = tuple()
-        self.pml_centres = tuple()
-        self.pml_partials = tuple()
+            origin = space.pml_origin
+            extended_shape = space.extended_shape
+            extended_extent = tuple(np.array(space.spacing) * (np.array(space.extended_shape) - 1))
 
-        for dim in range(space.dim):
-            self.pml_left += (PMLSide(space_order, extra, dim, 'left'),)
-            self.pml_right += (PMLSide(space_order, extra, dim, 'right'),)
-            self.pml_centres += (PMLCentre(space_order, extra, dim, 'left'),
-                                 PMLCentre(space_order, extra, dim, 'right'))
-            self.pml_partials += (PMLPartial(space_order, extra, dim, 'left'),
-                                  PMLPartial(space_order, extra, dim, 'right'))
+            self.full = FullDomain(space_order, extra)
+            self.interior = InteriorDomain(space_order, extra)
+            self.pml_left = tuple()
+            self.pml_right = tuple()
+            self.pml_centres = tuple()
+            self.pml_partials = tuple()
 
-        self.pml_corners = [PMLCorner(space_order, extra, *sides)
-                            for sides in itertools.product(['left', 'right'],
-                                                           repeat=space.dim)]
-        self.pml_corners = tuple(self.pml_corners)
+            for dim in range(space.dim):
+                self.pml_left += (PMLSide(space_order, extra, dim, 'left'),)
+                self.pml_right += (PMLSide(space_order, extra, dim, 'right'),)
+                self.pml_centres += (PMLCentre(space_order, extra, dim, 'left'),
+                                     PMLCentre(space_order, extra, dim, 'right'))
+                self.pml_partials += (PMLPartial(space_order, extra, dim, 'left'),
+                                      PMLPartial(space_order, extra, dim, 'right'))
 
-        self.pml = self.pml_partials
+            self.pml_corners = [PMLCorner(space_order, extra, *sides)
+                                for sides in itertools.product(['left', 'right'],
+                                                               repeat=space.dim)]
+            self.pml_corners = tuple(self.pml_corners)
+
+            self.pml = self.pml_partials
+
+            grid_kwargs['subdomains'] = (self.full, self.interior,) + \
+                                         self.pml + self.pml_left + self.pml_right + \
+                                         self.pml_centres + self.pml_corners
 
         dimensions = None
         time_dimension = None
@@ -245,14 +259,12 @@ class GridDevito(Gridded):
         self.dtype = kwargs.pop('dtype', np.float32)
 
         self.devito_grid = devito.Grid(extent=extended_extent,
-                                       shape=space.extended_shape,
-                                       origin=space.pml_origin,
-                                       subdomains=(self.full, self.interior,) +
-                                                   self.pml + self.pml_left + self.pml_right +
-                                                   self.pml_centres + self.pml_corners,
+                                       shape=extended_shape,
+                                       origin=origin,
                                        dimensions=dimensions,
                                        time_dimension=time_dimension,
-                                       dtype=self.dtype)
+                                       dtype=self.dtype,
+                                       **grid_kwargs)
 
     @_cached
     def function(self, name, space_order=None, **kwargs):
