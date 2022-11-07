@@ -87,7 +87,7 @@ To access the server, copy-paste the URL shown on the terminal into your browser
 ## Running the examples
 
 The easiest way to start working with Stride is to open the Jupyter notebooks under 
-[stride_examples/tutorials](https://github.com/trustimaging/stride/tree/master/examples/tutorials). 
+[stride_examples/tutorials](https://github.com/trustimaging/stride/tree/master/stride_examples/tutorials). 
 
 You can also check fully worked examples of breast imaging in 2D and 3D under 
 [stride_examples/breast2D](https://github.com/trustimaging/stride/tree/master/stride_examples/examples/breast2D) and 
