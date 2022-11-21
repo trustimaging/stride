@@ -17,8 +17,8 @@ Getting started
 You can get instructions on how to download and install Stride
 :doc:`here </download>`.
 
-To learn how to use Stride, check out the `tutorials <https://github.com/trustimaging/stride/tree/master/examples/tutorials>`_
-and `examples <https://github.com/trustimaging/stride/tree/master/examples/examples>`_ provided.
+To learn how to use Stride, check out the `tutorials <https://github.com/trustimaging/stride/tree/master/stride_examples/tutorials>`_
+and `examples <https://github.com/trustimaging/stride/tree/master/stride_examples/examples>`_ provided.
 
 You can find the API Reference :doc:`here </stride/api/api_index>`.
 
