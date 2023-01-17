@@ -2,36 +2,42 @@
 
 import os
 import signal
+import pickle
 import asyncio
 import warnings
 from pytools import prefork
+import multiprocess as multiprocessing
 
 
 # pre-fork before importing anything else
-prefork_fork = prefork._fork_server
+if multiprocessing.get_start_method() == 'fork':
+    prefork_fork = prefork._fork_server
 
 
-def _fork_server(sock):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        prefork_fork(sock)
+    def _fork_server(sock):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            prefork_fork(sock)
 
 
-prefork._fork_server = _fork_server
-prefork.enable_prefork()
-
-
-def _close_prefork_atsignal(signum, frame):
+    prefork._fork_server = _fork_server
     try:
-        prefork.forker._quit()
-    except (AttributeError, BrokenPipeError):
+        prefork.enable_prefork()
+    except pickle.UnpicklingError:
         pass
 
-    os._exit(-1)
+
+    def _close_prefork_atsignal(signum, frame):
+        try:
+            prefork.forker._quit()
+        except (AttributeError, BrokenPipeError, ConnectionResetError, pickle.UnpicklingError):
+            pass
+
+        os._exit(-1)
 
 
-signal.signal(signal.SIGINT, _close_prefork_atsignal)
-signal.signal(signal.SIGTERM, _close_prefork_atsignal)
+    signal.signal(signal.SIGINT, _close_prefork_atsignal)
+    signal.signal(signal.SIGTERM, _close_prefork_atsignal)
 
 
 import mosaic

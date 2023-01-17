@@ -17,6 +17,7 @@ from mosaic.file_manipulation import h5
 
 from .data import Traces
 from .base import ProblemBase
+from .. import plotting
 
 
 __all__ = ['Shot', 'Sequence', 'Acquisitions']
@@ -100,7 +101,8 @@ class Shot(ProblemBase):
             raise ValueError('The shot needs a positive ID')
 
         self.id = id
-        self.start = None
+        self.frame = -1
+        self.acq = -1
         self.sequence_id = None
 
         if problem is not None:
@@ -171,19 +173,33 @@ class Shot(ProblemBase):
         """
         return list(self._receivers.values())
 
+    @property
+    def slow_time_index(self):
+        """
+        Point along the slow time.
+
+        """
+        if self.frame < 0:
+            raise RuntimeError('Shot %d does not have an assigned frame.' % self.id)
+
+        return self.frame * self.slow_time.num_acq + self.acq
+
     @cached_property
     def delayed_wavelets(self):
         """
         Get wavelets with delays applied to them.
 
         """
+        if not self.delays.allocated:
+            return self.wavelets
+
         delays = np.round(self.delays.data[:, 0] / self.time.step).astype(int)
         wavelets = self.wavelets.data.copy()
 
         for source_idx in range(self.num_sources):
             delay = delays[source_idx]
 
-            if delay < 0:
+            if delay <= 0:
                 continue
 
             wavelet = wavelets[source_idx, :self.time.num - delay]
@@ -286,7 +302,8 @@ class Shot(ProblemBase):
         if self.delays is not None:
             shot.delays = self.delays
 
-        shot.start = self.start
+        shot.frame = self.frame
+        shot.acq = self.acq
         shot.sequence_id = self.sequence_id
 
         return shot
@@ -437,6 +454,8 @@ class Sequence(ProblemBase):
     ----------
     id : int
         Identifier assigned to this sequence.
+    acq : int, optional
+        Acquisition number at which the sequence starts, defaults to 0.
     name : str
         Optional name for the sequence.
     problem : Problem
@@ -450,14 +469,15 @@ class Sequence(ProblemBase):
 
     """
 
-    def __init__(self, id, name=None, problem=None, **kwargs):
-        name = name or 'shot_%05d' % id
+    def __init__(self, id, acq=0, name=None, problem=None, **kwargs):
+        name = name or 'sequence_%05d' % id
         super().__init__(name=name, problem=problem, **kwargs)
 
         if id < 0:
             raise ValueError('The shot needs a positive ID')
 
         self.id = id
+        self.acq = acq
 
         if problem is not None:
             geometry = problem.geometry
@@ -506,14 +526,14 @@ class Sequence(ProblemBase):
         """
         return len(self.shot_starts)
 
-    def add(self, start, item):
+    def add(self, frame, item):
         """
         Add a new shot to the Sequence.
 
         Parameters
         ----------
-        start : int
-            Start time step of the shot in the Sequence.
+        frame : int
+            Frame number where the shot is fired.
         item : Shot
             Shot to be added to the Sequence.
 
@@ -521,23 +541,24 @@ class Sequence(ProblemBase):
         -------
 
         """
-        if start in self._shots.keys():
-            raise ValueError('Shot with ID "%d" starting at time step "%d" '
-                             'already exists in the Sequence' % (item.id, start))
+        if frame in self._shots.keys():
+            raise ValueError('Shot with ID "%d" starting in frame "%d" '
+                             'already exists in the Sequence' % (item.id, frame))
 
-        self._shots[start] = item
+        self._shots[frame] = item
         item._sequence = self
-        item.start = start
+        item.frame = frame
+        item.acq = self.acq
         item.sequence_id = self.id
 
-    def get(self, start):
+    def get(self, frame):
         """
-        Get a shot from the Acquisitions with a known start time.
+        Get a shot from the Acquisitions with a known frame.
 
         Parameters
         ----------
-        start : int
-            Start time step of the shot in the Sequence.
+        frame : int
+            Frame number of the shot in the Sequence.
 
         Returns
         -------
@@ -545,22 +566,22 @@ class Sequence(ProblemBase):
             Found Shot.
 
         """
-        if isinstance(start, (np.int32, np.int64)):
-            start = int(start)
+        if isinstance(frame, (np.int32, np.int64)):
+            frame = int(frame)
 
-        if not isinstance(start, int) or start < 0:
-            raise ValueError('Shot start tines have to be positive integer numbers')
+        if not isinstance(frame, int) or frame < 0:
+            raise ValueError('Shot frames have to be positive integer numbers')
 
-        return self._shots[start]
+        return self._shots[frame]
 
-    def set(self, start, item):
+    def set(self, frame, item):
         """
         Change an existing shot in the Sequence.
 
         Parameters
         ----------
-        start : int
-            Start time step of the shot in the Sequence.
+        frame : int
+            Frame number of the shot in the Sequence.
         item : Shot
             Shot to be modified in the Acquisitions.
 
@@ -568,11 +589,11 @@ class Sequence(ProblemBase):
         -------
 
         """
-        if start not in self._shots.keys():
-            raise ValueError('Shot with ID "%d" starting at time step "%d" '
-                             'does not exists in the Sequence' % (item.id, start))
+        if frame not in self._shots.keys():
+            raise ValueError('Shot with ID "%d" starting in frame "%d" '
+                             'does not exists in the Sequence' % (item.id, frame))
 
-        self._shots[start] = item
+        self._shots[frame] = item
 
     def select_shot_ids(self, start=None, end=None, num=None, every=1, randomly=False):
         """
@@ -613,13 +634,14 @@ class Sequence(ProblemBase):
     def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
+            'acq': self.acq,
             'num_shots': self.num_shots,
             'shots': [],
         }
 
-        for start, shot in self._shots.items():
+        for frame, shot in self._shots.items():
             description['shots'].append({
-                'start': start,
+                'frame': frame,
                 'id': shot.id
             })
 
@@ -627,11 +649,12 @@ class Sequence(ProblemBase):
 
     def __set_desc__(self, description):
         self.id = description.id
+        self.acq = description.acq
 
         for shot_desc in description.shots:
-            if shot_desc.start not in self._shots:
+            if shot_desc.frame not in self._shots:
                 shot = self._acquisitions.get(shot_desc.id)
-                self.add(shot_desc.start, shot)
+                self.add(shot_desc.frame, shot)
 
 
 class Acquisitions(ProblemBase):
@@ -992,8 +1015,13 @@ class Acquisitions(ProblemBase):
         -------
 
         """
+        plot = kwargs.pop('plot', True)
+
         self.plot_wavelets(**kwargs)
         self.plot_observed(**kwargs)
+
+        if plot is True:
+            plotting.show()
 
     def _plot(self, update, **kwargs):
         if not ENABLED_2D_PLOTTING:

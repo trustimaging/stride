@@ -21,13 +21,13 @@ We provide two CPU images:
 To run this image locally, you will need `docker` to be installed. Once available, the following commands will get you started:
 
 ```bash
-docker run --rm -it -p 8888:8888 -p 8787:8787 -p 8786:8786 stridecodes/stride:gcc-latest
+docker run --rm -it -p 8888:8888 -p 8787:8787 -p 8786:8786 --add-host=host.docker.internal:host-gateway stridecodes/stride:gcc-latest
 ```
 
 or to run in user context on a cluster with shared filesystem, you can add the correct user config as docker options e.g.:
 
 ```bash
-docker run --rm -it -v `pwd`:`pwd` -w `pwd` -u $(id -u):$(id -g) stridecodes/stride:gcc-latest python stride_examples/tutorials/07_script_running.py
+docker run --rm -it -v `pwd`:`pwd` -w `pwd` -u $(id -u):$(id -g) --add-host=host.docker.internal:host-gateway stridecodes/stride:gcc-latest python stride_examples/tutorials/07_script_running.py
 ```
 
 
@@ -46,8 +46,8 @@ See for examples a few runtime commands for the NVIDIA `nvc` images:
 
 
 ```bash
-docker run --gpus all --rm -it -p 8888:8888 -p 8787:8787 -p 8786:8786 stridecodes/stride:nvidia-nvc-latest
-docker run --gpus all --rm -it stridecodes/stride:nvidia-nvc-latest python stride_examples/tutorials/07_script_running.py
+docker run --gpus all --rm -it -p 8888:8888 -p 8787:8787 -p 8786:8786 --add-host=host.docker.internal:host-gateway stridecodes/stride:nvidia-nvc-latest
+docker run --gpus all --rm -it --add-host=host.docker.internal:host-gateway stridecodes/stride:nvidia-nvc-latest python stride_examples/tutorials/07_script_running.py
 ```
 
 or to run in user context on a cluster with shared filesystem, you can add the correct user config as docker options e.g.:

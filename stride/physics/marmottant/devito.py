@@ -1,12 +1,11 @@
 
-import devito
 import functools
 import numpy as np
 
 import mosaic
 
 from stride.problem import Traces
-from ..common.devito import GridDevito, OperatorDevito, config_devito
+from ..common.devito import GridDevito, OperatorDevito, config_devito, devito
 from ..problem_type import ProblemTypeBase
 
 

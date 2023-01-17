@@ -1,5 +1,6 @@
 
 import numpy as np
+from cached_property import cached_property
 
 
 __all__ = ['Space', 'Time', 'SlowTime', 'Grid']
@@ -111,7 +112,7 @@ class Space:
 
         return mask
 
-    @property
+    @cached_property
     def mesh_indices(self):
         """
         Create the mesh of indices in the inner domain, as a tuple
@@ -121,7 +122,7 @@ class Space:
         grid = [np.arange(0, shape) for shape in self.shape]
         return np.meshgrid(*grid)
 
-    @property
+    @cached_property
     def extended_mesh_indices(self):
         """
         Create the mesh of indices in the extended domain, as a tuple
@@ -131,7 +132,7 @@ class Space:
         grid = [np.arange(0, extended_shape) for extended_shape in self.extended_shape]
         return np.meshgrid(*grid)
 
-    @property
+    @cached_property
     def mesh(self):
         """
         Create the mesh of spatial locations in the inner domain, as a tuple
@@ -141,7 +142,7 @@ class Space:
         grid = self.grid
         return np.meshgrid(*grid, indexing='ij')
 
-    @property
+    @cached_property
     def extended_mesh(self):
         """
         Create the mesh of spatial locations the full, extended domain, as a tuple
@@ -151,7 +152,7 @@ class Space:
         grid = self.extended_grid
         return np.meshgrid(*grid, indexing='ij')
 
-    @property
+    @cached_property
     def indices(self):
         """
         Indices corresponding to the grid of the inner domain, as a tuple of 1d-arrays.
@@ -160,7 +161,7 @@ class Space:
         axes = [np.arange(0, shape) for shape in self.shape]
         return tuple(axes)
 
-    @property
+    @cached_property
     def extended_indices(self):
         """
         Indices corresponding to the grid of the extended domain, as a tuple of 1d-arrays.
@@ -169,7 +170,7 @@ class Space:
         axes = [np.arange(0, extended_shape) for extended_shape in self.extended_shape]
         return tuple(axes)
 
-    @property
+    @cached_property
     def grid(self):
         """
         Spatial points corresponding to the grid of the inner domain, as a tuple of 1d-arrays.
@@ -180,7 +181,7 @@ class Space:
                 for dim in range(self.dim)]
         return tuple(axes)
 
-    @property
+    @cached_property
     def extended_grid(self):
         """
         Spatial points corresponding to the grid of the extended domain, as a tuple of 1d-arrays.
@@ -260,7 +261,7 @@ class Time:
         """
         return slice(self.extra, self.extra + self.num)
 
-    @property
+    @cached_property
     def grid(self):
         """
         Time points corresponding to the grid of the inner domain, as a 1d-array.
@@ -268,7 +269,7 @@ class Time:
         """
         return np.linspace(self.start, self.stop, self.num, endpoint=True, dtype=np.float32)
 
-    @property
+    @cached_property
     def extended_grid(self):
         """
         Time points corresponding to the grid of the extended domain, as a 1d-array.
@@ -277,67 +278,115 @@ class Time:
         return np.linspace(self.extended_start, self.extended_stop, self.extended_num, endpoint=True, dtype=np.float32)
 
 
-class SlowTime(Time):
+class SlowTime:
     """
     This defines the slow temporal grid over which the problem is defined
 
-    A time grid is fully defined by either the frequency freq or the step size step
-    and at leas one of its arguments: start, stop or num.
-
-    The time grid can be extended with a certain amount of padding, generating an
-    inner domain and an extended domain, similar to that seen in the Space.
-
     Parameters
     ----------
-    freq : float, optional
-        Sampling frequency of the axis, in Hz.
-    start : float, optional
-        Point at which time starts, in seconds.
-    step : float, optional
-        Step between time points, in seconds.
-    num : int, optional
-        Number of time points in the grid.
-    stop : float, optional
-        Point at which time ends, in seconds.
+    frame_rate : float, optional
+        Sampling frequency between frames, in Hz.
+    acq_rate : float, optional
+        Sampling frequency between acquisitions, in Hz.
+    frame_step : float, optional
+        Time step between frames, in seconds.
+    acq_step : float, optional
+        Time step between frames, in seconds.
+    num_frame : int, optional
+        Number of frames in the grid.
+    num_acq : int, optional
+        Number of acquisitions per frame.
 
     """
 
-    def __init__(self, freq=None, start=None, step=None, num=None, stop=None):
+    def __init__(self, frame_rate=None, acq_rate=None,
+                 frame_step=None, acq_step=None,
+                 num_frame=None, num_acq=None):
         try:
-            if step is None:
-                step = 1/freq
+            if frame_step is None:
+                frame_step = 1/frame_rate
             else:
-                freq = 1/step
+                frame_rate = 1/frame_step
 
         except:
             raise ValueError('Either freq or step has to be defined')
 
-        try:
-            if start is None and stop is None:
-                start = 0.
+        if not isinstance(num_frame, int):
+            raise TypeError('num_frames must be of type int')
 
-            if start is None:
-                start = stop - step*(num - 1)
-            elif step is None:
-                step = (stop - start)/(num - 1)
-            elif num is None:
-                num = int(np.ceil((stop - start)/step + 1))
-                stop = step*(num - 1) + start
-            elif stop is None:
-                stop = start + step*(num - 1)
+        if acq_step is None and acq_rate is None:
+            acq_step = 0
+            acq_rate = -1
+            num_acq = 1
+        else:
+            if not isinstance(num_acq, int):
+                raise TypeError('num_acq must be of type int')
 
-        except:
-            raise ValueError('Three of args start, step, num and stop may be set')
+        if acq_step is None:
+            acq_step = 1/acq_rate
+        elif acq_rate is None:
+            acq_rate = 1/acq_step
 
-        if not isinstance(num, int):
-            raise TypeError('"input" argument must be of type int')
+        if num_acq*acq_step > frame_step:
+            raise ValueError('Acquisition step (%e s) too large for frame step (%e s).'
+                             % (num_acq*acq_step, frame_step))
 
-        self.freq = freq
+        start = 0.
+        stop = start + frame_step * (num_frame - 1)
 
-        super().__init__(start=start, step=step, num=num, stop=stop)
+        self.start = start
+        self.stop = stop
+        self.frame_step = frame_step
+        self.frame_rate = frame_rate
+        self.num_frame = num_frame
+        self.acq_step = acq_step
+        self.acq_rate = acq_rate
+        self.num_acq = num_acq
 
     def resample(self):
         raise NotImplementedError('Resampling has not been implemented yet')
+
+    @property
+    def num(self):
+        """
+        Total number of steps.
+
+        """
+        return self.num_frame*self.num_acq
+
+    @property
+    def extended_num(self):
+        """
+        Total number of steps.
+
+        """
+        return self.num
+
+    @property
+    def inner(self):
+        """
+        Slice defining the inner domain.
+
+        """
+        return slice(0, None)
+
+    @cached_property
+    def grid(self):
+        """
+        Time points corresponding to the grid, as a 1d-array.
+
+        """
+        if self.acq_rate > 0:
+            start = 0.
+            stop = start + self.acq_step * (self.num_acq - 1)
+
+            grid = [np.linspace(start + self.frame_step*acq, stop + self.frame_step*acq,
+                                self.num_acq, endpoint=True, dtype=np.float32)
+                    for acq in range(self.num_frame)]
+
+            return np.concatenate(grid)
+        else:
+            return np.linspace(self.start, self.stop, self.num_frame, endpoint=True, dtype=np.float32)
 
 
 class Grid:

@@ -1,7 +1,6 @@
 
 import os
 import gc
-import devito
 import sympy
 import logging
 import functools
@@ -12,6 +11,7 @@ import scipy.special
 import mosaic
 from mosaic.types import Struct
 
+from . import stride_devito as devito
 from ...problem.base import Gridded
 
 
@@ -454,7 +454,7 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        bounds = bounds or (0, self.time.extended_num-1)
+        bounds = bounds or (1, self.time.extended_num-1)
 
         time_dim = self.devito_grid.time_dim
 
@@ -467,7 +467,7 @@ class GridDevito(Gridded):
                                                  factor=factor,
                                                  condition=condition)
 
-        buffer_size = (bounds[1] - bounds[0] + factor) // factor + 1
+        buffer_size = (bounds[1] - bounds[0] + factor) // factor
 
         fun = self.time_function(name,
                                  space_order=space_order,
@@ -812,7 +812,7 @@ class OperatorDevito:
 
             default_kwargs['dt'] = default_kwargs.get('dt', time.step)
             default_kwargs['time_m'] = default_kwargs.get('time_m', 1)
-            default_kwargs['time_M'] = default_kwargs.get('time_M', time.extended_num - 1)
+            default_kwargs['time_M'] = default_kwargs.get('time_M', time.extended_num-1)
 
             if self.grid.num_inner is not None:
                 default_kwargs['dt_inner'] = default_kwargs.get('dt_inner', time.step/self.grid.num_inner)
