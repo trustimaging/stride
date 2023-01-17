@@ -454,7 +454,7 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        bounds = bounds or (1, self.time.extended_num-1)
+        bounds = bounds or (0, self.time.extended_num-1)
 
         time_dim = self.devito_grid.time_dim
 
@@ -467,7 +467,7 @@ class GridDevito(Gridded):
                                                  factor=factor,
                                                  condition=condition)
 
-        buffer_size = (bounds[1] - bounds[0] + factor) // factor
+        buffer_size = (bounds[1] - bounds[0] + factor) // factor + 1
 
         fun = self.time_function(name,
                                  space_order=space_order,
