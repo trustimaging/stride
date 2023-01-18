@@ -1,12 +1,11 @@
 
-import devito
 import numpy as np
 import scipy.signal
 
 import mosaic
 from mosaic.utils import camel_case
 
-from ..common.devito import GridDevito, OperatorDevito
+from ..common.devito import GridDevito, OperatorDevito, devito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
 

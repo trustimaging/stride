@@ -10,6 +10,8 @@ services:
     volumes:
       - ./stride:/app/stride/stride
       - ./stride_examples:/app/stride/stride_examples
+    extra_hosts:
+      - host.docker.internal:host-gateway
     ports:
       - 8888:8888
 
@@ -24,4 +26,6 @@ services:
       - ./stride_examples:/app/stride/stride_examples
     ports:
       - 8888:8888
+    extra_hosts:
+      - host.docker.internal:host-gateway
     runtime: nvidia

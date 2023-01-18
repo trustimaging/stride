@@ -3,7 +3,6 @@ import os
 import glob
 import shutil
 import tempfile
-import devito
 import warnings
 import numpy as np
 import scipy.signal
@@ -14,7 +13,7 @@ from mosaic.comms.compression import maybe_compress, decompress
 
 from stride.utils import fft
 from stride.problem import StructuredData
-from ..common.devito import GridDevito, OperatorDevito, config_devito
+from ..common.devito import GridDevito, OperatorDevito, config_devito, devito
 from ..problem_type import ProblemTypeBase
 from .. import boundaries
 

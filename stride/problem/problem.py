@@ -168,7 +168,7 @@ class Problem(Gridded):
 
         # Acquisitions
         if plot_acquisitions:
-            acquisitions_axes = self.acquisitions.plot()
+            acquisitions_axes = self.acquisitions.plot(plot=False)
             plotting.show(acquisitions_axes)
 
     def sub_problem(self, shot_id):
