@@ -25,6 +25,7 @@ To install Stride, follow these steps:
 You can also start using Stride through Docker:
 
 .. code-block:: shell
+
     git clone https://github.com/trustimaging/stride.git
     cd stride
     docker-compose up stride
@@ -59,9 +60,9 @@ compilers is to install the `NVIDIA HPC SDK <https://developer.nvidia.com/nvidia
 
 .. code-block:: shell
 
-    wget https://developer.download.nvidia.com/hpc-sdk/21.2/nvhpc_2021_212_Linux_x86_64_cuda_multi.tar.gz
-    tar xpzf nvhpc_2021_212_Linux_x86_64_cuda_multi.tar.gz
-    cd nvhpc_2021_212_Linux_x86_64_cuda_multi/
+    wget https://developer.download.nvidia.com/hpc-sdk/22.11/nvhpc_2022_2211_Linux_x86_64_cuda_multi.tar.gz
+    tar xpzf nvhpc_2022_2211_Linux_x86_64_cuda_multi.tar.gz
+    cd nvhpc_2022_2211_Linux_x86_64_cuda_multi
     sudo ./install
 
 During the installation, select the `single system install` option.
@@ -70,8 +71,8 @@ Once the installation is done, you can add the following lines to your `~/.bashr
 
 .. code-block:: shell
 
-    export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/compilers/bin/:$PATH
-    export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/compilers/lib/:$LD_LIBRARY_PATH
-    export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/bin/:$PATH
-    export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/lib/:$LD_LIBRARY_PATH
+    export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/compilers/bin/:$PATH
+    export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/compilers/lib/:$LD_LIBRARY_PATH
+    export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/comm_libs/mpi/bin/:$PATH
+    export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/comm_libs/mpi/lib/:$LD_LIBRARY_PATH
 

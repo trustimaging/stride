@@ -5,10 +5,10 @@ from skimage.restoration import denoise_tv_chambolle
 from .constraint import Constraint
 
 
-__all__ = ['ChambolleTV']
+__all__ = ['ChambolleTV1']
 
 
-class ChambolleTV(Constraint):
+class ChambolleTV1(Constraint):
     """
     Apply a total-variation constraint using Chambolle's projection
     algorithm.

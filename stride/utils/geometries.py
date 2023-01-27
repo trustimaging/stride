@@ -3,7 +3,7 @@ import numpy as np
 import scipy.linalg
 
 
-__all__ = ['elliptical', 'ellipsoidal']
+__all__ = ['elliptical', 'ellipsoidal', 'disk']
 
 
 def _rot_matrix(axis, theta):

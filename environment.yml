@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.8
+  - python>=3.8,<3.11
   - blosc
   - cached-property
   - click
@@ -14,6 +14,7 @@ dependencies:
   - gputil
   - h5py>=3.2
   - matplotlib>=3.4
+  - multiprocess
   - nbval
   - numpy>=1.20
   - notebook>=6.4

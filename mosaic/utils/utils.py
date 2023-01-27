@@ -5,7 +5,7 @@ import traceback
 import threading
 import numpy as np
 
-__all__ = ['sizeof', 'set_main_thread', 'memory_limit', 'cpu_count', 'MultiError']
+__all__ = ['sizeof', 'set_main_thread', 'memory_limit', 'cpu_count', 'gpu_count', 'MultiError']
 
 
 def sizeof(obj, seen=None):
@@ -120,6 +120,25 @@ def cpu_count():
     num_cpus = psutil.cpu_count(logical=False) or num_logical_cpus
 
     return num_cpus
+
+
+def gpu_count():
+    """
+    Get the number of available GPUs in the node.
+
+    Returns
+    -------
+        int
+            Number of GPUs.
+
+    """
+    try:
+        import GPUtil
+        gpus = GPUtil.getGPUs()
+    except (ImportError, ValueError):
+        return None
+
+    return len(gpus)
 
 
 class MultiError(Exception):

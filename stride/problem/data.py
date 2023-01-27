@@ -22,7 +22,8 @@ from ..core import Variable
 from .. import plotting
 
 
-__all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces']
+__all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
+           'SparseField', 'ParticleField']
 
 
 @mosaic.tessera
@@ -361,7 +362,9 @@ class StructuredData(Data):
 
             if norm_prec > 1e-31:
                 prec += prec_scale * norm_prec + 1e-31
-                grad /= prec
+                prec /= np.max(np.abs(prec.data))
+                non_zero = np.abs(prec.data) > 0.
+                grad.data[non_zero] /= prec.data[non_zero]
 
         self.grad = grad
 
@@ -1013,7 +1016,26 @@ class ScalarField(StructuredData):
         origin = kwargs.pop('origin', self.space.pml_origin)
         limit = kwargs.pop('limit', self.space.extended_limit)
 
-        axis = self._plot(self.extended_data, origin=origin, limit=limit, **kwargs)
+        if (self.time_dependent or self.slow_time_dependent) and self.space.dim == 2:
+            def update(figure, axis, step):
+                if len(axis.images):
+                    axis.images[-1].colorbar.remove()
+                axis.clear()
+
+                kwargs.pop('time_range', None)
+                self._plot(self.extended_data[int(step)], origin=origin, limit=limit, axis=axis,
+                           **kwargs)
+                axis.set_title(axis.get_title() + ' - time step %d' % step)
+
+                figure.canvas.draw_idle()
+
+            axis = self._plot_time(update, **kwargs)
+
+        elif self.slow_time_dependent:
+            axis = self._plot(self.extended_data[0], origin=origin, limit=limit, **kwargs)
+
+        else:
+            axis = self._plot(self.extended_data, origin=origin, limit=limit, **kwargs)
 
         if plot is True:
             plotting.show(axis)
@@ -1489,3 +1511,310 @@ class Traces(StructuredData):
         super().__set_desc__(description)
 
         self._transducer_ids = description.transducer_ids
+
+
+@mosaic.tessera
+class SparseField(StructuredData):
+    """
+    Objects of this type describe a sparse field defined at discrete points. Sparse fields
+    can also be time-dependent.
+
+    Parameters
+    ----------
+    name : str
+        Name of the data.
+    num : int
+        Number of points in the field.
+    dim : int
+        Number of dimensions at every point in the field, defaults to 1.
+    time_dependent : bool, optional
+        Whether or not the field is time-dependent, defaults to False.
+    slow_time_dependent : bool, optional
+        Whether or not the field is slow-time dependent, defaults to False.
+    shape : tuple, optional
+        Shape of the inner domain of the data.
+    extended_shape : tuple, optional
+        Shape of the extended domain of the data, defaults to the ``shape``.
+    inner : tuple, optional
+        Tuple of slices defining the location of the inner domain inside the
+        extended domain, defaults to the inner domain being centred.
+    dtype : data-type, optional
+        Data type of the data, defaults to float32.
+    grid : Grid or any of Space or Time
+        Grid on which the Problem is defined
+
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        num = kwargs.pop('num', 1)
+        dim = kwargs.pop('dim', 1)
+        time_dependent = kwargs.pop('time_dependent', False)
+        slow_time_dependent = kwargs.pop('slow_time_dependent', False)
+
+        self._num = num
+        self._dim = dim
+        self._time_dependent = time_dependent
+        self._slow_time_dependent = slow_time_dependent
+
+        if self._shape is None:
+            self._init_shape()
+
+    def _init_shape(self, fill_shape=True):
+        shape = ()
+        extended_shape = ()
+        inner = ()
+
+        if self._time_dependent:
+            shape += (self.time.num,)
+            extended_shape += (self.time.extended_num,)
+            inner += (self.time.inner,)
+
+        if self._slow_time_dependent:
+            shape += (self.slow_time.num,)
+            extended_shape += (self.slow_time.extended_num,)
+            inner += (self.slow_time.inner,)
+
+        if self.dim > 1:
+            shape += (self.num, self.dim)
+            extended_shape += (self.num, self.dim)
+            inner += (slice(0, None), slice(0, None))
+        else:
+            shape += (self.num,)
+            extended_shape += (self.num,)
+            inner += (slice(0, None),)
+
+        if fill_shape:
+            self._shape = shape
+        self._extended_shape = extended_shape
+        self._inner = inner
+
+    def alike(self, *args, **kwargs):
+        """
+        Create a data object that shares its characteristics with this object.
+
+        The same parameters as those given to ``__init__`` are valid here. Otherwise the
+        new object will be configured to be like this one.
+
+        Returns
+        -------
+        ParticleField
+            Newly created ScalarField.
+
+        """
+        kwargs['num'] = kwargs.pop('num', self.num)
+        kwargs['dim'] = kwargs.pop('dim', self.dim)
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+
+        return super().alike(*args, **kwargs)
+
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph.
+
+        Returns
+        -------
+        ParticleField
+            Detached variable.
+
+        """
+        kwargs['num'] = kwargs.pop('num', self.num)
+        kwargs['dim'] = kwargs.pop('dim', self.dim)
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+
+        return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original
+        graph and re-initialised as a parameter.
+
+        Returns
+        -------
+        ScalarField
+            Detached variable.
+
+        """
+        kwargs['num'] = kwargs.pop('num', self.num)
+        kwargs['dim'] = kwargs.pop('dim', self.dim)
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+
+        return super().as_parameter(*args, **kwargs)
+
+    @property
+    def num(self):
+        """
+        Number of elements in the field.
+
+        """
+        return self._num
+
+    @property
+    def dim(self):
+        """
+        Number of elements in the field.
+
+        """
+        return self._dim
+
+    @property
+    def time_dependent(self):
+        """
+        Whether or not the field is time dependent.
+
+        """
+        return self._time_dependent
+
+    @property
+    def slow_time_dependent(self):
+        """
+        Whether or not the field is slow-time dependent.
+
+        """
+        return self._slow_time_dependent
+
+    def plot(self, *args, **kwargs):
+        pass
+
+    def __get_desc__(self, **kwargs):
+        description = super().__get_desc__(**kwargs)
+        description['num'] = self._num
+        description['dim'] = self._dim
+        description['time_dependent'] = self._time_dependent
+        description['slow_time_dependent'] = self._slow_time_dependent
+
+        return description
+
+    def __set_desc__(self, description):
+        self._shape = description.shape
+        self._dtype = np.dtype(description.dtype)
+        self._num = description.num
+        self._dim = description.dim
+        self._slow_time_dependent = description.get('slow_time_dependent', False)
+
+        if self.space is not None:
+            self._init_shape(fill_shape=False)
+
+        data = description.data
+        if hasattr(data, 'load'):
+            data = data.load()
+
+        self.extended_data[:] = self.pad_data(data)
+
+
+@mosaic.tessera
+class ParticleField(SparseField):
+    """
+    Objects of this type describe a sparse particle field defined over the spatial grid. Particle fields
+    can also be time-dependent.
+
+    Parameters
+    ----------
+    name : str
+        Name of the data.
+    num : int
+        Number of particles in the field.
+    time_dependent : bool, optional
+        Whether or not the field is time-dependent, defaults to False.
+    slow_time_dependent : bool, optional
+        Whether or not the field is slow-time dependent, defaults to True.
+    shape : tuple, optional
+        Shape of the inner domain of the data.
+    extended_shape : tuple, optional
+        Shape of the extended domain of the data, defaults to the ``shape``.
+    inner : tuple, optional
+        Tuple of slices defining the location of the inner domain inside the
+        extended domain, defaults to the inner domain being centred.
+    dtype : data-type, optional
+        Data type of the data, defaults to float32.
+    grid : Grid or any of Space or Time
+        Grid on which the Problem is defined
+
+    """
+
+    def __init__(self, **kwargs):
+        dim = kwargs.pop('dim', None)
+
+        if 'space' in kwargs and dim is None:
+            dim = kwargs['space'].dim
+        elif 'grid' in kwargs and dim is None:
+            dim = kwargs['grid'].space.dim
+
+        super().__init__(dim=dim, **kwargs)
+
+    def plot(self, **kwargs):
+        """
+        Plot the particle the field.
+
+        Parameters
+        ----------
+        kwargs
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        plot = kwargs.pop('plot', True)
+
+        if self.slow_time_dependent and self.space.dim == 2:
+            def update(figure, axis, step):
+                axis.clear()
+
+                self._plot(self.data[int(step)], axis=axis, **kwargs)
+                axis.set_title(axis.get_title() + ' - slow time step %d' % step)
+
+                figure.canvas.draw_idle()
+
+            axis = self._plot_time(update)
+
+        else:
+            slow_t = kwargs.pop('slow_t', 0)
+            axis = self._plot(self.data[slow_t]/np.array(self.space.spacing), **kwargs)
+
+        if plot is True:
+            plotting.show(axis)
+
+        return axis
+
+    def _plot(self, data, **kwargs):
+        title = kwargs.pop('title', self.name)
+        colour = kwargs.pop('colour', 'k')
+        size = kwargs.pop('size', 1)
+        origin = kwargs.pop('origin', self.space.origin)
+        limit = kwargs.pop('limit', self.space.limit)
+
+        data = data.reshape((-1, self.space.dim))
+
+        axis = plotting.plot_points(data, title=title, colour=colour, size=size,
+                                    origin=origin, limit=limit, **kwargs)
+
+        return axis
+
+    def _plot_time(self, update):
+        if not ENABLED_2D_PLOTTING:
+            return None
+
+        figure, axis = plt.subplots(1, 1)
+        plt.subplots_adjust(bottom=0.25)
+        axis.margins(x=0)
+
+        ax_shot = plt.axes([0.15, 0.1, 0.7, 0.03])
+        slider = Slider(ax_shot, 'time',
+                        0, self.slow_time.num-1,
+                        valinit=0, valstep=1)
+
+        update = functools.partial(update, figure, axis)
+        update(0)
+
+        slider.on_changed(update)
+        axis.slider = slider
+
+        return axis

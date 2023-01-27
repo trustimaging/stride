@@ -2,39 +2,46 @@
 
 import os
 import signal
+import pickle
 import asyncio
 import warnings
 from pytools import prefork
+import multiprocess as multiprocessing
 
 
 # pre-fork before importing anything else
-prefork_fork = prefork._fork_server
+if multiprocessing.get_start_method() == 'fork':
+    prefork_fork = prefork._fork_server
 
 
-def _fork_server(sock):
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        prefork_fork(sock)
+    def _fork_server(sock):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            prefork_fork(sock)
 
 
-prefork._fork_server = _fork_server
-prefork.enable_prefork()
-
-
-def _close_prefork_atsignal(signum, frame):
+    prefork._fork_server = _fork_server
     try:
-        prefork.forker._quit()
-    except (AttributeError, BrokenPipeError):
+        prefork.enable_prefork()
+    except pickle.UnpicklingError:
         pass
 
-    os._exit(-1)
+
+    def _close_prefork_atsignal(signum, frame):
+        try:
+            prefork.forker._quit()
+        except (AttributeError, BrokenPipeError, ConnectionResetError, pickle.UnpicklingError):
+            pass
+
+        os._exit(-1)
 
 
-signal.signal(signal.SIGINT, _close_prefork_atsignal)
-signal.signal(signal.SIGTERM, _close_prefork_atsignal)
+    signal.signal(signal.SIGINT, _close_prefork_atsignal)
+    signal.signal(signal.SIGTERM, _close_prefork_atsignal)
 
 
 import mosaic
+from mosaic.utils import gpu_count
 
 from .core import *
 from .problem import *
@@ -98,6 +105,12 @@ async def forward(problem, pde, *args, **kwargs):
     published_args = [runtime.put(each, publish=True) for each in args]
     published_args = await asyncio.gather(*published_args)
 
+    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    if using_gpu:
+        devices = kwargs.pop('devices', None)
+        num_gpus = gpu_count() if devices is None else len(devices)
+        devices = list(range(num_gpus)) if devices is None else devices
+
     @runtime.async_for(shot_ids, safe=safe)
     async def loop(worker, shot_id):
         logger.info('\n')
@@ -105,6 +118,11 @@ async def forward(problem, pde, *args, **kwargs):
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
+
+        if using_gpu:
+            devito_args = kwargs.get('devito_args', {})
+            devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
+            kwargs['devito_args'] = devito_args
 
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
@@ -188,6 +206,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
                                           len=runtime.num_workers)
 
+    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    if using_gpu:
+        devices = kwargs.pop('devices', None)
+        num_gpus = gpu_count() if devices is None else len(devices)
+        devices = list(range(num_gpus)) if devices is None else devices
+
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         optimiser.clear_grad()
 
@@ -226,6 +250,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             if observed is None:
                 raise RuntimeError('Shot %d has no observed data' % shot_id)
+
+            if using_gpu:
+                devito_args = kwargs.get('devito_args', {})
+                devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
+                kwargs['devito_args'] = devito_args
 
             wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
             await wavelets.init_future

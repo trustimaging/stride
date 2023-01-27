@@ -87,7 +87,7 @@ To access the server, copy-paste the URL shown on the terminal into your browser
 ## Running the examples
 
 The easiest way to start working with Stride is to open the Jupyter notebooks under 
-[stride_examples/tutorials](https://github.com/trustimaging/stride/tree/master/examples/tutorials). 
+[stride_examples/tutorials](https://github.com/trustimaging/stride/tree/master/stride_examples/tutorials). 
 
 You can also check fully worked examples of breast imaging in 2D and 3D under 
 [stride_examples/breast2D](https://github.com/trustimaging/stride/tree/master/stride_examples/examples/breast2D) and 
@@ -150,9 +150,9 @@ The Devito library uses OpenACC to generate GPU code. The recommended way to acc
 compilers is to install the [NVIDIA HPC SDK](https://developer.nvidia.com/nvidia-hpc-sdk-downloads).
 
 ```sh
-wget https://developer.download.nvidia.com/hpc-sdk/21.2/nvhpc_2021_212_Linux_x86_64_cuda_multi.tar.gz
-tar xpzf nvhpc_2021_212_Linux_x86_64_cuda_multi.tar.gz
-cd nvhpc_2021_212_Linux_x86_64_cuda_multi/
+wget https://developer.download.nvidia.com/hpc-sdk/22.11/nvhpc_2022_2211_Linux_x86_64_cuda_multi.tar.gz
+tar xpzf nvhpc_2022_2211_Linux_x86_64_cuda_multi.tar.gz
+cd nvhpc_2022_2211_Linux_x86_64_cuda_multi
 sudo ./install
 ```
 
@@ -161,26 +161,28 @@ During the installation, select the ``single system install`` option.
 Once the installation is done, you can add the following lines to your ``~/.bashrc``:
 
 ```sh
-export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/compilers/bin/:$PATH
-export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/compilers/lib/:$LD_LIBRARY_PATH
-export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/bin/:$PATH
-export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/2021/comm_libs/mpi/lib/:$LD_LIBRARY_PATH
+export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/compilers/bin/:$PATH
+export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/compilers/lib/:$LD_LIBRARY_PATH
+export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/comm_libs/mpi/bin/:$PATH
+export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/comm_libs/mpi/lib/:$LD_LIBRARY_PATH
 ```
 
 ## Citing Stride
 
-If you use Stride in your research, please cite our [paper](https://arxiv.org/abs/2110.03345):
+If you use Stride in your research, please cite our [paper](https://doi.org/10.1016/j.cmpb.2022.106855):
 
 ```
 @misc{cueto2021-stride,
 	title          =    { Stride: a flexible platform for high-performance ultrasound computed tomography  },
 	author         =    { Carlos Cueto and Oscar Bates and George Strong and Javier Cudeiro and Fabio Luporini
 				and Oscar Calderon Agudo and Gerard Gorman and Lluis Guasch and Meng-Xing Tang },
-	year           =    { 2021 },
-	eprint         =    { 2110.03345 },
-	archivePrefix  =    { arXiv },
-	primaryClass   =    { physics.med-ph },
-	url            =    { https://arxiv.org/abs/2110.03345 }
+	journal        =    {Computer Methods and Programs in Biomedicine},
+	volume         =    {221},
+	pages          =    {106855},
+	year           =    {2022},
+	issn           =    {0169-2607},
+	doi            =    {https://doi.org/10.1016/j.cmpb.2022.106855},
+	url            =    {https://www.sciencedirect.com/science/article/pii/S0169260722002371},
 }
 ```
 

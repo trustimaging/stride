@@ -261,11 +261,12 @@ class GriddedSaved(Saved, Gridded):
                 self._grid.time = time
 
             if 'slow_time' in description and self._grid.slow_time is None:
-                slow_time = SlowTime(start=description.slow_time.start,
-                                     stop=description.slow_time.stop,
-                                     step=description.slow_time.step,
-                                     num=description.slow_time.num,
-                                     freq=description.slow_time.freq)
+                slow_time = SlowTime(frame_step=description.slow_time.frame_step,
+                                     frame_rate=description.slow_time.frame_rate,
+                                     num_frame=description.slow_time.num_frame,
+                                     acq_step=description.slow_time.acq_step,
+                                     acq_rate=description.slow_time.acq_rate,
+                                     num_acq=description.slow_time.num_acq)
 
                 self._grid.slow_time = slow_time
 
@@ -306,9 +307,12 @@ class GriddedSaved(Saved, Gridded):
             grid_description['slow_time'] = {
                 'start': slow_time.start,
                 'stop': slow_time.stop,
-                'step': slow_time.step,
-                'num': slow_time.num,
-                'freq': slow_time.freq,
+                'frame_step': slow_time.frame_step,
+                'frame_rate': slow_time.frame_rate,
+                'num_frame': slow_time.num_frame,
+                'acq_step': slow_time.acq_step,
+                'acq_rate': slow_time.acq_rate,
+                'num_acq': slow_time.num_acq,
             }
 
         return grid_description
