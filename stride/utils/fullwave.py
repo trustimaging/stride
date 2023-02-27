@@ -70,6 +70,27 @@ def read_vtr_model3D(vtr_path, swapaxes=False):
     return model
 
 
+def read_header_ttr(ttr_path):
+    """
+    Function to read ttr header
+    """
+    
+    # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
+    with open(ttr_path, mode='rb') as file:
+
+        # List to store source and receivers ids
+        sources_ids, receiver_ids = [], []
+        shottraces = []
+        tmp_receiver_ids, tmp_traces = [], []
+
+        # Read header
+        nheader = 1 + 4 + 1  # number of variables in header with trailing integers
+        headers = file.read(4 * nheader)
+        headers = struct.unpack('iiiifi', headers)
+        _, number_composite_shots, max_num_rec_per_src, num_samples, total_time, _ = headers
+    return number_composite_shots, max_num_rec_per_src, num_samples, total_time
+
+
 def read_observed_ttr(ttr_path, store_traces=True):
     """
     Function to read acquisition parameters and data from Fullwave's Observed.ttr binary

@@ -1003,7 +1003,7 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
-    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False):
+    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, src_rcv_split=False):
         """
         Populates acquisition container with shot and receiver ids as described
         by a Fullwave .ttr acquisition file and an optional source .ttr file
@@ -1020,6 +1020,8 @@ class Acquisitions(ProblemBase):
         read_traces: bool, optional
             If flagged, data from acquisition_path file is read and for each source id
             and added to its correspondent Stride ``Shot`` object. Default False.
+        src_rcv_split: bool, optional
+            Flag when pgy for sources is different to pgy for receviers
 
         Returns
         -------
@@ -1037,6 +1039,11 @@ class Acquisitions(ProblemBase):
 
         # Read acquisition file
         sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisition_path, read_traces)
+        
+        # Re-label rcv_ids to compansate for src_id duplicates
+        if src_rcv_split:
+            for i in  range(0, len(receiver_ids)):
+                receiver_ids[i] = (np.array(receiver_ids[i]) + np.array(sources_ids).max() + 1).tolist()
 
         # Check every source has an assigned list of receivers and a trace
         assert len(sources_ids) == len(receiver_ids), (len(sources_ids), len(receiver_ids))
