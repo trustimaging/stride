@@ -163,6 +163,9 @@ class Monitor(Runtime):
 
         self._nodes[node_proxy.uid] = node_proxy
         await self._comms.wait_for(node_proxy.uid)
+        
+        while node_proxy.uid not in self._monitored_nodes:
+            await asyncio.sleep(0.1)
 
     async def init_cluster(self, **kwargs):
         """
@@ -228,6 +231,8 @@ class Monitor(Runtime):
 
             async def wait_for(proxy):
                 await self._comms.wait_for(proxy.uid)
+                while node_proxy.uid not in self._monitored_nodes:
+                    await asyncio.sleep(0.1)
                 return proxy
 
             tasks.append(wait_for(node_proxy))
