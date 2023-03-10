@@ -9,6 +9,13 @@ def magnitude_spectrum(signal, dt, db=True):
     """
     Calculate magnitude spectrum of a signal.
 
+    Uses an FFT to decompose the signal into frequency components.
+
+    In order to ensure that the returned magnitude matches the amplitude of input waves,
+    `forward` normalisation is used and the amplitude of the positive and negative
+    frequency components are summed. See numpy FFT documentation for more information:
+    https://numpy.org/devdocs/reference/routines.fft.html#implementation-details
+
     Parameters
     ----------
     signal : ndarray
@@ -27,16 +34,18 @@ def magnitude_spectrum(signal, dt, db=True):
 
     """
     num = signal.shape[-1]
+    num_freqs = (num + 1) // 2
 
-    if not num % 2:
-        num_freqs = num // 2
-    else:
-        num_freqs = (num + 1) // 2
-
-    signal_fft = np.fft.fft(signal, axis=-1).take(range(num_freqs), axis=-1)
     freqs = np.fft.fftfreq(num, dt)[:num_freqs]
 
-    signal_fft = np.abs(signal_fft)
+    fft_components = np.fft.fft(signal, axis=-1, norm="forward")
+    zero_freq_fft = np.abs(fft_components[0])
+    pos_freq_fft = np.abs(fft_components[1:num_freqs])
+    neg_freq_fft = np.abs(fft_components[-num_freqs+1:])
+
+    signal_fft = np.zeros((num_freqs,))
+    signal_fft[0] = zero_freq_fft
+    signal_fft[1:] = pos_freq_fft + neg_freq_fft[::-1]
 
     if db is True:
         signal_fft = 20 * np.log10((signal_fft + 1e-31) / (np.max(signal_fft) + 1e-31))
