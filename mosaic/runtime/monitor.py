@@ -163,7 +163,6 @@ class Monitor(Runtime):
 
         self._nodes[node_proxy.uid] = node_proxy
         await self._comms.wait_for(node_proxy.uid)
-        
         while node_proxy.uid not in self._monitored_nodes:
             await asyncio.sleep(0.1)
 
