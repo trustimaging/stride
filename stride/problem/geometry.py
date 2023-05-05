@@ -1,6 +1,7 @@
-import mosaic
 import numpy as np
 from collections import OrderedDict
+
+import mosaic
 
 from .base import GriddedSaved, ProblemBase
 from .. import plotting
@@ -292,17 +293,18 @@ class Geometry(ProblemBase):
         ----------
         geom_path : str
             Path to .pgy Fullwave geometry file
-        scale: float, optional
+        scale : float, optional
             Value to each scale the location values in all dimensions. Useful for unit conversion.
             To transform cell units from Fullwave to metric units in Stride, scale should be the
             same value as the model grid-spacing. Default 1.
-        disp: tuple or float, optional
-            Amount to displace in each dimension. Applied after scale. Default (0., 0., 0.)
-        dropdims: tuple or int, optional
+        disp : tuple or float, optional
+            Amount to displace in each dimension [units Metres]. Applied after scale. Default (0., 0., 0.)
+        dropdims : tuple or int, optional
             Coordinate dimensions of .pgy file to drop (count from 0). Default ()
-        swapaxes: bool, optional
+        swapaxes : bool, optional
             Permutes Fullwave storing format (depth, cross-line, in-line) to stride format
             (in-line, depth, cross-line). Default False.
+        
         Returns
         -------
         """

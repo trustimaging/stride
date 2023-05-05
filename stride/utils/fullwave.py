@@ -10,26 +10,24 @@ __all__ = ['read_vtr_model3D', 'read_observed_ttr', 'read_signature_ttr',
 
 def read_vtr_model3D(vtr_path, swapaxes=False):
     '''
-    Function to read 3D .vtr low kernel
-    binary data (model files) and returns the data as an as ndarray.
+    Function to read 3D vtr low kernel binary data (model files) and 
+    returns the data as an as ndarray.
 
     Code adapted from Oscar Calderon from Imperial College London's
     FULLWAVE consortium.
 
-    Clues as to the structure of the binary file were provided by
-    Oscar Agudo from Imperial College of London's FULLWAVE consortium
-
     Parameters
     ----------
-    vtr_path: str
-        .vtr file containing the 3D model
-    swapaxes: bool, optional
+    vtr_path : str
+        The path to the vtr file, which contains the 3D model
+    swapaxes : bool, optional
         Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line,
         depth, cross-line). Default False.
 
     Returns
     -------
-    model: ndarray as read from vtr
+    model : ndarray
+        File that was read from vtr
     '''
     with open(vtr_path, 'rb') as f:
         # Read headers from binary file.
@@ -72,7 +70,22 @@ def read_vtr_model3D(vtr_path, swapaxes=False):
 
 def read_header_ttr(ttr_path):
     """
-    Function to read ttr header
+    Function to read ttr header.
+    Parameters
+    ----------
+    ttr_path : str
+        The path to the ttr file, which contains metadata about model geomtery.
+
+    Returns
+    -------
+    number_composite_shots : int
+        The number of shots made during the experiment.
+    max_num_rec_per_src : int
+        The maximum number of receivers seen by a source.
+    num_samples : int
+        The total number of samples in the time domain.
+    total_time : float
+        The acquisition time per shot in seconds.
     """
     
     # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
@@ -100,9 +113,9 @@ def read_observed_ttr(ttr_path, store_traces=True):
     Parameters
     ----------
     ttr_path: str
-        Path to .ttr file
+        Path to ttr file
     store_traces: bool, optional
-        Flag to store the data inside the .ttr. If true, data is saved in memory and returned
+        Flag to store the data inside the ttr. If true, data is saved in memory and returned
         by function. If False, only the source and receiver IDs are returned. Default False
 
     Returns
@@ -110,10 +123,10 @@ def read_observed_ttr(ttr_path, store_traces=True):
     sources_ids: list
         List of sources ID numbers
     receiver_ids: list
-        Nested lists containing receiver IDs for each source ID as read from .ttr file
+        Nested lists containing receiver IDs for each source ID as read from ttr file
     shottraces: list
         Nested lists containing the trace for each receiver ID of every source ID as
-        read from .tt file. Will be empty if store_traces is False.
+        read from ttr file. Will be empty if store_traces is False.
     """
     # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
     with open(ttr_path, mode='rb') as file:
@@ -184,7 +197,7 @@ def read_signature_ttr(ttr_path):
     Parameters
     ----------
     ttr_path: str
-        Path to .ttr file
+        Path to ttr file
 
     Returns
     -------
@@ -233,7 +246,7 @@ def read_signature_txt(txt_path):
     Parameters
     ----------
     txt_path: str
-        Path to .txt file
+        Path to txt file
 
     Returns
     -------
@@ -255,13 +268,13 @@ def read_geometry_pgy(geom_path, **kwargs):
     Parameters
     ----------
     geom_path: str
-        Path to Fullwave .pgy geometry file
+        Path to Fullwave pgy geometry file
     scale: float, optional
         Value to each scale the location values in all dimensions. Useful for unit conversion. Default 1.
     disp: tuple or float, optional
-        Amount to displace in each dimension. Applied after scale and before swapaxes. Default (0., 0., 0.)
+        Amount to displace in each dimension in Metres. Applied after scale and before swapaxes. Default (0., 0., 0.)
     dropdims: tuple or int, optional
-        Coordinate dimensions of .pgy file to drop (count from 0). Default ().
+        Coordinate dimensions of pgy file to drop (count from 0). Default ().
     swapaxes: bool, optional
         Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line, depth,
         cross-line). Default False.
@@ -272,7 +285,7 @@ def read_geometry_pgy(geom_path, **kwargs):
         ID number of every transducer
     coordinates:
         Coordinate of each transducer with format (num_transducers, x, y, z). Coordinates will match
-        format specified by ``swapaxes``
+        format specified by <swapaxes>
 
     """
     num_locations, n3, n2, n1 = -1, -1, -1, -1

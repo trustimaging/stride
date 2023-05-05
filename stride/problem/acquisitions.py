@@ -3,7 +3,6 @@ import functools
 import numpy as np
 from collections import OrderedDict
 from cached_property import cached_property
-import mosaic
 
 try:
     import matplotlib.pyplot as plt
@@ -14,6 +13,7 @@ try:
 except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
+import mosaic
 from mosaic.file_manipulation import h5
 
 from .data import Traces
@@ -1014,13 +1014,13 @@ class Acquisitions(ProblemBase):
         Parameters
         ----------
         acquisition_path : str
-            Path to .ttr acquisition Fullwave file (ideally Observed-Trace.ttr)
-        source_path: str, optional
-            Path to .ttr or .txt source Fullwave file. Default None
-        read_traces: bool, optional
+            Path to ttr acquisition Fullwave file (ideally Observed-Trace.ttr)
+        source_path : str, optional
+            Path to ttr or txt source Fullwave file. Default None
+        read_traces : bool, optional
             If flagged, data from acquisition_path file is read and for each source id
-            and added to its correspondent Stride ``Shot`` object. Default False.
-        src_rcv_split: bool, optional
+            and added to its correspondent Stride <Shot> object. Default False.
+        src_rcv_split : bool, optional
             Flag when pgy for sources is different to pgy for receviers
 
         Returns
@@ -1069,8 +1069,8 @@ class Acquisitions(ProblemBase):
             source = self._geometry.get(sid)
             receivers = [self._geometry.get(rid) for rid in receiver_ids[i]]
             shot = Shot(sid,
-                          sources=[source], receivers=receivers,
-                          geometry=self._geometry, problem=self.problem)
+                        sources=[source], receivers=receivers,
+                        geometry=self._geometry, problem=self.problem)
 
             # Add wavelet to shot object
             if source_path is not None:
