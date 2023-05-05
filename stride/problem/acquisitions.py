@@ -1062,6 +1062,9 @@ class Acquisitions(ProblemBase):
                 wavelets = np.broadcast_to(wavelet, (len(sources_ids), len(wavelet)))
 
         # Add each source and correspondent receivers as a shot
+
+        self._shots.clear()  # Clear old shots (if any)
+
         for i, sid in enumerate(sources_ids):
             source = self._geometry.get(sid)
             receivers = [self._geometry.get(rid) for rid in receiver_ids[i]]
