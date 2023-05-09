@@ -138,7 +138,7 @@ class SpillBuffer(zict.Buffer):
 
         storage = zict.Func(serialise_and_compress,
                             decompress_and_deserialise,
-                            zict.File(spill_directory, mode='w'))
+                            zict.File(spill_directory))
 
         super().__init__(dict(), storage, target,
                          weight=self._weight,
