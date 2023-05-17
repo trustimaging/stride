@@ -26,4 +26,4 @@ scipy>=1.6
 sphinx
 sphinx_rtd_theme
 uvloop
-zict
+zict>=3.0.0
