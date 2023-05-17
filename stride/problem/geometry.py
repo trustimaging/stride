@@ -304,7 +304,7 @@ class Geometry(ProblemBase):
         swapaxes : bool, optional
             Permutes Fullwave storing format (depth, cross-line, in-line) to stride format
             (in-line, depth, cross-line). Default False.
-        
+
         Returns
         -------
         """

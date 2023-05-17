@@ -10,7 +10,7 @@ __all__ = ['read_vtr_model3D', 'read_observed_ttr', 'read_signature_ttr',
 
 def read_vtr_model3D(vtr_path, swapaxes=False):
     '''
-    Function to read 3D vtr low kernel binary data (model files) and 
+    Function to read 3D vtr low kernel binary data (model files) and
     returns the data as an as ndarray.
 
     Code adapted from Oscar Calderon from Imperial College London's
@@ -87,7 +87,7 @@ def read_header_ttr(ttr_path):
     total_time : float
         The acquisition time per shot in seconds.
     """
-    
+
     # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
     with open(ttr_path, mode='rb') as file:
 
