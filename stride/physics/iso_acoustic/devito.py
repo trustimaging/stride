@@ -225,8 +225,8 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self._check_problem(wavelets, vp, rho=rho, alpha=alpha, **kwargs)
 
-        num_sources = shot.num_sources
-        num_receivers = shot.num_receivers
+        num_sources = shot.num_points_sources
+        num_receivers = shot.num_points_receivers
 
         save_wavefield = kwargs.get('save_wavefield', False)
         if save_wavefield is False:
@@ -507,8 +507,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         problem = kwargs.get('problem')
         shot = problem.shot
 
-        num_sources = shot.num_sources
-        num_receivers = shot.num_receivers
+        num_sources = shot.num_points_sources
+        num_receivers = shot.num_points_receivers
 
         # If there's no previous operator, generate one
         if self.adjoint_operator.devito_operator is None:

@@ -223,9 +223,25 @@ class Shot(ProblemBase):
         return len(self.source_ids)
 
     @property
+    def num_points_sources(self):
+        """
+        Get total number of point sources in the Shot.
+
+        """
+        return len(self.source_ids)
+
+    @property
     def num_receivers(self):
         """
         Get number of receivers in the Shot.
+
+        """
+        return len(self.receiver_ids)
+
+    @property
+    def num_points_receivers(self):
+        """
+        Get total number of point receivers in the Shot.
 
         """
         return len(self.receiver_ids)
