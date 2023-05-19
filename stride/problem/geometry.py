@@ -299,9 +299,9 @@ class Geometry(ProblemBase):
             same value as the model grid-spacing. Default 1.
         disp : tuple or float, optional
             Amount to displace in each dimension [units Metres]. Applied after scale. Default (0., 0., 0.)
-        dropdims : tuple or int, optional
+        drop_dims : tuple or int, optional
             Coordinate dimensions of .pgy file to drop (count from 0). Default ()
-        swapaxes : bool, optional
+        swap_axes : bool, optional
             Permutes Fullwave storing format (depth, cross-line, in-line) to stride format
             (in-line, depth, cross-line). Default False.
 
