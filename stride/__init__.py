@@ -202,9 +202,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
     process_wavelets = ProcessWavelets.remote(f_min=f_min, f_max=f_max,
-                                              len=runtime.num_workers)
+                                              len=runtime.num_workers, **kwargs)
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
-                                          len=runtime.num_workers)
+                                          len=runtime.num_workers, **kwargs)
 
     using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
     if using_gpu:
