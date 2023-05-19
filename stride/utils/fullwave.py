@@ -8,7 +8,7 @@ __all__ = ['read_vtr_model3D', 'read_observed_ttr', 'read_signature_ttr',
             'read_signature_txt', 'read_geometry_pgy']
 
 
-def read_vtr_model3D(vtr_path, swapaxes=False):
+def read_vtr_model3D(vtr_path, swap_axes=False):
     '''
     Function to read 3D vtr low kernel binary data (model files) and
     returns the data as an as ndarray.
@@ -20,7 +20,7 @@ def read_vtr_model3D(vtr_path, swapaxes=False):
     ----------
     vtr_path : str
         The path to the vtr file, which contains the 3D model
-    swapaxes : bool, optional
+    swap_axes : bool, optional
         Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line,
         depth, cross-line). Default False.
 
@@ -63,7 +63,7 @@ def read_vtr_model3D(vtr_path, swapaxes=False):
                 trace = np.fromfile(f, dtype='f4', count=int(n3))
                 rec_len = np.fromfile(f, dtype='int32', count=1)
                 model[:, ind2, ind1] = trace[:]
-    if swapaxes:
+    if swap_axes:
         model = np.swapaxes(np.swapaxes(model, 0, 1), 0, 2)
     return model
 
@@ -78,7 +78,7 @@ def read_header_ttr(ttr_path):
 
     Returns
     -------
-    number_composite_shots : int
+    num_composite_shots : int
         The number of shots made during the experiment.
     max_num_rec_per_src : int
         The maximum number of receivers seen by a source.
@@ -100,8 +100,8 @@ def read_header_ttr(ttr_path):
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
         headers = file.read(4 * nheader)
         headers = struct.unpack('iiiifi', headers)
-        _, number_composite_shots, max_num_rec_per_src, num_samples, total_time, _ = headers
-    return number_composite_shots, max_num_rec_per_src, num_samples, total_time
+        _, num_composite_shots, max_num_rec_per_src, num_samples, total_time, _ = headers
+    return num_composite_shots, max_num_rec_per_src, num_samples, total_time
 
 
 def read_observed_ttr(ttr_path, store_traces=True):
@@ -273,9 +273,9 @@ def read_geometry_pgy(geom_path, **kwargs):
         Value to each scale the location values in all dimensions. Useful for unit conversion. Default 1.
     disp: tuple or float, optional
         Amount to displace in each dimension in Metres. Applied after scale and before swapaxes. Default (0., 0., 0.)
-    dropdims: tuple or int, optional
+    drop_dims: tuple or int, optional
         Coordinate dimensions of pgy file to drop (count from 0). Default ().
-    swapaxes: bool, optional
+    swap_axes: bool, optional
         Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line, depth,
         cross-line). Default False.
 
@@ -285,14 +285,14 @@ def read_geometry_pgy(geom_path, **kwargs):
         ID number of every transducer
     coordinates:
         Coordinate of each transducer with format (num_transducers, x, y, z). Coordinates will match
-        format specified by <swapaxes>
+        format specified by <swap_axes>
 
     """
     num_locations, n3, n2, n1 = -1, -1, -1, -1
     scale = kwargs.get('scale', 1.)
     disp = kwargs.get('disp', (0., 0., 0.))
-    dropdims = kwargs.get('dropdims', ())
-    swapaxes = kwargs.get('swapaxes', False)
+    drop_dims = kwargs.get('drop_dims', ())
+    swap_axes = kwargs.get('swap_axes', False)
 
     # Read coordinates and IDs from pgy file
     with open(geom_path, 'r') as f:
@@ -318,12 +318,12 @@ def read_geometry_pgy(geom_path, **kwargs):
             else:
                 ids[i-1] = int(line[0]) - 1     # Fullwave starts count from 1, stride from 0
                 _coordinates = [scale*float(c) + float(disp[i]) for i, c in enumerate(line[1:])]
-                if swapaxes:
+                if swap_axes:
                     _coordinates = [_coordinates[nx] for nx in (2, 0, 1)]
                 coordinates[i-1] = _coordinates
     assert len(coordinates) == len(ids) == num_locations
 
     # Drop dimensions if prompted
-    coordinates = np.delete(coordinates, obj=dropdims, axis=1)
+    coordinates = np.delete(coordinates, obj=drop_dims, axis=1)
 
     return ids, coordinates
