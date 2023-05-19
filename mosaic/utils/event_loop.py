@@ -1,6 +1,5 @@
 
 import uuid
-import uvloop
 import asyncio
 import inspect
 import weakref
@@ -173,7 +172,12 @@ class EventLoop:
     """
 
     def __init__(self, loop=None):
-        uvloop.install()
+        try:
+            import uvloop
+            uvloop.install()
+        except ImportError:
+            pass
+
         self._loop = loop or asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
 

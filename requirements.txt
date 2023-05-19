@@ -25,5 +25,5 @@ scikit-image
 scipy>=1.6
 sphinx
 sphinx_rtd_theme
-uvloop
+uvloop; platform_system != "Windows"
 zict>=3.0.0
