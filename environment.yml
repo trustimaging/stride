@@ -37,7 +37,7 @@ dependencies:
   - traitsui
   - uvloop
   - zlib
-  - zict
+  - zict>=3.0.0
   - pip:
       - devito>=4.6
       - python-daemon
