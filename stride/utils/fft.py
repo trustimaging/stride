@@ -9,12 +9,19 @@ def magnitude_spectrum(signal, dt, db=True):
     """
     Calculate magnitude spectrum of a signal.
 
-    Uses an FFT to decompose the signal into frequency components.
+    Uses an FFT to decompose the signal into frequency components. Only the non-negative
+    frequency components are returned.
 
-    In order to ensure that the returned magnitude matches the amplitude of input waves,
-    `forward` normalisation is used and the amplitude of the positive and negative
-    frequency components are summed. See numpy FFT documentation for more information:
+    This function uses the `forward` normalisation of the FFT. See numpy FFT
+    documentation for more information:
     https://numpy.org/devdocs/reference/routines.fft.html#implementation-details
+
+    When the input signal is composed only of waves with frequencies that correspond to
+    periods that are integer multiples of dt, then the magnitude terms returned will
+    exactly match the amplitude of the complex wave decomposition. Note that for
+    frequencies other than 0 or the Nyquist frequency, this amplitude is equal to half
+    of the amplitude of a sinusoidal wave because $e^{i2\pi f} = \frac{1}{2}(\cos(2\pi
+    f) + i\sin(2\pi f))$.
 
     Parameters
     ----------
@@ -32,30 +39,37 @@ def magnitude_spectrum(signal, dt, db=True):
     ndarray
         Magnitude spectrum of the signal or signals.
 
+    Examples
+    --------
+    The following code extracts the amplitude of a sinusoidal waveform at a given
+    target frequency (which is neither 0 nor the Nyquist frequency). Note that in order
+    for the amplitudes to be exactly correct, the frequency needs exist within the returned
+    freqs (that is, the period corresponds to an integer multiple of dt).
+
+    >>> freqs, signal_magnitude = fft.magnitude_spectrum(y, dt, db=False)
+    >>> assert target_frequency in freqs
+    >>> target_freq_idx = np.argmin(np.abs(freqs - target_frequency))
+    >>> waveform_amplitude = 2 * signal_magnitude[..., target_freq_idx]
     """
     num = signal.shape[-1]
-    num_freqs = (num + 1) // 2
-
-    freqs = np.fft.fftfreq(num, dt)[:num_freqs]
-
-    fft_components = np.fft.fft(signal, axis=-1, norm="forward")
-    zero_freq_fft = np.abs(fft_components[0])
-    pos_freq_fft = np.abs(fft_components[1:num_freqs])
-    neg_freq_fft = np.abs(fft_components[-num_freqs+1:])
-
-    signal_fft = np.zeros((num_freqs,))
-    signal_fft[0] = zero_freq_fft
-    signal_fft[1:] = pos_freq_fft + neg_freq_fft[::-1]
+    freqs = np.fft.rfftfreq(num, dt)
+    signal_fft = np.fft.rfft(signal, axis=-1, norm="forward")
+    signal_magnitude = np.abs(signal_fft)
 
     if db is True:
-        signal_fft = 20 * np.log10((signal_fft + 1e-31) / (np.max(signal_fft) + 1e-31))
+        signal_magnitude = 20 * np.log10(
+            (signal_magnitude + 1e-31) / (np.max(signal_magnitude) + 1e-31)
+        )
 
-    return freqs, signal_fft
+    return freqs, signal_magnitude
 
 
 def phase_spectrum(signal, dt):
     """
     Calculate phase spectrum of a signal.
+
+    Uses an FFT to decompose the signal into frequency components. Only the non-negative
+    frequency components are returned.
 
     Parameters
     ----------
@@ -73,18 +87,11 @@ def phase_spectrum(signal, dt):
 
     """
     num = signal.shape[-1]
+    freqs = np.fft.rfftfreq(num, dt)
+    signal_fft = np.fft.rfft(signal, axis=-1)
+    signal_phase = np.angle(signal_fft)
 
-    if not num % 2:
-        num_freqs = num // 2
-    else:
-        num_freqs = (num + 1) // 2
-
-    signal_fft = np.fft.fft(signal, axis=-1).take(range(num_freqs), axis=-1)
-    freqs = np.fft.fftfreq(num, dt)[:num_freqs]
-
-    signal_fft = np.angle(signal_fft)
-
-    return freqs, signal_fft
+    return freqs, signal_phase
 
 
 def bandwidth(signal, dt, cutoff=-10):
