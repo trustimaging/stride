@@ -71,6 +71,10 @@ class Concatenate(Operator):
             Concatenated data as a single StructuredData object.
 
         """
+        # check that at least one StructuredData object has been provided
+        if len(args) == 0:
+            raise TypeError('StructuredData objects missing. Please provide at least one.')
+
         new_axis = kwargs.pop('new_axis', None)
         axis = kwargs.pop('axis', None)
         start_end = kwargs.pop('start_end', None)
@@ -88,7 +92,7 @@ class Concatenate(Operator):
             # build start_end from the arguments
             self.build_start_end(args)
 
-        concat_data = [np.array(each.data) for each in args]
+        concat_data = [each.data for each in args]
 
         if self.new_axis:
             concat_data = np.stack(concat_data, axis=self.axis)
@@ -107,9 +111,9 @@ class Concatenate(Operator):
             else:
                 # get start and end points of original arguments
                 start, end = self._start_end[arg_i]
-                indices = [i for i in range(start, end)]
+                indices = list(range(start, end))
                 # preallocate shape for data as np.take has no keepdims option
-                out_array = np.zeros((end-start, d_concat.data.shape[-1]), dtype=np.float32)
+                out_array = np.zeros((end-start, d_concat.data.shape[-1]), dtype=d_concat.data.dtype)
                 # extract the data
                 d_arg_i_data = np.take(d_concat.data, indices=indices, axis=self.axis, out=out_array)
 
