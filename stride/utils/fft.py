@@ -6,7 +6,7 @@ __all__ = ['magnitude_spectrum', 'bandwidth']
 
 
 def magnitude_spectrum(signal, dt, db=True):
-    """
+    r"""
     Calculate magnitude spectrum of a signal.
 
     Uses an FFT to decompose the signal into frequency components. Only the non-negative
@@ -20,8 +20,8 @@ def magnitude_spectrum(signal, dt, db=True):
     periods that are integer multiples of dt, then the magnitude terms returned will
     exactly match the amplitude of the complex wave decomposition. Note that for
     frequencies other than 0 or the Nyquist frequency, this amplitude is equal to half
-    of the amplitude of a sinusoidal wave because $e^{i2\pi f} = \frac{1}{2}(\cos(2\pi
-    f) + i\sin(2\pi f))$.
+    of the amplitude of a sinusoidal wave because :math:`\cos(2\pi f) =
+    \frac{1}{2}(e^{i2\pi f} + e^{-i2\pi f})`.
 
     Parameters
     ----------
