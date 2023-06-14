@@ -13,7 +13,7 @@ on:
 jobs:
   examples:
     name: Examples
-    runs-on: ubuntu-latest
+    runs-on: python:3.11.4-buster
 
     env:
       DEVITO_COMPILER: gcc
