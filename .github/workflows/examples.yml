@@ -18,7 +18,7 @@ jobs:
     env:
       DEVITO_COMPILER: gcc
       DEVITO_LANGUAGE: "openmp"
-      PYTHON_VERSION: "3.10.5"
+      PYTHON_VERSION: "3.11.4"
 
     strategy:
       # Prevent all build to stop if a single one fails
@@ -28,7 +28,6 @@ jobs:
     - name: Checkout stride
       uses: actions/checkout@v2
       with:
-        repository: trustimaging/stride
         path: "stride"
 
     - name: Setup conda
@@ -36,7 +35,7 @@ jobs:
       with:
         activate-environment: stride
         environment-file: "stride/environment.yml"
-        python-version: 3.10.5
+        python-version: 3.11.4
         auto-activate-base: false
 
     - name: Install dependencies

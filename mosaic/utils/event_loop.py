@@ -14,6 +14,14 @@ from .utils import set_main_thread
 __all__ = ['EventLoop', 'Future', 'async_property', 'gather']
 
 
+def awaitify(sync_func):
+    """Wrap a synchronous callable to allow ``await``'ing it"""
+    @functools.wraps(sync_func)
+    async def async_func(*args, **kwargs):
+        return sync_func(*args, **kwargs)
+    return async_func
+
+
 class Future:
     """
     A local future associated with an EventLoop.
@@ -277,7 +285,7 @@ class EventLoop:
         kwargs = kwargs or {}
 
         if not inspect.iscoroutine(coro) and not inspect.iscoroutinefunction(coro):
-            coro = asyncio.coroutine(coro)
+            coro = awaitify(coro)
 
         if not self._loop.is_running():
             return self._loop.run_until_complete(coro(*args, **kwargs))
