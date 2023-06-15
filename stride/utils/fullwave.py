@@ -144,8 +144,10 @@ def read_observed_ttr(ttr_path, store_traces=True):
 
         # Read rows
         nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
+        cnt = 0
 
         while True:
+            cnt += 1
             row = file.read(4*nrow)
 
             if not row:
@@ -162,7 +164,7 @@ def read_observed_ttr(ttr_path, store_traces=True):
                 sources_uids = list(set(sources_ids))  # unique source ids only
 
             except struct.error as e:
-                mosaic.logger().warn("Warning: Line %g of %s file could not be " 
+                mosaic.logger().warn("Warning: Line %g of %s file could not be "
                                       "unpacked" % (cnt, ttr_path.split("/")[-1]))
 
     with open(ttr_path, mode='rb') as file:
