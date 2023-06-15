@@ -46,7 +46,7 @@ def read_vtr_model3D(vtr_path, swap_axes=False):
         # Read model:
         ind1 = 0
         ind2 = -1
-        model = np.zeros((int(n3), int(n2), int(n1)))
+        model = np.zeros((int(n1), int(n2), int(n3)))
         trace = np.zeros((int(n3), int(1)))
         while True:
             ind2 = ind2 + 1
@@ -62,9 +62,9 @@ def read_vtr_model3D(vtr_path, swap_axes=False):
             else:
                 trace = np.fromfile(f, dtype='f4', count=int(n3))
                 rec_len = np.fromfile(f, dtype='int32', count=1)
-                model[:, ind2, ind1] = trace[:]
+                model[ind1, ind2, :] = trace[:]
     if swap_axes:
-        model = np.swapaxes(np.swapaxes(model, 0, 1), 0, 2)
+        model = np.transpose(model, (2, 1, 0))
     return model
 
 
@@ -180,12 +180,7 @@ def read_observed_ttr(ttr_path, store_traces=True):
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
 
-        # Adjustments to source and receiver ids
-        receiver_ids.append(tmp_receiver_ids)      # append last receivers list
-        shottraces.append(tmp_traces)              # append last shot traces
-        sources_ids = list(set(sources_ids))       # unique source ids only
-
-    return sources_ids, receiver_ids, shottraces
+    return sources_uids, receiver_ids, shottraces
 
 
 def read_signature_ttr(ttr_path):
@@ -289,10 +284,10 @@ def read_geometry_pgy(geom_path, **kwargs):
 
     """
     num_locations, n3, n2, n1 = -1, -1, -1, -1
-    scale = kwargs.get('scale', 1.)
+    scale = kwargs.get('scale', (1., 1., 1.))
     disp = kwargs.get('disp', (0., 0., 0.))
     drop_dims = kwargs.get('drop_dims', ())
-    swap_axes = kwargs.get('swap_axes', False)
+    swap_axes = kwargs.get('swap_axes', True)
 
     # Read coordinates and IDs from pgy file
     with open(geom_path, 'r') as f:
@@ -317,9 +312,9 @@ def read_geometry_pgy(geom_path, **kwargs):
             # Transducer IDs and Coordinates
             else:
                 ids[i-1] = int(line[0]) - 1     # Fullwave starts count from 1, stride from 0
-                _coordinates = [scale*float(c) + float(disp[i]) for i, c in enumerate(line[1:])]
+                _coordinates = [scale[i]*(float(c)-1) + float(disp[i]) for i, c in enumerate(line[1:])]
                 if swap_axes:
-                    _coordinates = [_coordinates[nx] for nx in (2, 0, 1)]
+                    _coordinates = [_coordinates[nx] for nx in (2, 1, 0)]
                 coordinates[i-1] = _coordinates
     assert len(coordinates) == len(ids) == num_locations
 
