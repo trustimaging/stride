@@ -1056,7 +1056,7 @@ class Acquisitions(ProblemBase):
         # Read acquisition file
         sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisition_path, read_traces)
 
-        # Re-label rcv_ids to compansate for src_id duplicates
+        # Re-label rcv_ids to compensate for src_id duplicates
         if src_rcv_split:
             for i in range(0, len(receiver_ids)):
                 receiver_ids[i] = (np.array(receiver_ids[i]) + np.array(sources_ids).max() + 1).tolist()
