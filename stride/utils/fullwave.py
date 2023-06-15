@@ -159,10 +159,11 @@ def read_observed_ttr(ttr_path, store_traces=True):
 
                 # Append shot id
                 sources_ids.append(csref)
-                sources_uids = list(set(sources_ids)) # unique source ids only
+                sources_uids = list(set(sources_ids))  # unique source ids only
 
             except struct.error as e:
-                mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
+                mosaic.logger().warn("Warning: Line %g of %s file could not be " 
+                                      "unpacked" % (cnt, ttr_path.split("/")[-1]))
 
     with open(ttr_path, mode='rb') as file:
 
