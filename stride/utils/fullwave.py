@@ -145,6 +145,35 @@ def read_observed_ttr(ttr_path, store_traces=True):
         # Read rows
         nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
 
+        while True:
+            row = file.read(4*nrow)
+
+            if not row:
+                break  # End of file
+            try:
+                row = struct.unpack('<iii' + nt*'f' + 'i', row)
+
+                csref = row[1] - 1    # Fullwave starts count from 1, stride from 0
+                rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
+                trace = np.array(row[3:-1], dtype=np.float32)
+
+                # Append shot id
+                sources_ids.append(csref)
+                sources_uids = list(set(sources_ids)) # unique source ids only
+
+            except struct.error as e:
+                mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
+
+    with open(ttr_path, mode='rb') as file:
+
+        # Read header
+        nheader = 1 + 4 + 1  # number of variables in header with trailing integers
+        headers = file.read(4 * nheader)
+        headers = struct.unpack('iiiifi', headers)
+        _, ncomp, maxrecnum, nt, ttime, _ = headers
+
+        shottraces = [[] for i in range(ncomp)]
+        receiver_ids = [[] for i in range(ncomp)]
         cnt = 0
         while True:
             cnt += 1
@@ -159,23 +188,14 @@ def read_observed_ttr(ttr_path, store_traces=True):
                 rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
                 trace = np.array(row[3:-1], dtype=np.float32)
 
+                idx_uid = sources_uids.index(csref)
+
                 # Append all data from single csref id
-                if len(sources_ids) > 0 and sources_ids[-1] != csref:
-                    receiver_ids.append(tmp_receiver_ids)
-                    tmp_receiver_ids = []
+                receiver_ids[idx_uid] = receiver_ids[idx_uid] + [rcvref]
 
-                    # Store traces to memory -- ! need to add option to save to file instead
-                    if store_traces:
-                        shottraces.append(tmp_traces)
-                        tmp_traces = []
-
-                # Append data from single csref id to temp lists
-                tmp_receiver_ids.append(rcvref)
+                # Store traces to memory -- ! need to add option to save to file instead
                 if store_traces:
-                    tmp_traces.append(trace)
-
-                # Append shot id
-                sources_ids.append(csref)
+                    shottraces[idx_uid] = shottraces[idx_uid] + [trace]
 
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
