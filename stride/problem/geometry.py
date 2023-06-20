@@ -328,9 +328,9 @@ class Geometry(ProblemBase):
                 coordinates = np.delete(coordinates, obj=1, axis=-1)
 
         # Add transducer locations to geometry object
-        for index in ids:
+        for index, loc_id in enumerate(ids):
             _coordinates = coordinates[index, :]
-            self.add(index, self._transducers.get(0), _coordinates)
+            self.add(loc_id, self._transducers.get(0), _coordinates)
 
     @property
     def transducers(self):

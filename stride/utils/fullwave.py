@@ -229,11 +229,6 @@ def read_signature_ttr(ttr_path):
         headers = struct.unpack('iiiifi', headers)
         _, nsrc, maxptsrc, nt, ttime, _ = headers
 
-        # Assert not composite source for code assumptions later on
-        comp = True if maxptsrc > 1 else False
-        if comp:
-            raise NotImplementedError(" Files with composite sources are not yet supported inside Stride conversion. ")
-
         # Max number of wavelets is the total number of comp shots x max number of pt sources per comp shot
         nwavelets = nsrc * maxptsrc
 
