@@ -46,7 +46,7 @@ def read_vtr_model3D(vtr_path, swap_axes=False):
         # Read model:
         ind1 = 0
         ind2 = -1
-        model = np.zeros((int(n3), int(n2), int(n1)))
+        model = np.zeros((int(n1), int(n2), int(n3)))
         trace = np.zeros((int(n3), int(1)))
         while True:
             ind2 = ind2 + 1
@@ -62,9 +62,9 @@ def read_vtr_model3D(vtr_path, swap_axes=False):
             else:
                 trace = np.fromfile(f, dtype='f4', count=int(n3))
                 rec_len = np.fromfile(f, dtype='int32', count=1)
-                model[:, ind2, ind1] = trace[:]
+                model[ind1, ind2, :] = trace[:]
     if swap_axes:
-        model = np.swapaxes(np.swapaxes(model, 0, 1), 0, 2)
+        model = np.transpose(model, (2, 1, 0))
     return model
 
 
@@ -144,7 +144,39 @@ def read_observed_ttr(ttr_path, store_traces=True):
 
         # Read rows
         nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
+        cnt = 0
 
+        while True:
+            cnt += 1
+            row = file.read(4*nrow)
+
+            if not row:
+                break  # End of file
+            try:
+                row = struct.unpack('<iii' + nt*'f' + 'i', row)
+
+                csref = row[1] - 1    # Fullwave starts count from 1, stride from 0
+                rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
+                trace = np.array(row[3:-1], dtype=np.float32)
+
+                # Append shot id
+                sources_ids.append(csref)
+                sources_uids = list(set(sources_ids))  # unique source ids only
+
+            except struct.error as e:
+                mosaic.logger().warn("Warning: Line %g of %s file could not be "
+                                      "unpacked" % (cnt, ttr_path.split("/")[-1]))
+
+    with open(ttr_path, mode='rb') as file:
+
+        # Read header
+        nheader = 1 + 4 + 1  # number of variables in header with trailing integers
+        headers = file.read(4 * nheader)
+        headers = struct.unpack('iiiifi', headers)
+        _, ncomp, maxrecnum, nt, ttime, _ = headers
+
+        shottraces = [[] for i in range(ncomp)]
+        receiver_ids = [[] for i in range(ncomp)]
         cnt = 0
         while True:
             cnt += 1
@@ -159,33 +191,19 @@ def read_observed_ttr(ttr_path, store_traces=True):
                 rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
                 trace = np.array(row[3:-1], dtype=np.float32)
 
+                idx_uid = sources_uids.index(csref)
+
                 # Append all data from single csref id
-                if len(sources_ids) > 0 and sources_ids[-1] != csref:
-                    receiver_ids.append(tmp_receiver_ids)
-                    tmp_receiver_ids = []
+                receiver_ids[idx_uid] = receiver_ids[idx_uid] + [rcvref]
 
-                    # Store traces to memory -- ! need to add option to save to file instead
-                    if store_traces:
-                        shottraces.append(tmp_traces)
-                        tmp_traces = []
-
-                # Append data from single csref id to temp lists
-                tmp_receiver_ids.append(rcvref)
+                # Store traces to memory -- ! need to add option to save to file instead
                 if store_traces:
-                    tmp_traces.append(trace)
-
-                # Append shot id
-                sources_ids.append(csref)
+                    shottraces[idx_uid] = shottraces[idx_uid] + [trace]
 
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
 
-        # Adjustments to source and receiver ids
-        receiver_ids.append(tmp_receiver_ids)      # append last receivers list
-        shottraces.append(tmp_traces)              # append last shot traces
-        sources_ids = list(set(sources_ids))       # unique source ids only
-
-    return sources_ids, receiver_ids, shottraces
+    return sources_uids, receiver_ids, shottraces
 
 
 def read_signature_ttr(ttr_path):
@@ -289,10 +307,10 @@ def read_geometry_pgy(geom_path, **kwargs):
 
     """
     num_locations, n3, n2, n1 = -1, -1, -1, -1
-    scale = kwargs.get('scale', 1.)
+    scale = kwargs.get('scale', (1., 1., 1.))
     disp = kwargs.get('disp', (0., 0., 0.))
     drop_dims = kwargs.get('drop_dims', ())
-    swap_axes = kwargs.get('swap_axes', False)
+    swap_axes = kwargs.get('swap_axes', True)
 
     # Read coordinates and IDs from pgy file
     with open(geom_path, 'r') as f:
@@ -317,9 +335,9 @@ def read_geometry_pgy(geom_path, **kwargs):
             # Transducer IDs and Coordinates
             else:
                 ids[i-1] = int(line[0]) - 1     # Fullwave starts count from 1, stride from 0
-                _coordinates = [scale*float(c) + float(disp[i]) for i, c in enumerate(line[1:])]
+                _coordinates = [scale[i]*(float(c)-1) + float(disp[i]) for i, c in enumerate(line[1:])]
                 if swap_axes:
-                    _coordinates = [_coordinates[nx] for nx in (2, 0, 1)]
+                    _coordinates = [_coordinates[nx] for nx in (2, 1, 0)]
                 coordinates[i-1] = _coordinates
     assert len(coordinates) == len(ids) == num_locations
 

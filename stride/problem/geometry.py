@@ -285,7 +285,7 @@ class Geometry(ProblemBase):
 
             self.add(index, self._transducers.get(0), _coordinates)
 
-    def from_fullwave(self, geom_path, **kwargs):
+    def from_fullwave(self, geom_path, geom_path_rec=None, **kwargs):
         """
         Populates geometry container based from a Fullwave geometry pgy file
 
@@ -303,7 +303,7 @@ class Geometry(ProblemBase):
             Coordinate dimensions of .pgy file to drop (count from 0). Default ()
         swap_axes : bool, optional
             Permutes Fullwave storing format (depth, cross-line, in-line) to stride format
-            (in-line, depth, cross-line). Default False.
+            (in-line, depth, cross-line). Default True.
 
         Returns
         -------
@@ -311,7 +311,13 @@ class Geometry(ProblemBase):
         assert geom_path.lower().split(".")[-1] == "pgy", "Expected .pgy extension but \found .%s" \
              % geom_path.lower().split(".")[-1]
 
-        ids, coordinates = read_geometry_pgy(geom_path, **kwargs)
+        scale = kwargs.pop('scale', self.space.spacing)
+        ids, coordinates = read_geometry_pgy(geom_path, scale=scale, **kwargs)
+        if geom_path_rec is not None:
+            ids_rec, coordinates_rec = read_geometry_pgy(geom_path_rec, scale=scale, **kwargs)
+            ids_rec += ids.max() + 1
+            ids = np.concatenate((ids, ids_rec), axis=0)
+            coordinates = np.concatenate((coordinates, coordinates_rec), axis=0)
 
         # Trim coordinates to match problem dimension if needed. Raise warning if so
         if coordinates.shape[1] > self.space.dim:
@@ -319,7 +325,7 @@ class Geometry(ProblemBase):
                 in Space object".format(coordinates.shape[1], self.space.dim))
 
             for i in range(coordinates.shape[1] - self.space.dim):
-                coordinates = np.delete(coordinates, obj=-1, axis=1)
+                coordinates = np.delete(coordinates, obj=1, axis=-1)
 
         # Add transducer locations to geometry object
         for index in ids:
