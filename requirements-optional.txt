@@ -2,4 +2,4 @@ matplotlib
 pyface
 pyqt5
 traitsui
-mayavi
+mayavi @ git+https://github.com/enthought/mayavi@master
