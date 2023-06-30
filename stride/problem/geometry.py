@@ -307,15 +307,19 @@ class Geometry(ProblemBase):
 
         Returns
         -------
+        int
+            Offset to be added to the receiver ids in the fullwave pgys
         """
         assert geom_path.lower().split(".")[-1] == "pgy", "Expected .pgy extension but \found .%s" \
              % geom_path.lower().split(".")[-1]
 
         scale = kwargs.pop('scale', self.space.spacing)
         ids, coordinates = read_geometry_pgy(geom_path, scale=scale, **kwargs)
+        offset_id = 0
         if geom_path_rec is not None:
             ids_rec, coordinates_rec = read_geometry_pgy(geom_path_rec, scale=scale, **kwargs)
-            ids_rec += ids.max() + 1
+            offset_id = ids.max()
+            ids_rec += offset_id + 1
             ids = np.concatenate((ids, ids_rec), axis=0)
             coordinates = np.concatenate((coordinates, coordinates_rec), axis=0)
 
@@ -328,9 +332,11 @@ class Geometry(ProblemBase):
                 coordinates = np.delete(coordinates, obj=1, axis=-1)
 
         # Add transducer locations to geometry object
-        for index in ids:
+        for index, loc_id in enumerate(ids):
             _coordinates = coordinates[index, :]
-            self.add(index, self._transducers.get(0), _coordinates)
+            self.add(loc_id, self._transducers.get(0), _coordinates)
+
+        return offset_id
 
     @property
     def transducers(self):
