@@ -156,16 +156,15 @@ def read_observed_ttr(ttr_path, store_traces=True):
                 row = struct.unpack('<iii' + nt*'f' + 'i', row)
 
                 csref = row[1] - 1    # Fullwave starts count from 1, stride from 0
-                rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
-                trace = np.array(row[3:-1], dtype=np.float32)
 
                 # Append shot id
                 sources_ids.append(csref)
-                sources_uids = list(set(sources_ids))  # unique source ids only
 
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could not be "
                                       "unpacked" % (cnt, ttr_path.split("/")[-1]))
+
+    sources_uids = list(set(sources_ids))  # unique source ids only
 
     with open(ttr_path, mode='rb') as file:
 
