@@ -249,8 +249,8 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self._check_problem(wavelets, vp, rho=rho, alpha=alpha, **kwargs)
 
-        num_sources = shot.num_sources
-        num_receivers = shot.num_receivers
+        num_sources = shot.num_points_sources
+        num_receivers = shot.num_points_receivers
 
         save_wavefield = kwargs.get('save_wavefield', False)
         if save_wavefield is False:
@@ -492,7 +492,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self._wavefield = None
 
         traces_data = np.asarray(self.dev_grid.vars.rec.data, dtype=np.float32).T
-        traces = shot.observed.alike(name='modelled', data=traces_data)
+        traces = shot.observed.alike(name='modelled', data=traces_data, shape=None, extended_shape=None, inner=None)
 
         deallocate = kwargs.get('deallocate', False)
         if deallocate:
@@ -535,8 +535,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         problem = kwargs.get('problem')
         shot = problem.shot
 
-        num_sources = shot.num_sources
-        num_receivers = shot.num_receivers
+        num_sources = shot.num_points_sources
+        num_receivers = shot.num_points_receivers
 
         # If there's no previous operator, generate one
         if self.adjoint_operator.devito_operator is None:
@@ -955,7 +955,21 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         # Figure out propagated bandwidth
         wavelets = wavelets.data
-        f_min, f_centre, f_max = fft.bandwidth(wavelets, self.time.step, cutoff=-10)
+        if wavelets.ndim > 1:
+            f_mins = []
+            f_centres = []
+            f_maxs = []
+            for i in range(wavelets.shape[0]):
+                if np.any(wavelets[i]):
+                    # only run calculations on non-zero wavelets
+                    f_min, f_centre, f_max = fft.bandwidth(wavelets[i], self.time.step, cutoff=-10)
+                    f_mins.append(f_min)
+                    f_centres.append(f_centre)
+                    f_maxs.append(f_max)
+
+            f_min = np.min(f_mins)
+            f_max = np.max(f_maxs)
+            f_centre = np.median(f_centres)
 
         self._bandwidth = (f_min, f_centre, f_max)
 

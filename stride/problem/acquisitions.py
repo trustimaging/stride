@@ -13,6 +13,7 @@ try:
 except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
+import mosaic
 from mosaic.file_manipulation import h5
 
 from .data import Traces
@@ -222,9 +223,25 @@ class Shot(ProblemBase):
         return len(self.source_ids)
 
     @property
+    def num_points_sources(self):
+        """
+        Get total number of point sources in the Shot.
+
+        """
+        return len(self.source_ids)
+
+    @property
     def num_receivers(self):
         """
         Get number of receivers in the Shot.
+
+        """
+        return len(self.receiver_ids)
+
+    @property
+    def num_points_receivers(self):
+        """
+        Get total number of point receivers in the Shot.
 
         """
         return len(self.receiver_ids)
@@ -1001,6 +1018,85 @@ class Acquisitions(ProblemBase):
             self.add(Shot(source.id,
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
+
+    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, src_rcv_split=False,
+                      offset_id=0):
+        """
+        Populates acquisition container with shot and receiver ids as described
+        by a Fullwave .ttr acquisition file and an optional source .ttr file
+        describing the wavelets for each shot. Assumes point-source scheme, i.e.,
+        that each source id is an individual shot. Composite sources are yet to be
+        added to functionality
+
+        Parameters
+        ----------
+        acquisition_path : str
+            Path to ttr acquisition Fullwave file (ideally Observed-Trace.ttr)
+        source_path : str, optional
+            Path to ttr or txt source Fullwave file. Default None
+        read_traces : bool, optional
+            If flagged, data from acquisition_path file is read and for each source id
+            and added to its correspondent Stride <Shot> object. Default False.
+        src_rcv_split : bool, optional
+            Flag when pgy for sources is different to pgy for receviers
+        offset_id : int, optional
+            Offset to be added to the receiver ids in the fullwave pgys
+
+        Returns
+        -------
+
+        """
+
+        assert acquisition_path.lower().split(".")[-1] == "ttr", "Expected .ttr extension in\
+             acquisition_path but found .%s " % acquisition_path.lower().split(".")[-1]
+        if source_path is not None:
+            assert source_path.lower().split(".")[-1] in ("ttr", "txt"), "Expected .ttr or .\
+                txt extension in source_path but found .%s" % source_path.lower().split(".")[-1]
+
+        # Import of fullwave module at the top is throwing circular import error, needs debugging
+        from ..utils.fullwave import read_observed_ttr, read_signature_ttr, read_signature_txt
+
+        # Read acquisition file
+        sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisition_path, read_traces)
+
+        # Re-label rcv_ids to compensate for src_id duplicates
+        if src_rcv_split:
+            for i in range(0, len(receiver_ids)):
+                receiver_ids[i] = (np.array(receiver_ids[i]) + offset_id + 1).tolist()
+
+        # Read source signature file
+        if source_path is not None:
+            srcext = source_path.lower().split(".")[-1]
+            if srcext == "ttr":
+                wavelets = read_signature_ttr(source_path)
+
+            elif srcext == "txt":
+                wavelet = read_signature_txt(source_path)
+                wavelet = np.array(wavelet, dtype=np.float32)
+                wavelets = np.broadcast_to(wavelet, (len(sources_ids), len(wavelet)))
+
+        # Add each source and correspondent receivers as a shot
+
+        self._shots.clear()  # Clear old shots (if any)
+
+        for i, sid in enumerate(sources_ids):
+            source = self._geometry.get(sid)
+            receivers = [self._geometry.get(rid) for rid in receiver_ids[i]]
+            shot = Shot(sid,
+                        sources=[source], receivers=receivers,
+                        geometry=self._geometry, problem=self.problem)
+
+            # Add wavelet to shot object
+            if source_path is not None:
+                shot.wavelets.data[0, :] = wavelets[i, :]
+
+            # Add observed data to shot object
+            if read_traces:
+                try:
+                    shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
+                except Exception as e:
+                    mosaic.logger().warn("Warning shot id %g trace loading: %s" % (sid, e))
+            self.add(shot)
 
     def plot(self, **kwargs):
         """

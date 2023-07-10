@@ -1,10 +1,12 @@
-
 import numpy as np
 from collections import OrderedDict
+
+import mosaic
 
 from .base import GriddedSaved, ProblemBase
 from .. import plotting
 from ..utils import geometries
+from ..utils.fullwave import read_geometry_pgy
 
 
 __all__ = ['Geometry']
@@ -282,6 +284,59 @@ class Geometry(ProblemBase):
                 _coordinates[-1] = self.space.limit[2] / 2
 
             self.add(index, self._transducers.get(0), _coordinates)
+
+    def from_fullwave(self, geom_path, geom_path_rec=None, **kwargs):
+        """
+        Populates geometry container based from a Fullwave geometry pgy file
+
+        Parameters
+        ----------
+        geom_path : str
+            Path to .pgy Fullwave geometry file
+        scale : float, optional
+            Value to each scale the location values in all dimensions. Useful for unit conversion.
+            To transform cell units from Fullwave to metric units in Stride, scale should be the
+            same value as the model grid-spacing. Default 1.
+        disp : tuple or float, optional
+            Amount to displace in each dimension [units Metres]. Applied after scale. Default (0., 0., 0.)
+        drop_dims : tuple or int, optional
+            Coordinate dimensions of .pgy file to drop (count from 0). Default ()
+        swap_axes : bool, optional
+            Permutes Fullwave storing format (depth, cross-line, in-line) to stride format
+            (in-line, depth, cross-line). Default True.
+
+        Returns
+        -------
+        int
+            Offset to be added to the receiver ids in the fullwave pgys
+        """
+        assert geom_path.lower().split(".")[-1] == "pgy", "Expected .pgy extension but \found .%s" \
+             % geom_path.lower().split(".")[-1]
+
+        scale = kwargs.pop('scale', self.space.spacing)
+        ids, coordinates = read_geometry_pgy(geom_path, scale=scale, **kwargs)
+        offset_id = 0
+        if geom_path_rec is not None:
+            ids_rec, coordinates_rec = read_geometry_pgy(geom_path_rec, scale=scale, **kwargs)
+            offset_id = ids.max()
+            ids_rec += offset_id + 1
+            ids = np.concatenate((ids, ids_rec), axis=0)
+            coordinates = np.concatenate((coordinates, coordinates_rec), axis=0)
+
+        # Trim coordinates to match problem dimension if needed. Raise warning if so
+        if coordinates.shape[1] > self.space.dim:
+            mosaic.logger().warn("Warning: trimming {} dimensions found on .pgy file to match {} dimensions \
+                in Space object".format(coordinates.shape[1], self.space.dim))
+
+            for i in range(coordinates.shape[1] - self.space.dim):
+                coordinates = np.delete(coordinates, obj=1, axis=-1)
+
+        # Add transducer locations to geometry object
+        for index, loc_id in enumerate(ids):
+            _coordinates = coordinates[index, :]
+            self.add(loc_id, self._transducers.get(0), _coordinates)
+
+        return offset_id
 
     @property
     def transducers(self):
