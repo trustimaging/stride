@@ -44,7 +44,9 @@ from ..utils.logger import _stdout, _stderr
 @click.option('--local/--cluster', '-l/-c', default=False, required=True, show_default=True,
               help='whether to run mosaic locally or in a cluster system')
 # log level
-@click.option('--info', 'log_level', flag_value='info', default='info', show_default=True,
+@click.option('--perf', 'log_level', flag_value='perf', default='perf', show_default=True,
+              help='set log level to PERF')
+@click.option('--info', 'log_level', flag_value='info', show_default=True,
               help='set log level to INFO')
 @click.option('--debug', 'log_level', flag_value='debug', show_default=True,
               help='set log level to DEBUG')
@@ -68,7 +70,7 @@ def go(cmd=None, **kwargs):
         num_nodes = 1
     num_workers = kwargs.get('nworkers', 1)
     num_threads = kwargs.get('nthreads', None)
-    log_level = kwargs.get('log_level', 'info')
+    log_level = kwargs.get('log_level', 'perf')
     profile = kwargs.get('profile', False)
 
     # If not in local mode, find the node list

@@ -6,10 +6,10 @@ from cached_property import cached_property
 import mosaic
 
 
-__all__ = ['LoggerManager', 'clear_logger', 'default_logger']
+__all__ = ['LoggerManager', 'clear_logger', 'default_logger', 'log_level']
 
 
-log_level = 'info'
+log_level = 'perf'
 
 
 _stdout = sys.stdout
@@ -18,6 +18,7 @@ _stderr = sys.stderr
 
 _local_log_levels = {
     'info': logging.INFO,
+    'perf': 19,
     'debug': logging.DEBUG,
     'error': logging.ERROR,
     'warning': logging.WARNING,
@@ -26,10 +27,14 @@ _local_log_levels = {
 
 _remote_log_levels = {
     'info': 'log_info',
+    'perf': 'log_perf',
     'debug': 'log_debug',
     'error': 'log_error',
     'warning': 'log_warning',
 }
+
+
+logging.addLevelName(_local_log_levels['perf'], 'PERF')
 
 
 class LoggerBase:
@@ -163,6 +168,7 @@ class LoggerManager:
 
     def __init__(self):
         self._info_logger = None
+        self._perf_logger = None
         self._debug_logger = None
         self._error_logger = None
         self._warn_logger = None
@@ -170,7 +176,7 @@ class LoggerManager:
         self._stdout = _stdout
         self._stderr = _stderr
 
-        self._log_level = 'info'
+        self._log_level = 'perf'
         self._log_location = None
 
     def set_default(self, format='interactive'):
@@ -195,6 +201,7 @@ class LoggerManager:
         handler.setFormatter(CustomFormatter('%(message)s'))
 
         logger = logging.getLogger('mosaic')
+        logger.setLevel(_local_log_levels[log_level])
         logger.propagate = False
         if logger.hasHandlers():
             logger.handlers.clear()
@@ -202,6 +209,7 @@ class LoggerManager:
         logger.addHandler(handler)
 
         self._info_logger = LocalLogger(logger, log_level=_local_log_levels['info'])
+        self._perf_logger = LocalLogger(logger, log_level=_local_log_levels['perf'])
         self._debug_logger = LocalLogger(logger, log_level=_local_log_levels['debug'])
         self._error_logger = LocalLogger(logger, log_level=_local_log_levels['error'])
         self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
@@ -247,6 +255,7 @@ class LoggerManager:
         logger.addHandler(handler)
 
         self._info_logger = LocalLogger(logger, log_level=_local_log_levels['info'])
+        self._perf_logger = LocalLogger(logger, log_level=_local_log_levels['perf'])
         self._debug_logger = LocalLogger(logger, log_level=_local_log_levels['debug'])
         self._error_logger = LocalLogger(logger, log_level=_local_log_levels['error'])
         self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
@@ -283,6 +292,7 @@ class LoggerManager:
         sys.stderr = self._stderr
 
         self._info_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['info'])
+        self._perf_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['perf'])
         self._debug_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['debug'])
         self._error_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['error'])
         self._warn_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['warning'])
@@ -354,6 +364,30 @@ class LoggerManager:
             return
 
         self._info_logger.log(buf, uid=uid)
+
+    def perf(self, buf, uid=None):
+        """
+        Log message with level ``perf``.
+
+        Parameters
+        ----------
+        buf : str
+            Message to log.
+        uid : str, optional
+            UID of the runtime from which the message originates, defaults to
+            current runtime.
+
+        Returns
+        -------
+
+        """
+        if self._perf_logger is None:
+            return
+
+        if log_level in ['info', 'error']:
+            return
+
+        self._perf_logger.log(buf, uid=uid)
 
     def debug(self, buf, uid=None):
         """

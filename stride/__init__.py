@@ -113,22 +113,24 @@ async def forward(problem, pde, *args, **kwargs):
 
     @runtime.async_for(shot_ids, safe=safe)
     async def loop(worker, shot_id):
-        logger.info('\n')
-        logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
+        _kwargs = kwargs.copy()
+
+        logger.perf('\n')
+        logger.perf('Giving shot %d to %s' % (shot_id, worker.uid))
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
 
         if using_gpu:
-            devito_args = kwargs.get('devito_args', {})
+            devito_args = _kwargs.get('devito_args', {})
             devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
-            kwargs['devito_args'] = devito_args
+            _kwargs['devito_args'] = devito_args
 
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
-                           runtime=worker, **kwargs).result()
+                           runtime=worker, **_kwargs).result()
 
-        logger.info('Shot %d retrieved' % sub_problem.shot_id)
+        logger.perf('Shot %d retrieved' % sub_problem.shot_id)
 
         shot = problem.acquisitions.get(shot_id)
         shot.observed.data[:] = traces.data
@@ -137,7 +139,7 @@ async def forward(problem, pde, *args, **kwargs):
             shot.append_observed(path=problem.output_folder,
                                  project_name=problem.name)
 
-            logger.info('Appended traces for shot %d to observed file' % sub_problem.shot_id)
+            logger.perf('Appended traces for shot %d to observed file' % sub_problem.shot_id)
 
         if deallocate is True:
             shot.observed.deallocate()
@@ -218,7 +220,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         published_args = [runtime.put(each, publish=True) for each in args]
         published_args = await asyncio.gather(*published_args)
 
-        logger.info('Starting iteration %d (out of %d), '
+        logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
                     (iteration.id, block.num_iterations, block.id,
                      optimisation_loop.num_blocks))
@@ -238,8 +240,10 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
-            logger.info('\n')
-            logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
+            _kwargs = kwargs.copy()
+
+            logger.perf('\n')
+            logger.perf('Giving shot %d to %s' % (shot_id, worker.uid))
 
             sub_problem = problem.sub_problem(shot_id)
             wavelets = sub_problem.shot.wavelets
@@ -252,26 +256,26 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 raise RuntimeError('Shot %d has no observed data' % shot_id)
 
             if using_gpu:
-                devito_args = kwargs.get('devito_args', {})
+                devito_args = _kwargs.get('devito_args', {})
                 devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
-                kwargs['devito_args'] = devito_args
+                _kwargs['devito_args'] = devito_args
 
-            wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
+            wavelets = process_wavelets(wavelets, runtime=worker, **_kwargs)
             await wavelets.init_future
-            modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
+            modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **_kwargs)
             await modelled.init_future
 
-            traces = process_traces(modelled, observed, runtime=worker, **kwargs)
+            traces = process_traces(modelled, observed, runtime=worker, **_kwargs)
             await traces.init_future
             fun = await loss(traces.outputs[0], traces.outputs[1],
-                             problem=sub_problem, runtime=worker, **kwargs).result()
+                             problem=sub_problem, runtime=worker, **_kwargs).result()
 
             iteration.add_fun(fun)
-            logger.info('Functional value for shot %d: %s' % (shot_id, fun))
+            logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
 
-            await fun.adjoint(**kwargs)
+            await fun.adjoint(**_kwargs)
 
-            logger.info('Retrieved gradient for shot %d' % sub_problem.shot_id)
+            logger.perf('Retrieved gradient for shot %d' % sub_problem.shot_id)
 
         await loop
 
@@ -282,8 +286,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                     project_name=problem.name,
                                     version=iteration.abs_id)
 
-        logger.info('Done iteration %d (out of %d), '
+        logger.perf('Done iteration %d (out of %d), '
                     'block %d (out of %d) - Total loss %e' %
                     (iteration.id, block.num_iterations, block.id,
                      optimisation_loop.num_blocks, iteration.fun_value))
-        logger.info('====================================================================')
+        logger.perf('====================================================================')

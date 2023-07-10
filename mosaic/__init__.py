@@ -29,7 +29,7 @@ def init(runtime_type='head', runtime_indices=(),
          monitor_address=None, monitor_port=None,
          num_workers=1, num_threads=None,
          mode='local', monitor_strategy='round-robin',
-         log_level='info', profile=False, node_list=None,
+         log_level='perf', profile=False, node_list=None,
          asyncio_loop=None, wait=False,
          **kwargs):
     """
@@ -67,7 +67,7 @@ def init(runtime_type='head', runtime_indices=(),
     monitor_strategy : str, optional
         Strategy used by the monitor to allocate tessera, defaults to round robin.
     log_level : str, optional
-        Log level, defaults to ``info``.
+        Log level, defaults to ``perf``.
     profile : bool, optional
         Whether to start the profiler, defaults to False.
     node_list : list, optional
