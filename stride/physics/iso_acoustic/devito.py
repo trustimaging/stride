@@ -316,6 +316,9 @@ class IsoAcousticDevito(ProblemTypeBase):
             kwargs['devito_config'] = kwargs.get('devito_config', {})
             kwargs['devito_config']['devicecreate'] = devicecreate
 
+            if self.attenuation_power == 2:
+                kwargs['devito_config']['opt'] = 'noop'
+
             self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
                                              **kwargs)
             self.state_operator.compile()
@@ -568,6 +571,9 @@ class IsoAcousticDevito(ProblemTypeBase):
             # Compile the operator
             kwargs['devito_config'] = kwargs.get('devito_config', {})
             kwargs['devito_config']['devicecreate'] = (self.dev_grid.vars.p_a,)
+
+            if self.attenuation_power == 2:
+                kwargs['devito_config']['opt'] = 'noop'
 
             self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update,
                                                **kwargs)
