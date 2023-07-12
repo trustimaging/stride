@@ -139,10 +139,11 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                    name='acoustic_iso_adjoint',
                                                    grid=self.dev_grid,
                                                    **kwargs)
-            self.init_operator = OperatorDevito(self.space_order, self.time_order,
-                                                name='acoustic_iso_init',
-                                                grid=self.dev_grid,
-                                                **kwargs)
+            if devito.pro_available:
+                self.init_operator = OperatorDevito(self.space_order, self.time_order,
+                                                    name='acoustic_iso_init',
+                                                    grid=self.dev_grid,
+                                                    **kwargs)
 
             if self._cached_operator:
                 warehouse['%s_dev_grid' % cached_name] = self.dev_grid
@@ -302,8 +303,9 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                    factor=self.undersampling_factor,
                                                                    compression=compression)
 
-                self.init_operator.set_operator([devito.Eq(p_saved, 0)], **kwargs)
-                self.init_operator.compile()
+                if devito.pro_available:
+                    self.init_operator.set_operator([devito.Eq(p_saved, 0)], **kwargs)
+                    self.init_operator.compile()
 
                 update_saved = [devito.Eq(p_saved, self._saved(p))]
                 devicecreate = (self.dev_grid.vars.p, self.dev_grid.vars.p_saved,)
@@ -405,7 +407,10 @@ class IsoAcousticDevito(ProblemTypeBase):
             # if 'nvidia' in platform and devito.pro_available:
             #     functions['nbits'] = 16
 
-            self.init_operator.run(time_m=0, time_M=self.time.extended_num)
+            if self.init_operator is not None:
+                self.init_operator.run(time_m=0, time_M=self.time.extended_num,
+                                       **kwargs.get('devito_args', {}))
+                self.init_operator = None
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
