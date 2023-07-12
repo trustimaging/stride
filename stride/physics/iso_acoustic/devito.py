@@ -139,6 +139,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                    name='acoustic_iso_adjoint',
                                                    grid=self.dev_grid,
                                                    **kwargs)
+            self.init_operator = None
             if devito.pro_available:
                 self.init_operator = OperatorDevito(self.space_order, self.time_order,
                                                     name='acoustic_iso_init',
