@@ -304,10 +304,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                    factor=self.undersampling_factor,
                                                                    compression=compression)
 
-                if devito.pro_available:
-                    self.init_operator.set_operator([devito.Eq(p_saved, 0)], **kwargs)
-                    self.init_operator.compile()
-
                 update_saved = [devito.Eq(p_saved, self._saved(p))]
                 devicecreate = (self.dev_grid.vars.p, self.dev_grid.vars.p_saved,)
 
@@ -321,6 +317,10 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             if self.attenuation_power == 2:
                 kwargs['devito_config']['opt'] = 'noop'
+
+            if save_wavefield is True and devito.pro_available:
+                self.init_operator.set_operator([devito.Eq(p_saved, 0)], **kwargs)
+                self.init_operator.compile()
 
             self.state_operator.set_operator(stencil + src_term + rec_term + update_saved,
                                              **kwargs)
