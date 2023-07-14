@@ -782,6 +782,10 @@ class OperatorDevito:
                 'platform': 'nvidiaX',
             }
 
+            if devito.pro_available:
+                default_config['opt'] = ('parallel', 'buffering', 'tasking', 'orchestrate',
+                                         {'linearize': True})
+
         else:
             raise ValueError('Unrecognised platform %s' % platform)
 
