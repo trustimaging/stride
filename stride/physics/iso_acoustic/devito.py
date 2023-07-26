@@ -298,10 +298,12 @@ class IsoAcousticDevito(ProblemTypeBase):
                 platform = kwargs.get('platform', 'cpu')
                 # compression = 'bitcomp' if 'nvidia' in platform and devito.pro_available else None
                 compression = None
+                layers = devito.HostDevice if 'nvidia' in platform and devito.pro_available else None
 
                 p_saved = self.dev_grid.undersampled_time_function('p_saved',
                                                                    bounds=kwargs.pop('save_bounds', None),
                                                                    factor=self.undersampling_factor,
+                                                                   layers=layers,
                                                                    compression=compression)
 
                 update_saved = [devito.Eq(p_saved, self._saved(p))]
