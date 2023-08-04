@@ -742,7 +742,7 @@ class OperatorDevito:
         self.name = name
 
         self.devito_operator = None
-        self.kwargs = {}
+        self.devito_context = {}
 
         self.grid = GridDevito(*args, **kwargs) if grid is None else grid
 
@@ -769,7 +769,6 @@ class OperatorDevito:
                 'name': self.name,
                 'subs': self.grid.devito_grid.spacing_map,
                 'opt': 'advanced',
-                'platform': os.getenv('DEVITO_PLATFORM', None),
             }
 
         elif platform == 'nvidia-acc':
@@ -788,16 +787,24 @@ class OperatorDevito:
         devito_config = kwargs.pop('devito_config', {})
         default_config.update(devito_config)
 
+        context = {}
+        compiler_config = {}
+        for key, value in default_config.items():
+            if key in devito.configuration:
+                context[key] = value
+            else:
+                compiler_config[key] = value
+
+        self.devito_context = context
+
         logger = mosaic.logger()
         logger.perf('Operator `%s` instance configuration:' % self.name)
 
         for key, value in default_config.items():
-            if key == 'name':
-                continue
-
             logger.perf('\t * %s=%s' % (key, value))
 
-        self.devito_operator = devito.Operator(op, **default_config)
+        with devito.switchconfig(**self.devito_context):
+            self.devito_operator = devito.Operator(op, **compiler_config)
 
     def compile(self):
         """
@@ -818,7 +825,7 @@ class OperatorDevito:
 
         """
 
-        default_kwargs = dict()
+        default_kwargs = {}
 
         for arg in self.devito_operator.parameters:
             if arg.name in self.grid.vars:
@@ -838,7 +845,16 @@ class OperatorDevito:
                 default_kwargs['time_inner_m'] = default_kwargs.get('time_inner_m', 0)
                 default_kwargs['time_inner_M'] = default_kwargs.get('time_inner_M', self.grid.num_inner-1)
 
-        self.devito_operator.apply(**default_kwargs)
+        runtime_context = {}
+        runtime_kwargs = {}
+        for key, value in default_kwargs.items():
+            if key in devito.configuration:
+                runtime_context[key] = value
+            else:
+                runtime_kwargs[key] = value
+
+        with devito.switchconfig(**self.devito_context, **runtime_context):
+            self.devito_operator.apply(**runtime_kwargs)
 
 
 def config_devito(**kwargs):
