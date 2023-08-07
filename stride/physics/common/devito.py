@@ -761,6 +761,7 @@ class OperatorDevito:
         -------
 
         """
+        from mosaic.utils.logger import log_level
 
         platform = kwargs.pop('platform', None)
 
@@ -787,7 +788,7 @@ class OperatorDevito:
         devito_config = kwargs.pop('devito_config', {})
         default_config.update(devito_config)
 
-        context = {}
+        context = {'log-level': 'DEBUG' if log_level in ['perf', 'debug'] else 'INFO'}
         compiler_config = {}
         for key, value in default_config.items():
             if key in devito.configuration:
@@ -888,7 +889,7 @@ def config_devito(**kwargs):
         devito.parameters.configuration[key] = value
 
     # fix devito logging
-    devito_logger = logging.getLogger('devito')
+    devito_logger = logging.getLogger('Devito')
     devito_logger.setLevel(logging.DEBUG if log_level in ['perf', 'debug'] else logging.INFO)
     devito.logger.logger = devito_logger
 
