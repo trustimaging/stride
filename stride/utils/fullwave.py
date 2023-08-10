@@ -104,7 +104,7 @@ def read_header_ttr(ttr_path):
     return num_composite_shots, max_num_rec_per_src, num_samples, total_time
 
 
-def read_observed_ttr(ttr_path, store_traces=True):
+def read_observed_ttr(ttr_path, store_traces=True, exist_traces=True):
     """
     Function to read acquisition parameters and data from Fullwave's Observed.ttr binary
     file. Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
@@ -151,24 +151,25 @@ def read_observed_ttr(ttr_path, store_traces=True):
             if not row:
                 break  # End of file
             try:
-                # if exist_traces:  # TODO implement for 0000.ttr files
-                row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
-
-                shot_id = row[1] - 1    # Fullwave starts count from 1, stride from 0
-                rec_id = row[2] - 1   # Fullwave starts count from 1, stride from 0
-                trace_array = np.array(row[3:-1], dtype=np.float32)
-
-                # Store traces to memory -- ! need to add option to save to file instead
-                if store_traces:
-                    trace[rec_id] = trace_array
-                    observed[shot_id] = trace
+                if not exist_traces:
+                    row = struct.unpack('<iii' + num_steps*'f' + 'i', row)  # read assuming 0000_ttr
                 else:
+                    row = struct.unpack('<iii' + num_steps*'f' + 'i', row)  # read assuming observed_ttr
+                    shot_id = row[1] - 1    # Fullwave starts count from 1, stride from 0
+                    rec_id = row[2] - 1   # Fullwave starts count from 1, stride from 0
+                    trace_array = np.array(row[3:-1], dtype=np.float32)
+                
+                if not store_traces:
+                    # create empty observed dict
                     trace[rec_id] = None
                     observed[shot_id] = trace  # populate with blanks
-                # else:
-                #     row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
-                #     # ... code here for observed-0000.ttr
-                #     # raise Exception for exist=False adn store=True
+
+                elif store_traces and exist_traces:
+                    trace[rec_id] = trace_array  # store traces to memory
+                    observed[shot_id] = trace
+
+                elif store_traces and not exist_traces:
+                    raise Exception('If ttr does not contain data, then observed data cannot be stored. Try exist_traces=False.') #for exist=False adn store=True
 
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (trace_counter, ttr_path.split("/")[-1]))

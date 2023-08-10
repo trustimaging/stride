@@ -1019,7 +1019,7 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
-    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, src_rcv_split=False,
+    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, exist_traces=True, src_rcv_split=False,
                       offset_id=0):
         """
         Populates acquisition container with shot and receiver ids as described
