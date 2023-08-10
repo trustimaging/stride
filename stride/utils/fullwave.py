@@ -120,90 +120,60 @@ def read_observed_ttr(ttr_path, store_traces=True):
 
     Returns
     -------
-    sources_ids: list
-        List of sources ID numbers
-    receiver_ids: list
-        Nested lists containing receiver IDs for each source ID as read from ttr file
-    shottraces: list
-        Nested lists containing the trace for each receiver ID of every source ID as
-        read from ttr file. Will be empty if store_traces is False.
+    observed: dict
     """
-    # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
-    with open(ttr_path, mode='rb') as file:
 
-        # List to store source and receivers ids
-        # DICT structure dict[shot_id][rec_id] = trace 
-        sources_ids, receiver_ids = [], []  # TODO reformat lists into OrderedDicts
-        shottraces = []
-        tmp_receiver_ids, tmp_traces = [], []
+    from collections import OrderedDict
+
+    trace = OrderedDict()  # structure: trace[rec_id] = trace 
+    observed = OrderedDict()  # structure: observed[shot_id][rec_id] = trace 
+
+    with open(ttr_path, mode='rb') as file:  # get traces and populate observed
 
         # Read header
+        # header structure: _ (int), num_shots (int), num_recs_max (int), num_steps (int), total_time (float), _ (int)
+
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
         headers = file.read(4 * nheader)
         headers = struct.unpack('iiiifi', headers)
-        _, ncomp, maxrecnum, nt, ttime, _ = headers
+        _, num_shots, num_rec_max, num_steps, total_time, _ = headers
 
         # Read rows
-        nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
-        cnt = 0
+        # row structure: _ (int), shot_id (int), rec_id (int), range[1, num_steps] (float),  _ (int)
 
+        num_elements_per_row = 1 + 2 + num_steps + 1  # number of variables in row with trailing integers
+
+        trace_counter = 0
         while True:
-            cnt += 1
-            row = file.read(4*nrow)
+            trace_counter += 1
+            row = file.read(4*num_elements_per_row)
 
             if not row:
                 break  # End of file
             try:
-                row = struct.unpack('<iii' + nt*'f' + 'i', row)
+                # if exist_traces:  # TODO implement for 0000.ttr files
+                row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
 
-                csref = row[1] - 1    # Fullwave starts count from 1, stride from 0
-
-                # Append shot id
-                sources_ids.append(csref)
-
-            except struct.error as e:
-                mosaic.logger().warn("Warning: Line %g of %s file could not be "
-                                      "unpacked" % (cnt, ttr_path.split("/")[-1]))
-
-    sources_uids = list(set(sources_ids))  # unique source ids only
-
-    with open(ttr_path, mode='rb') as file:
-
-        # Read header
-        nheader = 1 + 4 + 1  # number of variables in header with trailing integers
-        headers = file.read(4 * nheader)
-        headers = struct.unpack('iiiifi', headers)
-        _, ncomp, maxrecnum, nt, ttime, _ = headers
-
-        shottraces = [[] for i in range(ncomp)]
-        receiver_ids = [[] for i in range(ncomp)]
-        cnt = 0
-        while True:
-            cnt += 1
-            row = file.read(4*nrow)
-
-            if not row:
-                break  # End of file
-            try:
-                row = struct.unpack('<iii' + nt*'f' + 'i', row)
-
-                csref = row[1] - 1    # Fullwave starts count from 1, stride from 0
-                rcvref = row[2] - 1   # Fullwave starts count from 1, stride from 0
-                trace = np.array(row[3:-1], dtype=np.float32)
-
-                idx_uid = sources_uids.index(csref)
-
-                # Append all data from single csref id
-                receiver_ids[idx_uid] = receiver_ids[idx_uid] + [rcvref]
+                shot_id = row[1] - 1    # Fullwave starts count from 1, stride from 0
+                rec_id = row[2] - 1   # Fullwave starts count from 1, stride from 0
+                trace_array = np.array(row[3:-1], dtype=np.float32)
 
                 # Store traces to memory -- ! need to add option to save to file instead
                 if store_traces:
-                    shottraces[idx_uid] = shottraces[idx_uid] + [trace]
+                    trace[rec_id] = trace_array
+                    observed[shot_id] = trace
+                else:
+                    trace[rec_id] = None
+                    observed[shot_id] = trace  # populate with blanks
+                # else:
+                #     row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
+                #     # ... code here for observed-0000.ttr
+                #     # raise Exception for exist=False adn store=True
 
             except struct.error as e:
-                mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
+                mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (trace_counter, ttr_path.split("/")[-1]))
 
-    return sources_uids, receiver_ids, shottraces  # TODO return dict
+    return observed
 
 
 def read_signature_ttr(ttr_path):
@@ -228,21 +198,22 @@ def read_signature_ttr(ttr_path):
 
     with open(ttr_path, mode='rb') as file:
         # Read header
+        # header structure: _ (int), num_shots (int), num_max_pntShot_per_csShot (int), num_steps (int), total_time (float), _ (int)
+
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
         headers = file.read(4 * nheader)
         headers = struct.unpack('iiiifi', headers)
         _, nsrc, maxptsrc, nt, ttime, _ = headers
 
-        # Max number of wavelets is the total number of comp shots x max number of pt sources per comp shot
-        nwavelets = nsrc * maxptsrc
+        num_wavelets = nsrc  # NOTE assumes num_max_pntShot_per_csShot = 1
 
         # List to store source ids and wavelets
-        wavelets = np.empty((nwavelets, nt), dtype=np.float32)
+        wavelets = np.empty((num_wavelets, nt), dtype=np.float32)  # TODO dict wavelets[sid] = wavelet
 
         # Read rows
         nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
 
-        for i in range(nwavelets):
+        for i in range(nwavelets):  # csref is a composite, 
             row = file.read(4*nrow)
             if not row:
                 break  # End of file

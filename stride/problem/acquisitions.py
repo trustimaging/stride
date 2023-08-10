@@ -1057,45 +1057,48 @@ class Acquisitions(ProblemBase):
         from ..utils.fullwave import read_observed_ttr, read_signature_ttr, read_signature_txt
 
         # Read acquisition file
-        sources_ids, receiver_ids, shottraces = read_observed_ttr(acquisition_path, read_traces)
-
-        # Re-label rcv_ids to compensate for src_id duplicates
-        if src_rcv_split:
-            for i in range(0, len(receiver_ids)):
-                receiver_ids[i] = (np.array(receiver_ids[i]) + offset_id + 1).tolist()
+        observed = read_observed_ttr(acquisition_path, read_traces)
 
         # Read source signature file
         if source_path is not None:
             srcext = source_path.lower().split(".")[-1]
             if srcext == "ttr":
-                wavelets = read_signature_ttr(source_path)  # read signature ttr needs to return wavelets with corresonding ids
-        # TODO instead of using lists, we need to load things using ordered_dicts.
-        # Dicts should be dependant on SID and RID, no more use of enumerated idx
+                wavelets = read_signature_ttr(source_path)  # TODO output OrderedDict
 
             elif srcext == "txt":
                 wavelet = read_signature_txt(source_path)
-                wavelet = np.array(wavelet, dtype=np.float32)
-                wavelets = np.broadcast_to(wavelet, (len(sources_ids), len(wavelet)))
+                wavelets = OrderedDict()
+                for sid in observed.keys():
+                    wavelets[sid] = np.array(wavelet, dtype=np.float32)
 
-        # Add each source and correspondent receivers as a shot
+        # Add each source and correspondening receivers as a shot
 
         self._shots.clear()  # Clear old shots (if any)
 
-        for i, sid in enumerate(sources_ids):
+        source_ids = [n for n in observed.keys()]  # source keys to list
+        for sid in source_ids:
             source = self._geometry.get(sid)
-            receivers = [self._geometry.get(rid) for rid in receiver_ids[i]]
+
+            receiver_ids = [n for n in observed[sid].keys()]  # reciever keys to list
+            if src_rcv_split:
+                receiver_ids = [n + offset_id + 1 for n in receiver_ids]
+
+            receivers = [self._geometry.get(rid) for rid in receiver_ids]
+
             shot = Shot(sid,
                         sources=[source], receivers=receivers,
                         geometry=self._geometry, problem=self.problem)
 
             # Add wavelet to shot object
             if source_path is not None:
-                shot.wavelets.data[0, :] = wavelets[i, :]  # wavelets sid not i
+                shot.wavelets.data[0, :] = wavelets[sid]
 
             # Add observed data to shot object
             if read_traces:
                 try:
-                    shot.observed.data[:] = np.array(shottraces[i], dtype=np.float32)
+                    data = []
+                    for rid in observed[sid].keys(): data += [observed[sid][rid].tolist()]
+                    shot.observed.data[:] = np.array(data, dtype=np.float32)
                 except Exception as e:
                     mosaic.logger().warn("Warning shot id %g trace loading: %s" % (sid, e))
             self.add(shot)
