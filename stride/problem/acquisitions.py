@@ -1068,7 +1068,9 @@ class Acquisitions(ProblemBase):
         if source_path is not None:
             srcext = source_path.lower().split(".")[-1]
             if srcext == "ttr":
-                wavelets = read_signature_ttr(source_path)
+                wavelets = read_signature_ttr(source_path)  # read signature ttr needs to return wavelets with corresonding ids
+        # TODO instead of using lists, we need to load things using ordered_dicts.
+        # Dicts should be dependant on SID and RID, no more use of enumerated idx
 
             elif srcext == "txt":
                 wavelet = read_signature_txt(source_path)
@@ -1088,7 +1090,7 @@ class Acquisitions(ProblemBase):
 
             # Add wavelet to shot object
             if source_path is not None:
-                shot.wavelets.data[0, :] = wavelets[i, :]
+                shot.wavelets.data[0, :] = wavelets[i, :]  # wavelets sid not i
 
             # Add observed data to shot object
             if read_traces:

@@ -132,7 +132,8 @@ def read_observed_ttr(ttr_path, store_traces=True):
     with open(ttr_path, mode='rb') as file:
 
         # List to store source and receivers ids
-        sources_ids, receiver_ids = [], []
+        # DICT structure dict[shot_id][rec_id] = trace 
+        sources_ids, receiver_ids = [], []  # TODO reformat lists into OrderedDicts
         shottraces = []
         tmp_receiver_ids, tmp_traces = [], []
 
@@ -202,7 +203,7 @@ def read_observed_ttr(ttr_path, store_traces=True):
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (cnt, ttr_path.split("/")[-1]))
 
-    return sources_uids, receiver_ids, shottraces
+    return sources_uids, receiver_ids, shottraces  # TODO return dict
 
 
 def read_signature_ttr(ttr_path):
@@ -221,6 +222,10 @@ def read_signature_ttr(ttr_path):
     wavelets: list
         List of wavelet for every source ID
      """
+    
+    # List to store source and receivers ids
+    # DICT structure dict[shot_id] = trace 
+
     with open(ttr_path, mode='rb') as file:
         # Read header
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
@@ -246,7 +251,7 @@ def read_signature_ttr(ttr_path):
             pntref = row[2] - 1   # Fullwave starts count from 1, stride from 0
             data = np.array(row[3:-1])
             wavelets[i] = data
-    return wavelets
+    return wavelets  # TODO output dict
 
 
 def read_signature_txt(txt_path):
