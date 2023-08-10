@@ -211,10 +211,10 @@ def read_signature_ttr(ttr_path):
         # Read rows
         # row structure: _ (int), shot_id (int), rec_id (int), range[1, num_steps] (float),  _ (int)
 
-        nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
+        num_row = 1 + 2 + nt + 1  # number of variables in row with trailing integers
 
-        for i in range(nwavelets):  # csref is a composite, 
-            row = file.read(4*nrow)
+        for i in range(num_wavelets):  # csref is a composite, 
+            row = file.read(4*num_row)
             if not row:
                 break  # End of file
             row = struct.unpack('<iii' + nt*'f' + 'i', row)
