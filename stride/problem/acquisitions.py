@@ -1071,37 +1071,36 @@ class Acquisitions(ProblemBase):
                 for sid in observed.keys():
                     wavelets[sid] = np.array(wavelet, dtype=np.float32)
 
-        # Add each source and correspondening receivers as a shot
+        # Create shot object and add to acquistions
 
-        self._shots.clear()  # Clear old shots (if any)
+        self._shots.clear()  # clear old shots (if any)
 
         source_ids = [n for n in observed.keys()]  # source keys to list
         for sid in source_ids:
-            source = self._geometry.get(sid)
+            source = self._geometry.get(sid)  # get source transducer
 
             receiver_ids = [n for n in observed[sid].keys()]  # reciever keys to list
             if src_rcv_split:
-                receiver_ids = [n + offset_id + 1 for n in receiver_ids]
+                receiver_ids = [n + offset_id + 1 for n in receiver_ids]  # if duplicate ids, then reciever_ids > max_source_id
 
-            receivers = [self._geometry.get(rid) for rid in receiver_ids]
+            receivers = [self._geometry.get(rid) for rid in receiver_ids]  # get receiver transducers
 
             shot = Shot(sid,
                         sources=[source], receivers=receivers,
                         geometry=self._geometry, problem=self.problem)
 
-            # Add wavelet to shot object
-            if source_path is not None:
+            if source_path is not None:  # add wavelet to shot object
                 shot.wavelets.data[0, :] = wavelets[sid]
 
-            # Add observed data to shot object
-            if read_traces:
+            if read_traces:  # add observed data to shot object
                 try:
                     data = []
                     for rid in observed[sid].keys(): data += [observed[sid][rid].tolist()]
                     shot.observed.data[:] = np.array(data, dtype=np.float32)
                 except Exception as e:
                     mosaic.logger().warn("Warning shot id %g trace loading: %s" % (sid, e))
-            self.add(shot)
+
+            self.add(shot)  # add shot object to acquisitions  
 
     def plot(self, **kwargs):
         """

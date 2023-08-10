@@ -193,10 +193,11 @@ def read_signature_ttr(ttr_path):
         List of wavelet for every source ID
      """
     
-    # List to store source and receivers ids
-    # DICT structure dict[shot_id] = trace 
+    # Dict for traces
+    wavelets = OrderedDict()
 
     with open(ttr_path, mode='rb') as file:
+
         # Read header
         # header structure: _ (int), num_shots (int), num_max_pntShot_per_csShot (int), num_steps (int), total_time (float), _ (int)
 
@@ -207,10 +208,9 @@ def read_signature_ttr(ttr_path):
 
         num_wavelets = nsrc  # NOTE assumes num_max_pntShot_per_csShot = 1
 
-        # List to store source ids and wavelets
-        wavelets = np.empty((num_wavelets, nt), dtype=np.float32)  # TODO dict wavelets[sid] = wavelet
-
         # Read rows
+        # row structure: _ (int), shot_id (int), rec_id (int), range[1, num_steps] (float),  _ (int)
+
         nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
 
         for i in range(nwavelets):  # csref is a composite, 
@@ -218,11 +218,13 @@ def read_signature_ttr(ttr_path):
             if not row:
                 break  # End of file
             row = struct.unpack('<iii' + nt*'f' + 'i', row)
-            csref = row[1] - 1    # Fullwave starts count from 1, stride from 0
-            pntref = row[2] - 1   # Fullwave starts count from 1, stride from 0
-            data = np.array(row[3:-1])
-            wavelets[i] = data
-    return wavelets  # TODO output dict
+            composite_shot_id = row[1] - 1    # Fullwave starts count from 1, stride from 0
+            point_source_id = row[2] - 1   # Fullwave starts count from 1, stride from 0
+            wavelet_array = np.array(row[3:-1], dtype=np.float32)
+
+            wavelets[composite_shot_id] = wavelet_array
+
+    return wavelets
 
 
 def read_signature_txt(txt_path):
