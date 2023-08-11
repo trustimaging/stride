@@ -88,15 +88,9 @@ def read_header_ttr(ttr_path):
         The acquisition time per shot in seconds.
     """
 
-    # Read 4-byte binary ttr file to retrieve source ids and correspondent receiver ids
+    # Read header
+    # header structure: _ (int), num_shots (int), num_recs_max (int), num_steps (int), total_time (float), _ (int)
     with open(ttr_path, mode='rb') as file:
-
-        # List to store source and receivers ids
-        sources_ids, receiver_ids = [], []
-        shottraces = []
-        tmp_receiver_ids, tmp_traces = [], []
-
-        # Read header
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
         headers = file.read(4 * nheader)
         headers = struct.unpack('iiiifi', headers)

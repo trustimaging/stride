@@ -314,6 +314,8 @@ class Geometry(ProblemBase):
              % geom_path.lower().split(".")[-1]
 
         scale = kwargs.pop('scale', self.space.spacing)  # TODO bug: in 2D case, scale is 2 elements but pgy's are always 3 elements
+        # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
+        scale = (scale[0], 1, scale[1]) if len(scale) == 2 else scale
         ids, coordinates = read_geometry_pgy(geom_path, scale=scale, **kwargs)
         offset_id = 0
         if geom_path_rec is not None:
