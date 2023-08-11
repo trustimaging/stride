@@ -1047,6 +1047,9 @@ class Acquisitions(ProblemBase):
 
         """
 
+        # TODO there is a silent bug where src_rcv_split=True but offset_id defaults to 0
+        # offset_id should be checked to ensure all transducer ids requirested exist
+
         assert acquisition_path.lower().split(".")[-1] == "ttr", "Expected .ttr extension in\
              acquisition_path but found .%s " % acquisition_path.lower().split(".")[-1]
         if source_path is not None:
@@ -1063,7 +1066,7 @@ class Acquisitions(ProblemBase):
         if source_path is not None:
             srcext = source_path.lower().split(".")[-1]
             if srcext == "ttr":
-                wavelets = read_signature_ttr(source_path)  # TODO output OrderedDict
+                wavelets = read_signature_ttr(source_path)
 
             elif srcext == "txt":
                 wavelet = read_signature_txt(source_path)
