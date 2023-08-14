@@ -89,6 +89,9 @@ def read_header_ttr(ttr_path):
         The total number of samples in the time domain.
     total_time : float
         The acquisition time per shot in seconds.
+    dt : float
+        Time-step sampling calculated from total_time and num_samples.
+
     """
 
     # Read header
@@ -99,9 +102,10 @@ def read_header_ttr(ttr_path):
         headers = struct.unpack('iiiifi', headers)
         _, num_composite_shots, max_num_rec_per_src, num_samples, total_time, _ = headers
 
-    # TODO Calculate dt here
+    # Calculate dt
+        dt = 1e-5*total_time/num_samples
 
-    return num_composite_shots, max_num_rec_per_src, num_samples, total_time
+    return num_composite_shots, max_num_rec_per_src, num_samples, total_time, dt
 
 
 def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
@@ -123,6 +127,7 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
     Returns
     -------
     observed: dict
+
     """
 
     # structure: observed[shot_id][rec_id] = trace
@@ -327,3 +332,40 @@ def read_geometry_pgy(geom_path, **kwargs):
     coordinates = np.delete(coordinates, obj=drop_dims, axis=1)
 
     return ids, coordinates
+
+def read_header_pgy(geom_path, **kwargs):
+    """
+    Function to read header values from Fullwave's .pgy file.
+
+    Parameters
+    ----------
+    geom_path: str
+        Path to Fullwave pgy geometry file
+    drop_dims: tuple or int, optional
+        Coordinate dimensions of pgy file to drop (count from 0). Default ().
+    swap_axes: bool, optional
+        Permutes Fullwave storing format (depth, cross-line, in-line) to stride format (in-line, depth,
+        cross-line). Default False.
+
+    Returns
+    -------
+    head: list
+        Model dimensions (in grid-points).
+
+    """
+
+    num_locations, n3, n2, n1 = -1, -1, -1, -1
+    drop_dims = kwargs.get('drop_dims', ())
+    swap_axes = kwargs.get('swap_axes', True)
+
+    # Read coordinates and IDs from pgy file
+    with open(geom_path, 'r') as f:
+        line = f.readline().split()
+        head = [int(h) for h in line[1:]]
+        head = [h for i, h in enumerate(head) if i not in drop_dims]
+
+        if swap_axes:
+            head = list(reversed(head)) 
+
+    return head
+
