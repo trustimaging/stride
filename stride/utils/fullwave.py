@@ -146,6 +146,9 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
         # Read rows
         # row structure: _ (int), shot_id (int), rec_id (int), range[1, num_steps] (float),  _ (int)
 
+        if not has_traces:
+            num_steps = 0
+
         num_elements_per_row = 1 + 2 + num_steps + 1  # number of variables in row with trailing integers
 
         trace_counter = 0
@@ -156,11 +159,10 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
             if not row:
                 break  # End of file
             try:
+               row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
                 if not has_traces:
-                    row = struct.unpack('<iii' + num_steps*'f' + 'i', row)  # read assuming 0000_ttr
                     trace_array = None
                 else:
-                    row = struct.unpack('<iii' + num_steps*'f' + 'i', row)  # read assuming observed_ttr
                     trace_array = np.array(row[3:-1], dtype=np.float32)
 
                 shot_id = row[1] - 1  # Fullwave starts count from 1, stride from 0
