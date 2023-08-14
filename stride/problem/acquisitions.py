@@ -1019,8 +1019,8 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
-    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, exist_traces=True, src_rcv_split=False,
-                      offset_id=0):
+    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, has_traces=True,
+                      src_rcv_split=False, offset_id=0):
         """
         Populates acquisition container with shot and receiver ids as described
         by a Fullwave .ttr acquisition file and an optional source .ttr file
@@ -1035,8 +1035,10 @@ class Acquisitions(ProblemBase):
         source_path : str, optional
             Path to ttr or txt source Fullwave file. Default None
         read_traces : bool, optional
-            If flagged, data from acquisition_path file is read and for each source id
+            If flagged, data from `acquisition_path` file is read and for each source id
             and added to its correspondent Stride <Shot> object. Default False.
+        has_traces : bool, optional
+            Whether the `acquisition_path` file contains any data or not. Default True.
         src_rcv_split : bool, optional
             Flag when pgy for sources is different to pgy for receviers
         offset_id : int, optional
@@ -1060,9 +1062,10 @@ class Acquisitions(ProblemBase):
         from ..utils.fullwave import read_observed_ttr, read_signature_ttr, read_signature_txt
 
         # Read acquisition file
-        observed = read_observed_ttr(acquisition_path, read_traces)
+        observed = read_observed_ttr(acquisition_path, read_traces, has_traces)
 
         # Read source signature file
+        wavelets = None
         if source_path is not None:
             srcext = source_path.lower().split(".")[-1]
             if srcext == "ttr":
@@ -1070,22 +1073,20 @@ class Acquisitions(ProblemBase):
 
             elif srcext == "txt":
                 wavelet = read_signature_txt(source_path)
-                wavelets = OrderedDict()
+                wavelets = {}
                 for sid in observed.keys():
                     wavelets[sid] = np.array(wavelet, dtype=np.float32)
 
-        # Create shot object and add to acquistions
-
         self._shots.clear()  # clear old shots (if any)
 
-        source_ids = [n for n in observed.keys()]  # source keys to list
-        for sid in source_ids:
+        # Create shot object and add to acquistions
+        for sid in observed.keys():
             source = self._geometry.get(sid)  # get source transducer
 
-            receiver_ids = [n for n in observed[sid].keys()]  # reciever keys to list
-            if src_rcv_split:
-                receiver_ids = [n + offset_id + 1 for n in receiver_ids]  # if duplicate ids, then reciever_ids > max_source_id
-
+            # receiver keys to list
+            # if duplicate ids, then receiver_ids > max_source_id
+            receiver_ids = [n + offset_id + 1 if src_rcv_split else n
+                            for n in observed[sid].keys()]
             receivers = [self._geometry.get(rid) for rid in receiver_ids]  # get receiver transducers
 
             shot = Shot(sid,
@@ -1097,13 +1098,12 @@ class Acquisitions(ProblemBase):
 
             if read_traces:  # add observed data to shot object
                 try:
-                    data = []
-                    for rid in observed[sid].keys(): data += [observed[sid][rid].tolist()]
-                    shot.observed.data[:] = np.array(data, dtype=np.float32)
+                    data = [observed[sid][rid] for rid in observed[sid].keys()]
+                    shot.observed.data[:] = np.asarray(data, dtype=np.float32)
                 except Exception as e:
                     mosaic.logger().warn("Warning shot id %g trace loading: %s" % (sid, e))
 
-            self.add(shot)  # add shot object to acquisitions  
+            self.add(shot)  # add shot object to acquisitions
 
     def plot(self, **kwargs):
         """

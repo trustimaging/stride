@@ -1,15 +1,18 @@
 
+from collections import defaultdict
 import numpy as np
 import struct
+from types import NoneType
+
 import mosaic
 
 
 __all__ = ['read_vtr_model3D', 'read_observed_ttr', 'read_signature_ttr',
-            'read_signature_txt', 'read_geometry_pgy']
+           'read_signature_txt', 'read_geometry_pgy']
 
 
 def read_vtr_model3D(vtr_path, swap_axes=False):
-    '''
+    """
     Function to read 3D vtr low kernel binary data (model files) and
     returns the data as an as ndarray.
 
@@ -28,7 +31,7 @@ def read_vtr_model3D(vtr_path, swap_axes=False):
     -------
     model : ndarray
         File that was read from vtr
-    '''
+    """
     with open(vtr_path, 'rb') as f:
         # Read headers from binary file.
         rec_len = np.fromfile(f, dtype='int32', count=1)
@@ -95,10 +98,13 @@ def read_header_ttr(ttr_path):
         headers = file.read(4 * nheader)
         headers = struct.unpack('iiiifi', headers)
         _, num_composite_shots, max_num_rec_per_src, num_samples, total_time, _ = headers
+
+    # TODO Calculate dt here
+
     return num_composite_shots, max_num_rec_per_src, num_samples, total_time
 
 
-def read_observed_ttr(ttr_path, store_traces=True, exist_traces=True):
+def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
     """
     Function to read acquisition parameters and data from Fullwave's Observed.ttr binary
     file. Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
@@ -111,16 +117,16 @@ def read_observed_ttr(ttr_path, store_traces=True, exist_traces=True):
     store_traces: bool, optional
         Flag to store the data inside the ttr. If true, data is saved in memory and returned
         by function. If False, only the source and receiver IDs are returned. Default False
+    has_traces : bool, optional
+        Flag that determines if ttr file contains any data. Default True.
 
     Returns
     -------
     observed: dict
     """
 
-    from collections import OrderedDict
-
-    trace = OrderedDict()  # structure: trace[rec_id] = trace 
-    observed = OrderedDict()  # structure: observed[shot_id][rec_id] = trace 
+    # structure: observed[shot_id][rec_id] = trace
+    observed = defaultdict(lambda: defaultdict(NoneType))
 
     with open(ttr_path, mode='rb') as file:  # get traces and populate observed
 
@@ -145,28 +151,31 @@ def read_observed_ttr(ttr_path, store_traces=True, exist_traces=True):
             if not row:
                 break  # End of file
             try:
-                if not exist_traces:
+                if not has_traces:
                     row = struct.unpack('<iii' + num_steps*'f' + 'i', row)  # read assuming 0000_ttr
+                    trace_array = None
                 else:
                     row = struct.unpack('<iii' + num_steps*'f' + 'i', row)  # read assuming observed_ttr
-                    shot_id = row[1] - 1    # Fullwave starts count from 1, stride from 0
-                    rec_id = row[2] - 1   # Fullwave starts count from 1, stride from 0
                     trace_array = np.array(row[3:-1], dtype=np.float32)
-                
+
+                shot_id = row[1] - 1  # Fullwave starts count from 1, stride from 0
+                rec_id = row[2] - 1
+
                 if not store_traces:
                     # create empty observed dict
-                    trace[rec_id] = None
-                    observed[shot_id] = trace  # populate with blanks
+                    observed[shot_id][rec_id] = None  # populate with blanks
 
-                elif store_traces and exist_traces:
-                    trace[rec_id] = trace_array  # store traces to memory
-                    observed[shot_id] = trace
+                elif store_traces and has_traces:
+                    observed[shot_id][rec_id] = trace_array
 
-                elif store_traces and not exist_traces:
-                    raise Exception('If ttr does not contain data, then observed data cannot be stored. Try exist_traces=False.') #for exist=False adn store=True
+                elif store_traces and not has_traces:
+                    raise Exception('If ttr does not contain data, '
+                                    'then observed data cannot be stored. '
+                                    'Try exist_traces=False.')  # for exist=False adn store=True
 
             except struct.error as e:
-                mosaic.logger().warn("Warning: Line %g of %s file could not be unpacked" % (trace_counter, ttr_path.split("/")[-1]))
+                mosaic.logger().warn("Warning: Line %g of %s file could "
+                                     "not be unpacked" % (trace_counter, ttr_path.split("/")[-1]))
 
     return observed
 
@@ -187,14 +196,15 @@ def read_signature_ttr(ttr_path):
     wavelets: list
         List of wavelet for every source ID
      """
-    
+
     # Dict for traces
-    wavelets = OrderedDict()
+    wavelets = {}
 
     with open(ttr_path, mode='rb') as file:
 
         # Read header
-        # header structure: _ (int), num_shots (int), num_max_pntShot_per_csShot (int), num_steps (int), total_time (float), _ (int)
+        # header structure: _ (int), num_shots (int), num_max_pntShot_per_csShot (int),
+        # num_steps (int), total_time (float), _ (int)
 
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
         headers = file.read(4 * nheader)
@@ -208,13 +218,17 @@ def read_signature_ttr(ttr_path):
 
         num_row = 1 + 2 + nt + 1  # number of variables in row with trailing integers
 
-        for i in range(num_wavelets):  # csref is a composite, 
+        for i in range(num_wavelets):  # csref is a composite,
             row = file.read(4*num_row)
+
             if not row:
                 break  # End of file
+
             row = struct.unpack('<iii' + nt*'f' + 'i', row)
+
             composite_shot_id = row[1] - 1    # Fullwave starts count from 1, stride from 0
             point_source_id = row[2] - 1   # Fullwave starts count from 1, stride from 0
+
             wavelet_array = np.array(row[3:-1], dtype=np.float32)
 
             wavelets[composite_shot_id] = wavelet_array
@@ -286,7 +300,8 @@ def read_geometry_pgy(geom_path, **kwargs):
 
             # Header line
             if i == 0:
-                num_locations, n3, n2, n1 = [int(h) for h in line]  # nz (depth), ny (cross-line), nx (inline) in fullwave format
+                # nz (depth), ny (cross-line), nx (inline) in fullwave format
+                num_locations, n3, n2, n1 = [int(h) for h in line]
                 dim = len(line)-1
                 coordinates = np.zeros((num_locations, dim))
                 ids = np.zeros((num_locations), dtype=int)
