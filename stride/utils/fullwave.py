@@ -159,7 +159,7 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
             if not row:
                 break  # End of file
             try:
-               row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
+                row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
                 if not has_traces:
                     trace_array = None
                 else:
