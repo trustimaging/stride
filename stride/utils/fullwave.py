@@ -335,6 +335,7 @@ def read_geometry_pgy(geom_path, **kwargs):
 
     return ids, coordinates
 
+
 def read_header_pgy(geom_path, **kwargs):
     """
     Function to read header values from Fullwave's .pgy file.
@@ -367,7 +368,6 @@ def read_header_pgy(geom_path, **kwargs):
         head = [h for i, h in enumerate(head) if i not in drop_dims]
 
         if swap_axes:
-            head = list(reversed(head)) 
+            head = list(reversed(head))
 
     return head
-
