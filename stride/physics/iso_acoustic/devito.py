@@ -306,7 +306,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                    layers=layers,
                                                                    compression=compression)
 
-                update_saved = [devito.Eq(p_saved, self._saved(p))]
+                update_saved = [devito.Eq(p_saved, self._saved(p), subdomain=self.dev_grid.interior)]
                 devicecreate = (self.dev_grid.vars.p, self.dev_grid.vars.p_saved,)
 
                 if devito.pro_available:
@@ -337,7 +337,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                 self.dev_grid.sparse_time_function('rec', num=num_receivers, cached=False)
 
         # Clear all buffers
-        self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.rec.data_with_halo.fill(0.)
         self.dev_grid.vars.p.data_with_halo.fill(0.)
         self.boundary.clear()
@@ -403,21 +402,23 @@ class IsoAcousticDevito(ProblemTypeBase):
             rec=self.dev_grid.vars.rec,
         )
 
+        platform = kwargs.get('platform', 'cpu')
+        devito_args = kwargs.get('devito_args', {})
+
         if 'p_saved' in self.dev_grid.vars:
             functions['p_saved'] = self.dev_grid.vars.p_saved
 
-            platform = kwargs.get('platform', 'cpu')
             # if 'nvidia' in platform and devito.pro_available:
-            #     functions['nbits'] = 16
+            #     devito_args['nbits'] = 16
 
             if self.init_operator is not None:
                 self.init_operator.run(time_m=0, time_M=1,
-                                       **kwargs.get('devito_args', {}))
+                                       **devito_args)
                 self.init_operator = None
 
         self.state_operator.run(dt=self.time.step,
                                 **functions,
-                                **kwargs.pop('devito_args', {}))
+                                **devito_args)
 
     async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -594,7 +595,6 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         # Clear all buffers
         self.dev_grid.vars.src.data_with_halo.fill(0.)
-        self.dev_grid.vars.rec.data_with_halo.fill(0.)
         self.dev_grid.vars.p_a.data_with_halo.fill(0.)
         self.boundary.clear()
         await self.init_grad(wavelets, vp, rho, alpha)
@@ -675,12 +675,14 @@ class IsoAcousticDevito(ProblemTypeBase):
             p_saved=self.dev_grid.vars.p_saved,
         )
 
+        devito_args = kwargs.get('devito_args', {})
+
         if wavelets.needs_grad:
             functions['src'] = self.dev_grid.vars.src
 
         self.adjoint_operator.run(dt=self.time.step,
                                   **functions,
-                                  **kwargs.pop('devito_args', {}))
+                                  **devito_args)
 
     async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
@@ -1158,29 +1160,29 @@ class IsoAcousticDevito(ProblemTypeBase):
                                    - vp2_fun*sub_exprs, u_next)
 
         # Prepare the subdomains
-        full, interior, boundary = self._subdomains(field, wavelets, vp_fun,
-                                                    direction=direction,
-                                                    save_wavefield=save_wavefield,
-                                                    **kwargs)
+        abox, full, interior, boundary = self._subdomains(field, wavelets, vp_fun,
+                                                          direction=direction,
+                                                          save_wavefield=save_wavefield,
+                                                          **kwargs)
 
         # Time-stepping stencil
         stencils = []
 
         if self.kernel != 'OT2':
             stencil_laplacian = devito.Eq(laplacian, laplacian_update,
-                                          subdomain=full,
+                                          subdomain=abox,
                                           coefficients=subs)
             stencils.append(stencil_laplacian)
 
-        stencil_interior = devito.Eq(u_next, eq_interior,
-                                     subdomain=interior,
+        stencil_interior = devito.Eq(u_next, eq_boundary,
+                                     subdomain=abox,
                                      coefficients=subs)
         stencils.append(stencil_interior)
 
-        stencil_boundary = [devito.Eq(u_next, eq_boundary,
-                                      subdomain=dom,
-                                      coefficients=subs) for dom in boundary]
-        stencils += stencil_boundary
+        # stencil_boundary = [devito.Eq(u_next, eq_boundary,
+        #                               subdomain=dom,
+        #                               coefficients=subs) for dom in boundary]
+        # stencils += stencil_boundary
 
         return sub_befores + eq_before + stencils + eq_after + sub_afters
 
@@ -1244,7 +1246,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         interior = self.dev_grid.interior
         boundary = self.dev_grid.pml
 
-        return full, interior, boundary
+        return full, full, interior, boundary
 
     def _saved(self, field, *kwargs):
         return field
