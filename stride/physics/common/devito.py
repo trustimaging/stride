@@ -764,19 +764,27 @@ class OperatorDevito:
         from mosaic.utils.logger import log_level
 
         platform = kwargs.pop('platform', None)
+        devito_config = kwargs.pop('devito_config', {})
+
+        subs = self.grid.devito_grid.spacing_map
+
+        if self.grid.time_dim:
+            time = self.grid.time_dim
+            time_spacing = self.grid.devito_grid.time_dim.spacing
+            subs = {**subs, **{time_spacing: devito_config.get('dt', time.step)}}
 
         if platform is None or platform == 'cpu':
             default_config = {
                 'name': self.name,
-                'subs': self.grid.devito_grid.spacing_map,
-                'opt': 'advanced',
+                'subs': subs,
+                'opt': 'advanced-fsg',
             }
 
         elif platform == 'nvidia-acc':
             default_config = {
                 'name': self.name,
-                'subs': self.grid.devito_grid.spacing_map,
-                'opt': 'advanced',
+                'subs': subs,
+                'opt': 'advanced-fsg',
                 'compiler': 'nvc',
                 'language': 'openacc',
                 'platform': 'nvidiaX',
@@ -785,7 +793,6 @@ class OperatorDevito:
         else:
             raise ValueError('Unrecognised platform %s' % platform)
 
-        devito_config = kwargs.pop('devito_config', {})
         default_config.update(devito_config)
 
         context = {'log-level': 'DEBUG' if log_level in ['perf', 'debug'] else 'INFO'}
