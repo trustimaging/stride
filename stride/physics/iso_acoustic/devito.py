@@ -749,13 +749,16 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                            bounds=kwargs.pop('save_bounds', None),
                                                            deriv_order=2, fd_order=2)
 
+        p_dt2_fun = self.dev_grid.function('p_dt2')
+        p_dt2_update = devito.Eq(p_dt2_fun, p_dt2, subdomain=self.dev_grid.interior)
+
         grad = self.dev_grid.function('grad_vp')
-        grad_update = devito.Inc(grad, p_dt2 * p_a)
+        grad_update = devito.Inc(grad, p_dt2_fun * p_a, subdomain=self.dev_grid.interior)
 
         prec = self.dev_grid.function('prec_vp')
-        prec_update = devito.Inc(prec, p_dt2 * p_dt2)
+        prec_update = devito.Inc(prec, p_dt2_fun * p_dt2_fun, subdomain=self.dev_grid.interior)
 
-        return grad_update, prec_update
+        return p_dt2_update, grad_update, prec_update
 
     async def init_grad_vp(self, vp, **kwargs):
         """
