@@ -1020,7 +1020,7 @@ class Acquisitions(ProblemBase):
                           geometry=self._geometry, problem=self.problem))
 
     def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, has_traces=True,
-                      src_rcv_split=False, offset_id=0):
+                      src_rcv_split=False, offset_id=0, dump=False):
         """
         Populates acquisition container with shot and receiver ids as described
         by a Fullwave .ttr acquisition file and an optional source .ttr file
@@ -1043,6 +1043,8 @@ class Acquisitions(ProblemBase):
             Flag when pgy for sources is different to pgy for receviers
         offset_id : int, optional
             Offset to be added to the receiver ids in the fullwave pgys
+        dump : bool, optional
+            If true, will dump the acquisition shot by shot to save on memory consumption/
 
         Returns
         -------
@@ -1103,7 +1105,16 @@ class Acquisitions(ProblemBase):
                 except Exception as e:
                     mosaic.logger().warn("Warning shot id %g trace loading: %s" % (sid, e))
 
-            self.add(shot)  # add shot object to acquisitions
+            if dump:
+                if not h5.file_exists(project_name=self.problem.name, path=self.problem.output_folder,
+                                      parameter='acquisitions', version=0):
+                    self.add(shot)  # add shot object to acquisitions
+                    self.dump(project_name=self.problem.name, path=self.problem.output_folder, version=0)
+                else:
+                    # append
+                    shot.append_observed(project_name=self.problem.name, path=self.problem.output_folder, version=0)
+            else:
+                self.add(shot)
 
     def plot(self, **kwargs):
         """
