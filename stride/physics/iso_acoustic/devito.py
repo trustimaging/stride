@@ -838,10 +838,10 @@ class IsoAcousticDevito(ProblemTypeBase):
                     - buoy * p.laplace
 
         grad = self.dev_grid.function('grad_rho')
-        grad_update = devito.Inc(grad, grad_term * p_a)
+        grad_update = devito.Inc(grad, grad_term * p_a, subdomain=self.dev_grid.interior)
 
         prec = self.dev_grid.function('prec_rho')
-        prec_update = devito.Inc(prec, grad_term * grad_term)
+        prec_update = devito.Inc(prec, grad_term * grad_term, subdomain=self.dev_grid.interior)
 
         return grad_update, prec_update
 

@@ -232,7 +232,7 @@ class Monitor(Runtime):
             async def wait_for(proxy):
                 await self._comms.wait_for(proxy.uid)
 
-                while node_proxy.uid not in self._monitored_nodes:
+                while proxy.uid not in self._monitored_nodes:
                     await asyncio.sleep(0.1)
 
                 return proxy
