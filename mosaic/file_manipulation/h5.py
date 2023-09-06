@@ -14,6 +14,10 @@ __all__ = ['HDF5', 'file_exists']
 _protocol_version = '0.1'
 
 
+class FilterException(Exception):
+    pass
+
+
 def _abs_filename(filename, path=None):
     if not os.path.isabs(filename):
         filename = os.path.join(path, filename)
@@ -119,17 +123,33 @@ def _write_dataset(name, obj, group):
         dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
 
 
-def read(obj, lazy=True):
+def read(obj, lazy=True, filter=None):
     if isinstance(obj, h5py.Group):
+        if filter is None:
+            filter = {}
+
+        for key, filter_list in filter.items():
+            if key in obj:
+                value = _read_dataset(obj[key], lazy=False)
+                if value not in filter_list:
+                    raise FilterException
+
         if obj.attrs.get('is_array'):
             data = []
             for key in sorted(obj.keys()):
-                data.append(read(obj[key], lazy=lazy))
-
+                try:
+                    value = read(obj[key], lazy=lazy, filter=filter)
+                except FilterException:
+                    continue
+                data.append(value)
         else:
-            data = dict()
+            data = {}
             for key in obj.keys():
-                data[key] = read(obj[key], lazy=lazy)
+                try:
+                    value = read(obj[key], lazy=lazy, filter=filter)
+                except FilterException:
+                    continue
+                data[key] = value
 
         return data
 
@@ -141,12 +161,7 @@ def _read_dataset(obj, lazy=True):
     if 'is_none' in obj.attrs and obj.attrs['is_none']:
         return None
 
-    if 'is_bytes' in obj.attrs and obj.attrs['is_bytes']:
-        obj = obj[()].tobytes()
-
-        return obj
-
-    elif obj.attrs['is_ndarray']:
+    if obj.attrs['is_ndarray']:
 
         def load():
             return obj[()]
@@ -158,6 +173,11 @@ def _read_dataset(obj, lazy=True):
 
         else:
             return obj[()]
+
+    elif 'is_bytes' in obj.attrs and obj.attrs['is_bytes']:
+        obj = obj[()].tobytes()
+
+        return obj
 
     else:
         data = obj[()]
@@ -260,7 +280,7 @@ class HDF5:
             filename = _abs_filename(filename, path)
 
         self._filename = filename
-        self._file = h5py.File(self._filename, self._mode)
+        self._file = h5py.File(self._filename, self._mode, libver='latest')
 
     @property
     def mode(self):
@@ -277,10 +297,9 @@ class HDF5:
     def close(self):
         self._file.close()
 
-    def load(self, lazy=True):
+    def load(self, lazy=True, filter=None):
         group = self._file['/']
-        description = read(group, lazy=lazy)
-
+        description = read(group, lazy=lazy, filter=filter)
         return Struct(description)
 
     def dump(self, description):
