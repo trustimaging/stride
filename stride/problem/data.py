@@ -4,6 +4,7 @@ import functools
 import numpy as np
 import scipy.ndimage
 import scipy.interpolate
+import resampy
 
 try:
     import matplotlib.pyplot as plt
@@ -1499,6 +1500,19 @@ class Traces(StructuredData):
             plotting.show(axis)
 
         return axis
+
+    def _resample(self, factor, new_num, **kwargs):
+        sr_orig = 1
+        sr_new = 1*factor
+        data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
+
+        interp_num = data.shape[1]
+        if new_num is not None and new_num > interp_num:  # do we need to pad the wavelet array?
+            data = np.pad(data, ((0, 0), (0, new_num-interp_num)), axis=1)
+        elif new_num is not None and new_num < interp_num:  # do we need to crop the wavelet array?
+            data = f[:, :new_num]
+
+        return data
 
     def __get_desc__(self, **kwargs):
         description = super().__get_desc__(**kwargs)
