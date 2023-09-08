@@ -1510,7 +1510,7 @@ class Traces(StructuredData):
         if new_num is not None and new_num > interp_num:  # do we need to pad the wavelet array?
             data = np.pad(data, ((0, 0), (0, new_num-interp_num)), axis=1)
         elif new_num is not None and new_num < interp_num:  # do we need to crop the wavelet array?
-            data = f[:, :new_num]
+            data = data[:, :new_num]
 
         return data
 
