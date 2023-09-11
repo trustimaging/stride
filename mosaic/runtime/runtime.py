@@ -202,7 +202,7 @@ class Runtime(BaseRPC):
         self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
 
         # Start maintenance loop
-        self._loop.interval(self.maintenance, interval=5)
+        self._loop.interval(self.maintenance, interval=0.5)
 
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)

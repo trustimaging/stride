@@ -333,7 +333,7 @@ class CMDBase(Base):
         return self.add_event(state)
 
     def add_event(self, event_name, **kwargs):
-        if self.runtime.uid == 'monitor':
+        if self.runtime.uid == 'monitor' or self.is_proxy:
             return
 
         obj_type = self.type.split('_')[0]
@@ -362,7 +362,7 @@ class CMDBase(Base):
         runtime.maintenance_queue(add_event_async)
 
     def add_profile(self, profile, **kwargs):
-        if self.runtime.uid == 'monitor':
+        if self.runtime.uid == 'monitor' or self.is_proxy:
             return
 
         obj_type = self.type.split('_')[0]

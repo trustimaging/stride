@@ -440,10 +440,11 @@ class Monitor(Runtime):
                 continue
 
             pending_tasks.append(task)
+        self.logger.info('Pending barrier tasks %d' % len(pending_tasks))
 
         tic = time.time()
         while pending_tasks:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
 
             for task in pending_tasks:
                 if task.state in ['done', 'failed', 'collected']:

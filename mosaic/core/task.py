@@ -663,11 +663,7 @@ class TaskProxy(ProxyBase):
         if self._result is not None:
             return self._result
 
-        self.state_changed('result')
-
         self._result = await self.cmd_recv_async(method='get_result')
-
-        self.state_changed('done')
 
         return self._result
 
@@ -850,11 +846,7 @@ class TaskOutput(TaskOutputBase):
         if self._result is not None:
             return self._result
 
-        self._task_proxy.state_changed('result')
-
         self._result = await self._task_proxy.cmd_recv_async(method='get_result', key=self._key)
-
-        self._task_proxy.state_changed('done')
 
         return self._result
 
