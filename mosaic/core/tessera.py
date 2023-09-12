@@ -272,6 +272,7 @@ class Tessera(RemoteBase):
 
             future = await task.prepare_args()
 
+            # TODO Make this conditional on this being an async tessera
             if self.runtime_id == 'warehouse':
                 future.add_done_callback(functools.partial(self._put_run_queue,
                                                            sender_id=sender_id, task=task, future=future))

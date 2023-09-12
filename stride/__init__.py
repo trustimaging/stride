@@ -105,7 +105,8 @@ async def forward(problem, pde, *args, **kwargs):
     published_args = [runtime.put(each, publish=True) for each in args]
     published_args = await asyncio.gather(*published_args)
 
-    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    platform = kwargs.get('platform', 'cpu')
+    using_gpu = platform in ['nvidia-acc', 'gpu']
     if using_gpu:
         devices = kwargs.pop('devices', None)
         num_gpus = gpu_count() if devices is None else len(devices)
@@ -122,9 +123,15 @@ async def forward(problem, pde, *args, **kwargs):
         wavelets = sub_problem.shot.wavelets
 
         if using_gpu:
-            devito_args = _kwargs.get('devito_args', {})
-            devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
-            _kwargs['devito_args'] = devito_args
+            deviceid = devices[worker.indices[1] % num_gpus]
+            if platform == 'nvidia-acc':
+                devito_args = _kwargs.get('devito_args', {})
+                devito_args['deviceid'] = deviceid
+                _kwargs['devito_args'] = devito_args
+            elif platform == 'gpu':
+                _kwargs['deviceid'] = deviceid
+            else:
+                raise ValueError('Unknown platform %s' % platform)
 
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
@@ -208,7 +215,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
                                           len=runtime.num_workers, **kwargs)
 
-    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    platform = kwargs.get('platform', 'cpu')
+    using_gpu = platform in ['nvidia-acc', 'gpu']
     if using_gpu:
         devices = kwargs.pop('devices', None)
         num_gpus = gpu_count() if devices is None else len(devices)
@@ -256,9 +264,15 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 raise RuntimeError('Shot %d has no observed data' % shot_id)
 
             if using_gpu:
-                devito_args = _kwargs.get('devito_args', {})
-                devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
-                _kwargs['devito_args'] = devito_args
+                deviceid = devices[worker.indices[1] % num_gpus]
+                if platform == 'nvidia-acc':
+                    devito_args = _kwargs.get('devito_args', {})
+                    devito_args['deviceid'] = deviceid
+                    _kwargs['devito_args'] = devito_args
+                elif platform == 'gpu':
+                    _kwargs['deviceid'] = deviceid
+                else:
+                    raise ValueError('Unknown platform %s' % platform)
 
             wavelets = process_wavelets(wavelets, runtime=worker, **_kwargs)
             await wavelets.init_future
