@@ -27,3 +27,4 @@ sphinx
 sphinx_rtd_theme
 uvloop
 zict>=3.0.0
+resampy

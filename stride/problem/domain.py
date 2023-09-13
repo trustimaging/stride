@@ -250,8 +250,31 @@ class Time:
         self.extended_stop = self.stop + (self.extra[1] - 1)*self.step
         self.extended_num = self.num + self.extra[0] + self.extra[1]
 
-    def resample(self):
-        raise NotImplementedError('Resampling has not been implemented yet')
+    def resample(self, new_step, new_num):
+        # raise NotImplementedError('Resampling has not been implemented yet')
+
+        dt_in = self.step  # Extract current parameters
+        start = self.start
+        stop = self.stop
+        num = self.num
+
+        new_start = 0.  # Calculate new parameters
+
+        interp_num = int((num)*(dt_in/new_step))
+        interp_stop = new_start + new_step*(interp_num - 1)
+
+        if new_num is not None:  # Do we need to pad the array or not?
+            new_stop = new_start + new_step*(new_num - 1)
+        else:
+            new_num = interp_num
+            new_stop = interp_stop
+
+        self.__init__(start=new_start, step=new_step, num=new_num)  # Update time
+        try:
+            del self.__dict__['grid']
+            del self.__dict__['extended_grid']
+        except:
+            print('no grid')
 
     @property
     def inner(self):

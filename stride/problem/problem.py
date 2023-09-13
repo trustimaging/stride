@@ -128,58 +128,17 @@ class Problem(Gridded):
         Returns
         -------
         '''
-        dt_in = self.time.step  # Extract current parameters
-        start = self.time.start
-        stop = self.time.stop
-        num = self.time.num
 
-        new_start = 0.  # Calculate new parameters
+        old_step = self.time.step
+        old_num = self.time.num
+        self.grid.time.resample(new_step=new_step, new_num=new_num)
 
-        interp_num = int((num)*(dt_in/new_step))
-        interp_stop = new_start + new_step*(interp_num - 1)
+        for shot_id, _ in self.acquisitions._shots.items():
+            self.acquisitions._shots[shot_id].wavelets = \
+                self.acquisitions._shots[shot_id].wavelets._resample(factor=old_step/new_step, new_num=new_num)  # resample wavelet
+            self.acquisitions._shots[shot_id].observed = \
+                self.acquisitions._shots[shot_id].observed._resample(factor=old_step/new_step, new_num=new_num)  # resample observed
 
-        if new_num is not None:  # Do we need to pad the array or not?
-            new_stop = new_start + new_step*(new_num - 1)
-        else:
-            new_num = interp_num
-            new_stop = interp_stop
-
-        print('Old num: {:f}'.format(num))
-        print('Calc num: {:f}'.format(interp_num))
-        print('New num: {:f}'.format(new_num))
-
-        print('Old stop: {:f}'.format(stop))
-        print('New stop: {:f}'.format(new_stop))
-
-        self.grid.time.__init__(start=new_start, step=new_step, num=new_num)  # Update time
-        try:
-            del self.grid.time.__dict__['grid']
-            del self.grid.time.__dict__['extended_grid']
-        except:
-            print('no grid')
-
-        shots_out = OrderedDict()
-        for shot_id, shot in self.acquisitions._shots.items():
-            shot_out = Shot(shot_id,
-                        sources=shot.sources, receivers=shot.receivers,
-                        geometry=self.geometry, problem=self)  # create new shot
-
-            wavelet_out = shot.wavelets._resample(factor=dt_in/new_step, new_num=new_num)  # resample wavelet
-
-            shot_out.wavelets.data[:] = wavelet_out
-
-            observed_out = shot.observed._resample(factor=dt_in/new_step, new_num=new_num)  # resample observed
-
-            shot_out.observed.data[:] = observed_out
-
-            # shot.delays._resample(factor=0.9)  # Not sure what delays are, and whether they need resampling?
-
-            shots_out[shot_id] = shot_out
-
-        # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
-        self.acquisitions._shots.clear()  # Clear old shots
-        for shot in shots_out:  # Replace with new shots
-            self.acquisitions.add(shots_out[shot])
 
     def dump(self, *args, **kwargs):
         """
