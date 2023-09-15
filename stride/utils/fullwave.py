@@ -232,7 +232,7 @@ def read_signature_ttr(ttr_path):
         nwavelets = nsrc * maxptsrc
 
         # List to store source ids and wavelets
-        wavelets = np.empty((nwavelets, nt))
+        wavelets = np.empty((nwavelets, nt), dtype=np.float32)
 
         # Read rows
         nrow = 1 + 2 + nt + 1  # number of variables in row with trailing integers
