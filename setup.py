@@ -52,6 +52,7 @@ setup(
             'mrun=mosaic.cli.mrun:go',
             'mscript=mosaic.cli.mscript:go',
             'mprof=mosaic.cli.mprof:go',
+            'fw2stride=stride.cli.fw2stride:go'
         ]
     },
     zip_safe=False,

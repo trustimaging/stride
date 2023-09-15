@@ -8,7 +8,7 @@ import mosaic
 
 
 __all__ = ['read_vtr_model3D', 'read_observed_ttr', 'read_signature_ttr',
-           'read_signature_txt', 'read_geometry_pgy']
+           'read_signature_txt', 'read_geometry_pgy', 'read_header_ttr', 'read_header_pgy']
 
 
 def read_vtr_model3D(vtr_path, swap_axes=False):
