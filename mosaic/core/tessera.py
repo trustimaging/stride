@@ -180,6 +180,7 @@ class Tessera(RemoteBase):
 
         """
         self._is_parameter = True
+        self.is_async = True
 
         obj = self._obj
         self._obj = weakref.ref(obj, self._dec_parameter_ref())
@@ -272,8 +273,7 @@ class Tessera(RemoteBase):
 
             future = await task.prepare_args()
 
-            # TODO Make this conditional on this being an async tessera
-            if self.runtime_id == 'warehouse':
+            if self.is_async:
                 future.add_done_callback(functools.partial(self._put_run_queue,
                                                            sender_id=sender_id, task=task, future=future))
             else:

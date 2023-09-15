@@ -72,6 +72,7 @@ class CMDBase(Base):
         # CMD specific config
         self.retries = 0
         self.max_retries = None
+        self.is_async = False
 
     async def __init_async__(self, *args, **kwargs):
         await self.init(*args, **kwargs)
@@ -152,6 +153,7 @@ class CMDBase(Base):
 
     def _fill_config(self, **kwargs):
         self.max_retries = kwargs.pop('max_retries', 0)
+        self.is_async = kwargs.pop('is_async', False)
 
         return kwargs
 
