@@ -1,4 +1,3 @@
-import numpy as np
 import os
 from stride.utils.fullwave import *
 from stride import Time, Space, Problem, ScalarField
@@ -51,8 +50,6 @@ import click
               help='absorbing cells in the extra cells of the model (most outer ones)')
 @click.option('--plot', type=bool, required=True, default=True, prompt='plot data and src traces?',
               help='plot traces and sources')
-
-
 def go(**kwargs):
     path = kwargs.get('path', None)
     prjname = kwargs.get('prjname', None)
@@ -99,18 +96,18 @@ def go(**kwargs):
 
     assert src_shape != rec_shape, 'model dimensions mismatch in src and rec pgys'
 
-    space = Space(shape=(shape[0], shape[1], shape[2])
-                  extra=(extra, extra, extra)
-                  absorbing=(absorb, absorb, absorb)
+    space = Space(shape=(src_shape[0], src_shape[1], src_shape[2]),
+                  extra=(extra, extra, extra),
+                  absorbing=(absorb, absorb, absorb),
                   spacing=(dx, dx, dx))
-    
+
     # Create problem
     problem = Problem(name=prjname, space=space, time=time)
 
     # Create vp ScalarField
     if vpvtrname is not None:
         vp = ScalarField(name='vp', grid=problem.grid)
-        vp.data[:] = read_vtr_model3D(vtr_path=os.path.join(path, vtrvpname))
+        vp.data[:] = read_vtr_model3D(vtr_path=os.path.join(path, vpvtrname))
         vp.pad()
     else:
         vp = ScalarField(name='vp', grid=problem.grid)
@@ -143,7 +140,7 @@ def go(**kwargs):
         source_path=srcttrname,
         read_traces=writedata, src_rcv_split=srcrecsplit, offset_id=offset_id)
 
-     # Plot if required
+    # Plot if required
     if plot:
         problem.plot()
         vp.plot()
@@ -151,11 +148,10 @@ def go(**kwargs):
     # Dump problem to disk
     problem.dump()
 
-# TODO ---------------
-#----# fix read_observed_ttr in fullwave.py to handle 0000.ttr properly
+# TODO fix read_observed_ttr in fullwave.py to handle 0000.ttr properly
 #
-#----# if no optional args are given, raise an exception.
-#    #
+# if no optional args are given, raise an exception
+
 
 if __name__ == '__main__':
     go()
