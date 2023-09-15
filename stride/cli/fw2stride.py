@@ -130,6 +130,7 @@ def go(**kwargs):
 
     offset_id = problem.geometry.from_fullwave(os.path.join(path, srcpgyname), recpgyname)
 
+    print('---parameters')
     print('offset id:  ', offset_id)
     print('num: {:f}'.format(num))
     print('dt: {:f}'.format(dt))
@@ -152,7 +153,6 @@ def go(**kwargs):
     # Plot if required
     if plot:
         problem.plot()
-        vp.plot()
 
     # Dump problem to disk
     problem.dump()
