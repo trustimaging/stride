@@ -11,80 +11,85 @@ import click
               help='''path of your fullwave files (they all have to be in the
                       same path)''')
 @click.option('--prjname', type=str, required=True,
-              prompt='name of the project (to prepend to Stride files):',
+              prompt='name of the project (to prepend to Stride files)',
               help='prefix name for Stride files')
 # acquisition data
-@click.option('--ttrname', type=str, required=False, default="",
-              prompt='observed data ttr file name:',
-              help='observed data ttr file to convert (None if you do not have one)')
+@click.option('--ttrname', type=str, required=True,
+              prompt='observed data ttr file name',
+              help='observed data ttr file to convert')
 @click.option('--ttr0000', type=bool, required=False, default=False,
               prompt='do you have a 0000.ttr file?',
               help='''whether the ttr data file is empty (0000.ttr file),
               '(does not matter if you do not have a data ttr file)''')
 # geometry
-@click.option('--srcpgyname', type=str, required=False, prompt='source pgy file name:',
+@click.option('--srcpgyname', type=str, required=True,
+              prompt='source pgy file name',
               help='source pgy file name')
-@click.option('--recpgyname', type=str, required=False, prompt='receiver pgy file name:',
+@click.option('--recpgyname', type=str, required=False, default='null',
+              prompt='receiver pgy file name',
               help='receiver pgy file name (None if you do not have one)')
 # source signature
-@click.option('--srcttrname', type=str, required=False, prompt='source ttr file name:',
+@click.option('--srcttrname', type=str, required=False, default='null',
+              prompt='source ttr file name',
               help='''source ttr file to convert to Stride (None if you do not have one or
               do not want to convert it)''')
 # vp model
-@click.option('--vpvtrname', type=str, required=False, prompt='vp model vtr file name:',
+@click.option('--vpvtrname', type=str, required=False, default='null',
+              prompt='vp model vtr file name',
               help='vp model vtr file to convert to Stride format (None if you do not have one)')
-@click.option('--vpvalue', type=float, required=False, prompt='Constant vp value to generate model:',
+@click.option('--vpvalue', type=str, required=False, default='null',
+              prompt='constant vp value to generate model',
               help='constant vp value to populate model in m/s (if vp vtr provided will ignore this value)')
 # other
-@click.option('--writedata', type=bool, prompt='write data read from Time.ttr file?', default=True,
+@click.option('--writedata', type=bool, required=False, default=True,
+              prompt='write data read from Time.ttr file?',
               help='write read data from Time.ttr or not')
-@click.option('--srcrecsplit', type=bool, required=False, prompt='are src pgy and rec pgy different?', default=True,
+@click.option('--srcrecsplit', type=bool, required=False, default=True,
+              prompt='are src pgy and rec pgy different?',
               help='''whether srcs and recs are different in the pgy files so that they can be treated
               as separate transducers (if not, only src pgy is read and the same transducer positions are
-              used for the receivers) ''')
-@click.option('--dx', type=float, required=True, prompt='model dx:',
+              used for the receivers)''')
+@click.option('--dx', type=float, required=True,
+              prompt='model dx',
               help='model spacing in meters (same for all three dimensions)')
-@click.option('--extra', type=int, required=True, prompt='extra cells to pad model:',
+@click.option('--extra', type=int, required=True,
+              prompt='extra cells to pad model',
               help='extra cells to add to the edges of the model (same for all dimensions')
-@click.option('--absorb', type=int, required=True, prompt='absorbing cells:',
+@click.option('--absorb', type=int, required=True,
+              prompt='absorbing cells',
               help='absorbing cells in the extra cells of the model (most outer ones)')
-@click.option('--plot', type=bool, required=True, default=True, prompt='plot data and src traces?',
+@click.option('--plot', type=bool, required=False, default=False,
+              prompt='plot data and src traces?',
               help='plot traces and sources')
 def go(**kwargs):
-    path = kwargs.get('path', None)
-    prjname = kwargs.get('prjname', None)
-    ttrname = kwargs.get('ttrname', None)
-    ttr0000 = kwargs.get('ttr0000', False)
-    srcpgyname = kwargs.get('srcpgyname', None)
-    recpgyname = kwargs.get('recpgyname', None)
-    srcttrname = kwargs.get('srcttrname', None)
-    vpvtrname = kwargs.get('vpvtrname', None)
-    vpvalue = kwargs.get('vpvalue', None)
-    writedata = kwargs.get('writedata', True)
-    srcrecsplit = kwargs.get('srcrecsplit', False)
-    dx = kwargs.get('dx', None)
-    extra = kwargs.get('extra', None)
-    absorb = kwargs.get('absorb', None)
-    plot = kwargs.get('plot', True)
-
-    print(path)
-    print(prjname)
-    print(ttrname)
-    print(ttr0000)
-    print(srcpgyname)
-    print(recpgyname)
-    print(srcttrname)
-    print(vpvtrname)
-    print(vpvalue)
-    print(writedata)
-    print(srcrecsplit)
-    print(dx)
-    print(extra)
-    print(absorb)
-    print(plot)
+    path = kwargs.pop('path')
+    prjname = kwargs.pop('prjname')
+    ttrname = kwargs.pop('ttrname')
+    ttr0000 = kwargs.pop('ttr0000')
+    srcpgyname = kwargs.pop('srcpgyname')
+    recpgyname = kwargs.pop('recpgyname')
+    if recpgyname == 'null':
+        recpgyname = None
+    srcttrname = kwargs.pop('srcttrname')
+    if srcttrname == 'null':
+        srcttrname = None
+    vpvtrname = kwargs.pop('vpvtrname')
+    if vpvtrname == 'null':
+        vpvtrname = None
+    vpvalue = kwargs.pop('vpvalue')
+    if vpvalue == 'null':
+        vpvalue = None
+    else:
+        vpvalue = float(vpvalue)
+    writedata = kwargs.pop('writedata')
+    srcrecsplit = kwargs.pop('srcrecsplit')
+    dx = kwargs.pop('dx')
+    extra = kwargs.pop('extra')
+    absorb = kwargs.pop('absorb')
+    plot = kwargs.pop('plot')
 
     # Create the temporal grid
-    number_composite_shots, max_num_rec_per_src, num, stop, dt = read_header_ttr(os.path.join(path, ttrname))
+    _, _, num, stop, dt = read_header_ttr(os.path.join(path, ttrname))
     start = 0.
     time = Time(start=start,
                 step=dt,
@@ -92,9 +97,10 @@ def go(**kwargs):
 
     # Create the spatial grid
     src_shape = read_header_pgy(os.path.join(path, srcpgyname))
-    rec_shape = read_header_pgy(os.path.join(path, recpgyname))
 
-    assert src_shape != rec_shape, 'model dimensions mismatch in src and rec pgys'
+    if recpgyname is not None:
+        rec_shape = read_header_pgy(os.path.join(path, recpgyname))
+        assert src_shape == rec_shape, 'model dimensions mismatch in src and rec pgys'
 
     space = Space(shape=(src_shape[0], src_shape[1], src_shape[2]),
                   extra=(extra, extra, extra),
@@ -119,7 +125,10 @@ def go(**kwargs):
     # Create point transducers
     problem.transducers.default()
 
-    offset_id = problem.geometry.from_fullwave(os.path.join(path, srcpgyname), os.path.join(path, recpgyname))
+    if recpgyname is not None:
+        recpgyname = os.path.join(path, recpgyname)
+
+    offset_id = problem.geometry.from_fullwave(os.path.join(path, srcpgyname), recpgyname)
 
     print('offset id:  ', offset_id)
     print('num: {:f}'.format(num))
