@@ -1,9 +1,7 @@
 
-from mosaic.utils import camel_case
-
 from mosaic import tessera
 
-from . import steps as steps_module
+from .steps import steps_registry
 from ...core import Operator, no_grad
 
 
@@ -34,12 +32,17 @@ class Pipeline(Operator):
         steps = steps or []
         self._steps = []
         for step in steps:
+            do_raise = True
+            if isinstance(step, tuple):
+                step, do_raise = step
+
             if isinstance(step, str):
-                step_module = getattr(steps_module, step)
-                step = getattr(step_module, camel_case(step))
+                step_cls = steps_registry.get(step, None)
+                if step_cls is None and do_raise:
+                    raise ValueError('Pipeline step %s does not exist in the registry' % step)
 
-                self._steps.append(step(**kwargs))
-
+                if step_cls is not None:
+                    self._steps.append(step_cls(**kwargs))
             else:
                 self._steps.append(step)
 

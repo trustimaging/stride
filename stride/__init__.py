@@ -274,12 +274,15 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 else:
                     raise ValueError('Unknown platform %s' % platform)
 
-            wavelets = process_wavelets(wavelets, runtime=worker, **_kwargs)
+            wavelets = process_wavelets(wavelets,
+                                        problem=sub_problem, runtime=worker, **_kwargs)
             await wavelets.init_future
-            modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **_kwargs)
+            modelled = pde(wavelets, *published_args,
+                           problem=sub_problem, runtime=worker, **_kwargs)
             await modelled.init_future
 
-            traces = process_traces(modelled, observed, runtime=worker, **_kwargs)
+            traces = process_traces(modelled, observed,
+                                    problem=sub_problem, runtime=worker, **_kwargs)
             await traces.init_future
             fun = await loss(traces.outputs[0], traces.outputs[1],
                              problem=sub_problem, runtime=worker, **_kwargs).result()
