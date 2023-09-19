@@ -1504,9 +1504,12 @@ class Traces(StructuredData):
     def _resample(self, factor, new_num, **kwargs):
         sr_orig = 1
         sr_new = factor
-        data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
+        if self.allocated:
+            data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
+            new_traces = Traces(name=self.name, grid=self.grid, data=data)
+        else:
+            raise ValueError('Cannot resample traces becasue traces do not exist')
 
-        new_traces = Traces(data=data)
         return new_traces
 
     def __get_desc__(self, **kwargs):

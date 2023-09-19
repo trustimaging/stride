@@ -133,11 +133,9 @@ class Problem(Gridded):
         old_num = self.time.num
         self.grid.time.resample(new_step=new_step, new_num=new_num)
 
-        for shot_id, _ in self.acquisitions._shots.items():
-            self.acquisitions._shots[shot_id].wavelets = \
-                self.acquisitions._shots[shot_id].wavelets._resample(factor=old_step/new_step, new_num=new_num)  # resample wavelet
-            self.acquisitions._shots[shot_id].observed = \
-                self.acquisitions._shots[shot_id].observed._resample(factor=old_step/new_step, new_num=new_num)  # resample observed
+        for shot in self.acquisitions.shots:
+            shot.wavelets = shot.wavelets._resample(factor=old_step/new_step, new_num=new_num)  # resample wavelet
+            shot.observed = shot.observed._resample(factor=old_step/new_step, new_num=new_num)  # resample observed
 
 
     def dump(self, *args, **kwargs):

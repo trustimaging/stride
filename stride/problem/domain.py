@@ -217,6 +217,9 @@ class Time:
     """
 
     def __init__(self, start=None, step=None, num=None, stop=None):
+        self._set_properties(start, step, num, stop)
+
+    def _set_properties(self, start=None, step=None, num=None, stop=None):
         try:
             if start is None:
                 start = stop - step*(num - 1)
@@ -269,12 +272,12 @@ class Time:
             new_num = interp_num
             new_stop = interp_stop
 
-        self.__init__(start=new_start, step=new_step, num=new_num)  # Update time
+        self._set_properties(start=new_start, step=new_step, num=new_num)  # Update time
         try:
             del self.__dict__['grid']
             del self.__dict__['extended_grid']
         except:
-            print('no grid')
+            pass
 
     @property
     def inner(self):
