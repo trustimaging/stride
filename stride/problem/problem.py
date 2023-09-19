@@ -1,10 +1,9 @@
 
 import os
 import numpy as np
-from collections import OrderedDict
 
 from .base import Gridded
-from . import Medium, Transducers, Geometry, Acquisitions, Shot
+from . import Medium, Transducers, Geometry, Acquisitions
 from .. import plotting
 
 
@@ -136,7 +135,6 @@ class Problem(Gridded):
         for shot in self.acquisitions.shots:
             shot.wavelets = shot.wavelets._resample(factor=old_step/new_step, new_num=new_num)  # resample wavelet
             shot.observed = shot.observed._resample(factor=old_step/new_step, new_num=new_num)  # resample observed
-
 
     def dump(self, *args, **kwargs):
         """

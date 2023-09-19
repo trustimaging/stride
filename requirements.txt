@@ -21,10 +21,11 @@ pytest-runner
 pyyaml>=5.4
 pyzmq>=22.1
 python-daemon
+resampy
 scikit-image
 scipy>=1.6
 sphinx
 sphinx_rtd_theme
+tblib
 uvloop
 zict>=3.0.0
-resampy
