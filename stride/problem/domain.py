@@ -254,8 +254,6 @@ class Time:
         self.extended_num = self.num + self.extra[0] + self.extra[1]
 
     def resample(self, new_step, new_num):
-        # raise NotImplementedError('Resampling has not been implemented yet')
-
         dt_in = self.step  # Extract current parameters
         start = self.start
         stop = self.stop
