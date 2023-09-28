@@ -160,7 +160,7 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
                 break  # End of file
             try:
                 row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
-                if not has_traces:
+                if not has_traces or not store_traces:
                     trace_array = None
                 else:
                     trace_array = np.array(row[3:-1], dtype=np.float32)
@@ -172,13 +172,8 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
                     # create empty observed dict
                     observed[shot_id][rec_id] = None  # populate with blanks
 
-                elif store_traces and has_traces:
+                else:
                     observed[shot_id][rec_id] = trace_array
-
-                elif store_traces and not has_traces:
-                    raise Exception('If ttr does not contain data, '
-                                    'then observed data cannot be stored. '
-                                    'Try exist_traces=False.')  # for exist=False adn store=True
 
             except struct.error as e:
                 mosaic.logger().warn("Warning: Line %g of %s file could "

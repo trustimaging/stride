@@ -313,7 +313,6 @@ class Geometry(ProblemBase):
         assert geom_path.lower().split(".")[-1] == "pgy", "Expected .pgy extension but \found .%s" % \
                geom_path.lower().split(".")[-1]
 
-        # TODO bug: in 2D case, scale is 2 elements but pgy's are always 3 elements
         scale = kwargs.pop('scale', self.space.spacing)
         scale = (scale[0], 1, scale[1]) if len(scale) == 2 else scale
 
