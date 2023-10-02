@@ -2,6 +2,22 @@ import os
 from stride.utils.fullwave import *
 from stride import Time, Space, Problem, ScalarField
 import click
+from datetime import datetime
+
+
+def _printer(name, var=None):
+    space = 16
+    name_length = len(name)
+    if name_length < space:
+        offset = (space-name_length)*' '
+    else:
+        offset = ''
+    if var == 'no output':
+        print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), f'       {name}')
+    elif var is not None:
+        print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), f'       {name}:', offset, var)
+    else:
+        print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), f'       {name}:', offset, 'None')
 
 
 @click.command()
@@ -32,7 +48,7 @@ import click
 @click.option('--writedata', type=bool, default=True, show_default=True,
               help='whether to extract and write data from data ttr file or not')
 @click.option('--srcrecsplit', type=bool, default=True, show_default=True,
-              help='whether source aand receiver pgy files are different or not')
+              help='whether source and receiver pgy files are different or not')
 @click.option('--dx', type=float,
               help='model spacing in meters (same for all dimensions)')
 @click.option('--extra', type=int,
@@ -41,11 +57,54 @@ import click
               help='how many absorbing cells to pad model with (same for all dimensions)')
 @click.option('--plot', type=bool, default=False, show_default=True,
               help='plot the problem contents')
+@click.option('--version', type=int, default=0, show_default=True,
+              help='version of the converted problem files')
 def go(**kwargs):
 
     path = kwargs.pop('path')
+    _printer('Path', path)
+
+    prjname = kwargs.pop('prjname', None)
+    if prjname is None:
+        prjname = click.prompt('Please specify a Stride project name', type=str)
+    _printer('Project', prjname)
+
     ttrname = kwargs.pop('ttrname', None)
+    _printer('obs.ttr', ttrname)
+
+    ttr0000 = kwargs.pop('ttr0000', False)
+    _printer('.ttr0000', ttr0000)
+
+    srcpgyname = kwargs.pop('srcpgyname', None)
+    _printer('src.pgy', srcpgyname)
+
+    # Extract model shape from .pgy or prompt user for each dimension
+    if srcpgyname is not None:
+        srcpgyname = os.path.join(path, srcpgyname)
+        src_shape = read_header_pgy(srcpgyname)
+    else:
+        dim3 = click.prompt('Does the model have 3 dimensions', type=bool, default=True, show_default=True)
+        n1 = click.prompt('Please specify the size of the model along the first dimension', type=int)
+        n2 = click.prompt('Please specify the size of the model along the second dimension', type=int)
+        if dim3:
+            n3 = click.prompt('Please specify the size of the model along the third dimension', type=int)
+            src_shape = (n1, n2, n3)
+        else:
+            src_shape = (n1, n2)
+    ndim = len(src_shape)
+    _printer('Shape', src_shape)
+
+    recpgyname = kwargs.pop('recpgyname', None)
+    _printer('rec.pgy', recpgyname)
+
+    # If necessary, check that the receiver .pgy dimensions match those given by the source .pgy
+    if recpgyname is not None:
+        recpgyname = os.path.join(path, recpgyname)
+        rec_shape = read_header_pgy(recpgyname)
+        assert src_shape == rec_shape, 'model dimensions mismatch in src and rec pgys'
+
     srcttrname = kwargs.pop('srcttrname', None)
+    _printer('sig.ttr', srcttrname)
 
     # Extract the num and step if required
     time_grid = False
@@ -57,6 +116,8 @@ def go(**kwargs):
         time_grid = True
         step = click.prompt('Please specify the size of the time step (in seconds)', type=float)
         num = click.prompt('Please specify the number of time samples', type=int)
+    _printer('Time step', step)
+    _printer('Num. samples', num)
 
     # Create the temporal grid if required
     if time_grid:
@@ -66,23 +127,17 @@ def go(**kwargs):
     else:
         time = None
 
-    # Extract the grid dimensions
-    srcpgyname = kwargs.pop('srcpgyname', None)
-    if srcpgyname is not None:
-        srcpgyname = os.path.join(path, srcpgyname)
-        src_shape = read_header_pgy(srcpgyname)
-    else:
-        n1 = click.prompt('Please specify the size of the model along the first dimension', type=int)
-        n2 = click.prompt('Please specify the size of the model along the second dimension', type=int)
-        n3 = click.prompt('Please specify the size of the model along the third dimension', type=int)
-        src_shape = (n1, n2, n3)
+    vpvtrname = kwargs.pop('vpvtrname', None)
+    _printer('vp.vtr', vpvtrname)
 
-    # If necessary, check that the receiver .pgy dimensions match those given by the source .pgy
-    recpgyname = kwargs.pop('recpgyname', None)
-    if recpgyname is not None:
-        recpgyname = os.path.join(path, recpgyname)
-        rec_shape = read_header_pgy(recpgyname)
-        assert src_shape == rec_shape, 'model dimensions mismatch in src and rec pgys'
+    vpvalue = kwargs.pop('vpvalue', None)
+    _printer('Const. vp', vpvalue)
+
+    writedata = kwargs.pop('writedata', True)
+    _printer('Write data', writedata)
+
+    srcrecsplit = kwargs.pop('srcrecsplit', True)
+    _printer('Split src/rec', srcrecsplit)
 
     # Extract model spacing
     dx = kwargs.pop('dx', None)
@@ -99,26 +154,29 @@ def go(**kwargs):
     if absorb is None:
         absorb = click.prompt('Please specify the number of absorbing cells', type=int)
 
-    # Create the spatial grid
-    space = Space(shape=(src_shape[0], src_shape[1], src_shape[2]),
-                  extra=(extra, extra, extra),
-                  absorbing=(absorb, absorb, absorb),
-                  spacing=(dx, dx, dx))
+    _printer('Model dx', dx)
+    dx = tuple([dx]*ndim)
 
-    # Extract the project name
-    prjname = kwargs.pop('prjname', None)
-    if prjname is None:
-        prjname = click.prompt('Please specify a Stride project name', type=str)
+    _printer('Extra cells', extra)
+    extra = tuple([extra]*ndim)
+
+    _printer('Absorb. cells', absorb)
+    absorb = tuple([absorb]*ndim)
+
+    # Create the spatial grid
+    space = Space(shape=src_shape,
+                  extra=extra,
+                  absorbing=absorb,
+                  spacing=dx)
 
     # Create problem
     problem = Problem(name=prjname, space=space, time=time)
 
     # Create vp ScalarField, if required
-    vpvtrname = kwargs.pop('vpvtrname', None)
-    vpvalue = kwargs.pop('vpvalue', None)
     if vpvtrname is not None or vpvalue is not None:
         vp = ScalarField(name='vp', grid=problem.grid)
         if vpvtrname is not None:
+            _printer('Loading vp model', 'no output')
             vp.data[:] = read_vtr_model3D(vtr_path=os.path.join(path, vpvtrname))
             vp.pad()
         else:
@@ -128,19 +186,20 @@ def go(**kwargs):
     # Create point transducers
     problem.transducers.default()
 
+    # Load acquisition data
+    if srcttrname is not None:
+        srcttrname = os.path.join(path, srcttrname)
+
     # Load geometry, extracting the offset to be added to the receiver ids in the .pgy files
     if srcpgyname is not None:
+        _printer('Loading geometry', 'no output')
         offset_id = problem.geometry.from_fullwave(srcpgyname, recpgyname)
     else:
         offset_id = 0
+        srcrecsplit = False
 
-    # Load acquisition data
-    ttr0000 = kwargs.pop('ttr0000', False)
-    if srcttrname is not None:
-        srcttrname = os.path.join(path, srcttrname)
-    writedata = kwargs.pop('writedata', True)
-    srcrecsplit = kwargs.pop('srcrecsplit', True)
     if ttrname is not None:
+        _printer('Loading acquisitions', 'no output')
         problem.acquisitions.from_fullwave(acquisition_path=ttrname,
                                 source_path=srcttrname,
                                 read_traces=writedata,
@@ -148,13 +207,15 @@ def go(**kwargs):
                                 src_rcv_split=srcrecsplit,
                                 offset_id=offset_id)
 
+    # Save problem files to disk
+    version = kwargs.pop('version', 0)
+    _printer('Saving to disk', 'no output')
+    problem.dump(path=path, project_name=prjname, version=version)
+
     # Plot if required
     plot = kwargs.pop('plot', False)
     if plot:
         problem.plot()
-
-    # Save problem files to disk
-    problem.dump(path=path, project_name=prjname)
 
 
 if __name__ == '__main__':
