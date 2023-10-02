@@ -137,7 +137,6 @@ def go(**kwargs):
     _printer('Write data', writedata)
 
     srcrecsplit = kwargs.pop('srcrecsplit', True)
-    _printer('Split src/rec', srcrecsplit)
 
     # Extract model spacing
     dx = kwargs.pop('dx', None)
@@ -177,7 +176,10 @@ def go(**kwargs):
         vp = ScalarField(name='vp', grid=problem.grid)
         if vpvtrname is not None:
             _printer('Loading vp model', 'no output')
-            vp.data[:] = read_vtr_model3D(vtr_path=os.path.join(path, vpvtrname))
+            vp_data = read_vtr_model3D(vtr_path=os.path.join(path, vpvtrname))
+            if ndim == 2:
+                vp_data = vp_data.squeeze()
+            vp.data[:] = vp_data
             vp.pad()
         else:
             vp.fill(vpvalue)
@@ -193,17 +195,19 @@ def go(**kwargs):
     # Load geometry, extracting the offset to be added to the receiver ids in the .pgy files
     if srcpgyname is not None:
         _printer('Loading geometry', 'no output')
+        srcrecsplit = recpgyname is not None
         offset_id = problem.geometry.from_fullwave(srcpgyname, recpgyname)
     else:
         offset_id = 0
         srcrecsplit = False
+    _printer('Split src/rec', srcrecsplit)
 
     if ttrname is not None:
         _printer('Loading acquisitions', 'no output')
         problem.acquisitions.from_fullwave(acquisition_path=ttrname,
                                 source_path=srcttrname,
                                 read_traces=writedata,
-                                has_traces=ttr0000,
+                                has_traces=not ttr0000,
                                 src_rcv_split=srcrecsplit,
                                 offset_id=offset_id)
 

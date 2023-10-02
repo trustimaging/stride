@@ -1019,7 +1019,7 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
-    def from_fullwave(self, acquisition_path, source_path=None, read_traces=False, has_traces=True,
+    def from_fullwave(self, acquisition_path, source_path=None, read_traces=True, has_traces=True,
                       src_rcv_split=False, offset_id=0, dump=False):
         """
         Populates acquisition container with shot and receiver ids as described
@@ -1036,7 +1036,7 @@ class Acquisitions(ProblemBase):
             Path to ttr or txt source Fullwave file. Default None
         read_traces : bool, optional
             If flagged, data from `acquisition_path` file is read and for each source id
-            and added to its correspondent Stride <Shot> object. Default False.
+            and added to its correspondent Stride <Shot> object. Default True.
         has_traces : bool, optional
             Whether the `acquisition_path` file contains any data or not. Default True.
         src_rcv_split : bool, optional
@@ -1044,7 +1044,7 @@ class Acquisitions(ProblemBase):
         offset_id : int, optional
             Offset to be added to the receiver ids in the fullwave pgys
         dump : bool, optional
-            If true, will dump the acquisition shot by shot to save on memory consumption/
+            If True, will dump the acquisition shot by shot to save on memory consumption/
 
         Returns
         -------
@@ -1064,7 +1064,7 @@ class Acquisitions(ProblemBase):
         from ..utils.fullwave import read_observed_ttr, read_signature_ttr, read_signature_txt
 
         # Read acquisition file
-        observed = read_observed_ttr(acquisition_path, read_traces, has_traces)
+        observed = read_observed_ttr(acquisition_path, read_traces=read_traces, has_traces=has_traces)
 
         # Read source signature file
         wavelets = None

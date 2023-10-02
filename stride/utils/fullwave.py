@@ -3,6 +3,7 @@ from collections import defaultdict
 import numpy as np
 import struct
 from types import NoneType
+from tqdm import tqdm
 
 import mosaic
 
@@ -108,7 +109,7 @@ def read_header_ttr(ttr_path):
     return num_composite_shots, max_num_rec_per_src, num_samples, total_time, dt
 
 
-def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
+def read_observed_ttr(ttr_path, read_traces=True, has_traces=True):
     """
     Function to read acquisition parameters and data from Fullwave's Observed.ttr binary
     file. Adapted from code provided by Oscar Calderon from Imperial College London's FULLWAVE
@@ -118,9 +119,9 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
     ----------
     ttr_path: str
         Path to ttr file
-    store_traces: bool, optional
+    read_traces: bool, optional
         Flag to store the data inside the ttr. If true, data is saved in memory and returned
-        by function. If False, only the source and receiver IDs are returned. Default False
+        by function. If False, only the source and receiver IDs are returned. Default True.
     has_traces : bool, optional
         Flag that determines if ttr file contains any data. Default True.
 
@@ -141,8 +142,8 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
         headers = file.read(4 * nheader)
         headers = struct.unpack('iiiifi', headers)
-        _, num_shots, num_rec_max, num_steps, total_time, _ = headers
-
+        _, ncomp, maxrecnum, num_steps, _, _ = headers
+        total_traces_est = ncomp*maxrecnum
         # Read rows
         # row structure: _ (int), shot_id (int), rec_id (int), range[1, num_steps] (float),  _ (int)
 
@@ -151,33 +152,29 @@ def read_observed_ttr(ttr_path, store_traces=True, has_traces=True):
 
         num_elements_per_row = 1 + 2 + num_steps + 1  # number of variables in row with trailing integers
 
-        trace_counter = 0
-        while True:
-            trace_counter += 1
-            row = file.read(4*num_elements_per_row)
+        with tqdm(total=total_traces_est) as pbar:
+            trace_counter = 0
+            while True:
+                trace_counter += 1
+                pbar.update(1)
+                row = file.read(4*num_elements_per_row)
 
-            if not row:
-                break  # End of file
-            try:
-                row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
-                if not has_traces or not store_traces:
-                    trace_array = None
-                else:
-                    trace_array = np.array(row[3:-1], dtype=np.float32)
+                if not row:
+                    break  # End of file
+                try:
+                    row = struct.unpack('<iii' + num_steps*'f' + 'i', row)
+                    if not has_traces or not read_traces:
+                        trace_array = None
+                    else:
+                        trace_array = np.array(row[3:-1], dtype=np.float32)
 
-                shot_id = row[1] - 1  # Fullwave starts count from 1, stride from 0
-                rec_id = row[2] - 1
-
-                if not store_traces:
-                    # create empty observed dict
-                    observed[shot_id][rec_id] = None  # populate with blanks
-
-                else:
+                    shot_id = row[1] - 1  # Fullwave starts count from 1, stride from 0
+                    rec_id = row[2] - 1
                     observed[shot_id][rec_id] = trace_array
 
-            except struct.error as e:
-                mosaic.logger().warn("Warning: Line %g of %s file could "
-                                     "not be unpacked" % (trace_counter, ttr_path.split("/")[-1]))
+                except struct.error as e:
+                    mosaic.logger().warn("Warning: Line %g of %s file could "
+                                        "not be unpacked" % (trace_counter, ttr_path.split("/")[-1]))
 
     return observed
 
@@ -211,7 +208,7 @@ def read_signature_ttr(ttr_path):
         nheader = 1 + 4 + 1  # number of variables in header with trailing integers
         headers = file.read(4 * nheader)
         headers = struct.unpack('iiiifi', headers)
-        _, nsrc, maxptsrc, nt, ttime, _ = headers
+        _, nsrc, _, nt, _, _ = headers
 
         num_wavelets = nsrc  # NOTE assumes num_max_pntShot_per_csShot = 1
 
@@ -229,7 +226,6 @@ def read_signature_ttr(ttr_path):
             row = struct.unpack('<iii' + nt*'f' + 'i', row)
 
             composite_shot_id = row[1] - 1    # Fullwave starts count from 1, stride from 0
-            point_source_id = row[2] - 1   # Fullwave starts count from 1, stride from 0
 
             wavelet_array = np.array(row[3:-1], dtype=np.float32)
 
