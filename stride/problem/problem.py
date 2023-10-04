@@ -120,7 +120,7 @@ class Problem(Gridded):
         ----------
         new_step : float
             The time spacing for the interpolated grid
-        new_num : int
+        new_num : int, optional
             The number of time-points, default is calculated to match input pulse
             length in [s]
 

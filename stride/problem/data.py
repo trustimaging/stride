@@ -1508,7 +1508,7 @@ class Traces(StructuredData):
             data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
             new_traces = Traces(name=self.name, grid=self.grid, data=data)
         else:
-            raise ValueError('Cannot resample traces becasue traces do not exist')
+            raise ValueError('Cannot resample traces because traces do not exist')
 
         return new_traces
 

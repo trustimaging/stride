@@ -254,6 +254,21 @@ class Time:
         self.extended_num = self.num + self.extra[0] + self.extra[1]
 
     def resample(self, new_step, new_num):
+        """
+        Resample a trace.
+
+        Parameters
+        ----------
+        new_step : float
+            The time spacing for the interpolated grid
+        new_num : int
+            The number of time-points, default is calculated to match input pulse
+            length in [s]
+
+        Returns
+        -------
+        """
+
         dt_in = self.step  # Extract current parameters
         start = self.start
         stop = self.stop
