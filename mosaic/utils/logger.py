@@ -408,7 +408,7 @@ class LoggerManager:
         if self._debug_logger is None:
             return
 
-        if log_level in ['info', 'error']:
+        if log_level in ['info', 'error', 'perf']:
             return
 
         self._debug_logger.log(buf, uid=uid)

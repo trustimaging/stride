@@ -227,7 +227,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            update = await method(variable, **kwargs)
+            update = await method(variable, wrt=wrt, **kwargs)
 
             if not isinstance(update, tuple):
                 update = (update,)
@@ -261,7 +261,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            await method(variable, **kwargs)
+            await method(variable, wrt=wrt, **kwargs)
 
     async def get_grad(self, *wrt, **kwargs):
         """
@@ -292,6 +292,6 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            grads.append(await method(variable, **kwargs))
+            grads.append(await method(variable, wrt=wrt, **kwargs))
 
         return tuple(grads)
