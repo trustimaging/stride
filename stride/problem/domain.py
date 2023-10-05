@@ -286,8 +286,13 @@ class Time:
             new_stop = interp_stop
 
         self._set_properties(start=new_start, step=new_step, num=new_num)  # Update time
-        try:  # TODO two try-catch sequences
+
+        try:
             del self.__dict__['grid']
+        except:
+            pass
+
+        try:
             del self.__dict__['extended_grid']
         except:
             pass

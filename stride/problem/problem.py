@@ -111,7 +111,7 @@ class Problem(Gridded):
                 if getattr(problem_property, grid_property) is None:
                     setattr(problem_property._grid, grid_property, getattr(self, grid_property))
 
-    def time_resample(self, new_step, f_max, new_num=None, **kwargs):
+    def time_resample(self, new_step, freq_max_hz, new_num=None, **kwargs):
         '''
         In-place operatin to resample the wavelets and data into a grid with new
         time-spacing. Sinc interpolation is used.
@@ -121,7 +121,9 @@ class Problem(Gridded):
         new_step : float
             The time spacing for the interpolated grid.
         freq_max : float
-            The maximum frequency that will be simulated.
+            The maximum frequency that will be simulated [Hz].
+        filter_type : str, optional
+            Filtering method for data processing. Options 'cos', 'fir', 'butterworth'
         new_num : int, optional
             The number of time-points, default is calculated to match input pulse
             length in [s].
@@ -134,21 +136,23 @@ class Problem(Gridded):
         old_num = self.time.num
         self.grid.time.resample(new_step=new_step, new_num=new_num)
 
-        freq_niquist = max(1/old_step, 1/new_step)  # anti-aliasing filter using max sampling frequency
+        freq_niquist_hz = min(1/old_step, 1/new_step)  # anti-aliasing filter using max sampling frequency
 
         for shot in self.acquisitions.shots:  # TODO, implement low-pass filtering with freq_max as pass band
 
             shot.wavelets = shot.wavelets._resample(  # resample wavelet
                                 factor=old_step/new_step,
                                 new_num=new_num,
-                                freq_niquist=freq_niquist,
-                                freq_max=freq_max)
+                                freq_niquist=freq_niquist_hz*old_step,  # Convert [Hz] to dimensionless frequency
+                                freq_max=freq_max_hz*new_step,
+                                **kwargs)
 
             shot.observed = shot.observed._resample(  # resample observed
                                 factor=old_step/new_step,
                                 new_num=new_num,
-                                freq_niquist=freq_niquist,
-                                freq_max=freq_max)
+                                freq_niquist=freq_niquist_hz*old_step,
+                                freq_max=freq_max_hz*new_step,
+                                **kwargs)
 
     def dump(self, *args, **kwargs):
         """

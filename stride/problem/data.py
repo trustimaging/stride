@@ -21,6 +21,7 @@ from mosaic.comms.compression import maybe_compress, decompress
 from .base import GriddedSaved
 from ..core import Variable
 from .. import plotting
+from ..utils import filters
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
@@ -1501,15 +1502,38 @@ class Traces(StructuredData):
 
         return axis
 
-    def _resample(self, factor, new_num, **kwargs):
+    def _resample(self, factor, new_num, freq_niquist, freq_max, **kwargs):
+        filter_type = kwargs.pop('filter_type', 'cos')
+
         sr_orig = 1
         sr_new = factor
 
         if self.allocated:
-            # TODO anti-aliasing filter
-            data = resampy.resample(self.data, sr_orig, sr_new, axis=1, parallel=True)  # resample
-            # TODO low-pass filter data
-            new_traces = Traces(name=self.name, grid=self.grid, data=data)
+
+            # Select filter
+            method_name = 'lowpass_filter_%s' % (filter_type)
+            method = getattr(filters, method_name, None)
+            if method is None:
+                raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
+
+            # Run anti-aliasing filter
+
+            if freq_niquist != 1.0:
+                filtered = method(self.data, f_max=freq_niquist, zero_phase=True, **kwargs)
+            else:
+                filtered = self.data
+
+            # Resample
+            filtered = resampy.resample(filtered, sr_orig, sr_new, axis=1, parallel=True)
+
+            # Run low-pass filter
+            filtered = method(filtered, f_max=freq_max, zero_phase=True, **kwargs)
+
+            # TODO implement hann window for muted data
+
+            # Fill object
+            new_traces = Traces(name=self.name, grid=self.grid, data=filtered)
+
         else:
             new_traces = Traces(name=self.name, grid=self.grid)
 
