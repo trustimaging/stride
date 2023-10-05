@@ -271,6 +271,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         diff_source = kwargs.pop('diff_source', False)
         save_compression = kwargs.get('save_compression',
                                       'bitcomp' if self.space.dim > 2 else None)
+        save_compression = save_compression if 'nvidia' in platform and devito.pro_available else None
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
@@ -303,14 +304,12 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             # Define the saving of the wavefield
             if save_wavefield is True:
-                compression = save_compression if 'nvidia' in platform and devito.pro_available else None
                 layers = devito.HostDevice if 'nvidia' in platform else devito.NoLayers
-
                 p_saved = self.dev_grid.undersampled_time_function('p_saved',
                                                                    bounds=kwargs.pop('save_bounds', None),
                                                                    factor=self.undersampling_factor,
                                                                    layers=layers,
-                                                                   compression=compression)
+                                                                   compression=save_compression)
 
                 if self._needs_grad(wavelets, rho, alpha):
                     p_saved_expr = p
