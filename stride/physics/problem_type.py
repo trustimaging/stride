@@ -72,13 +72,13 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         if problem is not None and hasattr(problem, 'shot_id'):
             pre_str = '(ShotID %d) ' % problem.shot_id
 
-        self.logger.info('%sPreparing to run state for shot' % pre_str)
+        self.logger.perf('%sPreparing to run state for shot' % pre_str)
         await self.before_forward(*args, **kwargs)
 
-        self.logger.info('%sRunning state equation for shot' % pre_str)
+        self.logger.perf('%sRunning state equation for shot' % pre_str)
         await self.run_forward(*args, **kwargs)
 
-        self.logger.info('%sCompleted state equation run for shot' % pre_str)
+        self.logger.perf('%sCompleted state equation run for shot' % pre_str)
         output = await self.after_forward(*args, **kwargs)
 
         return output
@@ -99,13 +99,13 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         if problem is not None and hasattr(problem, 'shot_id'):
             pre_str = '(ShotID %d) ' % problem.shot_id
 
-        self.logger.info('%sPreparing to run adjoint for shot' % pre_str)
+        self.logger.perf('%sPreparing to run adjoint for shot' % pre_str)
         await self.before_adjoint(*args, **kwargs)
 
-        self.logger.info('%sRunning adjoint equation for shot' % pre_str)
+        self.logger.perf('%sRunning adjoint equation for shot' % pre_str)
         await self.run_adjoint(*args, **kwargs)
 
-        self.logger.info('%sCompleted adjoint equation run for shot' % pre_str)
+        self.logger.perf('%sCompleted adjoint equation run for shot' % pre_str)
         output = await self.after_adjoint(*args, **kwargs)
 
         return output
@@ -227,7 +227,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            update = await method(variable, **kwargs)
+            update = await method(variable, wrt=wrt, **kwargs)
 
             if not isinstance(update, tuple):
                 update = (update,)
@@ -261,7 +261,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            await method(variable, **kwargs)
+            await method(variable, wrt=wrt, **kwargs)
 
     async def get_grad(self, *wrt, **kwargs):
         """
@@ -292,6 +292,6 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            grads.append(await method(variable, **kwargs))
+            grads.append(await method(variable, wrt=wrt, **kwargs))
 
         return tuple(grads)

@@ -361,7 +361,7 @@ def _make_filter_cos(filter_length):
 
 
 def lowpass_filter_cos(data, f_max, order=2,
-                       zero_phase=True, adjoint=False, axis=-1):
+                       zero_phase=True, adjoint=False, axis=-1, **kwargs):
     """
     Apply a cosine lowpass filter.
 

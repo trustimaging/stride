@@ -72,6 +72,7 @@ class CMDBase(Base):
         # CMD specific config
         self.retries = 0
         self.max_retries = None
+        self.is_async = False
 
     async def __init_async__(self, *args, **kwargs):
         await self.init(*args, **kwargs)
@@ -152,6 +153,7 @@ class CMDBase(Base):
 
     def _fill_config(self, **kwargs):
         self.max_retries = kwargs.pop('max_retries', 0)
+        self.is_async = kwargs.pop('is_async', False)
 
         return kwargs
 
@@ -333,7 +335,7 @@ class CMDBase(Base):
         return self.add_event(state)
 
     def add_event(self, event_name, **kwargs):
-        if self.runtime.uid == 'monitor':
+        if self.runtime.uid == 'monitor' or self.is_proxy:
             return
 
         obj_type = self.type.split('_')[0]
@@ -362,7 +364,7 @@ class CMDBase(Base):
         runtime.maintenance_queue(add_event_async)
 
     def add_profile(self, profile, **kwargs):
-        if self.runtime.uid == 'monitor':
+        if self.runtime.uid == 'monitor' or self.is_proxy:
             return
 
         obj_type = self.type.split('_')[0]

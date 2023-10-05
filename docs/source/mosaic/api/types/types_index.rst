@@ -5,5 +5,4 @@ Types
 
 .. toctree::
 
-    immutable
     struct

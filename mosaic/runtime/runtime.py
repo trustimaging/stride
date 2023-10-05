@@ -202,7 +202,7 @@ class Runtime(BaseRPC):
         self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
 
         # Start maintenance loop
-        self._loop.interval(self.maintenance, interval=5)
+        self._loop.interval(self.maintenance, interval=0.5)
 
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)
@@ -619,6 +619,24 @@ class Runtime(BaseRPC):
             return
 
         self.logger.info(buf, uid=sender_id)
+
+    def log_perf(self, sender_id, buf):
+        """
+        Log remote message from ``sender_id`` on perf stream.
+
+        Parameters
+        ----------
+        sender_id : str
+        buf : str
+
+        Returns
+        -------
+
+        """
+        if self.logger is None:
+            return
+
+        self.logger.perf(buf, uid=sender_id)
 
     def log_debug(self, sender_id, buf):
         """

@@ -43,6 +43,9 @@ class ProcessTraces(Pipeline):
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
 
+        if kwargs.pop('filter_offsets', False):
+            steps.append(('filter_offsets', False))  # do not raise if not present
+
         if kwargs.pop('mute_traces', True):
             steps.append('mute_traces')
 

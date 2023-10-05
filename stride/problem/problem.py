@@ -89,10 +89,22 @@ class Problem(Gridded):
         kwargs['project_name'] = kwargs.get('project_name', self.name)
         kwargs['path'] = kwargs.get('path', self.input_folder)
 
-        self.medium.load(*args, **kwargs)
-        self.transducers.load(*args, **kwargs)
-        self.geometry.load(*args, **kwargs)
-        self.acquisitions.load(*args, **kwargs)
+        try:
+            self.medium.load(*args, **kwargs)
+        except FileNotFoundError:
+            pass
+        try:
+            self.transducers.load(*args, **kwargs)
+        except FileNotFoundError:
+            pass
+        try:
+            self.geometry.load(*args, **kwargs)
+        except FileNotFoundError:
+            pass
+        try:
+            self.acquisitions.load(*args, **kwargs)
+        except FileNotFoundError:
+            pass
 
         grid_properties = ['space', 'time', 'slow_time']
         problem_properties = ['medium', 'transducers', 'geometry', 'acquisitions']

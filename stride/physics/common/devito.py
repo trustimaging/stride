@@ -11,7 +11,7 @@ import scipy.special
 import mosaic
 from mosaic.types import Struct
 
-from . import stride_devito as devito
+from . import import_devito as devito
 from ...problem.base import Gridded
 
 
@@ -289,7 +289,7 @@ class GridDevito(Gridded):
         space_order = space_order or self.space_order
 
         fun = devito.Function(name=name,
-                              grid=self.devito_grid,
+                              grid=kwargs.pop('grid', self.devito_grid),
                               space_order=space_order,
                               dtype=kwargs.pop('dtype', self.dtype),
                               **kwargs)
@@ -322,7 +322,7 @@ class GridDevito(Gridded):
         time_order = time_order or self.time_order
 
         fun = devito.TimeFunction(name=name,
-                                  grid=self.devito_grid,
+                                  grid=kwargs.pop('grid', self.devito_grid),
                                   time_order=time_order,
                                   space_order=space_order,
                                   dtype=kwargs.pop('dtype', self.dtype),
@@ -353,7 +353,7 @@ class GridDevito(Gridded):
         space_order = space_order or self.space_order
 
         fun = devito.VectorFunction(name=name,
-                                    grid=self.devito_grid,
+                                    grid=kwargs.pop('grid', self.devito_grid),
                                     space_order=space_order,
                                     dtype=kwargs.pop('dtype', self.dtype),
                                     **kwargs)
@@ -386,7 +386,7 @@ class GridDevito(Gridded):
         time_order = time_order or self.time_order
 
         fun = devito.VectorTimeFunction(name=name,
-                                        grid=self.devito_grid,
+                                        grid=kwargs.pop('grid', self.devito_grid),
                                         time_order=time_order,
                                         space_order=space_order,
                                         dtype=kwargs.pop('dtype', self.dtype),
@@ -420,7 +420,7 @@ class GridDevito(Gridded):
         time_order = time_order or self.time_order
 
         fun = devito.TensorTimeFunction(name=name,
-                                        grid=self.devito_grid,
+                                        grid=kwargs.pop('grid', self.devito_grid),
                                         time_order=time_order,
                                         space_order=space_order,
                                         dtype=kwargs.pop('dtype', self.dtype),
@@ -456,18 +456,9 @@ class GridDevito(Gridded):
         """
         bounds = bounds or (0, self.time.extended_num-1)
 
-        time_dim = self.devito_grid.time_dim
+        time_under, buffer_size = self._time_undersampled('time_under', factor, bounds)
 
-        condition = sympy.And(devito.symbolics.CondEq(time_dim % factor, 0),
-                              devito.Gt(time_dim, bounds[0] + factor),
-                              devito.Lt(time_dim, bounds[1] - factor),)
-
-        time_under = devito.ConditionalDimension('time_under',
-                                                 parent=time_dim,
-                                                 factor=factor,
-                                                 condition=condition)
-
-        buffer_size = (bounds[1] - bounds[0] + factor) // factor
+        compression = kwargs.pop('compression', None)
 
         fun = self.time_function(name,
                                  space_order=space_order,
@@ -475,11 +466,42 @@ class GridDevito(Gridded):
                                  time_dim=time_under,
                                  save=buffer_size,
                                  dtype=kwargs.pop('dtype', self.dtype),
+                                 compression=compression,
                                  **kwargs)
 
         space_dims = fun.dimensions[1:]
 
         return fun.func(time_under - int(bounds[0] // factor), *space_dims)
+
+    def undersampled_time_derivative(self, fun, factor, bounds=None, offset=None,
+                                     deriv_order=1, fd_order=1):
+        offset = offset or (0, 0)
+
+        time_under, buffer_size = self._time_undersampled('time_under_d', factor, bounds, offset)
+
+        deriv = devito.Derivative(fun, (fun.dimensions[0], deriv_order), fd_order=fd_order)
+        deriv = deriv.xreplace({fun.dimensions[0]: time_under})
+
+        return deriv
+
+    def _time_undersampled(self, name, factor, bounds=None, offset=None):
+        bounds = bounds or (0, self.time.extended_num - 1)
+        offset = offset or (0, 0)
+
+        time_dim = self.devito_grid.time_dim
+
+        condition = sympy.And(devito.symbolics.CondEq(time_dim % factor, 0),
+                              devito.Ge(time_dim, bounds[0] + offset[0]),
+                              devito.Le(time_dim, bounds[1] - offset[1]), )
+
+        time_under = devito.ConditionalDimension(name,
+                                                 parent=time_dim,
+                                                 factor=factor,
+                                                 condition=condition)
+
+        buffer_size = (bounds[1] - bounds[0] + factor) // factor + 1
+
+        return time_under, buffer_size
 
     @_cached
     def sparse_time_function(self, name, num=1, space_order=None, time_order=None,
@@ -519,7 +541,7 @@ class GridDevito(Gridded):
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
         sparse_kwargs = dict(name=name,
-                             grid=self.devito_grid,
+                             grid=kwargs.pop('grid', self.devito_grid),
                              dimensions=kwargs.get('dimensions', (self.devito_grid.time_dim, p_dim)),
                              npoint=num,
                              nt=kwargs.get('nt', self.time.extended_num),
@@ -581,7 +603,7 @@ class GridDevito(Gridded):
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
         sparse_kwargs = dict(name=name,
-                             grid=self.devito_grid,
+                             grid=kwargs.pop('grid', self.devito_grid),
                              dimensions=kwargs.get('dimensions', (p_dim,)),
                              npoint=num,
                              space_order=space_order,
@@ -712,18 +734,17 @@ class OperatorDevito:
     ----------
     grid : GridDevito, optional
         Predefined GridDevito. A new one will be created unless specified.
+    name : str
+            Name to give to the operator, defaults to ``kernel``.
     """
 
     def __init__(self, *args, grid=None, name='kernel', **kwargs):
         self.name = name
 
         self.devito_operator = None
-        self.kwargs = {}
+        self.devito_context = {}
 
-        if grid is None:
-            self.grid = GridDevito(*args, **kwargs)
-        else:
-            self.grid = grid
+        self.grid = GridDevito(*args, **kwargs) if grid is None else grid
 
     def set_operator(self, op, **kwargs):
         """
@@ -733,8 +754,6 @@ class OperatorDevito:
         ----------
         op : list
             List of operations to be given to the devito.Operator instance.
-        name : str
-            Name to give to the operator, defaults to ``kernel``.
         kwargs : optional
             Configuration parameters to set for Devito overriding defaults.
 
@@ -742,23 +761,31 @@ class OperatorDevito:
         -------
 
         """
+        from mosaic.utils.logger import log_level
 
         platform = kwargs.pop('platform', None)
+        devito_config = kwargs.pop('devito_config', {})
 
-        if platform is None:
+        subs = self.grid.devito_grid.spacing_map
+
+        if self.grid.time_dim:
+            time = self.grid.time_dim
+            time_spacing = self.grid.devito_grid.time_dim.spacing
+            subs = {**subs, **{time_spacing: devito_config.get('dt', time.step)}}
+
+        if platform is None or platform == 'cpu':
             default_config = {
                 'name': self.name,
-                'subs': self.grid.devito_grid.spacing_map,
-                'opt': 'advanced',
-                'platform': os.getenv('DEVITO_PLATFORM', None),
+                'subs': subs,
+                'opt': 'advanced-fsg',
             }
 
         elif platform == 'nvidia-acc':
             default_config = {
                 'name': self.name,
-                'subs': self.grid.devito_grid.spacing_map,
-                'opt': 'advanced',
-                'compiler': 'pgcc',
+                'subs': subs,
+                'opt': 'advanced-fsg',
+                'compiler': 'nvc',
                 'language': 'openacc',
                 'platform': 'nvidiaX',
             }
@@ -766,19 +793,26 @@ class OperatorDevito:
         else:
             raise ValueError('Unrecognised platform %s' % platform)
 
-        devito_config = kwargs.pop('devito_config', {})
         default_config.update(devito_config)
 
+        context = {'log-level': 'DEBUG' if log_level in ['perf', 'debug'] else 'INFO'}
+        compiler_config = {}
+        for key, value in default_config.items():
+            if key in devito.configuration:
+                context[key] = value
+            else:
+                compiler_config[key] = value
+
+        self.devito_context = context
+
         logger = mosaic.logger()
-        logger.info('Operator `%s` instance configuration:' % self.name)
+        logger.perf('Operator `%s` instance configuration:' % self.name)
 
         for key, value in default_config.items():
-            if key == 'name':
-                continue
+            logger.perf('\t * %s=%s' % (key, value))
 
-            logger.info('\t * %s=%s' % (key, value))
-
-        self.devito_operator = devito.Operator(op, **default_config)
+        with devito.switchconfig(**self.devito_context):
+            self.devito_operator = devito.Operator(op, **compiler_config)
 
     def compile(self):
         """
@@ -799,7 +833,7 @@ class OperatorDevito:
 
         """
 
-        default_kwargs = dict()
+        default_kwargs = {}
 
         for arg in self.devito_operator.parameters:
             if arg.name in self.grid.vars:
@@ -819,16 +853,27 @@ class OperatorDevito:
                 default_kwargs['time_inner_m'] = default_kwargs.get('time_inner_m', 0)
                 default_kwargs['time_inner_M'] = default_kwargs.get('time_inner_M', self.grid.num_inner-1)
 
-        self.devito_operator.apply(**default_kwargs)
+        runtime_context = {}
+        runtime_kwargs = {}
+        for key, value in default_kwargs.items():
+            if key in devito.configuration:
+                runtime_context[key] = value
+            else:
+                runtime_kwargs[key] = value
+
+        with devito.switchconfig(**self.devito_context, **runtime_context):
+            self.devito_operator.apply(**runtime_kwargs)
 
 
 def config_devito(**kwargs):
+    from mosaic.utils.logger import log_level
+
     # global devito config
     default_config = {
         'autotuning': ['aggressive', 'runtime'],
         'develop-mode': False,
         'mpi': False,
-        'log-level': 'DEBUG',
+        'log-level': 'DEBUG' if log_level in ['perf', 'debug'] else 'INFO',
     }
 
     compiler = os.getenv('DEVITO_COMPILER', None)
@@ -843,16 +888,16 @@ def config_devito(**kwargs):
     default_config.update(devito_config)
 
     logger = mosaic.logger()
-    logger.info('Default Devito configuration:')
+    logger.perf('Default Devito configuration:')
 
     for key, value in default_config.items():
-        logger.info('\t * %s=%s' % (key, value))
+        logger.perf('\t * %s=%s' % (key, value))
 
         devito.parameters.configuration[key] = value
 
     # fix devito logging
-    devito_logger = logging.getLogger('devito')
-    devito_logger.setLevel(logging.DEBUG)
+    devito_logger = logging.getLogger('Devito')
+    devito_logger.setLevel(logging.DEBUG if log_level in ['perf', 'debug'] else logging.INFO)
     devito.logger.logger = devito_logger
 
     class RerouteFilter(logging.Filter):
@@ -864,7 +909,7 @@ def config_devito(**kwargs):
             _logger = mosaic.logger()
 
             if record.levelno == devito.logger.PERF:
-                _logger.info(record.msg)
+                _logger.perf(record.msg)
 
             elif record.levelno == logging.ERROR:
                 _logger.error(record.msg)
@@ -876,7 +921,7 @@ def config_devito(**kwargs):
                 _logger.debug(record.msg)
 
             else:
-                _logger.info(record.msg)
+                _logger.perf(record.msg)
 
             return False
 

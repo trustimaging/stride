@@ -86,7 +86,7 @@ class LocalOptimiser(ABC):
 
         """
         logger = mosaic.logger()
-        logger.info('Updating variable %s,' % self.variable.name)
+        logger.perf('Updating variable %s,' % self.variable.name)
 
         if processed_grad is None:
             if grad is None:
@@ -98,7 +98,7 @@ class LocalOptimiser(ABC):
             min_dir = np.min(grad.extended_data)
             max_dir = np.max(grad.extended_data)
 
-            logger.info('\t grad before processing in range [%e, %e]' %
+            logger.perf('\t grad before processing in range [%e, %e]' %
                         (min_dir, max_dir))
 
             processed_grad = await self._process_grad(grad, **kwargs)
@@ -109,9 +109,9 @@ class LocalOptimiser(ABC):
         min_var = np.min(self.variable.extended_data)
         max_var = np.max(self.variable.extended_data)
 
-        logger.info('\t grad after processing in range [%e, %e]' %
+        logger.perf('\t grad after processing in range [%e, %e]' %
                     (min_dir, max_dir))
-        logger.info('\t variable range before update [%e, %e]' %
+        logger.perf('\t variable range before update [%e, %e]' %
                     (min_var, max_var))
 
         return processed_grad
@@ -134,7 +134,7 @@ class LocalOptimiser(ABC):
         max_var = np.max(self.variable.extended_data)
 
         logger = mosaic.logger()
-        logger.info('\t variable range after update [%e, %e]' %
+        logger.perf('\t variable range after update [%e, %e]' %
                     (min_var, max_var))
 
         self.variable.release_grad()

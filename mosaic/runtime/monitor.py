@@ -163,6 +163,7 @@ class Monitor(Runtime):
 
         self._nodes[node_proxy.uid] = node_proxy
         await self._comms.wait_for(node_proxy.uid)
+
         while node_proxy.uid not in self._monitored_nodes:
             await asyncio.sleep(0.1)
 
@@ -230,8 +231,10 @@ class Monitor(Runtime):
 
             async def wait_for(proxy):
                 await self._comms.wait_for(proxy.uid)
-                while node_proxy.uid not in self._monitored_nodes:
+
+                while proxy.uid not in self._monitored_nodes:
                     await asyncio.sleep(0.1)
+
                 return proxy
 
             tasks.append(wait_for(node_proxy))
@@ -437,10 +440,11 @@ class Monitor(Runtime):
                 continue
 
             pending_tasks.append(task)
+        self.logger.info('Pending barrier tasks %d' % len(pending_tasks))
 
         tic = time.time()
         while pending_tasks:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
 
             for task in pending_tasks:
                 if task.state in ['done', 'failed', 'collected']:
