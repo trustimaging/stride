@@ -31,10 +31,10 @@ jobs:
         path: stride
 
     - name: Checkout devito
-        uses: actions/checkout@v2
-        with:
-          repository: devitocodes/devito
-          path: devito
+      uses: actions/checkout@v2
+      with:
+        repository: devitocodes/devito
+        path: devito
 
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
