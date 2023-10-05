@@ -271,7 +271,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         diff_source = kwargs.pop('diff_source', False)
         save_compression = kwargs.get('save_compression',
                                       'bitcomp' if self.space.dim > 2 else None)
-        save_compression = None
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
