@@ -217,6 +217,9 @@ class Time:
     """
 
     def __init__(self, start=None, step=None, num=None, stop=None):
+        self._set_properties(start, step, num, stop)
+
+    def _set_properties(self, start=None, step=None, num=None, stop=None):
         try:
             if start is None:
                 start = stop - step*(num - 1)
@@ -250,8 +253,44 @@ class Time:
         self.extended_stop = self.stop + (self.extra[1] - 1)*self.step
         self.extended_num = self.num + self.extra[0] + self.extra[1]
 
-    def resample(self):
-        raise NotImplementedError('Resampling has not been implemented yet')
+    def resample(self, new_step, new_num):
+        """
+        Resample a trace.
+
+        Parameters
+        ----------
+        new_step : float
+            The time spacing for the interpolated grid
+        new_num : int
+            The number of time-points, default is calculated to match input pulse
+            length in [s]
+
+        Returns
+        -------
+        """
+
+        dt_in = self.step  # Extract current parameters
+        start = self.start
+        stop = self.stop
+        num = self.num
+
+        new_start = 0.  # Calculate new parameters
+
+        interp_num = int((num)*(dt_in/new_step))
+        interp_stop = new_start + new_step*(interp_num - 1)
+
+        if new_num is not None:  # Do we need to pad the array or not?
+            new_stop = new_start + new_step*(new_num - 1)
+        else:
+            new_num = interp_num
+            new_stop = interp_stop
+
+        self._set_properties(start=new_start, step=new_step, num=new_num)  # Update time
+        try:
+            del self.__dict__['grid']
+            del self.__dict__['extended_grid']
+        except:
+            pass
 
     @property
     def inner(self):

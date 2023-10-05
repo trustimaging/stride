@@ -43,3 +43,4 @@ dependencies:
       - python-daemon
       - py-libnuma
       - tblib
+      - resampy

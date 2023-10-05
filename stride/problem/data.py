@@ -4,6 +4,7 @@ import functools
 import numpy as np
 import scipy.ndimage
 import scipy.interpolate
+import resampy
 
 try:
     import matplotlib.pyplot as plt
@@ -1499,6 +1500,18 @@ class Traces(StructuredData):
             plotting.show(axis)
 
         return axis
+
+    def _resample(self, factor, new_num, **kwargs):
+        sr_orig = 1
+        sr_new = factor
+
+        if self.allocated:
+            data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
+            new_traces = Traces(name=self.name, grid=self.grid, data=data)
+        else:
+            new_traces = Traces(name=self.name, grid=self.grid)
+
+        return new_traces
 
     def __get_desc__(self, **kwargs):
         description = super().__get_desc__(**kwargs)
