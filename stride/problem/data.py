@@ -1506,7 +1506,9 @@ class Traces(StructuredData):
         sr_new = factor
 
         if self.allocated:
-            data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
+            # TODO anti-aliasing filter
+            data = resampy.resample(self.data, sr_orig, sr_new, axis=1, parallel=True)  # resample
+            # TODO low-pass filter data
             new_traces = Traces(name=self.name, grid=self.grid, data=data)
         else:
             new_traces = Traces(name=self.name, grid=self.grid)

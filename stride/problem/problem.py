@@ -111,7 +111,7 @@ class Problem(Gridded):
                 if getattr(problem_property, grid_property) is None:
                     setattr(problem_property._grid, grid_property, getattr(self, grid_property))
 
-    def time_resample(self, new_step, new_num=None, **kwargs):
+    def time_resample(self, new_step, f_max, new_num=None, **kwargs):
         '''
         In-place operatin to resample the wavelets and data into a grid with new
         time-spacing. Sinc interpolation is used.
@@ -119,10 +119,12 @@ class Problem(Gridded):
         Parameters
         ----------
         new_step : float
-            The time spacing for the interpolated grid
+            The time spacing for the interpolated grid.
+        freq_max : float
+            The maximum frequency that will be simulated.
         new_num : int, optional
             The number of time-points, default is calculated to match input pulse
-            length in [s]
+            length in [s].
 
         Returns
         -------
@@ -132,9 +134,21 @@ class Problem(Gridded):
         old_num = self.time.num
         self.grid.time.resample(new_step=new_step, new_num=new_num)
 
-        for shot in self.acquisitions.shots:
-            shot.wavelets = shot.wavelets._resample(factor=old_step/new_step, new_num=new_num)  # resample wavelet
-            shot.observed = shot.observed._resample(factor=old_step/new_step, new_num=new_num)  # resample observed
+        freq_niquist = max(1/old_step, 1/new_step)  # anti-aliasing filter using max sampling frequency
+
+        for shot in self.acquisitions.shots:  # TODO, implement low-pass filtering with freq_max as pass band
+
+            shot.wavelets = shot.wavelets._resample(  # resample wavelet
+                                factor=old_step/new_step,
+                                new_num=new_num,
+                                freq_niquist=freq_niquist,
+                                freq_max=freq_max)
+
+            shot.observed = shot.observed._resample(  # resample observed
+                                factor=old_step/new_step,
+                                new_num=new_num,
+                                freq_niquist=freq_niquist,
+                                freq_max=freq_max)
 
     def dump(self, *args, **kwargs):
         """
