@@ -111,6 +111,31 @@ class Problem(Gridded):
                 if getattr(problem_property, grid_property) is None:
                     setattr(problem_property._grid, grid_property, getattr(self, grid_property))
 
+    def time_resample(self, new_step, new_num=None, **kwargs):
+        '''
+        In-place operatin to resample the wavelets and data into a grid with new
+        time-spacing. Sinc interpolation is used.
+
+        Parameters
+        ----------
+        new_step : float
+            The time spacing for the interpolated grid
+        new_num : int, optional
+            The number of time-points, default is calculated to match input pulse
+            length in [s]
+
+        Returns
+        -------
+        '''
+
+        old_step = self.time.step
+        old_num = self.time.num
+        self.grid.time.resample(new_step=new_step, new_num=new_num)
+
+        for shot in self.acquisitions.shots:
+            shot.wavelets = shot.wavelets._resample(factor=old_step/new_step, new_num=new_num)  # resample wavelet
+            shot.observed = shot.observed._resample(factor=old_step/new_step, new_num=new_num)  # resample observed
+
     def dump(self, *args, **kwargs):
         """
         Dump all elements in the Problem.
