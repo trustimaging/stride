@@ -336,7 +336,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         else:
             # If the wavefield is lazily streamed, re-create every time
-            if save_wavefield and 'nvidia' in platform and devito.pro_available:
+            if 'nvidia' in platform and devito.pro_available:
                 self.dev_grid.undersampled_time_function('p_saved',
                                                          bounds=kwargs.pop('save_bounds', None),
                                                          factor=self.undersampling_factor,
