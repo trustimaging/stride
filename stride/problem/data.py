@@ -1502,7 +1502,7 @@ class Traces(StructuredData):
 
         return axis
 
-    def _resample(self, factor, new_num, freq_niquist, freq_max, **kwargs):
+    def _resample(self, factor, new_num, freq_niquist, freq_max, mute_start=None, **kwargs):
         filter_type = kwargs.pop('filter_type', 'cos')
 
         sr_orig = 1
@@ -1516,23 +1516,29 @@ class Traces(StructuredData):
             if method is None:
                 raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
 
-            # Run anti-aliasing filter
+            # Detect starting mute
+            processed_data = self.data
+            if mute_start is None: # detect
+                _, mute_idx = np.where(processed_data==0)
+                mute_start = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
 
+            mute_start = int(np.ceil((mute_start/sr_orig) * sr_new))  # adjust for new sampleing rate
+
+            # Run anti-aliasing filter
             if freq_niquist != 1.0:
-                filtered = method(self.data, f_max=freq_niquist, zero_phase=True, **kwargs)
-            else:
-                filtered = self.data
+                processed_data = method(processed_data, f_max=freq_niquist, zero_phase=True, **kwargs)
 
             # Resample
-            filtered = resampy.resample(filtered, sr_orig, sr_new, axis=1, parallel=True)
+            processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)
 
-            # Run low-pass filter
-            filtered = method(filtered, f_max=freq_max, zero_phase=True, **kwargs)
-
-            # TODO implement hann window for muted data
+            # Hann window
+            processed_data[:, mute_start] = 0
+            method_name = 'lowpass_filter_hann'
+            method = getattr(filters, method_name, None)
+            processed_data = method(processed_data, 10)  # NOTE, not sure how wide hann should be
 
             # Fill object
-            new_traces = Traces(name=self.name, grid=self.grid, data=filtered)
+            new_traces = Traces(name=self.name, grid=self.grid, data=processed_data)
 
         else:
             new_traces = Traces(name=self.name, grid=self.grid)

@@ -112,6 +112,7 @@ def lowpass_filter_butterworth(data, f_max, padding=0, order=8,
     if adjoint:
         data = np.flip(data, axis=axis)
 
+    import IPython.terminal.debugger as ipdb; ipdb.set_trace()
     filtered = method(sos, data, axis=axis)
 
     if adjoint:
@@ -166,6 +167,57 @@ def highpass_filter_butterworth(data, f_min, padding=0, order=8,
         data = np.flip(data, axis=axis)
 
     filtered = method(sos, data, axis=axis)
+
+    if adjoint:
+        filtered = np.flip(filtered, axis=axis)
+
+    return filtered
+
+
+def lowpass_filter_hann(data, width, padding=0,
+                        zero_phase=True, adjoint=False, axis=-1, **kwargs):
+    """
+    Apply a Butterworth lowpass filter using cascaded second-order sections.
+
+    Parameters
+    ----------
+    data : 2-dimensional array
+        Data to apply the filter to, with shape (number_of_traces, number_of_timesteps)
+    width : int
+        Width of the Hann window
+    padding : int, optional
+        Padding to apply before AND after the traces to compensate for the filtering, defaults to 0.
+    order : int, optional
+        Order of the filter, defaults to 8.
+    zero_phase : bool, optional
+        Whether the filter should be zero phase, defaults to True.
+    adjoint : bool, optional
+        Whether to run the adjoint of the filter, defaults to False.
+    axis : int, optional
+        Axis on which to perform the filtering, defaults to -1
+
+    Returns
+    -------
+    n-dimensional array
+        Data after filtering, with shape (..., number_of_timesteps+2*padding)
+
+    """
+    if padding > 0:
+        pad = [(0, 0)] * data.ndim
+        pad[axis] = (padding, padding)
+        data = np.pad(data, pad, mode='constant', constant_values=0.)
+
+    win = scipy.signal.hann(width, sym=True)
+
+    if zero_phase:
+        method = scipy.signal.filtfilt
+    else:
+        method = scipy.signal.lfilter
+
+    if adjoint:
+        data = np.flip(data, axis=axis)
+
+    filtered = method(win, 1., data, axis=axis)
 
     if adjoint:
         filtered = np.flip(filtered, axis=axis)
