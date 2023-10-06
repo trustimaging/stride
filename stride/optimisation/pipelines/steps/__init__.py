@@ -8,6 +8,7 @@ from .smooth_field import SmoothField
 from .mask import Mask
 from .mute_traces import MuteTraces
 from .clip import Clip
+from .check_traces import CheckTraces
 
 
 steps_registry = {
@@ -17,7 +18,8 @@ steps_registry = {
     'norm_per_trace': NormPerTrace,
     'norm_field': NormField,
     'smooth_field': SmoothField,
-    'mask' : Mask,
+    'mask': Mask,
     'mute_traces': MuteTraces,
     'clip': Clip,
+    'check_traces': CheckTraces,
 }

@@ -24,6 +24,9 @@ class ProcessWavelets(Pipeline):
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
 
+        if kwargs.pop('check_traces', True):
+            steps.append('check_traces')
+
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
 
@@ -42,6 +45,9 @@ class ProcessTraces(Pipeline):
 
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
+
+        if kwargs.pop('check_traces', True):
+            steps.append('check_traces')
 
         if kwargs.pop('filter_offsets', False):
             steps.append(('filter_offsets', False))  # do not raise if not present
