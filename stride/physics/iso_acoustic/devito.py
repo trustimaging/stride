@@ -269,10 +269,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         platform = kwargs.get('platform', 'cpu')
         diff_source = kwargs.pop('diff_source', False)
-        if platform and ('nvidia' in platform) and devito.pro_available and (self.space.dim > 2):
-            save_compression = kwargs.get('save_compression', 'bitcomp')
-        else:
-            save_compression = None
+        save_compression = kwargs.get('save_compression',
+                                      'bitcomp' if self.space.dim > 2 else None)
+        save_compression = save_compression if platform and 'nvidia' in platform and devito.pro_available else None
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
@@ -305,7 +304,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             # Define the saving of the wavefield
             if save_wavefield is True:
-                layers = devito.HostDevice if (platform and ('nvidia' in platform)) else devito.NoLayers
+                layers = devito.HostDevice if platform and 'nvidia' in platform else devito.NoLayers
                 p_saved = self.dev_grid.undersampled_time_function('p_saved',
                                                                    bounds=kwargs.pop('save_bounds', None),
                                                                    factor=self.undersampling_factor,
@@ -337,7 +336,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         else:
             # If the wavefield is lazily streamed, re-create every time
-            if platform and ('nvidia' in platform) and devito.pro_available:
+            if platform and 'nvidia' in platform and devito.pro_available:
                 self.dev_grid.undersampled_time_function('p_saved',
                                                          bounds=kwargs.pop('save_bounds', None),
                                                          factor=self.undersampling_factor,
