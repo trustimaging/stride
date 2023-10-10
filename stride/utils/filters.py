@@ -174,10 +174,10 @@ def highpass_filter_butterworth(data, f_min, padding=0, order=8,
     return filtered
 
 
-def lowpass_filter_hann(data, width, padding=0,
+def lowpass_filter_hann(data, order, freq_max, padding=0,
                         zero_phase=True, adjoint=False, axis=-1, **kwargs):
     """
-    Apply a Butterworth lowpass filter using cascaded second-order sections.
+    Apply a Hann lowpass filter using cascaded second-order sections.
 
     Parameters
     ----------
@@ -207,7 +207,9 @@ def lowpass_filter_hann(data, width, padding=0,
         pad[axis] = (padding, padding)
         data = np.pad(data, pad, mode='constant', constant_values=0.)
 
-    win = scipy.signal.hann(width, sym=True)
+    # win = scipy.signal.hann(width, sym=True)
+    win = scipy.signal.firwin(order, freq_max, pass_zero='lowpass', window='hann', scale=True)
+    # filt = scipy.signal.firwin(order, [f_min, f_max], pass_zero='bandpass', window=('kaiser', beta), scale=True)
 
     if zero_phase:
         method = scipy.signal.filtfilt

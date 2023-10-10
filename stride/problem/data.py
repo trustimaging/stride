@@ -1508,34 +1508,40 @@ class Traces(StructuredData):
         sr_orig = 1
         sr_new = factor
 
+        # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
         if self.allocated:
-
-            # Select filter
-            method_name = 'lowpass_filter_%s' % (filter_type)
-            method = getattr(filters, method_name, None)
-            if method is None:
-                raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
 
             # Detect starting mute
             processed_data = self.data
             if mute_start is None: # detect
                 _, mute_idx = np.where(processed_data==0)
-                mute_start = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
+                mute_start_old = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
+            else:
+                mute_start_old = mute_start
 
-            mute_start = int(np.ceil((mute_start/sr_orig) * sr_new))  # adjust for new sampleing rate
+            mute_start_new = int(np.ceil((mute_start_old/sr_orig) * sr_new))  # adjust for new sampling rate
+
+            # Select anit-aliasing filter
+            method_name = 'lowpass_filter_%s' % (filter_type)
+            method = getattr(filters, method_name, None)
+            if method is None:
+                raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
 
             # Run anti-aliasing filter
             if freq_niquist != 1.0:
                 processed_data = method(processed_data, f_max=freq_niquist, zero_phase=True, **kwargs)
 
-            # Resample
-            processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)
-
-            # Hann window
-            processed_data[:, mute_start] = 0
+            # Mute (pre-resample) & Hann window
+            processed_data[:, mute_start_old] = 0
             method_name = 'lowpass_filter_hann'
             method = getattr(filters, method_name, None)
-            processed_data = method(processed_data, 10)  # NOTE, not sure how wide hann should be
+            processed_data = method(processed_data, order=8, freq_max=0.5)  # NOTE, not sure parameters for hann filter
+
+            # Resample
+            processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)
+            
+            # Mute (post-resample) & Hann window
+            processed_data = method(processed_data, order=8, freq_max=0.5)  # NOTE, not sure parameters for hann filter
 
             # Fill object
             new_traces = Traces(name=self.name, grid=self.grid, data=processed_data)
