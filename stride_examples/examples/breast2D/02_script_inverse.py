@@ -77,7 +77,7 @@ async def main(runtime):
                       select_shots=dict(num=16, randomly=True),
                       f_min=0.05e6, f_max=freq)
 
-    vp.plot()
+        vp.plot()
 
 if __name__ == '__main__':
     mosaic.run(main)

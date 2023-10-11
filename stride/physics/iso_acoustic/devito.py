@@ -335,15 +335,6 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.state_operator.compile()
 
         else:
-            # If the wavefield is lazily streamed, re-create every time
-            if 'nvidia' in platform and devito.pro_available:
-                self.dev_grid.undersampled_time_function('p_saved',
-                                                         bounds=kwargs.pop('save_bounds', None),
-                                                         factor=self.undersampling_factor,
-                                                         layers=devito.HostDevice,
-                                                         compression=save_compression,
-                                                         cached=False)
-
             # If the source/receiver size has changed, then create new functions for them
             if num_sources != self.dev_grid.vars.src.npoint:
                 self.dev_grid.sparse_time_function('src', num=num_sources, cached=False)
@@ -422,7 +413,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         devito_args = kwargs.get('devito_args', {})
 
         if 'p_saved' in self.dev_grid.vars:
-            functions['p_saved'] = self.dev_grid.vars.p_saved
+            if 'nvidia' in platform:
+                self._wavefield = self.dev_grid.func('p_saved')
+            else:
+                self._wavefield = self.dev_grid.vars.p_saved
+            functions['p_saved'] = self._wavefield
 
             if 'nbits_compression' in kwargs or 'nbits' in devito_args:
                 devito_args['nbits'] = kwargs.get('nbits_compression',
@@ -467,8 +462,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                 save_wavefield |= alpha.needs_grad
 
         if save_wavefield:
-            self._wavefield = self.dev_grid.vars.p_saved
-
             if os.environ.get('STRIDE_DUMP_WAVEFIELD', None) == 'yes':
                 self.wavefield.dump(path=problem.output_folder,
                                     project_name=problem.name)
@@ -686,7 +679,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         functions = dict(
             vp=self.dev_grid.vars.vp,
             rec=self.dev_grid.vars.rec,
-            p_saved=self.dev_grid.vars.p_saved,
+            p_saved=self._wavefield,
         )
 
         devito_args = kwargs.get('devito_args', {})

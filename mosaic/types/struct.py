@@ -93,6 +93,9 @@ class Struct:
     def __getitem__(self, item):
         return self._get(item)
 
+    def __delitem__(self, item):
+        self.__dict__['_content'].__delitem__(item)
+
     def get(self, item, default=None):
         """
         Returns an item from the Struct or a default value if it is not found.

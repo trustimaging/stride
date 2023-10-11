@@ -139,7 +139,7 @@ def _cached(func):
         if cached is True:
             fun = self.vars.get(name, None)
             if fun is not None:
-                _args, _kwargs = self._args[name]
+                _args, _kwargs = self.cached_args[name]
 
                 same_args = True
                 for arg, _arg in zip(args, _args):
@@ -156,11 +156,16 @@ def _cached(func):
 
                 if same_args:
                     return fun
+        else:
+            self.vars.pop(name, None)
+            self.cached_funcs.pop(name, None)
+            self.cached_args.pop(name, None)
 
         fun = func(self, *args, **kwargs)
 
         self.vars[name] = fun
-        self._args[name] = (args, kwargs)
+        self.cached_funcs[name] = func
+        self.cached_args[name] = (args, kwargs)
 
         return fun
 
@@ -196,7 +201,8 @@ class GridDevito(Gridded):
         super().__init__(**kwargs)
 
         self.vars = Struct()
-        self._args = Struct()
+        self.cached_args = Struct()
+        self.cached_funcs = Struct()
 
         self.space_order = space_order
         self.time_order = time_order
@@ -628,6 +634,31 @@ class GridDevito(Gridded):
 
         return fun
 
+    def func(self, name, cache=False):
+        """
+        Re-instantiate devito function, if ``name`` is cached.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        cache : bool, optional
+            Whether to cache the result of the func call, defaults to ``False``.
+
+        Returns
+        -------
+
+        """
+        func = self.cached_funcs[name]
+        args, kwargs = self.cached_args[name]
+
+        fun = func(self, *args, **kwargs)
+
+        if cache:
+            self.vars[name] = fun
+
+        return fun
+
     def deallocate(self, name, collect=False):
         """
         Remove internal references to data buffers, if ``name`` is cached.
@@ -654,6 +685,29 @@ class GridDevito(Gridded):
 
             if collect:
                 gc.collect()
+
+    def delete(self, name, collect=False):
+        """
+        Remove internal references to devito function, if ``name`` is cached.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        collect : bool, optional
+            Whether to garbage collect after deallocate, defaults to ``False``.
+
+        Returns
+        -------
+
+        """
+        if name in self.vars:
+            del self.vars[name]
+            del self.cached_funcs[name]
+            del self.cached_args[name]
+
+            if collect:
+                devito.clear_cache(force=True)
 
     def with_halo(self, data, value=None, time_dependent=False, is_vector=False):
         """
