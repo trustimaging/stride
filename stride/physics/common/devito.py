@@ -893,6 +893,7 @@ class OperatorDevito:
             if arg.name in self.grid.vars:
                 default_kwargs[arg.name] = self.grid.vars[arg.name]
 
+        autotune = kwargs.pop('autotune', None)
         default_kwargs.update(kwargs)
 
         if self.grid.time_dim:
@@ -916,6 +917,11 @@ class OperatorDevito:
                 runtime_kwargs[key] = value
 
         with devito.switchconfig(**self.devito_context, **runtime_context):
+            if autotune is None and 'autotuning' in self.devito_operator._state:
+                tuned = self.devito_operator._state['autotuning'][-1]['tuned']
+                runtime_kwargs.update(tuned)
+                runtime_kwargs['autotune'] = 'off'
+
             self.devito_operator.apply(**runtime_kwargs)
 
 
