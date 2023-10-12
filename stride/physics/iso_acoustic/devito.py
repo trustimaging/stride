@@ -505,7 +505,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                         shutil.rmtree(self._cache_folder, ignore_errors=True)
                         raise
 
-                    del self._wavefield
                     self._wavefield = None
 
                 self.dev_grid.deallocate('p_saved')
@@ -617,21 +616,22 @@ class IsoAcousticDevito(ProblemTypeBase):
             slices = [slice(extra, -extra) for extra in self.space.extra]
             slices = (slice(0, None),) + tuple(slices)
 
+            wavefield = self.dev_grid.func('p_saved')
+
             if cache_location is None:
                 inner_wavefield = np.asarray([np.frombuffer(decompress(*each), dtype=np.float32)
                                               for each in self._wavefield])
                 inner_wavefield = inner_wavefield.reshape((inner_wavefield.shape[0],) + self.space.shape)
-                self.dev_grid.vars.p_saved.data[slices] = inner_wavefield
-
-                del self._wavefield
-                self._wavefield = None
+                wavefield.data[slices] = inner_wavefield
 
             else:
                 filename = os.path.join(self._cache_folder,
                                         '%s-%s-%05d.npy' % (problem.name, 'P', shot.id))
-                self.dev_grid.vars.p_saved.data[slices] = np.load(filename)
+                wavefield.data[slices] = np.load(filename)
 
                 os.remove(filename)
+
+            self._wavefield = wavefield
 
         # Set medium parameters
         vp_with_halo = self.dev_grid.with_halo(vp.extended_data)
@@ -770,17 +770,17 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                bounds=kwargs.pop('save_bounds', None),
                                                                deriv_order=2, fd_order=2)
 
-            p_dt2_fun = self.dev_grid.function('p_dt2')
+            p_dt2_fun = self.dev_grid.function('p_dt2', space_order=0)
             p_dt2_update = (devito.Eq(p_dt2_fun, p_dt2, subdomain=interior),)
         else:
             p_dt2 = p
             p_dt2_fun = p_dt2
             p_dt2_update = ()
 
-        grad = self.dev_grid.function('grad_vp')
+        grad = self.dev_grid.function('grad_vp', space_order=0)
         grad_update = devito.Inc(grad, p_dt2_fun * p_a, subdomain=interior)
 
-        prec = self.dev_grid.function('prec_vp')
+        prec = self.dev_grid.function('prec_vp', space_order=0)
         prec_update = devito.Inc(prec, p_dt2_fun * p_dt2_fun, subdomain=interior)
 
         return p_dt2_update + (grad_update, prec_update)
@@ -863,14 +863,16 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         grad_term = - devito.grad(buoy, shift=-0.5).dot(devito.grad(p, shift=-0.5)) \
                     - buoy * p.laplace
+        grad_rho_fun = self.dev_grid.function('grad_rho_fun', space_order=0)
+        grad_term_update = (devito.Eq(grad_rho_fun, grad_term, subdomain=interior),)
 
-        grad = self.dev_grid.function('grad_rho')
-        grad_update = devito.Inc(grad, grad_term * p_a, subdomain=interior)
+        grad = self.dev_grid.function('grad_rho', space_order=0)
+        grad_update = devito.Inc(grad, grad_rho_fun * p_a, subdomain=interior)
 
-        prec = self.dev_grid.function('prec_rho')
-        prec_update = devito.Inc(prec, grad_term * grad_term, subdomain=interior)
+        prec = self.dev_grid.function('prec_rho', space_order=0)
+        prec_update = devito.Inc(prec, grad_rho_fun * grad_rho_fun, subdomain=interior)
 
-        return grad_update, prec_update
+        return grad_term_update + (grad_update, prec_update)
 
     async def init_grad_rho(self, rho, **kwargs):
         """
@@ -1138,7 +1140,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             if rho_fun is not None:
                 extra_functions = (rho_fun, buoy_fun,)
 
-            subs = self._symbolic_coefficients(field, laplacian,
+            subs = self._symbolic_coefficients(field, laplacian, vp_fun,
                                                *extra_functions)
         else:
             subs = None
@@ -1221,7 +1223,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             'coefficients': 'symbolic' if self.drp else 'standard',
         }
 
-        vp_fun = self.dev_grid.function('vp', space_order=0, **_kwargs)
+        vp_fun = self.dev_grid.function('vp', **_kwargs)
         vp2_fun = vp_fun**2
         inv_vp2_fun = 1/vp_fun**2
 
@@ -1232,7 +1234,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             rho_fun = buoy_fun = None
 
         if alpha is not None:
-            alpha_fun = self.dev_grid.function('alpha', space_order=0, **_kwargs)
+            alpha_fun = self.dev_grid.function('alpha', **_kwargs)
         else:
             alpha_fun = None
 
