@@ -259,7 +259,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         num_sources = shot.num_points_sources
         num_receivers = shot.num_points_receivers
 
-        save_wavefield = kwargs.get('save_wavefield', False)
+        save_wavefield = kwargs.pop('save_wavefield', False)
         if save_wavefield is False:
             save_wavefield = vp.needs_grad
             if rho is not None:
