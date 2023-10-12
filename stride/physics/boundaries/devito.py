@@ -23,7 +23,7 @@ class SpongeBoundary1(Boundary):
         reflection_coefficient = kwargs.pop('reflection_coefficient', reflection_coefficient)
 
         if np.max(space.extra) > 0:
-            damp = self._grid.function('damp', space_order=0)
+            damp = self._grid.function('damp')
             damp.data[:] = self.damping(velocity=velocity, reflection_coefficient=reflection_coefficient, mask=True) * time.step
         else:
             damp = 0
