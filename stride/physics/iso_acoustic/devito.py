@@ -268,10 +268,12 @@ class IsoAcousticDevito(ProblemTypeBase):
                 save_wavefield |= alpha.needs_grad
 
         platform = kwargs.get('platform', 'cpu')
+        is_nvidia = platform is not None and 'nvidia' in platform
+
         diff_source = kwargs.pop('diff_source', False)
         save_compression = kwargs.get('save_compression',
                                       'bitcomp' if self.space.dim > 2 else None)
-        save_compression = save_compression if 'nvidia' in platform and devito.pro_available else None
+        save_compression = save_compression if is_nvidia and devito.pro_available else None
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
@@ -305,7 +307,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             # Define the saving of the wavefield
             if save_wavefield is True:
                 space_order = None if self._needs_grad(rho, alpha) else 0
-                layers = devito.HostDevice if 'nvidia' in platform else devito.NoLayers
+                layers = devito.HostDevice if is_nvidia else devito.NoLayers
                 p_saved = self.dev_grid.undersampled_time_function('p_saved',
                                                                    bounds=kwargs.pop('save_bounds', None),
                                                                    factor=self.undersampling_factor,
@@ -313,7 +315,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                    layers=layers,
                                                                    compression=save_compression)
 
-                if 'nvidia' not in platform:
+                if not is_nvidia:
                     self.logger.perf('(ShotID %d) Expected wavefield size %.4f GB' %
                                      (problem.shot_id,
                                       np.prod(p_saved.shape_allocated)*p_saved.dtype().itemsize/1024**3))
@@ -724,7 +726,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         platform = kwargs.get('platform', 'cpu')
         deallocate = kwargs.get('deallocate', False)
 
-        if 'nvidia' in platform or deallocate:
+        if platform and 'nvidia' in platform or deallocate:
             self._wavefield = None
             devito.clear_cache(force=True)
 
