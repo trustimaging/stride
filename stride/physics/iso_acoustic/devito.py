@@ -259,7 +259,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         num_sources = shot.num_points_sources
         num_receivers = shot.num_points_receivers
 
-        save_wavefield = kwargs.get('save_wavefield', False)
+        save_wavefield = kwargs.pop('save_wavefield', False)
         if save_wavefield is False:
             save_wavefield = vp.needs_grad
             if rho is not None:
@@ -267,7 +267,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             if alpha is not None:
                 save_wavefield |= alpha.needs_grad
 
-        platform = kwargs.get('platform', 'cpu')
+        platform = kwargs.pop('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
 
         diff_source = kwargs.pop('diff_source', False)
