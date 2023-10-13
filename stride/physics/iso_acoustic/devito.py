@@ -267,7 +267,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             if alpha is not None:
                 save_wavefield |= alpha.needs_grad
 
-        platform = kwargs.pop('platform', 'cpu')
+        platform = kwargs.get('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
 
         diff_source = kwargs.pop('diff_source', False)
