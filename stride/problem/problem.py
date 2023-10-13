@@ -137,13 +137,15 @@ class Problem(Gridded):
         for shot in self.acquisitions.shots:  # TODO, implement low-pass filtering with freq_max as pass band
 
             shot.wavelets = shot.wavelets._resample(  # resample wavelet
-                                factor=old_step/new_step,
+                                old_step=old_step,
+                                new_step=new_step,
                                 new_num=new_num,
                                 freq_niquist=freq_niquist_hz*old_step,  # Convert [Hz] to dimensionless frequency
                                 **kwargs)
 
             shot.observed = shot.observed._resample(  # resample observed
-                                factor=old_step/new_step,
+                                old_step=old_step,
+                                new_step=new_step,
                                 new_num=new_num,
                                 freq_niquist=freq_niquist_hz*old_step,
                                 **kwargs)
