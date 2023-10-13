@@ -1502,46 +1502,76 @@ class Traces(StructuredData):
 
         return axis
 
-    def _resample(self, factor, new_num, freq_niquist, freq_max, mute_start=None, **kwargs):
-        filter_type = kwargs.pop('filter_type', 'cos')
+    def _resample(self, factor, new_num, freq_niquist, len_hann=None, mute_start=None, **kwargs):
+        '''
+        In-place operation to resample a trace to a new time-spacing.
+        Sinc interpolation is used.
+
+        Parameters
+        ----------
+        factor
+            The ratio dt_old/dt_new.
+        new_num
+            The length of the trace. 
+        freq_niquist
+            min(fs_old, fs_new), where fs is the sampling frequency.
+        len_hann
+            The length of the Hann window applied around the edge of the mute.
+        mute_start, default: None
+            The length of the starting mute in num_samples.
+        filter_type_antialias, default: cos
+            The method used by the anti-aliasing filter. Options are butterworth, fir & cos.
+        filter_order_antialias, default: 8
+            The order of the anti-aliasing filter.
+
+        Returns
+        -------
+        '''
+
+        filter_type_antialias = kwargs.pop('filter_type_antialias', 'cos')
+        filter_order_antialias = kwargs.pop('filter_order_antialias', 2)
 
         sr_orig = 1
         sr_new = factor
 
-        # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
         if self.allocated:
 
             # Detect starting mute
             processed_data = self.data
-            if mute_start is None: # detect
-                _, mute_idx = np.where(processed_data==0)
-                mute_start_old = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
-            else:
-                mute_start_old = mute_start
+            # if mute_start is None: # detect
+            #     _, mute_idx = np.where(processed_data==0)
+            #     mute_start_old = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
+            # else:
+            #     mute_start_old = mute_start
 
-            mute_start_new = int(np.ceil((mute_start_old/sr_orig) * sr_new))  # adjust for new sampling rate
+            # mute_start_new = int(np.ceil((mute_start_old/sr_orig) * sr_new))  # adjust for new sampling rate
 
-            # Select anit-aliasing filter
-            method_name = 'lowpass_filter_%s' % (filter_type)
-            method = getattr(filters, method_name, None)
-            if method is None:
-                raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
+            # # Anit-aliasing filter
+            # method_name = 'lowpass_filter_%s' % (filter_type_antialias)  # select anti-aliasing filter
+            # method = getattr(filters, method_name, None)
 
-            # Run anti-aliasing filter
-            if freq_niquist != 1.0:
-                processed_data = method(processed_data, f_max=freq_niquist, zero_phase=True, **kwargs)
+            # if method is None:
+            #     raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
 
-            # Mute (pre-resample) & Hann window
-            processed_data[:, mute_start_old] = 0
-            method_name = 'lowpass_filter_hann'
-            method = getattr(filters, method_name, None)
-            processed_data = method(processed_data, order=8, freq_max=0.5)  # NOTE, not sure parameters for hann filter
+            # if freq_niquist != 1.0: # run anti-aliasing filter
+            #     processed_data = method(
+            #         processed_data,
+            #         f_max=freq_niquist,
+            #         zero_phase=True,
+            #         order=filter_order_antialias)
+            # # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
 
             # Resample
             processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)
             
             # Mute (post-resample) & Hann window
-            processed_data = method(processed_data, order=8, freq_max=0.5)  # NOTE, not sure parameters for hann filter
+            # processed_data[:, mute_start_new] = 0
+            # win = scipy.signal.hann(len_hann, sym=True)
+
+            # processed_data[:, mute_start_new] = 0  # multiply by Hann around mute
+
+            # method_name = 'lowpass_filter_hann'
+            # processed_data = method(processed_data, order=8, freq_max=0.5)  # NOTE, not sure parameters for hann filter
 
             # Fill object
             new_traces = Traces(name=self.name, grid=self.grid, data=processed_data)
