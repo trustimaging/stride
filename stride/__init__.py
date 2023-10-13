@@ -301,7 +301,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if dump:
             optimiser.variable.dump(path=problem.output_folder,
                                     project_name=problem.name,
-                                    version=iteration.abs_id)
+                                    version=iteration.abs_id+1)
 
         logger.perf('Done iteration %d (out of %d), '
                     'block %d (out of %d) - Total loss %e' %

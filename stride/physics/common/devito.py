@@ -134,12 +134,13 @@ def _cached(func):
     @functools.wraps(func)
     def cached_wrapper(self, *args, **kwargs):
         name = args[0]
-        cached = kwargs.pop('cached', True)
+        cached = kwargs.get('cached', True)
+        replace_cached = kwargs.get('replace_cached', True)
 
         if cached is True:
             fun = self.vars.get(name, None)
             if fun is not None:
-                _args, _kwargs = self._args[name]
+                _args, _kwargs = self.cached_args[name]
 
                 same_args = True
                 for arg, _arg in zip(args, _args):
@@ -157,10 +158,18 @@ def _cached(func):
                 if same_args:
                     return fun
 
+        elif replace_cached:
+            self.vars.pop(name, None)
+            self.cached_args.pop(name, None)
+
+        if name not in self.cached_funcs:
+            self.cached_funcs[name] = cached_wrapper
+
         fun = func(self, *args, **kwargs)
 
-        self.vars[name] = fun
-        self._args[name] = (args, kwargs)
+        if replace_cached:
+            self.vars[name] = fun
+            self.cached_args[name] = (args, kwargs)
 
         return fun
 
@@ -196,7 +205,8 @@ class GridDevito(Gridded):
         super().__init__(**kwargs)
 
         self.vars = Struct()
-        self._args = Struct()
+        self.cached_args = Struct()
+        self.cached_funcs = Struct()
 
         self.space_order = space_order
         self.time_order = time_order
@@ -286,7 +296,7 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        space_order = space_order or self.space_order
+        space_order = self.space_order if space_order is None else space_order
 
         fun = devito.Function(name=name,
                               grid=kwargs.pop('grid', self.devito_grid),
@@ -318,8 +328,8 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        space_order = space_order or self.space_order
-        time_order = time_order or self.time_order
+        space_order = self.space_order if space_order is None else space_order
+        time_order = self.time_order if time_order is None else time_order
 
         fun = devito.TimeFunction(name=name,
                                   grid=kwargs.pop('grid', self.devito_grid),
@@ -350,7 +360,7 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        space_order = space_order or self.space_order
+        space_order = self.space_order if space_order is None else space_order
 
         fun = devito.VectorFunction(name=name,
                                     grid=kwargs.pop('grid', self.devito_grid),
@@ -382,8 +392,8 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        space_order = space_order or self.space_order
-        time_order = time_order or self.time_order
+        space_order = self.space_order if space_order is None else space_order
+        time_order = self.time_order if time_order is None else time_order
 
         fun = devito.VectorTimeFunction(name=name,
                                         grid=kwargs.pop('grid', self.devito_grid),
@@ -416,8 +426,8 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        space_order = space_order or self.space_order
-        time_order = time_order or self.time_order
+        space_order = self.space_order if space_order is None else space_order
+        time_order = self.time_order if time_order is None else time_order
 
         fun = devito.TensorTimeFunction(name=name,
                                         grid=kwargs.pop('grid', self.devito_grid),
@@ -534,8 +544,8 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        space_order = space_order or self.space_order
-        time_order = time_order or self.time_order
+        space_order = self.space_order if space_order is None else space_order
+        time_order = self.time_order if time_order is None else time_order
 
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
@@ -597,7 +607,7 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        space_order = space_order or self.space_order
+        space_order = self.space_order if space_order is None else space_order
 
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
@@ -628,6 +638,26 @@ class GridDevito(Gridded):
 
         return fun
 
+    def func(self, name, cached=False):
+        """
+        Re-instantiate devito function, if ``name`` is cached.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        cached : bool, optional
+            Whether to cache the result of the func call, defaults to ``False``.
+
+        Returns
+        -------
+
+        """
+        func = self.cached_funcs[name]
+        args, kwargs = self.cached_args[name]
+        return func(self, *args, **kwargs,
+                    cached=cached, replace_cached=cached)
+
     def deallocate(self, name, collect=False):
         """
         Remove internal references to data buffers, if ``name`` is cached.
@@ -654,6 +684,29 @@ class GridDevito(Gridded):
 
             if collect:
                 gc.collect()
+
+    def delete(self, name, collect=False):
+        """
+        Remove internal references to devito function, if ``name`` is cached.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        collect : bool, optional
+            Whether to garbage collect after deallocate, defaults to ``False``.
+
+        Returns
+        -------
+
+        """
+        if name in self.vars:
+            del self.vars[name]
+            del self.cached_funcs[name]
+            del self.cached_args[name]
+
+            if collect:
+                devito.clear_cache(force=True)
 
     def with_halo(self, data, value=None, time_dependent=False, is_vector=False):
         """
@@ -839,6 +892,7 @@ class OperatorDevito:
             if arg.name in self.grid.vars:
                 default_kwargs[arg.name] = self.grid.vars[arg.name]
 
+        autotune = kwargs.pop('autotune', None)
         default_kwargs.update(kwargs)
 
         if self.grid.time_dim:
@@ -862,6 +916,14 @@ class OperatorDevito:
                 runtime_kwargs[key] = value
 
         with devito.switchconfig(**self.devito_context, **runtime_context):
+            if autotune is None:
+                try:
+                    tuned = self.devito_operator._state['autotuning'][-1]['tuned']
+                    runtime_kwargs.update(tuned)
+                    runtime_kwargs['autotune'] = 'off'
+                except KeyError:
+                    pass
+
             self.devito_operator.apply(**runtime_kwargs)
 
 

@@ -268,10 +268,12 @@ class IsoAcousticDevito(ProblemTypeBase):
                 save_wavefield |= alpha.needs_grad
 
         platform = kwargs.get('platform', 'cpu')
+        is_nvidia = platform is not None and 'nvidia' in platform
+
         diff_source = kwargs.pop('diff_source', False)
         save_compression = kwargs.get('save_compression',
                                       'bitcomp' if self.space.dim > 2 else None)
-        save_compression = save_compression if platform and 'nvidia' in platform and devito.pro_available else None
+        save_compression = save_compression if is_nvidia and devito.pro_available else None
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
@@ -304,12 +306,19 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             # Define the saving of the wavefield
             if save_wavefield is True:
-                layers = devito.HostDevice if platform and 'nvidia' in platform else devito.NoLayers
+                space_order = None if self._needs_grad(rho, alpha) else 0
+                layers = devito.HostDevice if is_nvidia else devito.NoLayers
                 p_saved = self.dev_grid.undersampled_time_function('p_saved',
                                                                    bounds=kwargs.pop('save_bounds', None),
                                                                    factor=self.undersampling_factor,
+                                                                   space_order=space_order,
                                                                    layers=layers,
                                                                    compression=save_compression)
+
+                if not is_nvidia:
+                    self.logger.perf('(ShotID %d) Expected wavefield size %.4f GB' %
+                                     (problem.shot_id,
+                                      np.prod(p_saved.shape_allocated)*p_saved.dtype().itemsize/1024**3))
 
                 if self._needs_grad(wavelets, rho, alpha):
                     p_saved_expr = p
@@ -335,15 +344,6 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.state_operator.compile()
 
         else:
-            # If the wavefield is lazily streamed, re-create every time
-            if platform and 'nvidia' in platform and devito.pro_available:
-                self.dev_grid.undersampled_time_function('p_saved',
-                                                         bounds=kwargs.pop('save_bounds', None),
-                                                         factor=self.undersampling_factor,
-                                                         layers=devito.HostDevice,
-                                                         compression=save_compression,
-                                                         cached=False)
-
             # If the source/receiver size has changed, then create new functions for them
             if num_sources != self.dev_grid.vars.src.npoint:
                 self.dev_grid.sparse_time_function('src', num=num_sources, cached=False)
@@ -418,11 +418,13 @@ class IsoAcousticDevito(ProblemTypeBase):
             rec=self.dev_grid.vars.rec,
         )
 
-        platform = kwargs.get('platform', 'cpu')
         devito_args = kwargs.get('devito_args', {})
 
         if 'p_saved' in self.dev_grid.vars:
-            functions['p_saved'] = self.dev_grid.vars.p_saved
+            if self._wavefield is None:
+                self._wavefield = self.dev_grid.func('p_saved')
+
+            functions['p_saved'] = self._wavefield
 
             if 'nbits_compression' in kwargs or 'nbits' in devito_args:
                 devito_args['nbits'] = kwargs.get('nbits_compression',
@@ -467,8 +469,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                 save_wavefield |= alpha.needs_grad
 
         if save_wavefield:
-            self._wavefield = self.dev_grid.vars.p_saved
-
             if os.environ.get('STRIDE_DUMP_WAVEFIELD', None) == 'yes':
                 self.wavefield.dump(path=problem.output_folder,
                                     project_name=problem.name)
@@ -507,7 +507,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                         shutil.rmtree(self._cache_folder, ignore_errors=True)
                         raise
 
-                    del self._wavefield
                     self._wavefield = None
 
                 self.dev_grid.deallocate('p_saved')
@@ -619,21 +618,22 @@ class IsoAcousticDevito(ProblemTypeBase):
             slices = [slice(extra, -extra) for extra in self.space.extra]
             slices = (slice(0, None),) + tuple(slices)
 
+            wavefield = self.dev_grid.func('p_saved')
+
             if cache_location is None:
                 inner_wavefield = np.asarray([np.frombuffer(decompress(*each), dtype=np.float32)
                                               for each in self._wavefield])
                 inner_wavefield = inner_wavefield.reshape((inner_wavefield.shape[0],) + self.space.shape)
-                self.dev_grid.vars.p_saved.data[slices] = inner_wavefield
-
-                del self._wavefield
-                self._wavefield = None
+                wavefield.data[slices] = inner_wavefield
 
             else:
                 filename = os.path.join(self._cache_folder,
                                         '%s-%s-%05d.npy' % (problem.name, 'P', shot.id))
-                self.dev_grid.vars.p_saved.data[slices] = np.load(filename)
+                wavefield.data[slices] = np.load(filename)
 
                 os.remove(filename)
+
+            self._wavefield = wavefield
 
         # Set medium parameters
         vp_with_halo = self.dev_grid.with_halo(vp.extended_data)
@@ -686,7 +686,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         functions = dict(
             vp=self.dev_grid.vars.vp,
             rec=self.dev_grid.vars.rec,
-            p_saved=self.dev_grid.vars.p_saved,
+            p_saved=self._wavefield,
         )
 
         devito_args = kwargs.get('devito_args', {})
@@ -723,9 +723,13 @@ class IsoAcousticDevito(ProblemTypeBase):
             Tuple with the gradients of the variables that need them
 
         """
-        self._wavefield = None
-
+        platform = kwargs.get('platform', 'cpu')
         deallocate = kwargs.get('deallocate', False)
+
+        if platform and 'nvidia' in platform or deallocate:
+            self._wavefield = None
+            devito.clear_cache(force=True)
+
         if deallocate:
             self.boundary.deallocate()
             self.dev_grid.deallocate('p_a')
@@ -768,17 +772,17 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                bounds=kwargs.pop('save_bounds', None),
                                                                deriv_order=2, fd_order=2)
 
-            p_dt2_fun = self.dev_grid.function('p_dt2')
+            p_dt2_fun = self.dev_grid.function('p_dt2', space_order=0)
             p_dt2_update = (devito.Eq(p_dt2_fun, p_dt2, subdomain=interior),)
         else:
             p_dt2 = p
             p_dt2_fun = p_dt2
             p_dt2_update = ()
 
-        grad = self.dev_grid.function('grad_vp')
+        grad = self.dev_grid.function('grad_vp', space_order=0)
         grad_update = devito.Inc(grad, p_dt2_fun * p_a, subdomain=interior)
 
-        prec = self.dev_grid.function('prec_vp')
+        prec = self.dev_grid.function('prec_vp', space_order=0)
         prec_update = devito.Inc(prec, p_dt2_fun * p_dt2_fun, subdomain=interior)
 
         return p_dt2_update + (grad_update, prec_update)
@@ -861,14 +865,16 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         grad_term = - devito.grad(buoy, shift=-0.5).dot(devito.grad(p, shift=-0.5)) \
                     - buoy * p.laplace
+        grad_rho_fun = self.dev_grid.function('grad_rho_fun', space_order=0)
+        grad_term_update = (devito.Eq(grad_rho_fun, grad_term, subdomain=interior),)
 
-        grad = self.dev_grid.function('grad_rho')
-        grad_update = devito.Inc(grad, grad_term * p_a, subdomain=interior)
+        grad = self.dev_grid.function('grad_rho', space_order=0)
+        grad_update = devito.Inc(grad, grad_rho_fun * p_a, subdomain=interior)
 
-        prec = self.dev_grid.function('prec_rho')
-        prec_update = devito.Inc(prec, grad_term * grad_term, subdomain=interior)
+        prec = self.dev_grid.function('prec_rho', space_order=0)
+        prec_update = devito.Inc(prec, grad_rho_fun * grad_rho_fun, subdomain=interior)
 
-        return grad_update, prec_update
+        return grad_term_update + (grad_update, prec_update)
 
     async def init_grad_rho(self, rho, **kwargs):
         """
@@ -1134,7 +1140,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         if self.drp:
             extra_functions = ()
             if rho_fun is not None:
-                extra_functions = (rho_fun,)
+                extra_functions = (rho_fun, buoy_fun,)
 
             subs = self._symbolic_coefficients(field, laplacian, vp_fun,
                                                *extra_functions)
@@ -1215,7 +1221,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         return sub_befores + eq_before + stencils + eq_after + sub_afters
 
     def _medium_functions(self, vp, rho=None, alpha=None, **kwargs):
-        _kwargs = dict(coefficients='symbolic' if self.drp else 'standard')
+        _kwargs = {
+            'coefficients': 'symbolic' if self.drp else 'standard',
+        }
 
         vp_fun = self.dev_grid.function('vp', **_kwargs)
         vp2_fun = vp_fun**2
