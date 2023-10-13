@@ -28,6 +28,8 @@ class FilterWavelets(Operator):
 
         self.filter_type = kwargs.pop('filter_type', None)
 
+        self.dilation = kwargs.pop('filter_wavelets_dilation', 0.25)
+
     def forward(self, wavelets, **kwargs):
         return self._apply(wavelets, **kwargs)
 
@@ -39,9 +41,10 @@ class FilterWavelets(Operator):
 
         f_min = kwargs.pop('f_min', self.f_min)
         f_max = kwargs.pop('f_max', self.f_max)
+        dilation = kwargs.pop('filter_wavelets_dilation', self.dilation)
 
-        f_min_dim_less = f_min*time.step if f_min is not None else 0
-        f_max_dim_less = f_max*time.step if f_max is not None else 0
+        f_min_dim_less = dilation*f_min*time.step if f_min is not None else 0
+        f_max_dim_less = 1/dilation*f_max*time.step if f_max is not None else 0
 
         out_wavelets = wavelets.alike(name='filtered_%s' % wavelets.name)
 

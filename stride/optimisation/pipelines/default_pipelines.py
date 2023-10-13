@@ -27,6 +27,8 @@ class ProcessWavelets(Pipeline):
         if kwargs.pop('check_traces', True):
             steps.append('check_traces')
 
+        steps.append('filter_wavelets')
+
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
 
