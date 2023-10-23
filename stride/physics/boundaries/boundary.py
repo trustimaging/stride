@@ -132,7 +132,7 @@ class Boundary(ABC):
                     val = dimension_coefficient * pos
 
                 else:
-                    raise ValueError('Allowed dumping type are (`sine`, `quadratic`)')
+                    raise ValueError('Allowed dumping type are (`sine`, `power`)')
 
                 # : slices
                 all_ind = [slice(0, d) for d in damp.shape]

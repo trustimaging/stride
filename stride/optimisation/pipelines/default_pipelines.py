@@ -4,7 +4,7 @@ import mosaic
 from .pipeline import Pipeline
 
 
-__all__ = ['ProcessWavelets', 'ProcessTraces',
+__all__ = ['ProcessWavelets', 'ProcessObserved', 'ProcessTraces',
            'ProcessGlobalGradient', 'ProcessModelIteration']
 
 # TODO Default configuration of pipelines should be better defined
@@ -17,7 +17,7 @@ class ProcessWavelets(Pipeline):
 
     **Default steps:**
 
-    - ``filter_wavelets``
+    - ``filter_traces``
 
     """
 
@@ -27,6 +27,24 @@ class ProcessWavelets(Pipeline):
         if kwargs.pop('check_traces', True):
             steps.append('check_traces')
 
+        steps.append('filter_traces')
+
+        super().__init__(steps, no_grad=no_grad, **kwargs)
+
+
+@mosaic.tessera
+class ProcessObserved(ProcessWavelets):
+    """
+    Default pipeline to process observed data before running the forward problem.
+
+    **Default steps:**
+
+    - ``filter_traces``
+
+    """
+
+    def __init__(self, steps=None, no_grad=False, **kwargs):
+        steps = steps or []
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
 

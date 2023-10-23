@@ -210,9 +210,16 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
+    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.25)
+    filter_traces_relaxation = kwargs.pop('filter_traces_relaxation', 0.75)
     process_wavelets = ProcessWavelets.remote(f_min=f_min, f_max=f_max,
+                                              filter_relaxation=filter_wavelets_relaxation,
+                                              len=runtime.num_workers, **kwargs)
+    process_observed = ProcessObserved.remote(f_min=f_min, f_max=f_max,
+                                              filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
+                                          filter_relaxation=filter_traces_relaxation,
                                           len=runtime.num_workers, **kwargs)
 
     platform = kwargs.get('platform', 'cpu')
@@ -274,22 +281,32 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 else:
                     raise ValueError('Unknown platform %s' % platform)
 
+            # pre-process wavelets and observed traces
             wavelets = process_wavelets(wavelets,
                                         problem=sub_problem, runtime=worker, **_kwargs)
             await wavelets.init_future
+            observed = process_observed(observed,
+                                        problem=sub_problem, runtime=worker, **_kwargs)
+            await observed.init_future
+
+            # run PDE
             modelled = pde(wavelets, *published_args,
                            problem=sub_problem, runtime=worker, **_kwargs)
             await modelled.init_future
 
+            # post-process modelled and observed traces
             traces = process_traces(modelled, observed,
                                     problem=sub_problem, runtime=worker, **_kwargs)
             await traces.init_future
+
+            # calculate loss
             fun = await loss(traces.outputs[0], traces.outputs[1],
                              problem=sub_problem, runtime=worker, **_kwargs).result()
 
             iteration.add_fun(fun)
             logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
 
+            # run adjoint
             await fun.adjoint(**_kwargs)
 
             logger.perf('Retrieved gradient for shot %d' % sub_problem.shot_id)

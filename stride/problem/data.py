@@ -339,7 +339,7 @@ class StructuredData(Data):
         """
         self.grad = None
 
-    def process_grad(self, prec_scale=1e-9, **kwargs):
+    def process_grad(self, prec_scale=0.15, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
@@ -355,21 +355,37 @@ class StructuredData(Data):
         if not self.needs_grad:
             return
 
-        grad = self.grad
-        prec = grad.prec
+        self.grad.apply_prec(prec_scale=prec_scale, **kwargs)
+        return self.grad
+
+    def apply_prec(self, prec_scale=0.15, prec=None, **kwargs):
+        """
+        Apply a pre-conditioner to the current field.
+
+        Parameters
+        ----------
+        prec_scale : float, optional
+            Condition scaling for the preconditioner.
+        prec : StructuredData, optional
+            Pre-conditioner to apply. Defaults to self.prec.
+
+        Returns
+        -------
+
+        """
+        prec = self.prec if prec is None else prec
 
         if prec is not None:
-            norm_prec = np.linalg.norm(prec.data)
+            prec_factor = np.sum(prec.data)
 
-            if norm_prec > 1e-31:
-                prec += prec_scale * norm_prec + 1e-31
-                prec /= np.max(np.abs(prec.data))
+            if prec_factor > 1e-31:
+                num_points = np.prod(prec.shape)
+                prec_factor = prec_scale * num_points / prec_factor
+                prec.data[:] = np.sqrt(prec.data * prec_factor + 1)
                 non_zero = np.abs(prec.data) > 0.
-                grad.data[non_zero] /= prec.data[non_zero]
+                self.data[non_zero] /= prec.data[non_zero]
 
-        self.grad = grad
-
-        return grad
+        return self
 
     def allocate(self):
         """
