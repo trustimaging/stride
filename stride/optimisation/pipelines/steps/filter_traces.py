@@ -17,6 +17,8 @@ class FilterTraces(Operator):
     filter_type : str, optional
         Type of filter to apply, from ``butterworth`` (default for band pass and high pass),
         ``fir``, or ``cos`` (default for low pass).
+    filter_relaxation : float, optional
+        Relaxation factor for the filter in range (0, 1], defaults to 1 (no dilation).
 
     """
 
@@ -28,7 +30,7 @@ class FilterTraces(Operator):
 
         self.filter_type = kwargs.pop('filter_type', None)
 
-        self.dilation = kwargs.pop('filter_traces_dilation', 0.75)
+        self.relaxation = kwargs.pop('filter_relaxation', 1.0)
 
         self._num_traces = None
 
@@ -65,10 +67,10 @@ class FilterTraces(Operator):
 
         f_min = kwargs.pop('f_min', self.f_min)
         f_max = kwargs.pop('f_max', self.f_max)
-        dilation = kwargs.pop('filter_traces_dilation', self.dilation)
+        relaxation = kwargs.pop('filter_relaxation', self.relaxation)
 
-        f_min_dim_less = dilation*f_min*time.step if f_min is not None else 0
-        f_max_dim_less = 1/dilation*f_max*time.step if f_max is not None else 0
+        f_min_dim_less = relaxation*f_min*time.step if f_min is not None else 0
+        f_max_dim_less = 1/relaxation*f_max*time.step if f_max is not None else 0
 
         out_traces = traces.alike(name='filtered_%s' % traces.name)
 

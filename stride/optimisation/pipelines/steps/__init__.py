@@ -1,5 +1,4 @@
 
-from .filter_wavelets import FilterWavelets
 from .filter_traces import FilterTraces
 from .norm_per_shot import NormPerShot
 from .norm_per_trace import NormPerTrace
@@ -12,7 +11,6 @@ from .check_traces import CheckTraces
 
 
 steps_registry = {
-    'filter_wavelets': FilterWavelets,
     'filter_traces': FilterTraces,
     'norm_per_shot': NormPerShot,
     'norm_per_trace': NormPerTrace,
