@@ -33,7 +33,7 @@ class Warehouse(Runtime):
         super().__init__(**kwargs)
 
     async def init(self, **kwargs):
-        if self.mode == 'cluster':
+        if self.mode == 'cluster' and not self.reuse_head:
             num_cpus = cpu_count()
 
             warehouse_cpus = max(1, min(int(num_cpus // 8), 8))

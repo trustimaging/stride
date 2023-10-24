@@ -96,7 +96,7 @@ class Monitor(Runtime):
         -------
 
         """
-        if self.mode == 'cluster':
+        if self.mode == 'cluster' and not self.reuse_head:
             num_cpus = cpu_count()
 
             monitor_cpus = max(1, min(int(num_cpus // 8), 8))
@@ -195,6 +195,7 @@ class Monitor(Runtime):
         ssh_flags = os.environ.get('SSH_FLAGS', '')
         ssh_commands = os.environ.get('SSH_COMMANDS', None)
         ssh_commands = ssh_commands + ';' if ssh_commands else ''
+        reuse_head = '--reuse-head' if self.reuse_head else '--free-head'
 
         in_slurm = os.environ.get('SLURM_NODELIST', None) is not None
 
@@ -207,7 +208,7 @@ class Monitor(Runtime):
                           f'mrun --node -i {node_index} '
                           f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
                           f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
-                          f'--cluster --{log_level}')
+                          f'--cluster --{log_level} {reuse_head}')
 
             if in_slurm:
                 cpu_mask = _cpu_mask(1, 1, num_cpus)

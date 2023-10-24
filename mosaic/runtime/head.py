@@ -36,7 +36,7 @@ class Head(Runtime):
         -------
 
         """
-        if self.mode == 'cluster':
+        if self.mode == 'cluster' and not self.reuse_head:
             num_cpus = cpu_count()
 
             monitor_cpus = max(1, min(int(num_cpus // 8), 8))
