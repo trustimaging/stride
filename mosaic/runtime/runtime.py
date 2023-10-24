@@ -144,6 +144,7 @@ class Runtime(BaseRPC):
         super().__init__(name=self.__class__.__name__.lower(), indices=runtime_indices)
 
         self.mode = kwargs.get('mode', 'local')
+        self.reuse_head = kwargs.get('reuse_head', False)
 
         self._comms = None
         self._head = None

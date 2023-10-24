@@ -43,6 +43,8 @@ from ..utils.logger import _stdout, _stderr
 # cluster options
 @click.option('--local/--cluster', '-l/-c', default=False, required=True, show_default=True,
               help='whether to run mosaic locally or in a cluster system')
+@click.option('--reuse-head/--free-head', '-rh/-fh', default=False, required=True, show_default=True,
+              help='whether to create workers in the head node')
 # log level
 @click.option('--perf', 'log_level', flag_value='perf', default='perf', show_default=True,
               help='set log level to PERF')
@@ -60,6 +62,7 @@ def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)
+    reuse_head = kwargs.get('reuse-head', False)
 
     if runtime_indices is not None:
         runtime_indices = tuple(runtime_indices.split(':'))
@@ -82,9 +85,9 @@ def go(cmd=None, **kwargs):
 
         host_name = get_hostname()
 
-        sge_nodes = clusters.sge.node_list(host_name)
-        pbs_nodes = clusters.pbs.node_list(host_name)
-        slurm_nodes = clusters.slurm.node_list(host_name)
+        sge_nodes = clusters.sge.node_list(host_name, reuse_head)
+        pbs_nodes = clusters.pbs.node_list(host_name, reuse_head)
+        slurm_nodes = clusters.slurm.node_list(host_name, reuse_head)
 
         if sge_nodes is not None:
             node_list = sge_nodes
@@ -111,6 +114,7 @@ def go(cmd=None, **kwargs):
         'num_workers': num_workers,
         'num_threads': num_threads,
         'mode': 'local' if local is True else 'cluster',
+        'reuse_head': reuse_head,
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,

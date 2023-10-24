@@ -7,13 +7,14 @@ from .hostlist import expand_hostlist
 __all__ = ['node_list', 'submission_script']
 
 
-def node_list(host_name):
+def node_list(host_name, reuse_head):
     """
     Attempt to find a node list for SLURM clusters.
 
     Parameters
     ----------
     host_name
+    reuse_head
 
     Returns
     -------
@@ -25,10 +26,11 @@ def node_list(host_name):
         return
 
     slurm_list = expand_hostlist(slurm_nodes)
-    try:
-        slurm_list.remove(host_name)
-    except ValueError:
-        slurm_list.remove(host_name.split('.')[0])
+    if not reuse_head:
+        try:
+            slurm_list.remove(host_name)
+        except ValueError:
+            slurm_list.remove(host_name.split('.')[0])
 
     return slurm_list
 

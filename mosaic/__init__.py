@@ -28,7 +28,7 @@ def init(runtime_type='head', runtime_indices=(),
          parent_id=None, parent_address=None, parent_port=None,
          monitor_address=None, monitor_port=None,
          num_workers=1, num_threads=None,
-         mode='local', monitor_strategy='round-robin',
+         mode='local', reuse_head=False, monitor_strategy='round-robin',
          log_level='perf', profile=False, node_list=None,
          asyncio_loop=None, wait=False,
          **kwargs):
@@ -64,6 +64,8 @@ def init(runtime_type='head', runtime_indices=(),
         available cores over ``num_workers``.
     mode : str, optional
         Mode of the runtime, defaults to ``local``.
+    reuse_head : bool, optional
+        Whether to set up workers in the head node, defaults to False.
     monitor_strategy : str, optional
         Strategy used by the monitor to allocate tessera, defaults to round robin.
     log_level : str, optional
@@ -93,6 +95,7 @@ def init(runtime_type='head', runtime_indices=(),
     runtime_config = {
         'runtime_indices': runtime_indices,
         'mode': mode,
+        'reuse_head': reuse_head,
         'monitor_strategy': monitor_strategy,
         'num_workers': num_workers,
         'num_threads': num_threads,
