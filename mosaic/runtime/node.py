@@ -48,13 +48,6 @@ class Node(Runtime):
         -------
 
         """
-        if self.mode == 'cluster':
-            num_cpus = cpu_count()
-
-            # Node process is pinned to first CPU
-            if num_cpus > 1:
-                psutil.Process().cpu_affinity([num_cpus-1])
-
         await super().init(**kwargs)
 
         # Start local workers
@@ -82,56 +75,58 @@ class Node(Runtime):
         num_threads = num_threads or num_cpus // num_workers
         self._num_threads = num_threads
 
+        if num_workers*num_threads > num_cpus:
+            raise ValueError('Requested number of CPUs per node (%d - num_workers*num_threads) '
+                             'is greater than the number of available CPUs (%d)' % (num_workers*num_threads, num_cpus))
+
+        # Find all available NUMA nodes and CPUs per node
+        try:
+            import numa
+            numa_available = numa.info.numa_available()
+        except Exception:
+            numa_available = False
+
+        if numa_available:
+            available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
+        else:
+            available_cpus = {worker_index: list(range(num_threads*worker_index,
+                                                       num_threads*(worker_index+1)))
+                              for worker_index in range(self._num_workers)}
+
+        # Eliminate cores corresponding to hyperthreading
+        for node_index, node_cpus in available_cpus.items():
+            node_cpus = [each for each in node_cpus if each < num_cpus]
+            available_cpus[node_index] = node_cpus
+
+        node_ids = list(available_cpus.keys())
+        num_nodes = len(available_cpus)
+        num_cpus_per_node = min([len(cpus) for cpus in available_cpus.values()])
+
+        # Distribute cores across workers
         worker_cpus = {}
-        if self.mode == 'cluster':
-            if num_workers*num_threads > num_cpus:
-                raise ValueError('Requested number of CPUs per node (%d - num_workers*num_threads) '
-                                 'is greater than the number of available CPUs (%d)' % (num_workers*num_threads, num_cpus))
+        worker_nodes = {}
+        if num_nodes >= self._num_workers:
+            nodes_per_worker = num_nodes // self._num_workers
+            for worker_index in range(self._num_workers):
+                node_s = worker_index*nodes_per_worker
+                node_e = min((worker_index+1)*nodes_per_worker, num_nodes)
+                worker_cpus[worker_index] = sum([available_cpus[node_index]
+                                                 for node_index in node_ids[node_s:node_e]], [])
+                worker_nodes[worker_index] = node_ids[node_s:node_e]
 
-            # Find all available NUMA nodes and CPUs per node
-            try:
-                import numa
-                numa_available = numa.info.numa_available()
-            except Exception:
-                numa_available = False
-
-            if numa_available:
-                available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
-            else:
-                available_cpus = {worker_index: list(range(num_threads*worker_index,
-                                                           num_threads*(worker_index+1)))
-                                  for worker_index in range(self._num_workers)}
-
-            # Eliminate cores corresponding to hyperthreading
+        else:
+            workers_per_node = self._num_workers // num_nodes
+            cpus_per_worker = num_cpus_per_node // workers_per_node
             for node_index, node_cpus in available_cpus.items():
-                node_cpus = [each for each in node_cpus if each < num_cpus]
-                available_cpus[node_index] = node_cpus
-
-            node_ids = list(available_cpus.keys())
-            num_nodes = len(available_cpus)
-            num_cpus_per_node = min([len(cpus) for cpus in available_cpus.values()])
-
-            # Distribute cores across workers
-            if num_nodes >= self._num_workers:
-                nodes_per_worker = num_nodes // self._num_workers
-                for worker_index in range(self._num_workers):
-                    node_s = worker_index*nodes_per_worker
-                    node_e = min((worker_index+1)*nodes_per_worker, num_nodes)
-                    worker_cpus[worker_index] = sum([available_cpus[node_index]
-                                                     for node_index in node_ids[node_s:node_e]], [])
-
-            else:
-                workers_per_node = self._num_workers // num_nodes
-                cpus_per_worker = num_cpus_per_node // workers_per_node
-                for node_index, node_cpus in available_cpus.items():
-                    worker_s = node_index*workers_per_node
-                    worker_e = min((node_index+1)*workers_per_node, self._num_workers)
-                    worker_chunk = {}
-                    for worker_index in range(worker_s, worker_e):
-                        cpu_s = worker_index*cpus_per_worker
-                        cpu_e = min((worker_index+1)*cpus_per_worker, len(node_cpus))
-                        worker_chunk[worker_index] = node_cpus[cpu_s:cpu_e]
-                    worker_cpus.update(worker_chunk)
+                worker_s = node_index*workers_per_node
+                worker_e = min((node_index+1)*workers_per_node, self._num_workers)
+                worker_chunk = {}
+                for worker_index in range(worker_s, worker_e):
+                    cpu_s = worker_index*cpus_per_worker
+                    cpu_e = min((worker_index+1)*cpus_per_worker, len(node_cpus))
+                    worker_chunk[worker_index] = node_cpus[cpu_s:cpu_e]
+                    worker_nodes[worker_index] = node_index
+                worker_cpus.update(worker_chunk)
 
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
@@ -147,7 +142,8 @@ class Node(Runtime):
             worker_proxy = RuntimeProxy(name='worker', indices=indices)
             worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
                                                          daemon=False,
-                                                         cpu_affinity=worker_cpus.get(worker_index, None))
+                                                         cpu_affinity=worker_cpus.get(worker_index, None),
+                                                         mem_affinity=worker_nodes.get(worker_index, None))
             worker_subprocess.start_process()
             worker_proxy.subprocess = worker_subprocess
 

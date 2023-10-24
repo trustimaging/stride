@@ -96,13 +96,6 @@ class Monitor(Runtime):
         -------
 
         """
-        if self.mode == 'cluster' and not self.reuse_head:
-            num_cpus = cpu_count()
-
-            monitor_cpus = max(1, min(int(num_cpus // 8), 8))
-            available_cpus = list(range(num_cpus))
-            psutil.Process().cpu_affinity(available_cpus[-monitor_cpus:])
-
         await super().init(**kwargs)
 
         # Start local cluster
