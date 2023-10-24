@@ -62,7 +62,7 @@ def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)
-    reuse_head = kwargs.get('reuse-head', False)
+    reuse_head = kwargs.get('reuse_head', False)
 
     if runtime_indices is not None:
         runtime_indices = tuple(runtime_indices.split(':'))
