@@ -125,7 +125,7 @@ class Node(Runtime):
                     cpu_s = worker_index*cpus_per_worker
                     cpu_e = min((worker_index+1)*cpus_per_worker, len(node_cpus))
                     worker_chunk[worker_index] = node_cpus[cpu_s:cpu_e]
-                    worker_nodes[worker_index] = node_index
+                    worker_nodes[worker_index] = [node_index]
                 worker_cpus.update(worker_chunk)
 
         # Initialise workers

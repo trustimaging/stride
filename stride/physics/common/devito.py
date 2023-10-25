@@ -854,6 +854,7 @@ class OperatorDevito:
                 'name': self.name,
                 'subs': subs,
                 'opt': 'advanced-fsg',
+                'autotuning': 'off',
                 'compiler': 'nvc',
                 'language': 'openacc',
                 'platform': 'nvidiaX',
