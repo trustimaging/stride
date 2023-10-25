@@ -252,8 +252,6 @@ class Subprocess:
                 # anyway - if, for example, the system is getting bogged down
                 # due to the running out of memory, exiting sooner rather than
                 # later might be needed to restore normal system function.
-                # If this is in appropriate for your use case, please file a
-                # bug.
                 os._exit(-1)
 
         thread = threading.Thread(target=monitor_parent)

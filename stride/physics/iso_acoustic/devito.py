@@ -269,11 +269,12 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         platform = kwargs.get('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
+        is_nvc = platform is not None and (is_nvidia or 'nvc' in platform)
 
         diff_source = kwargs.pop('diff_source', False)
         save_compression = kwargs.get('save_compression',
                                       'bitcomp' if self.space.dim > 2 else None)
-        save_compression = save_compression if is_nvidia and devito.pro_available else None
+        save_compression = save_compression if (is_nvidia or is_nvc) and devito.pro_available else None
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
@@ -315,7 +316,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                    layers=layers,
                                                                    compression=save_compression)
 
-                if not is_nvidia:
+                if not is_nvidia and save_compression is None:
                     self.logger.perf('(ShotID %d) Expected wavefield size %.4f GB' %
                                      (problem.shot_id,
                                       np.prod(p_saved.shape_allocated)*p_saved.dtype().itemsize/1024**3))
@@ -726,7 +727,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         platform = kwargs.get('platform', 'cpu')
         deallocate = kwargs.get('deallocate', False)
 
-        if platform and 'nvidia' in platform or deallocate:
+        if platform and 'nvidia' in platform \
+                or devito.pro_available and isinstance(self._wavefield, devito.CompressedTimeFunction) \
+                or deallocate:
             self._wavefield = None
             devito.clear_cache(force=True)
 

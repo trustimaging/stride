@@ -128,6 +128,7 @@ class Node(Runtime):
                     worker_nodes[worker_index] = node_index
                 worker_cpus.update(worker_chunk)
 
+        # Initialise workers
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
 
