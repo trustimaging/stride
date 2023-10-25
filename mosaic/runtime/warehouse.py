@@ -1,13 +1,11 @@
 
 import copy
-import psutil
 import asyncio
 
 from .runtime import Runtime
 from .utils import WarehouseObject
 from ..utils import LoggerManager
 from ..profile import global_profiler
-from ..utils.utils import cpu_count
 
 
 __all__ = ['Warehouse']

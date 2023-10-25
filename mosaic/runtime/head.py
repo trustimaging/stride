@@ -1,5 +1,4 @@
 
-import psutil
 import asyncio
 
 import mosaic
@@ -7,7 +6,6 @@ from .runtime import Runtime, RuntimeProxy
 from ..utils import LoggerManager
 from ..utils import subprocess
 from ..profile import profiler, global_profiler
-from ..utils.utils import cpu_count
 
 
 __all__ = ['Head']
