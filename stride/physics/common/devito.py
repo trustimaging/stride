@@ -833,14 +833,51 @@ class OperatorDevito:
                 'opt': 'advanced-fsg',
             }
 
-        elif platform == 'nvidia-acc':
+        elif platform == 'cpu-icc':
+            default_config = {
+                'name': self.name,
+                'subs': subs,
+                'opt': 'advanced-fsg',
+                'compiler': 'icc',
+            }
+
+        elif platform == 'cpu-nvc':
             default_config = {
                 'name': self.name,
                 'subs': subs,
                 'opt': 'advanced-fsg',
                 'compiler': 'nvc',
+            }
+
+        elif platform == 'nvidia-acc' or platform == 'nvidia-nvc':
+            default_config = {
+                'name': self.name,
+                'subs': subs,
+                'opt': 'advanced-fsg',
+                'autotuning': 'off',
+                'compiler': 'nvc',
                 'language': 'openacc',
                 'platform': 'nvidiaX',
+            }
+
+        elif platform == 'nvidia-cuda' and devito.pro_available:
+            default_config = {
+                'name': self.name,
+                'subs': subs,
+                'opt': 'advanced-fsg',
+                'compiler': 'cuda',
+                'language': 'cuda',
+                'platform': 'nvidiaX',
+            }
+
+        elif platform == 'amd-hip' and devito.pro_available:
+            default_config = {
+                'name': self.name,
+                'subs': subs,
+                'opt': 'advanced-fsg',
+                'compiler': 'hip',
+                'language': 'hip',
+                'platform': 'amdgpuX',
             }
 
         else:

@@ -5,13 +5,14 @@ import os
 __all__ = ['node_list', 'submission_script']
 
 
-def node_list(host_name):
+def node_list(host_name, reuse_head):
     """
     Attempt to find a node list for SGE clusters.
 
     Parameters
     ----------
     host_name
+    reuse_head
 
     Returns
     -------
@@ -29,7 +30,7 @@ def node_list(host_name):
         for line in lines:
             line = line.strip().split(' ')
 
-            if line[0] != host_name:
+            if line[0] != host_name or reuse_head:
                 sge_list.append(line[0])
 
     return sge_list

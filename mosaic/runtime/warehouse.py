@@ -1,13 +1,11 @@
 
 import copy
-import psutil
 import asyncio
 
 from .runtime import Runtime
 from .utils import WarehouseObject
 from ..utils import LoggerManager
 from ..profile import global_profiler
-from ..utils.utils import cpu_count
 
 
 __all__ = ['Warehouse']
@@ -33,13 +31,6 @@ class Warehouse(Runtime):
         super().__init__(**kwargs)
 
     async def init(self, **kwargs):
-        if self.mode == 'cluster':
-            num_cpus = cpu_count()
-
-            warehouse_cpus = max(1, min(int(num_cpus // 8), 8))
-            available_cpus = list(range(num_cpus))
-            psutil.Process().cpu_affinity(available_cpus[-2*warehouse_cpus:-warehouse_cpus])
-
         await super().init(**kwargs)
 
     def set_logger(self):

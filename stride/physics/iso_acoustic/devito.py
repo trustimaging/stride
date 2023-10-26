@@ -269,11 +269,12 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         platform = kwargs.get('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
+        is_nvc = platform is not None and (is_nvidia or 'nvc' in platform)
 
         diff_source = kwargs.pop('diff_source', False)
         save_compression = kwargs.get('save_compression',
                                       'bitcomp' if self.space.dim > 2 else None)
-        save_compression = save_compression if is_nvidia and devito.pro_available else None
+        save_compression = save_compression if (is_nvidia or is_nvc) and devito.pro_available else None
 
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
@@ -315,17 +316,20 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                    layers=layers,
                                                                    compression=save_compression)
 
-                if not is_nvidia:
+                try:
                     self.logger.perf('(ShotID %d) Expected wavefield size %.4f GB' %
                                      (problem.shot_id,
                                       np.prod(p_saved.shape_allocated)*p_saved.dtype().itemsize/1024**3))
+                except ValueError:
+                    # ValueError: Cannot access `shape_allocated` as unfinalized - so no size estimate
+                    pass
 
                 if self._needs_grad(wavelets, rho, alpha):
                     p_saved_expr = p
                 else:
                     p_saved_expr = p.dt2
                 abox, full, interior, boundary = self.subdomains
-                update_saved = [devito.Eq(p_saved, p_saved_expr, subdmomain=interior)]
+                update_saved = [devito.Eq(p_saved, p_saved_expr, subdomain=abox)]
                 devicecreate = (self.dev_grid.vars.p, self.dev_grid.vars.p_saved,)
 
             else:
@@ -726,7 +730,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         platform = kwargs.get('platform', 'cpu')
         deallocate = kwargs.get('deallocate', False)
 
-        if platform and 'nvidia' in platform or deallocate:
+        if platform and 'nvidia' in platform \
+                or devito.pro_available and isinstance(self._wavefield, devito.CompressedTimeFunction) \
+                or deallocate:
             self._wavefield = None
             devito.clear_cache(force=True)
 
@@ -765,6 +771,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         p_a = self.dev_grid.vars.p_a
 
         abox, full, interior, boundary = self.subdomains
+        subdomain = abox if self.adaptive_boxes else interior
 
         wavelets, _, rho, alpha = kwargs.get('wrt')
         if self._needs_grad(wavelets, rho, alpha):
@@ -773,17 +780,17 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                                deriv_order=2, fd_order=2)
 
             p_dt2_fun = self.dev_grid.function('p_dt2', space_order=0)
-            p_dt2_update = (devito.Eq(p_dt2_fun, p_dt2, subdomain=interior),)
+            p_dt2_update = (devito.Eq(p_dt2_fun, p_dt2, subdomain=subdomain),)
         else:
             p_dt2 = p
             p_dt2_fun = p_dt2
             p_dt2_update = ()
 
         grad = self.dev_grid.function('grad_vp', space_order=0)
-        grad_update = devito.Inc(grad, p_dt2_fun * p_a, subdomain=interior)
+        grad_update = devito.Inc(grad, p_dt2_fun * p_a, subdomain=subdomain)
 
         prec = self.dev_grid.function('prec_vp', space_order=0)
-        prec_update = devito.Inc(prec, p_dt2_fun * p_dt2_fun, subdomain=interior)
+        prec_update = devito.Inc(prec, p_dt2_fun * p_dt2_fun, subdomain=subdomain)
 
         return p_dt2_update + (grad_update, prec_update)
 
@@ -862,17 +869,18 @@ class IsoAcousticDevito(ProblemTypeBase):
         buoy = self.dev_grid.vars.buoy
 
         abox, full, interior, boundary = self.subdomains
+        subdomain = abox if self.adaptive_boxes else interior
 
         grad_term = - devito.grad(buoy, shift=-0.5).dot(devito.grad(p, shift=-0.5)) \
                     - buoy * p.laplace
         grad_rho_fun = self.dev_grid.function('grad_rho_fun', space_order=0)
-        grad_term_update = (devito.Eq(grad_rho_fun, grad_term, subdomain=interior),)
+        grad_term_update = (devito.Eq(grad_rho_fun, grad_term, subdomain=subdomain),)
 
         grad = self.dev_grid.function('grad_rho', space_order=0)
-        grad_update = devito.Inc(grad, grad_rho_fun * p_a, subdomain=interior)
+        grad_update = devito.Inc(grad, grad_rho_fun * p_a, subdomain=subdomain)
 
         prec = self.dev_grid.function('prec_rho', space_order=0)
-        prec_update = devito.Inc(prec, grad_rho_fun * grad_rho_fun, subdomain=interior)
+        prec_update = devito.Inc(prec, grad_rho_fun * grad_rho_fun, subdomain=subdomain)
 
         return grad_term_update + (grad_update, prec_update)
 

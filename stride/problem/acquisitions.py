@@ -611,7 +611,7 @@ class Sequence(ProblemBase):
 
         self._shots[frame] = item
 
-    def select_shot_ids(self, start=None, end=None, num=None, every=1, randomly=False):
+    def select_shot_ids(self, shot_ids=None, start=None, end=None, num=None, every=1, randomly=False):
         """
         Select a number of shots according to the rules given in the arguments to the method.
 
@@ -621,6 +621,8 @@ class Sequence(ProblemBase):
 
         Parameters
         ----------
+        shot_ids : list, optional
+            List of shot IDs to select from.
         start : int, optional
             Start of the slice, defaults to the first time step.
         end : int, optional
@@ -639,8 +641,8 @@ class Sequence(ProblemBase):
             List with selected shots.
 
         """
-
-        next_slice, selection = _select_slice(self._shot_selection, self.shot_starts,
+        shot_starts = self.shot_starts if shot_ids is None else shot_ids
+        next_slice, selection = _select_slice(self._shot_selection, shot_starts,
                                               start=start, end=end, num=num, every=every,
                                               randomly=randomly)
         self._shot_selection = selection
@@ -926,7 +928,7 @@ class Acquisitions(ProblemBase):
 
         self._sequences[item.id] = item
 
-    def select_shot_ids(self, start=None, end=None, num=None, every=1, randomly=False):
+    def select_shot_ids(self, shot_ids=None, start=None, end=None, num=None, every=1, randomly=False):
         """
         Select a number of shots according to the rules given in the arguments to the method.
 
@@ -936,6 +938,8 @@ class Acquisitions(ProblemBase):
 
         Parameters
         ----------
+        shot_ids : list, optional
+            List of shot IDs to select from.
         start : int, optional
             Start of the slice, defaults to the first id.
         end : int, optional
@@ -954,7 +958,8 @@ class Acquisitions(ProblemBase):
             List with selected shots.
 
         """
-        next_slice, selection = _select_slice(self._shot_selection, self.shot_ids,
+        shot_ids = self.shot_ids if shot_ids is None else shot_ids
+        next_slice, selection = _select_slice(self._shot_selection, shot_ids,
                                               start=start, end=end, num=num, every=every,
                                               randomly=randomly)
         self._shot_selection = selection

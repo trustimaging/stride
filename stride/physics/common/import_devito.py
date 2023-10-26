@@ -5,6 +5,7 @@ try:
     from devitopro import *  # noqa: F401
     from devitopro.types.enriched import (DiskHostDevice, DiskHost, DiskDevice,  # noqa: F401
                                           HostDevice, Host, Device, NoLayers)
+    from devitopro.types.dynamic import CompressedTimeFunction
     pro_available = True
 
 except ImportError:
@@ -16,3 +17,4 @@ except ImportError:
     Device = None
     NoLayers = None
     pro_available = False
+    CompressedTimeFunction = None
