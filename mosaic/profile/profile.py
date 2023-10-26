@@ -15,7 +15,10 @@ from cached_property import cached_property
 
 import mosaic
 
-import _profile
+try:
+    import _profile
+except ImportError:
+    pass
 
 
 __all__ = ['Profiler', 'GlobalProfiler', 'profiler',
