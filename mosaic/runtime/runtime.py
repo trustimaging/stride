@@ -13,7 +13,7 @@ from .utils import WarehouseObject
 from ..utils import SpillBuffer
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
-from ..core import Task
+from ..core import Task, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
 from ..utils.utils import memory_limit, cpu_count
 
@@ -262,10 +262,16 @@ class Runtime(BaseRPC):
     def async_for(self, *iterables, **kwargs):
         assert not self._inside_async_for
 
-        safe = kwargs.pop('safe', False)
+        safe = kwargs.pop('safe', True)
+        timeout = kwargs.pop('timeout', None)
+        max_await = kwargs.pop('max_await', None)
 
         async def _async_for(func):
             self._inside_async_for = True
+
+            available_workers = self.num_workers
+            if available_workers <= 0:
+                raise RuntimeError('No workers available to complete async workload')
 
             worker_queue = asyncio.Queue()
             for worker in self._workers.values():
@@ -279,8 +285,31 @@ class Runtime(BaseRPC):
 
                 return res
 
-            tasks = [call(*each) for each in zip(*iterables)]
-            gather = await asyncio.gather(*tasks)
+            tasks = [asyncio.create_task(call(*each)) for each in zip(*iterables)]
+
+            gather = []
+            for task in asyncio.as_completed(tasks, timeout=timeout):
+                try:
+                    res = await task
+                    gather.append(res)
+                except Exception as exc:
+                    if safe:
+                        self.logger.info('Runtime failed, retiring worker: %s' % exc)
+                        available_workers -= 1
+                        if available_workers <= 0:
+                            for other_task in tasks:
+                                other_task.cancel()
+                                with contextlib.suppress(RuntimeDisconnectedError, asyncio.CancelledError):
+                                    await other_task
+                            raise RuntimeError('No workers available to complete async workload')
+                    else:
+                        raise
+
+                if max_await is not None and len(gather) > max_await:
+                    for other_task in tasks:
+                        other_task.close()
+                    break
+
             await self.barrier()
 
             self._inside_async_for = False
@@ -292,17 +321,8 @@ class Runtime(BaseRPC):
     @contextlib.asynccontextmanager
     async def _exclusive_proxy(self, queue, safe=False):
         proxy = await queue.get()
-
-        try:
-            yield proxy
-        except Exception as exc:
-            if safe:
-                self.logger.info('Runtime %s failed, retiring runtime:\n\n%s'
-                                 % (proxy.uid, exc))
-            else:
-                raise
-        else:
-            await queue.put(proxy)
+        yield proxy
+        await queue.put(proxy)
 
     @property
     def address(self):
@@ -584,6 +604,27 @@ class Runtime(BaseRPC):
         else:
             return found_proxy
 
+    def remove_proxy_from_uid(self, uid, proxy=None):
+        """
+        Remove a proxy from a UID.
+
+        Parameters
+        ----------
+        uid : str
+        proxy : BaseProxy
+
+        Returns
+        -------
+
+        """
+        proxy = proxy or self.proxy(uid=uid)
+
+        if hasattr(self, '_' + proxy.name + 's'):
+            del getattr(self, '_' + proxy.name + 's')[uid]
+
+        elif hasattr(self, '_' + proxy.name):
+            setattr(self, '_' + proxy.name, None)
+
     @staticmethod
     def proxy(name=None, indices=(), uid=None):
         """
@@ -771,7 +812,28 @@ class Runtime(BaseRPC):
         -------
 
         """
-        pass
+        # deregister if remote uid held a proxy to a local tessera
+        for obj in self._tessera.values():
+            obj.deregister_proxy(uid)
+
+        # deregister if remote uid held a proxy to a local task
+        for obj in self._task.values():
+            obj.deregister_proxy(uid)
+
+        # deregister if local tessera proxy points to remote uid
+        for obj in self._tessera_proxy.values():
+            obj.deregister_runtime(uid)
+
+        # deregister if local tessera proxy array points to remote uid
+        for obj in self._tessera_proxy_array.values():
+            obj.deregister_runtime(uid)
+
+        # deregister if local task proxy points to remote uid
+        for obj in self._task_proxy.values():
+            obj.deregister_runtime(uid)
+
+        # remove remote runtime from local runtime
+        self.remove_proxy_from_uid(uid)
 
     async def stop(self, sender_id=None):
         """

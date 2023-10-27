@@ -6,7 +6,11 @@ from ..utils import Future
 from ..profile import profiler
 
 
-__all__ = ['RemoteBase', 'ProxyBase']
+__all__ = ['RemoteBase', 'ProxyBase', 'RuntimeDisconnectedError']
+
+
+class RuntimeDisconnectedError(Exception):
+    pass
 
 
 class Base:
@@ -83,6 +87,17 @@ class CMDBase(Base):
 
     async def init(self, *args, **kwargs):
         pass
+
+    def deregister_runtime(self, uid):
+        if uid != self.runtime_id:
+            return
+
+        if self._init_future.done():
+            self._init_future = Future()
+
+        self.init_future.set_exception(
+            RuntimeDisconnectedError('Remote runtime %s became disconnected' % uid)
+        )
 
     def __repr__(self):
         NotImplementedError('Unimplemented Base method __repr__')
