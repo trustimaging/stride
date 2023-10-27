@@ -207,10 +207,10 @@ class Monitor(Runtime):
                 cpu_mask = _cpu_mask(1, 1, num_cpus)
 
                 cmd = (f'srun {ssh_flags} --nodes=1 --ntasks=1 --tasks-per-node={num_cpus} '
-                       f'--cpu-bind=mask_cpu:{cpu_mask} '
+                       f'--cpu-bind=mask_cpu:{cpu_mask} --mem-bind=local '
                        f'--oversubscribe '
                        f'--distribution=block:block '
-                       f'--hint=nomultithread '
+                       f'--hint=nomultithread --no-kill '
                        f'--nodelist={node_address} '
                        f'{remote_cmd}')
 
