@@ -979,7 +979,7 @@ class ScalarField(StructuredData):
                              for dx_old, dx_new in zip(self.space.spacing, space.spacing)])
 
         # Anti-aliasing is only required for down-sampling interpolation
-        if any(factor > 1 for factor in resampling_factors):
+        if any(factor < 1 for factor in resampling_factors):
             anti_alias = kwargs.pop('anti_alias', True)
 
             if anti_alias:
