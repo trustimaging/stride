@@ -488,7 +488,7 @@ class OutboundConnection(Connection):
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
         self._heartbeat_max_attempts = 5
-        self._heartbeat_interval = 30
+        self._heartbeat_interval = 1
 
         self._shaken = False
 
@@ -1587,9 +1587,17 @@ class CommsManager:
 
         if notify is True:
             for connected_id, connection in self._send_socket.items():
+                if connection.state == 'disconnected':
+                    continue
                 await self.send_async(connected_id,
                                       method='disconnect',
                                       uid=uid)
+
+        if 'node' in uid and uid in self._runtime._nodes:
+            node_index = self._runtime._nodes[uid].indices[0]
+            for worker in self._runtime.workers:
+                if worker.indices[0] == node_index:
+                    await self.disconnect(sender_id, worker.uid, notify=notify)
 
     async def handshake(self, uid, address, port):
         """

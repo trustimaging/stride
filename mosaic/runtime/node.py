@@ -143,8 +143,7 @@ class Node(Runtime):
             worker_proxy = RuntimeProxy(name='worker', indices=indices)
             worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
                                                          daemon=False,
-                                                         cpu_affinity=worker_cpus.get(worker_index, None),
-                                                         mem_affinity=worker_nodes.get(worker_index, None))
+                                                         cpu_affinity=worker_cpus.get(worker_index, None))
             worker_subprocess.start_process()
             worker_proxy.subprocess = worker_subprocess
 

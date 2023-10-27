@@ -84,7 +84,7 @@ async def forward(problem, pde, *args, **kwargs):
     dump = kwargs.pop('dump', True)
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
-    safe = kwargs.pop('safe', False)
+    safe = kwargs.pop('safe', True)
 
     if dump is True:
         try:
@@ -206,7 +206,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     restart_id = kwargs.pop('restart_id', -1)
 
     dump = kwargs.pop('dump', True)
-    safe = kwargs.pop('safe', False)
+    safe = kwargs.pop('safe', True)
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)

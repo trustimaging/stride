@@ -8,7 +8,7 @@ import operator
 from cached_property import cached_property
 
 from .. import types
-from .base import Base, RemoteBase, ProxyBase
+from .base import Base, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..utils import Future, MultiError
 
 
@@ -481,6 +481,24 @@ class TaskProxy(ProxyBase):
 
         if self._state == 'init':
             self.state_changed('queued')
+
+    def deregister_runtime(self, uid):
+        if uid != self.runtime_id:
+            return
+
+        super().deregister_runtime(uid)
+
+        self.state_changed('failed')
+
+        try:
+            self._done_future.set_exception(
+                RuntimeDisconnectedError('Remote runtime %s became disconnected' % uid)
+            )
+        except asyncio.InvalidStateError:
+            pass
+        else:
+            # Once done release local copy of the arguments
+            self._cleanup()
 
     @cached_property
     def runtime_id(self):

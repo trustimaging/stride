@@ -370,10 +370,14 @@ class Subprocess:
         """
         try:
             import numa
+            from numa import LIBNUMA
         except Exception:
             return
 
         numa.memory.set_membind_nodes(*nodes)
+        op_res = LIBNUMA.numa_set_bind_policy(0)
+        if op_res == -1:
+            raise Exception('set_bind_policy failed')
 
 
 def subprocess(target):
