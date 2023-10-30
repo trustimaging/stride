@@ -237,7 +237,7 @@ class Monitor(Runtime):
 
         for node_proxy in asyncio.as_completed(tasks):
             node_proxy = await node_proxy
-            self.logger.info('Started node %s' % node_proxy.uid)
+            self.logger.debug('Started node %s' % node_proxy.uid)
 
     def set_logger(self):
         """

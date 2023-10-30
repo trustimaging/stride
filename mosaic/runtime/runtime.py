@@ -299,15 +299,21 @@ class Runtime(BaseRPC):
                         if available_workers <= 0:
                             for other_task in tasks:
                                 other_task.cancel()
-                                with contextlib.suppress(RuntimeDisconnectedError, asyncio.CancelledError):
+                                try:
                                     await other_task
+                                except (RuntimeDisconnectedError, asyncio.CancelledError):
+                                    pass
                             raise RuntimeError('No workers available to complete async workload')
                     else:
                         raise
 
                 if max_await is not None and len(gather) > max_await:
                     for other_task in tasks:
-                        other_task.close()
+                        other_task.cancel()
+                        try:
+                            await other_task
+                        except (RuntimeDisconnectedError, asyncio.CancelledError):
+                            pass
                     break
 
             await self.barrier()
@@ -620,7 +626,10 @@ class Runtime(BaseRPC):
         proxy = proxy or self.proxy(uid=uid)
 
         if hasattr(self, '_' + proxy.name + 's'):
-            del getattr(self, '_' + proxy.name + 's')[uid]
+            try:
+                del getattr(self, '_' + proxy.name + 's')[uid]
+            except KeyError:
+                pass
 
         elif hasattr(self, '_' + proxy.name):
             setattr(self, '_' + proxy.name, None)

@@ -1,4 +1,4 @@
-
+import asyncio
 import time
 
 import mosaic
@@ -79,6 +79,11 @@ class CMDBase(Base):
         self.is_async = False
 
     async def __init_async__(self, *args, **kwargs):
+        if self._init_future.done():
+            exc = self._init_future.exception()
+            if exc is not None:
+                raise exc
+
         await self.init(*args, **kwargs)
 
         self._init_future.set_result(True)
