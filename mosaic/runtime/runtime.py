@@ -292,7 +292,7 @@ class Runtime(BaseRPC):
                 try:
                     res = await task
                     gather.append(res)
-                except Exception as exc:
+                except RuntimeDisconnectedError as exc:
                     if safe:
                         self.logger.warn('Runtime failed, retiring worker: %s' % exc)
                         available_workers -= 1

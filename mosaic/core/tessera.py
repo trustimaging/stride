@@ -953,7 +953,7 @@ class ArrayProxy(CMDBase):
         for task in asyncio.as_completed(inits, timeout=timeout):
             try:
                 await task
-            except Exception as exc:
+            except RuntimeDisconnectedError as exc:
                 if safe:
                     self.logger.warn('Runtime failed, retiring worker: %s' % exc)
                     available_workers -= 1
