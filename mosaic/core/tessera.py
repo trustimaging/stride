@@ -13,7 +13,7 @@ from cached_property import cached_property
 
 import mosaic
 from .task import TaskProxy
-from .base import Base, CMDBase, RemoteBase, ProxyBase
+from .base import Base, CMDBase, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..runtime import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
 
@@ -940,13 +940,33 @@ class ArrayProxy(CMDBase):
         Asynchronous correlate of ``__init__``.
 
         """
+        safe = kwargs.pop('safe', True)
+        timeout = kwargs.pop('timeout', None)
+        available_workers = self._len
+
         inits = []
         for proxy in self._proxies:
-            inits.append(proxy.__init_async__(*args, **kwargs))
+            inits.append(asyncio.create_task(proxy.__init_async__(*args, **kwargs)))
             self._runtime_id.append(proxy.runtime_id)
             self._cls_attr_names = proxy._cls_attr_names
 
-        await asyncio.gather(*inits)
+        for task in asyncio.as_completed(inits, timeout=timeout):
+            try:
+                await task
+            except Exception as exc:
+                if safe:
+                    self.logger.warn('Runtime failed, retiring worker: %s' % exc)
+                    available_workers -= 1
+                    if available_workers <= 0:
+                        for other_task in inits:
+                            other_task.cancel()
+                            try:
+                                await other_task
+                            except (RuntimeDisconnectedError, asyncio.CancelledError):
+                                pass
+                        raise RuntimeError('No workers available to complete async workload')
+                else:
+                    raise
 
         self.runtime.register(self)
 

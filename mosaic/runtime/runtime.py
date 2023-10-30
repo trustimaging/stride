@@ -260,7 +260,7 @@ class Runtime(BaseRPC):
         await monitor.barrier(timeout=timeout, reply=True)
 
     def async_for(self, *iterables, **kwargs):
-        assert not self._inside_async_for
+        assert not self._inside_async_for, 'async_for cannot be nested'
 
         safe = kwargs.pop('safe', True)
         timeout = kwargs.pop('timeout', None)
@@ -294,7 +294,7 @@ class Runtime(BaseRPC):
                     gather.append(res)
                 except Exception as exc:
                     if safe:
-                        self.logger.info('Runtime failed, retiring worker: %s' % exc)
+                        self.logger.warn('Runtime failed, retiring worker: %s' % exc)
                         available_workers -= 1
                         if available_workers <= 0:
                             for other_task in tasks:

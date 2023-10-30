@@ -1593,11 +1593,11 @@ class CommsManager:
                                       method='disconnect',
                                       uid=uid)
 
-        if 'node' in uid and uid in self._runtime._nodes:
-            node_index = self._runtime._nodes[uid].indices[0]
-            for worker in self._runtime.workers:
-                if worker.indices[0] == node_index:
-                    await self.disconnect(sender_id, worker.uid, notify=notify)
+            if 'node' in uid and uid in self._runtime._nodes:
+                node_index = self._runtime._nodes[uid].indices[0]
+                for worker in self._runtime.workers:
+                    if worker.indices[0] == node_index:
+                        await self.disconnect(sender_id, worker.uid, notify=notify)
 
     async def handshake(self, uid, address, port):
         """
