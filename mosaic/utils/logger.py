@@ -100,9 +100,11 @@ class LocalLogger(LoggerBase):
                 uid = self.runtime.uid
             else:
                 uid = ''
-        uid = uid.upper()
-
-        self._logger.log(self._log_level, msg, extra={'runtime_id': uid})
+            uid = uid.upper()
+            self._logger.log(self._log_level, msg, extra={'runtime_id': uid})
+        else:
+            self.write(msg, uid=uid)
+            self.flush(uid=uid)
 
 
 class RemoteLogger(LoggerBase):
@@ -110,6 +112,10 @@ class RemoteLogger(LoggerBase):
         self._runtime_id = runtime_id
         self._log_level = log_level
         self._linebuf = ''
+        self._queuebuf = ''
+
+        loop = mosaic.get_event_loop()
+        loop.interval(self.send, interval=1)
 
     @cached_property
     def remote_runtime(self):
@@ -137,25 +143,31 @@ class RemoteLogger(LoggerBase):
                 self._linebuf += line
                 self._linebuf += '\n'
 
-        self.send(self._linebuf)
+        self.queue(self._linebuf)
         self._linebuf = ''
 
     def flush(self):
-        if self._linebuf != '':
-            self.send(self._linebuf)
+        if len(self._linebuf):
+            self.queue(self._linebuf)
+            self._linebuf = ''
 
-        self._linebuf = ''
+    def log(self, buf, uid=None):
+        self.queue(buf)
 
-    def send(self, buf):
+    def queue(self, buf):
         if not self.comms.shaken(self._runtime_id):
             _stdout.write(buf)
             _stdout.flush()
 
         else:
-            self.remote_runtime[self._log_level](buf=buf, as_async=False)
+            if len(self._queuebuf):
+                self._queuebuf += '\n'
+            self._queuebuf += buf
 
-    def log(self, buf, uid=None):
-        self.send(buf)
+    async def send(self):
+        if len(self._queuebuf):
+            await self.remote_runtime[self._log_level](buf=self._queuebuf)
+            self._queuebuf = ''
 
 
 class LoggerManager:

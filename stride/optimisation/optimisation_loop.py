@@ -415,7 +415,8 @@ class OptimisationLoop(Saved):
                             del self._blocks[index]
 
             except (OSError, AttributeError):
-                pass
+                self.clear()
+                self.restart = False
 
         if self._num_blocks is None:
             self._num_blocks = num
