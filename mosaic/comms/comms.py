@@ -616,7 +616,8 @@ class OutboundConnection(Connection):
 
         """
         if self._state == 'disconnected':
-            warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
+            warnings.warn('Trying to send %s in a disconnected '
+                          'OutboundConnection "%s"' % (method, self.uid), Warning)
             return
 
         reply_future, msg_size, multipart_msg = self._process_send(method, cmd=cmd, reply=reply, **kwargs)
@@ -647,7 +648,8 @@ class OutboundConnection(Connection):
 
         """
         if self._state == 'disconnected':
-            warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
+            warnings.warn('Trying to send %s in a disconnected '
+                          'OutboundConnection "%s"' % (method, self.uid), Warning)
             return
 
         reply_future, msg_size, multipart_msg = self._process_send(method, cmd=cmd, reply=reply, **kwargs)
@@ -788,7 +790,8 @@ class CircularConnection(Connection):
 
         """
         if self._state == 'disconnected':
-            warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
+            warnings.warn('Trying to send %s in a disconnected '
+                          'OutboundConnection "%s"' % (method, self.uid), Warning)
             return
 
         reply_future, msg = self._process_send(method, cmd=cmd, reply=reply, **kwargs)

@@ -465,7 +465,13 @@ class Runtime(BaseRPC):
 
             # Set thread pool for ZMQ
             try:
-                num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())-1
+                try:
+                    import numa
+                    available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
+                    num_cpus = min([len(cpus) for cpus in available_cpus.values()])//2
+                except Exception:
+                    num_cpus = cpu_count()//8
+
                 num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', num_cpus)
                 num_cpus = max(1, int(num_cpus))
 
