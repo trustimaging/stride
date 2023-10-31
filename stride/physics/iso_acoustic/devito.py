@@ -613,7 +613,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.p_a.data_with_halo.fill(0.)
         self.boundary.clear()
-        await self.init_grad(wavelets, vp, rho, alpha)
+        await self.init_grad(wavelets, vp, rho, alpha, **kwargs)
 
         # Set wavefield if necessary
         cache_forward = kwargs.pop('cache_forward', False)
