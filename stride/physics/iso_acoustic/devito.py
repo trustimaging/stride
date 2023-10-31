@@ -1272,12 +1272,8 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         if buoy is None:
             return vp2 * field.laplace
-
         else:
-            if self.drp:
-                return vp2 * (field.laplace + rho * devito.grad(buoy, shift=-0.5).dot(devito.grad(field, shift=-0.5)))
-            else:
-                return vp2 * rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
+            return vp2 * rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
 
     def _subdomains(self, *args, **kwargs):
         problem = kwargs.get('problem')
