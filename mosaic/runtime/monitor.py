@@ -244,7 +244,8 @@ class Monitor(Runtime):
             self.logger.debug('Started node %s' % node_proxy.uid)
 
         self.logger.info('Listening at <NODE:%d-%d | '
-                         'WORKER:*:0-*:%d address=%s>' % (0, num_nodes, num_workers, ', '.join(node_list)))
+                         'WORKER:*:0-*:%d address=%s>' % (0, num_nodes, num_workers,
+                                                          ', '.join(node_list)))
 
     def set_logger(self):
         """

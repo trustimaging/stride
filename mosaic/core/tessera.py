@@ -320,6 +320,7 @@ class Tessera(RemoteBase):
             await asyncio.sleep(0)
             self.state_changed('running')
             task.state_changed('running')
+            await self.logger.send()
             await self.call_safe(sender_id, method, task)
 
             del task

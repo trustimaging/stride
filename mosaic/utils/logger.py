@@ -1,5 +1,6 @@
 
 import sys
+import asyncio
 import logging
 from cached_property import cached_property
 
@@ -106,6 +107,9 @@ class LocalLogger(LoggerBase):
             self.write(msg, uid=uid)
             self.flush(uid=uid)
 
+    async def send(self):
+        pass
+
 
 class RemoteLogger(LoggerBase):
     def __init__(self, runtime_id, log_level='log_info'):
@@ -115,7 +119,7 @@ class RemoteLogger(LoggerBase):
         self._queuebuf = ''
 
         loop = mosaic.get_event_loop()
-        loop.interval(self.send, interval=1)
+        loop.interval(self.send, interval=0.1)
 
     @cached_property
     def remote_runtime(self):
@@ -484,6 +488,15 @@ class LoggerManager:
 
         """
         self.warning(buf, uid=uid)
+
+    async def send(self):
+        await asyncio.gather(
+            self._info_logger.send(),
+            self._perf_logger.send(),
+            self._debug_logger.send(),
+            self._error_logger.send(),
+            self._warn_logger.send(),
+        )
 
 
 class CustomFormatter(logging.Formatter):
