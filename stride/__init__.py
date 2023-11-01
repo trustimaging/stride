@@ -210,15 +210,24 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
-    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.25)
-    filter_traces_relaxation = kwargs.pop('filter_traces_relaxation', 0.75)
+
+    filter_wavelets = kwargs.pop('filter_wavelets', True)
+    filter_traces = kwargs.pop('filter_traces', True)
+
+    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.75)
+    filter_traces_relaxation = kwargs.pop('filter_traces_relaxation',
+                                          0.75 if filter_wavelets else 1.00)
+
     process_wavelets = ProcessWavelets.remote(f_min=f_min, f_max=f_max,
+                                              filter_traces=filter_wavelets,
                                               filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
     process_observed = ProcessObserved.remote(f_min=f_min, f_max=f_max,
+                                              filter_traces=filter_wavelets,
                                               filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
+                                          filter_traces=filter_traces,
                                           filter_relaxation=filter_traces_relaxation,
                                           len=runtime.num_workers, **kwargs)
 
