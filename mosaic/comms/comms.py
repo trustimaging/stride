@@ -1241,7 +1241,8 @@ class CommsManager:
 
         self._state = 'listening'
 
-        self.logger.info('Listening at %s' % self)
+        if self._runtime.uid in ['monitor', 'head', 'warehouse']:
+            self.logger.info('Listening at %s' % self)
 
         while self._state != 'disconnected':
             sender_id, msg = await self.recv_async()
