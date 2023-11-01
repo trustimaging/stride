@@ -327,7 +327,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 if self._needs_grad(wavelets, rho, alpha):
                     p_saved_expr = p
                 else:
-                    p_saved_expr = p.dt2
+                    p_saved_expr = self._forward_save(p)
                 abox, full, interior, boundary = self.subdomains
                 update_saved = [devito.Eq(p_saved, p_saved_expr, subdomain=abox)]
                 devicecreate = (self.dev_grid.vars.p, self.dev_grid.vars.p_saved,)
@@ -768,31 +768,28 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         """
         p = self.dev_grid.vars.p_saved
-        p_a = self.dev_grid.vars.p_a
+        p_a = self._adjoint_save(self.dev_grid.vars.p_a)
 
         abox, full, interior, boundary = self.subdomains
         subdomain = abox if self.adaptive_boxes else interior
 
         wavelets, _, rho, alpha = kwargs.get('wrt')
         if self._needs_grad(wavelets, rho, alpha):
-            p_dt2 = self.dev_grid.undersampled_time_derivative(p, self.undersampling_factor,
-                                                               bounds=kwargs.pop('save_bounds', None),
-                                                               deriv_order=2, fd_order=2)
-
-            p_dt2_fun = self.dev_grid.function('p_dt2', space_order=0)
-            p_dt2_update = (devito.Eq(p_dt2_fun, p_dt2, subdomain=subdomain),)
+            p_dt = self._forward_save_undersampled(p, **kwargs)
+            p_dt_fun = self.dev_grid.function('p_dt', space_order=0)
+            p_dt_update = (devito.Eq(p_dt_fun, p_dt, subdomain=subdomain),)
         else:
-            p_dt2 = p
-            p_dt2_fun = p_dt2
-            p_dt2_update = ()
+            p_dt = p
+            p_dt_fun = p_dt
+            p_dt_update = ()
 
         grad = self.dev_grid.function('grad_vp', space_order=0)
-        grad_update = devito.Inc(grad, p_dt2_fun * p_a, subdomain=subdomain)
+        grad_update = devito.Inc(grad, p_dt_fun * p_a, subdomain=subdomain)
 
         prec = self.dev_grid.function('prec_vp', space_order=0)
-        prec_update = devito.Inc(prec, p_dt2_fun * p_dt2_fun, subdomain=subdomain)
+        prec_update = devito.Inc(prec, p_dt_fun * p_dt_fun, subdomain=subdomain)
 
-        return p_dt2_update + (grad_update, prec_update)
+        return p_dt_update + (grad_update, prec_update)
 
     async def init_grad_vp(self, vp, **kwargs):
         """
@@ -1300,3 +1297,14 @@ class IsoAcousticDevito(ProblemTypeBase):
 
     def _needs_grad(self, *wrt):
         return any(v is not None and v.needs_grad for v in wrt)
+
+    def _forward_save(self, field):
+        return field.dt2
+
+    def _forward_save_undersampled(self, field, **kwargs):
+        return self.dev_grid.undersampled_time_derivative(field, self.undersampling_factor,
+                                                          bounds=kwargs.pop('save_bounds', None),
+                                                          deriv_order=2, fd_order=2)
+
+    def _adjoint_save(self, field):
+        return field
