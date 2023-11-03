@@ -305,6 +305,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             # post-process modelled and observed traces
             traces = process_traces(modelled, observed,
+                                    scale_to=sub_problem.shot.observed,
                                     problem=sub_problem, runtime=worker, **_kwargs)
             await traces.init_future
 
