@@ -119,7 +119,7 @@ class RemoteLogger(LoggerBase):
         self._queuebuf = ''
 
         loop = mosaic.get_event_loop()
-        loop.interval(self.send, interval=0.1)
+        loop.interval(self.send, interval=0.01)
 
     @cached_property
     def remote_runtime(self):
