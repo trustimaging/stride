@@ -1,4 +1,5 @@
 
+import os
 import sys
 import uuid
 import copy
@@ -271,6 +272,18 @@ class Tessera(RemoteBase):
                 self._put_run_queue(sender_id=sender_id, task=task, future=None)
                 break
 
+            if self.runtime.uid == 'warehouse':
+                max_runtime_mem = float(os.environ.get('MOSAIC_WAREHOUSE_QUEUE_MEM', 0.85))
+            elif 'worker' in self.runtime.uid:
+                max_runtime_mem = float(os.environ.get('MOSAIC_WORKER_QUEUE_MEM', 0.95))
+            else:
+                max_runtime_mem = float(os.environ.get('MOSAIC_RUNTIME_QUEUE_MEM', 0.85))
+
+            runtime_mem = self.runtime.total_memory_fraction()
+            while runtime_mem > max_runtime_mem:
+                await asyncio.sleep(0.1)
+                runtime_mem = self.runtime.total_memory_fraction()
+
             future = await task.prepare_args()
 
             if self.is_async:
@@ -359,8 +372,6 @@ class Tessera(RemoteBase):
                                                        **task.kwargs_value())
 
                 result = await future
-                # TODO Dodgy
-                await asyncio.sleep(0)
 
                 task.set_result(result)
                 await task.set_done()

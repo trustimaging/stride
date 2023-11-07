@@ -7,6 +7,7 @@ import psutil
 import asyncio
 import contextlib
 import weakref
+from cached_property import cached_property
 
 import mosaic
 from .utils import WarehouseObject
@@ -241,6 +242,84 @@ class Runtime(BaseRPC):
         """
         if wait is True:
             self._comms.wait()
+
+    @cached_property
+    def ps_process(self):
+        return psutil.Process(os.getpid())
+
+    def memory(self):
+        """
+        Amount of RSS memory being consumed by the runtime.
+
+        Returns
+        -------
+        float
+            RSS memory.
+
+        """
+        # OSX does not allow accessing information on external processes
+        try:
+            return self.ps_process.memory_info().rss
+        except psutil.AccessDenied:
+            pass
+
+        return 0
+
+    def memory_fraction(self):
+        """
+        Amount of RSS memory being consumed by the runtime
+        as a percentage.
+
+        Returns
+        -------
+        float
+            RSS memory.
+
+        """
+        # OSX does not allow accessing information on external processes
+        try:
+            return self.ps_process.memory_percent()/100
+        except psutil.AccessDenied:
+            pass
+
+        return 0
+
+    def total_memory_fraction(self):
+        """
+        Amount of RSS memory being consumed by the node
+        as a percentage.
+
+        Returns
+        -------
+        float
+            RSS memory.
+
+        """
+        # OSX does not allow accessing information on external processes
+        try:
+            return psutil.virtual_memory().percent/100
+        except psutil.AccessDenied:
+            pass
+
+        return 0
+
+    def cpu_load(self):
+        """
+        CPU load of this runtime as a percentage.
+
+        Returns
+        -------
+        float
+            CPU load.
+
+        """
+        # OSX does not allow accessing information on external processes
+        try:
+            return self.ps_process.cpu_percent(interval=None)
+        except psutil.AccessDenied:
+            pass
+
+        return 0
 
     async def barrier(self, timeout=None):
         """

@@ -372,8 +372,7 @@ class Variable:
 
         await asyncio.gather(*returns)
 
-        self.graph = Graph()
-        self.prev_op = None
+        self.clear_graph()
 
     def detach(self, *args, **kwargs):
         """
@@ -456,6 +455,17 @@ class Variable:
         """
         kwargs['propagate_tessera'] = kwargs.pop('propagate_tessera', False)
         return self.copy(*args, **kwargs)
+
+    def clear_graph(self):
+        """
+        Clear the adjoint graph of the variable.
+
+        Returns
+        -------
+
+        """
+        self.graph = Graph()
+        self.prev_op = None
 
     def clear_grad(self):
         """

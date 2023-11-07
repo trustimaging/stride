@@ -1,5 +1,5 @@
 
-import devito
+from ..common.devito import devito
 import numpy as np
 
 from .boundary import Boundary

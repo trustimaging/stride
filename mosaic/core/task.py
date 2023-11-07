@@ -250,7 +250,6 @@ class Task(RemoteBase):
         kwargs['tessera_id'] = self.tessera_id
         return super().add_profile(profile, **kwargs)
 
-    # TODO Await all of the remote results together using gather
     async def prepare_args(self):
         """
         Prepare the arguments of the task for execution.
@@ -260,6 +259,8 @@ class Task(RemoteBase):
         Future
 
         """
+
+        awaitable_args = []
 
         for index in range(len(self.args)):
             arg = self.args[index]
@@ -281,9 +282,14 @@ class Task(RemoteBase):
                     arg.add_done_callback(callback(index, arg))
 
                 else:
-                    result = await arg.result()
-                    if not isinstance(arg, TaskDone):
-                        self._args_value[index] = result
+                    async def _await_arg(_index, _arg):
+                        _result = await _arg.result()
+                        _attr = self._args_value if not isinstance(_arg, TaskDone) else None
+                        return _attr, _index, _result
+
+                    awaitable_args.append(
+                        _await_arg(index, arg)
+                    )
 
             else:
                 self._args_state[index] = 'ready'
@@ -307,13 +313,23 @@ class Task(RemoteBase):
                     value.add_done_callback(callback(key, value))
 
                 else:
-                    result = await value.result()
-                    if not isinstance(value, TaskDone):
-                        self._kwargs_value[key] = result
+                    async def _await_kwarg(_key, _arg):
+                        _result = await _arg.result()
+                        _attr = self._kwargs_value if not isinstance(_arg, TaskDone) else None
+                        return _attr, _key, _result
+
+                    awaitable_args.append(
+                        _await_kwarg(key, value)
+                    )
 
             else:
                 self._kwargs_state[key] = 'ready'
                 self._kwargs_value[key] = value
+
+        for task in asyncio.as_completed(awaitable_args):
+            attr, key, result = await task
+            if attr is not None:
+                attr[key] = result
 
         await self._check_ready()
 

@@ -415,7 +415,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
-
         functions = dict(
             vp=self.dev_grid.vars.vp,
             src=self.dev_grid.vars.src,
