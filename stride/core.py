@@ -313,7 +313,7 @@ class Variable:
         # no need to run graph
         if self.prev_op is None:
             await self.__call_adjoint__(grad, **kwargs)
-            self.graph = Graph()
+            self.clear_graph()
             return
 
         prev = dict()
