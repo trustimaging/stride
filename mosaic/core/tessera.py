@@ -15,7 +15,7 @@ from cached_property import cached_property
 import mosaic
 from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, RuntimeDisconnectedError
-from ..runtime import WarehouseObject
+from ..types import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
 
 
@@ -373,8 +373,7 @@ class Tessera(RemoteBase):
 
                 result = await future
 
-                task.set_result(result)
-                await task.set_done()
+                await task.set_result(result)
 
     @contextlib.asynccontextmanager
     async def send_exception(self, sender_id=None, method=None, task=None):
@@ -468,8 +467,7 @@ class ParameterMixin:
 
     @property
     def ref(self):
-        warehouse_obj = WarehouseObject(uid=self._tessera.uid)
-        return warehouse_obj
+        return self._ref
 
     @property
     def cached(self):
@@ -480,7 +478,7 @@ class ParameterMixin:
             await self
 
             warehouse = mosaic.get_warehouse()
-            await warehouse.publish(uid=self._tessera.uid, reply=True)
+            await warehouse.publish(uid=self.ref, reply=True)
 
     async def push(self, attr=None, publish=False):
         if self.has_tessera:
@@ -507,7 +505,7 @@ class ParameterMixin:
 
             warehouse = mosaic.get_warehouse()
             await warehouse.push_remote(__dict__=__dict__,
-                                        uid=self._tessera.uid,
+                                        uid=self.ref,
                                         publish=publish, reply=publish)
 
     async def pull(self, attr=None):
@@ -515,7 +513,7 @@ class ParameterMixin:
             await self
 
             warehouse = mosaic.get_warehouse()
-            __dict__ = await warehouse.pull_remote(uid=self._tessera.uid, attr=attr, reply=True)
+            __dict__ = await warehouse.pull_remote(uid=self.ref, attr=attr, reply=True)
 
             for key, value in __dict__.items():
                 setattr(self, key, value)
@@ -773,6 +771,7 @@ class TesseraProxy(ProxyBase):
 
         obj = self._cls.cls(*args, **kwargs)
         setattr(obj, '_tessera', self)
+        setattr(obj, '_ref', WarehouseObject(uid=self.uid))
         setattr(obj, '_cached', cached)
 
         return obj

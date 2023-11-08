@@ -107,30 +107,6 @@ class Monitor(Runtime):
         else:
             await self.init_cluster(**kwargs)
 
-    async def init_warehouse(self, **kwargs):
-        """
-        Init warehouse process.
-
-        Parameters
-        ----------
-        kwargs
-
-        Returns
-        -------
-
-        """
-        def start_warehouse(*args, **extra_kwargs):
-            kwargs.update(extra_kwargs)
-            mosaic.init('warehouse', *args, **kwargs, wait=True)
-
-        warehouse_proxy = RuntimeProxy(name='warehouse')
-        warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)
-        warehouse_subprocess.start_process()
-        warehouse_proxy.subprocess = warehouse_subprocess
-
-        self._remote_warehouse = warehouse_proxy
-        await self._comms.wait_for(warehouse_proxy.uid)
-
     async def init_local(self, **kwargs):
         """
         Init nodes in local mode.
@@ -386,8 +362,8 @@ class Monitor(Runtime):
             self._append_description(description)
 
         # Close warehouse
-        await self._remote_warehouse.stop()
-        self._remote_warehouse.subprocess.join_process()
+        await self._local_warehouse.stop()
+        self._local_warehouse.subprocess.join_process()
 
         # Close nodes
         for node_id, node in self._nodes.items():

@@ -9,7 +9,8 @@ from cached_property import cached_property
 
 from .. import types
 from .base import Base, RemoteBase, ProxyBase, RuntimeDisconnectedError
-from ..utils import Future, MultiError
+from ..types import WarehouseObject
+from ..utils import Future, MultiError, sizeof
 
 
 __all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone']
@@ -167,7 +168,7 @@ class Task(RemoteBase):
         """
         return self._kwargs_value
 
-    def set_result(self, result):
+    async def set_result(self, result):
         """
         Set task result.
 
@@ -179,37 +180,57 @@ class Task(RemoteBase):
         -------
 
         """
-        self._result = result
+        if not isinstance(result, (tuple, dict)):
+            result = (result,)
 
-    def get_result(self, key=None):
-        """
-        Get task result.
+        min_size = 1e4
+        if isinstance(result, tuple):
+            async def store(_value):
+                return await self.runtime.put(_value, reply=True)
 
-        Parameters
-        ----------
-        key : optional
-            Access particular item within the result, defaults to None.
+            async def noop(_value):
+                return _value
 
-        Returns
-        -------
+            tasks = []
+            for value in result:
+                obj_size = sizeof(value)
 
-        """
-        if self._state == 'failed':
-            raise Exception('Tried to get the result on failed task %s' % self._uid)
+                if obj_size > min_size:
+                    tasks.append(store(value))
+                else:
+                    tasks.append(noop(value))
 
-        if self._state != 'done':
-            raise Exception('Tried to get result of task not done, this should never happen!')
+            stored_result = await asyncio.gather(*tasks)
+            stored_result = tuple(stored_result)
 
-        if key is None:
-            return self._result
+        elif isinstance(result, dict):
+            async def store(_key, _value):
+                return _key, await self.runtime.put(_value, reply=True)
+
+            async def noop(_key, _value):
+                return _key, _value
+
+            tasks = []
+            for key, value in result.items():
+                obj_size = sizeof(value)
+
+                if obj_size > min_size:
+                    tasks.append(store(key, value))
+                else:
+                    tasks.append(noop(key, value))
+
+            stored_result = {}
+            tasks = await asyncio.gather(*tasks)
+            for key, value in tasks:
+                stored_result[key] = value
 
         else:
-            result = self._result
+            assert False
 
-            if not hasattr(type(result), '__getitem__'):
-                result = (result,)
+        await self.cmd_async(method='set_result', result=stored_result)
+        self._result = stored_result
 
-            return result[key]
+        await self.set_done()
 
     def check_result(self):
         """
@@ -227,7 +248,7 @@ class Task(RemoteBase):
             return 'failed', self._exception
 
         else:
-            return self._state, None
+            return self._state, self._result
 
     def _cleanup(self):
         self.args = None
@@ -365,8 +386,6 @@ class Task(RemoteBase):
         """
         self.state_changed('done')
 
-        await self.cmd_async(method='set_done')
-
         # Once done release local copy of the arguments
         self._cleanup()
 
@@ -441,6 +460,18 @@ class Task(RemoteBase):
 
             if not self._ready_future.done():
                 self._ready_future.set_result(True)
+
+    def __del__(self):
+        result = self._result
+        if isinstance(result, tuple):
+            for value in result:
+                if isinstance(value, WarehouseObject):
+                    self.loop.run(self.runtime.drop, value.uid)
+
+        elif isinstance(result, dict):
+            for value in result.values():
+                if isinstance(value, WarehouseObject):
+                    self.loop.run(self.runtime.drop, value.uid)
 
 
 class TaskProxy(ProxyBase):
@@ -618,6 +649,21 @@ class TaskProxy(ProxyBase):
         # Once done release local copy of the arguments
         self._cleanup()
 
+    def set_result(self, result):
+        """
+        Set task result.
+
+        Parameters
+        ----------
+        result
+
+        Returns
+        -------
+
+        """
+        self._result = result
+        self.set_done()
+
     def set_exception(self, exc):
         """
         Set exception during task execution.
@@ -694,12 +740,55 @@ class TaskProxy(ProxyBase):
         """
         await self
 
-        if self._result is not None:
-            return self._result
+        if hasattr(self, '_retrieved'):
+            return self._retrieved
 
-        self._result = await self.cmd_recv_async(method='get_result')
+        result = self._result
+        if isinstance(result, tuple):
+            async def retrieve(_value):
+                return await self.runtime.get(_value)
 
-        return self._result
+            async def noop(_value):
+                return _value
+
+            tasks = []
+            for value in result:
+                if isinstance(value, WarehouseObject):
+                    tasks.append(retrieve(value))
+                else:
+                    tasks.append(noop(value))
+
+            retrieved = await asyncio.gather(*tasks)
+            retrieved = tuple(retrieved)
+            if len(retrieved) == 1:
+                retrieved = retrieved[0]
+
+        elif isinstance(result, dict):
+            async def retrieve(_key, _value):
+                return _key, await self.runtime.get(_value)
+
+            async def noop(_key, _value):
+                return _key, _value
+
+            tasks = []
+            for key, value in result.items():
+                if isinstance(value, WarehouseObject):
+                    tasks.append(retrieve(key, value))
+                else:
+                    tasks.append(noop(key, value))
+
+            tasks = await asyncio.gather(*tasks)
+            retrieved = {}
+            for key, value in tasks:
+                retrieved[key] = value
+
+        else:
+            assert False
+
+        self._result = None
+        setattr(self, '_retrieved', retrieved)
+
+        return retrieved
 
     async def check_result(self):
         """
@@ -710,13 +799,13 @@ class TaskProxy(ProxyBase):
 
         """
         if self._state != 'done' and self._state != 'failed':
-            state, exc = await self.cmd_recv_async(method='check_result')
+            state, result = await self.cmd_recv_async(method='check_result')
 
             if state == 'done':
-                self.set_done()
+                self.set_result(result)
 
             elif state == 'failed':
-                self.set_exception(exc)
+                self.set_exception(result)
 
     def __await__(self):
         yield from self._done_future.__await__()
@@ -874,13 +963,9 @@ class TaskOutput(TaskOutputBase):
         """
         await self
 
-        if self._result is None and self._task_proxy._result is not None:
-            self._result = self._select_result(self._task_proxy._result)
-
-        if self._result is not None:
-            return self._result
-
-        self._result = await self._task_proxy.cmd_recv_async(method='get_result', key=self._key)
+        if self._result is None:
+            result = await self._task_proxy.result()
+            self._result = self._select_result(result)
 
         return self._result
 

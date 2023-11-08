@@ -1,10 +1,12 @@
 
+import os
 import copy
 import asyncio
 
 from .runtime import Runtime
-from .utils import WarehouseObject
-from ..utils import LoggerManager
+from ..types import WarehouseObject
+from ..utils import LoggerManager, SpillBuffer
+from ..utils.utils import memory_limit
 from ..profile import global_profiler
 
 
@@ -30,8 +32,20 @@ class Warehouse(Runtime):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        self._warehouses = dict()
+
     async def init(self, **kwargs):
         await super().init(**kwargs)
+
+        # Set up local warehouse
+        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', '%s-storage' % self.uid)
+        if not os.path.exists(spill_directory):
+            os.makedirs(spill_directory)
+
+        warehouse_memory_fraction = kwargs.pop('warehouse_memory_fraction', 0.80)
+        warehouse_memory = memory_limit() * warehouse_memory_fraction
+
+        self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
 
     def set_logger(self):
         """
@@ -42,7 +56,12 @@ class Warehouse(Runtime):
 
         """
         self.logger = LoggerManager()
-        self.logger.set_local(format=self.mode)
+
+        if not len(self.indices) or self.mode == 'local':
+            self.logger.set_local(format=self.mode)
+        else:
+            runtime_id = 'head' if self.mode == 'interactive' else 'monitor'
+            self.logger.set_remote(runtime_id=runtime_id, format=self.mode)
 
     def set_profiler(self):
         """
@@ -56,16 +75,13 @@ class Warehouse(Runtime):
         super().set_profiler()
 
     async def put(self, obj, uid=None, publish=False):
-        raise NotImplementedError('Cannot put directly into the warehouse runtime')
+        return await self.put_remote(self.uid, obj, uid=uid)
 
     async def get(self, uid):
-        raise NotImplementedError('Cannot get directly from the warehouse runtime')
+        return await self.get_remote(self.uid, uid=uid)
 
     async def drop(self, uid):
-        raise NotImplementedError('Cannot drop directly from the warehouse runtime')
-
-    async def force_put(self, sender_id, obj, uid=None):
-        raise NotImplementedError('Cannot force put directly into the warehouse runtime')
+        return await self.drop_remote(self.uid, uid=uid)
 
     async def put_remote(self, sender_id, obj, uid=None, publish=False):
         """
@@ -82,6 +98,9 @@ class Warehouse(Runtime):
         -------
 
         """
+        if isinstance(uid, WarehouseObject):
+            uid = uid.uid
+
         if uid in self._local_warehouse:
             raise RuntimeError('Warehouse values are not writable')
 
@@ -90,7 +109,7 @@ class Warehouse(Runtime):
         if publish:
             await self.publish(sender_id, uid)
 
-    async def get_remote(self, sender_id, uid):
+    async def get_remote(self, sender_id, uid, warehouse_id=None, node_id=None):
         """
         Retrieve an object from the warehouse.
 
@@ -98,18 +117,35 @@ class Warehouse(Runtime):
         ----------
         sender_id
         uid
+        warehouse_id
+        node_id
 
         Returns
         -------
 
         """
         if isinstance(uid, WarehouseObject):
-            uid = uid.uid
-
-        if uid in self._local_warehouse:
-            return self._local_warehouse[uid]
+            node_id = uid.node_id
+            warehouse_id = uid.warehouse_id
+            obj_id = uid.uid
         else:
-            raise KeyError('%s is not available in the warehouse' % uid)
+            obj_id = uid
+
+        if obj_id in self._local_warehouse:
+            return self._local_warehouse[obj_id]
+
+        if warehouse_id == self.uid or (node_id is None and warehouse_id is None):
+            raise KeyError('%s is not available in %s' % (obj_id, self.uid))
+
+        if node_id not in self._warehouses:
+            self._warehouses[node_id] = self.proxy(uid=warehouse_id)
+
+        obj = await self._warehouses[node_id].get_remote(uid=uid, reply=True)
+
+        if hasattr(obj, 'cached') and obj.cached:
+            self._local_warehouse[obj_id] = obj
+
+        return obj
 
     async def drop_remote(self, sender_id, uid):
         """
@@ -124,10 +160,15 @@ class Warehouse(Runtime):
         -------
 
         """
+        if isinstance(uid, WarehouseObject):
+            uid = uid.uid
+
         if uid in self._local_warehouse:
             del self._local_warehouse[uid]
 
-    async def push_remote(self, sender_id, __dict__, uid=None, publish=False):
+    async def push_remote(self, sender_id, __dict__,
+                          uid=None, warehouse_id=None, node_id=None,
+                          publish=False):
         """
         Push changes into warehouse object.
 
@@ -136,6 +177,8 @@ class Warehouse(Runtime):
         sender_id
         __dict__
         uid
+        warehouse_id
+        node_id
         publish
 
         Returns
@@ -143,24 +186,40 @@ class Warehouse(Runtime):
 
         """
         if isinstance(uid, WarehouseObject):
-            uid = uid.uid
+            node_id = uid.node_id
+            warehouse_id = uid.warehouse_id
+            obj_id = uid.uid
+        else:
+            obj_id = uid
 
-        if uid not in self._local_warehouse:
-            raise KeyError('%s is not available in the warehouse' % uid)
+        if obj_id in self._local_warehouse:
+            obj = self._local_warehouse[obj_id]
+            for key, value in __dict__.items():
+                setattr(obj, key, value)
 
-        obj = self._local_warehouse[uid]
-        for key, value in __dict__.items():
-            setattr(obj, key, value)
+        else:
+            if warehouse_id == self.uid or (node_id is None and warehouse_id is None):
+                raise KeyError('%s is not available in %s' % (obj_id, self.uid))
+
+            await self.get_remote(sender_id, uid=uid)
 
         if publish:
             tasks = []
 
-            for worker in self._workers.values():
-                tasks.append(worker.force_push(__dict__=__dict__, uid=uid, reply=True))
+            for node in self._nodes.values():
+                if node.uid not in self._warehouses:
+                    self._warehouses[node.uid] = self.proxy('warehouse',
+                                                            indices=node.indices[0])
+                tasks.append(self._warehouses[node.uid].push_remote(__dict__=__dict__, uid=uid, reply=True))
+
+            if len(self.indices):
+                if 'head' not in self._warehouses:
+                    self._warehouses['head'] = self.proxy('warehouse')
+                tasks.append(self._warehouses['head'].push_remote(__dict__=__dict__, uid=uid, reply=True))
 
             await asyncio.gather(*tasks)
 
-    async def pull_remote(self, sender_id, uid, attr=None):
+    async def pull_remote(self, sender_id, uid, warehouse_id=None, node_id=None, attr=None):
         """
         Pull changes from warehouse object.
 
@@ -168,6 +227,8 @@ class Warehouse(Runtime):
         ----------
         sender_id
         uid
+        warehouse_id
+        node_id
         attr
 
         Returns
@@ -175,12 +236,27 @@ class Warehouse(Runtime):
 
         """
         if isinstance(uid, WarehouseObject):
-            uid = uid.uid
+            node_id = uid.node_id
+            warehouse_id = uid.warehouse_id
+            obj_id = uid.uid
+        else:
+            obj_id = uid
 
-        if uid not in self._local_warehouse:
-            raise KeyError('%s is not available in the warehouse' % uid)
+        if obj_id in self._local_warehouse:
+            obj = self._local_warehouse[obj_id]
 
-        obj = self._local_warehouse[uid]
+        else:
+            if warehouse_id == self.uid or (node_id is None and warehouse_id is None):
+                raise KeyError('%s is not available in %s' % (obj_id, self.uid))
+
+            if node_id not in self._warehouses:
+                self._warehouses[node_id] = self.proxy(uid=warehouse_id)
+
+            obj = await self._warehouses[node_id].get_remote(uid=uid, reply=True)
+
+            if not hasattr(obj, 'cached') or obj.cached:
+                self._local_warehouse[obj_id] = obj
+
         if attr is None:
             __dict__ = copy.copy(obj.__dict__)
         else:
@@ -212,16 +288,26 @@ class Warehouse(Runtime):
 
         """
         if isinstance(uid, WarehouseObject):
-            uid = uid.uid
+            obj_id = uid.uid
+        else:
+            obj_id = uid
 
-        if uid not in self._local_warehouse:
-            raise KeyError('%s is not available in the warehouse' % uid)
+        if obj_id not in self._local_warehouse:
+            raise KeyError('%s is not available in %s' % (obj_id, self.uid))
 
-        obj = self._local_warehouse[uid]
+        obj = self._local_warehouse[obj_id]
         tasks = []
 
-        for worker in self._workers.values():
-            tasks.append(worker.force_put(obj=obj, uid=uid, reply=True))
+        for node in self._nodes.values():
+            if node.uid not in self._warehouses:
+                self._warehouses[node.uid] = self.proxy('warehouse',
+                                                        indices=node.indices[0])
+            tasks.append(self._warehouses[node.uid].put_remote(obj=obj, uid=obj_id, reply=True))
+
+        if len(self.indices):
+            if 'head' not in self._warehouses:
+                self._warehouses['head'] = self.proxy('warehouse')
+            tasks.append(self._warehouses['head'].put_remote(obj=obj, uid=obj_id, reply=True))
 
         await asyncio.gather(*tasks)
 

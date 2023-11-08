@@ -1241,7 +1241,7 @@ class CommsManager:
 
         self._state = 'listening'
 
-        if self._runtime.uid in ['monitor', 'head', 'warehouse']:
+        if self._runtime.uid in ['monitor', 'head']:
             self.logger.info('Listening at %s' % self)
 
         while self._state != 'disconnected':

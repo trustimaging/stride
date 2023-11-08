@@ -50,7 +50,8 @@ class Node(Runtime):
         """
         await super().init(**kwargs)
 
-        # Start local workers
+        # Start local cluster
+        await self.init_warehouse(indices=self.indices[0], **kwargs)
         await self.init_workers(**kwargs)
 
     async def init_workers(self, **kwargs):
@@ -276,6 +277,11 @@ class Node(Runtime):
         if profiler.tracing:
             profiler.stop()
 
+        # Close warehouse
+        await self._local_warehouse.stop()
+        self._local_warehouse.subprocess.join_process()
+
+        # Close workers
         for worker_id, worker in self._own_workers.items():
             await worker.stop()
             worker.subprocess.join_process()

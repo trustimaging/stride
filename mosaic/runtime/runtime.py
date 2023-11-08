@@ -10,13 +10,13 @@ import weakref
 from cached_property import cached_property
 
 import mosaic
-from .utils import WarehouseObject
-from ..utils import SpillBuffer
+from ..types import WarehouseObject
+from ..utils import subprocess
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
-from ..utils.utils import memory_limit, cpu_count
+from ..utils.utils import cpu_count
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -197,11 +197,11 @@ class Runtime(BaseRPC):
         if not os.path.exists(spill_directory):
             os.makedirs(spill_directory)
 
-        warehouse_memory_fraction = kwargs.pop('warehouse_memory_fraction', 0.25)
-        warehouse_memory = memory_limit() * warehouse_memory_fraction
-
         self._remote_warehouse = self.proxy('warehouse')
-        self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
+        if len(self.indices):
+            self._local_warehouse = self.proxy('warehouse', indices=self.indices[0])
+        else:
+            self._local_warehouse = self._remote_warehouse
 
         # Start maintenance loop
         self._loop.interval(self.maintenance, interval=0.5)
@@ -226,6 +226,36 @@ class Runtime(BaseRPC):
         profile = kwargs.get('profile', False)
         if profile:
             self.set_profiler()
+
+    async def init_warehouse(self, **kwargs):
+        """
+        Init warehouse process.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
+        def start_warehouse(*args, **extra_kwargs):
+            kwargs.update(extra_kwargs)
+            mosaic.init('warehouse', *args, **kwargs, wait=True)
+
+        warehouse_indices = kwargs.pop('indices', -1)
+        if warehouse_indices < 0:
+            warehouse_proxy = RuntimeProxy(name='warehouse')
+        else:
+            warehouse_proxy = RuntimeProxy(name='warehouse', indices=warehouse_indices)
+        warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)
+        warehouse_subprocess.start_process()
+        warehouse_proxy.subprocess = warehouse_subprocess
+
+        self._local_warehouse = warehouse_proxy
+        if self.uid == 'monitor':
+            self._remote_warehouse = warehouse_proxy
+        await self._comms.wait_for(warehouse_proxy.uid)
 
     def wait(self, wait=False):
         """
@@ -519,7 +549,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        return self._remote_warehouse
+        return self._local_warehouse
 
     def get_local_warehouse(self):
         """
@@ -991,7 +1021,7 @@ class Runtime(BaseRPC):
         """
         global_profiler.send_profile()
 
-    async def put(self, obj, publish=False):
+    async def put(self, obj, publish=False, reply=False):
         """
         Put an object into the warehouse.
 
@@ -999,6 +1029,7 @@ class Runtime(BaseRPC):
         ----------
         obj
         publish
+        reply
 
         Returns
         -------
@@ -1006,14 +1037,14 @@ class Runtime(BaseRPC):
         """
         if hasattr(obj, 'has_tessera') and obj.is_proxy:
             await obj.push(publish=publish)
-
             return obj.ref
 
         else:
+            warehouse = self._local_warehouse
             warehouse_obj = WarehouseObject(obj)
 
-            await self._remote_warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
-                                                    publish=publish, reply=publish)
+            await warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
+                                       publish=publish, reply=reply or publish)
 
             return warehouse_obj
 
@@ -1029,18 +1060,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        if isinstance(uid, WarehouseObject):
-            uid = uid.uid
-
-        if uid in self._local_warehouse:
-            return self._local_warehouse[uid]
-
-        obj = await self._remote_warehouse.get_remote(uid=uid, reply=True)
-
-        if not hasattr(obj, 'cached') or obj.cached:
-            self._local_warehouse[uid] = obj
-
-        return obj
+        return await self._local_warehouse.get_remote(uid=uid, reply=True)
 
     async def drop(self, uid):
         """
@@ -1054,47 +1074,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        if uid in self._local_warehouse:
-            del self._local_warehouse[uid]
-
-        await self._remote_warehouse.drop_remote(uid=uid)
-
-    async def force_put(self, sender_id, obj, uid=None):
-        """
-
-        Parameters
-        ----------
-        sender_id
-        obj
-        uid
-
-        Returns
-        -------
-
-        """
-        if uid not in self._local_warehouse:
-            self._local_warehouse[uid] = obj
-
-    async def force_push(self, sender_id, __dict__, uid=None):
-        """
-
-        Parameters
-        ----------
-        sender_id
-        __dict__
-        uid
-
-        Returns
-        -------
-
-        """
-        if uid in self._local_warehouse:
-            obj = self._local_warehouse[uid]
-            for key, value in __dict__.items():
-                setattr(obj, key, value)
-
-        else:
-            await self.get(uid)
+        await self._local_warehouse.drop_remote(uid=uid)
 
     # Command and task management methods
 
@@ -1176,8 +1156,9 @@ class Runtime(BaseRPC):
                     obj.queue_task((None, 'stop'))
 
                 # Remove from local warehouse
-                if obj_uid in self._local_warehouse:
-                    del self._local_warehouse[obj_uid]
+                if 'warehouse' in self.uid and obj_uid in self._local_warehouse:
+                    if self._local_warehouse[obj_uid] is obj:
+                        del self._local_warehouse[obj_uid]
 
                 # Execute object deregister
                 if hasattr(obj, 'deregister'):
