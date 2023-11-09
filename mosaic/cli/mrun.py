@@ -65,7 +65,7 @@ def go(cmd=None, **kwargs):
     reuse_head = kwargs.get('reuse_head', False)
 
     if runtime_indices is not None:
-        runtime_indices = tuple(runtime_indices.split(':'))
+        runtime_indices = tuple([int(i) for i in runtime_indices.split(':')])
 
     if not local:
         num_nodes = kwargs.get('nnodes', 1)
