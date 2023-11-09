@@ -239,15 +239,18 @@ class Runtime(BaseRPC):
         -------
 
         """
-        def start_warehouse(*args, **extra_kwargs):
-            kwargs.update(extra_kwargs)
-            mosaic.init('warehouse', *args, **kwargs, wait=True)
-
         warehouse_indices = kwargs.pop('indices', -1)
         if warehouse_indices < 0:
             warehouse_proxy = RuntimeProxy(name='warehouse')
         else:
             warehouse_proxy = RuntimeProxy(name='warehouse', indices=warehouse_indices)
+        indices = warehouse_proxy.indices
+
+        def start_warehouse(*args, **extra_kwargs):
+            kwargs.update(extra_kwargs)
+            kwargs['runtime_indices'] = indices
+            mosaic.init('warehouse', *args, **kwargs, wait=True)
+
         warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)
         warehouse_subprocess.start_process()
         warehouse_proxy.subprocess = warehouse_subprocess
