@@ -91,8 +91,8 @@ class Node:
         self.idx = idx
         self.next = nxt or []
 
-        if hasattr(op, '_tessera') and \
-                (not hasattr(op, 'has_tessera') or not op.has_tessera):
+        if hasattr(op, '_tessera') or \
+                (hasattr(op, 'has_tessera') and op.has_tessera and op.is_proxy):
             op = getattr(op, '_tessera')
 
         self.op = op if self.method != '__noop__' else None
@@ -329,12 +329,8 @@ class Variable:
             output_grads = [prev[each] for each in output_names]
 
             # call adjoint method
-            if hasattr(node.op, 'has_tessera') and node.op.has_tessera and node.op.is_proxy:
-                method = getattr(node.op._tessera, node.method)
-                ret = method(*output_grads, **kwargs)
-            else:
-                method = getattr(node.op, node.method)
-                ret = method(*output_grads, **kwargs)
+            method = getattr(node.op, node.method)
+            ret = method(*output_grads, **kwargs)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
                 ret = await ret
