@@ -340,7 +340,7 @@ class StructuredData(Data):
         """
         self.grad = None
 
-    def process_grad(self, prec_scale=1e-9, **kwargs):
+    def process_grad(self, prec_scale=0.15, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
@@ -356,21 +356,37 @@ class StructuredData(Data):
         if not self.needs_grad:
             return
 
-        grad = self.grad
-        prec = grad.prec
+        self.grad.apply_prec(prec_scale=prec_scale, **kwargs)
+        return self.grad
+
+    def apply_prec(self, prec_scale=0.15, prec=None, **kwargs):
+        """
+        Apply a pre-conditioner to the current field.
+
+        Parameters
+        ----------
+        prec_scale : float, optional
+            Condition scaling for the preconditioner.
+        prec : StructuredData, optional
+            Pre-conditioner to apply. Defaults to self.prec.
+
+        Returns
+        -------
+
+        """
+        prec = self.prec if prec is None else prec
 
         if prec is not None:
-            norm_prec = np.linalg.norm(prec.data)
+            prec_factor = np.sum(prec.data)
 
-            if norm_prec > 1e-31:
-                prec += prec_scale * norm_prec + 1e-31
-                prec /= np.max(np.abs(prec.data))
+            if prec_factor > 1e-31:
+                num_points = np.prod(prec.shape)
+                prec_factor = prec_scale * num_points / prec_factor
+                prec.data[:] = np.sqrt(prec.data * prec_factor + 1)
                 non_zero = np.abs(prec.data) > 0.
-                grad.data[non_zero] /= prec.data[non_zero]
+                self.data[non_zero] /= prec.data[non_zero]
 
-        self.grad = grad
-
-        return grad
+        return self
 
     def allocate(self):
         """
@@ -884,7 +900,7 @@ class ScalarField(StructuredData):
 
         return interp
 
-    def resample(self, space=None, order=3, prefilter=True, **kwargs):
+    def resample(self, space=None, **kwargs):
         """
         Resample the internal (non-padded) data given some new space object.
 
@@ -896,7 +912,15 @@ class ScalarField(StructuredData):
             Order of the interplation, default is 3.
         prefilter : bool, optional
             Determines if the input array is prefiltered
-            before interpolation. The default is ``True``.
+            before interpolation. If downsampling, this defaults to ``False`` as an anti-aliasing filter
+            will be applied instead. If upsampling, this defaults to ``True``.
+        anti_alias : bool, optional
+            Whether a Gaussian filter is applied to smooth the data before interpolation.
+            The default is ``True``. This is only applied when downsampling.
+        anti_alias_sigma : float or tuple of floats, optional
+            Gaussian filter standard deviations used for the anti-aliasing filter.
+            The default is (d - 1) / 2 where d is the downsampling factor and d > 1. When upsampling,
+            d < 1, and no anti-aliasing filter is applied.
 
         Returns
         -------
@@ -908,22 +932,18 @@ class ScalarField(StructuredData):
 
             interp = []
             for t in range(data.shape[0]):
-                interp.append(self.resample_data(data[t], space,
-                                                 order=order,
-                                                 prefilter=prefilter))
+                interp.append(self.resample_data(data[t], space, **kwargs))
 
             interp = np.stack(interp, axis=0)
 
         else:
-            interp = self.resample_data(self.data, space,
-                                        order=order,
-                                        prefilter=prefilter)
+            interp = self.resample_data(self.data, space, **kwargs)
 
         self.grid.space = space
         self._init_shape()
         self._data = self.pad_data(interp)
 
-    def resample_data(self, data, space, order=3, prefilter=True):
+    def resample_data(self, data, space, **kwargs):
         """
         Resample the data given some new space object.
 
@@ -934,10 +954,18 @@ class ScalarField(StructuredData):
         space : Space
             New space.
         order : int, optional
-            Order of the interplation, default is 3.
+            Order of the interpolation, default is 3.
         prefilter : bool, optional
             Determines if the input array is prefiltered
-            before interpolation. The default is ``True``.
+            before interpolation. If downsampling, this defaults to ``False`` as an anti-aliasing filter
+            will be applied instead. If upsampling, this defaults to ``True``.
+        anti_alias : bool, optional
+            Whether a Gaussian filter is applied to smooth the data before interpolation.
+            The default is ``True``. This is only applied when downsampling.
+        anti_alias_sigma : float or tuple of floats, optional
+            Gaussian filter standard deviations used for the anti-aliasing filter.
+            The default is (d - 1) / 2 where d is the downsampling factor and d > 1. When upsampling,
+            d < 1, and no anti-aliasing filter is applied.
 
         Returns
         -------
@@ -945,11 +973,35 @@ class ScalarField(StructuredData):
             Resampled data.
 
         """
+        order = kwargs.pop('order', 3)
+        prefilter = kwargs.pop('prefilter', True)
 
-        resampling_factor = [dx_old/dx_new
-                             for dx_old, dx_new in zip(self.space.spacing, space.spacing)]
+        resampling_factors = np.array([dx_old/dx_new
+                             for dx_old, dx_new in zip(self.space.spacing, space.spacing)])
 
-        interp = scipy.ndimage.zoom(data, resampling_factor,
+        # Anti-aliasing is only required for down-sampling interpolation
+        if any(factor < 1 for factor in resampling_factors):
+            anti_alias = kwargs.pop('anti_alias', True)
+
+            if anti_alias:
+                anti_alias_sigma = kwargs.pop('anti_alias_sigma', None)
+
+                if anti_alias_sigma is not None:
+                    anti_alias_sigma = anti_alias_sigma * np.ones_like(resampling_factors)
+
+                    if np.any(anti_alias_sigma < 0):
+                        raise ValueError("Anti-alias standard dev. must be equal to or greater than zero")
+
+                # Estimate anti-alias standard deviations if none provided
+                else:
+                    anti_alias_sigma = np.maximum(0, (1/resampling_factors - 1) / 2)
+
+                data = scipy.ndimage.gaussian_filter(data, anti_alias_sigma)
+
+                # Prefiltering is not necessary if anti-alias filter used
+                prefilter = False
+
+        interp = scipy.ndimage.zoom(data, resampling_factors,
                                     order=order, prefilter=prefilter)
 
         return interp

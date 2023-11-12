@@ -112,12 +112,12 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
         time_range = (0, signal.shape[-1])
 
     if norm is True:
-        signal = signal / (np.max(np.abs(signal))+1e-31)
+        signal = signal / (np.max(np.abs(signal))+1e-30)
 
     num_traces = signal.shape[0]
 
     if norm_trace is True:
-        signal = signal / (np.max(np.abs(signal), axis=-1).reshape((num_traces, 1))+1e-31)
+        signal = signal / (np.max(np.abs(signal), axis=-1).reshape((num_traces, 1))+1e-30)
 
     signal_under = signal[0:num_traces:skip, time_range[0]:time_range[1]]
     num_under_traces = signal_under.shape[0]

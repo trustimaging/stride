@@ -198,18 +198,22 @@ class Block:
         if restart is False:
             self.clear()
         else:
-            if type(restart_id) is int and restart_id >= 0:
+            if type(restart_id) is int and restart_id < 0:
+                iteration = Iteration(self._current_iteration.id+1, self._optimisation_loop.running_id,
+                                      self, self._optimisation_loop)
+
+                self._iterations[self._current_iteration.id+1] = iteration
+                self._optimisation_loop.running_id += 1
+                self._current_iteration = iteration
+
+            elif type(restart_id) is int and restart_id >= 0:
                 if restart_id not in self._iterations:
                     raise ValueError('Iteration %d does not exist, so loop cannot be '
                                      'restarted from that point' % restart_id)
 
-                if restart_id-1 in self._iterations:
-                    self._current_iteration = self._iterations[restart_id-1]
-                else:
-                    self._current_iteration = None
-                    self._iterations = OrderedDict()
+                self._current_iteration = self._iterations[restart_id]
 
-                for index in range(restart_id, self._num_iterations):
+                for index in range(restart_id+1, self._num_iterations):
                     if index in self._iterations:
                         del self._iterations[index]
 
@@ -223,7 +227,7 @@ class Block:
             index = zipped[0]
 
             if self._current_iteration is not None \
-                    and index <= self._current_iteration.id:
+                    and index < self._current_iteration.id:
                 continue
 
             if index not in self._iterations:
@@ -392,16 +396,14 @@ class OptimisationLoop(Saved):
 
                 self.load(**load_kwargs)
 
-                if type(restart_id) is int and restart_id < 0:
-                    restart_id = self._current_block.id
-
                 if type(restart_id) is int and restart_id >= 0:
                     if restart_id not in self._blocks:
                         raise ValueError('Block %d does not exist, so loop cannot be '
                                          'restarted from that point' % restart_id)
 
                     self._current_block = self._blocks[restart_id]
-                    self.running_id = 0
+                    last_iter = self._current_block._iterations[self._current_block.num_iterations - 1]
+                    self.running_id = last_iter.abs_id
 
                     if restart_id-1 in self._blocks:
                         prev_block = self._blocks[restart_id-1]

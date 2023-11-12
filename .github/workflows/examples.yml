@@ -17,8 +17,8 @@ jobs:
 
     env:
       DEVITO_COMPILER: gcc
-      DEVITO_LANGUAGE: "openmp"
-      PYTHON_VERSION: "3.11.4"
+      DEVITO_LANGUAGE: openmp
+      PYTHON_VERSION: 3.11.4
 
     strategy:
       # Prevent all build to stop if a single one fails
@@ -28,13 +28,19 @@ jobs:
     - name: Checkout stride
       uses: actions/checkout@v2
       with:
-        path: "stride"
+        path: stride
+
+    - name: Checkout devito
+      uses: actions/checkout@v2
+      with:
+        repository: devitocodes/devito
+        path: devito
 
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
         activate-environment: stride
-        environment-file: "stride/environment.yml"
+        environment-file: stride/environment.yml
         python-version: 3.11.4
         auto-activate-base: false
 
@@ -42,6 +48,12 @@ jobs:
       shell: bash -l {0}
       run: |
         cd stride
+        pip install -e .
+
+    - name: Install devito
+      shell: bash -l {0}
+      run: |
+        cd devito
         pip install -e .
 
     - name: Homogeneous examples

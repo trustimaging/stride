@@ -7,13 +7,14 @@ from .hostlist import expand_hostlist
 __all__ = ['node_list', 'submission_script']
 
 
-def node_list(host_name):
+def node_list(host_name, reuse_head):
     """
     Attempt to find a node list for SLURM clusters.
 
     Parameters
     ----------
     host_name
+    reuse_head
 
     Returns
     -------
@@ -25,10 +26,11 @@ def node_list(host_name):
         return
 
     slurm_list = expand_hostlist(slurm_nodes)
-    try:
-        slurm_list.remove(host_name)
-    except ValueError:
-        slurm_list.remove(host_name.split('.')[0])
+    if not reuse_head:
+        try:
+            slurm_list.remove(host_name)
+        except ValueError:
+            slurm_list.remove(host_name.split('.')[0])
 
     return slurm_list
 
@@ -64,6 +66,7 @@ def submission_script(name, num_nodes, num_workers, num_threads, node_memory):
 #SBATCH --account=<budget_allocation>
 #SBATCH --partition=<partition>
 #SBATCH --qos=<quality_of_service>
+#SBATCH --exclusive
 
 name={name}
 num_nodes={num_nodes}
@@ -81,6 +84,7 @@ conda activate stride
 # use $(ppn) to use one worker per node and as many threads pr worker as cores in the node
 export OMP_NUM_THREADS=$num_threads_per_worker
 export OMP_PLACES=cores
+export OMP_PROC_BIND=true
 
 # set any environment variables
 # for example:

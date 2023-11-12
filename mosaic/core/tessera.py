@@ -75,6 +75,7 @@ class Tessera(RemoteBase):
         self._state = None
         self._is_parameter = False
         self._task_queue = asyncio.Queue()
+        self._run_queue = asyncio.Queue()
         self._task_lock = asyncio.Lock()
 
         self._cls = cls
@@ -179,6 +180,7 @@ class Tessera(RemoteBase):
 
         """
         self._is_parameter = True
+        self.is_async = True
 
         obj = self._obj
         self._obj = weakref.ref(obj, self._dec_parameter_ref())
@@ -245,10 +247,41 @@ class Tessera(RemoteBase):
             return
 
         self.loop.run(self.listen_async)
+        self.loop.run(self.run_async)
 
     async def listen_async(self):
         """
-        Listening loop that consumes tasks from the tessera queue.
+        Listening loop that consumes tasks from the tessera queue and
+        tries to retrieve their arguments.
+
+        Returns
+        -------
+
+        """
+        if self._state != 'init':
+            return
+
+        while True:
+            sender_id, task = await self._task_queue.get()
+            # Make sure that the loop does not keep implicit references to the task until the
+            # next task arrives in the queue
+            self._task_queue.task_done()
+
+            if type(task) is str and task == 'stop':
+                self._put_run_queue(sender_id=sender_id, task=task, future=None)
+                break
+
+            future = await task.prepare_args()
+
+            if self.is_async:
+                future.add_done_callback(functools.partial(self._put_run_queue,
+                                                           sender_id=sender_id, task=task, future=future))
+            else:
+                self._put_run_queue(sender_id=sender_id, task=task, future=future)
+
+    async def run_async(self):
+        """
+        Loop that runs tasks once inputs are ready.
 
         Returns
         -------
@@ -260,15 +293,14 @@ class Tessera(RemoteBase):
         while True:
             self.state_changed('listening')
 
-            sender_id, task = await self._task_queue.get()
+            sender_id, task, future = await self._run_queue.get()
             # Make sure that the loop does not keep implicit references to the task until the
             # next task arrives in the queue
-            self._task_queue.task_done()
+            self._run_queue.task_done()
 
             if type(task) is str and task == 'stop':
                 break
 
-            future = await task.prepare_args()
             await future
 
             if task.state == 'failed':
@@ -371,6 +403,9 @@ class Tessera(RemoteBase):
 
         finally:
             pass
+
+    def _put_run_queue(self, *args, sender_id, task, future):
+        self._run_queue.put_nowait((sender_id, task, future))
 
     def _dec_parameter_ref(self):
         def _dec_ref(*args):

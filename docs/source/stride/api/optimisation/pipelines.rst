@@ -28,11 +28,6 @@ Steps
     :undoc-members:
     :show-inheritance:
 
-.. automodule:: stride.optimisation.pipelines.steps.filter_wavelets
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 .. automodule:: stride.optimisation.pipelines.steps.norm_per_shot
     :members:
     :undoc-members:

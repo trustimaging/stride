@@ -84,7 +84,7 @@ async def forward(problem, pde, *args, **kwargs):
     dump = kwargs.pop('dump', True)
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
-    safe = kwargs.pop('safe', False)
+    safe = kwargs.pop('safe', True)
 
     if dump is True:
         try:
@@ -105,7 +105,8 @@ async def forward(problem, pde, *args, **kwargs):
     published_args = [runtime.put(each, publish=True) for each in args]
     published_args = await asyncio.gather(*published_args)
 
-    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    platform = kwargs.get('platform', 'cpu')
+    using_gpu = platform in ['nvidia-acc', 'gpu']
     if using_gpu:
         devices = kwargs.pop('devices', None)
         num_gpus = gpu_count() if devices is None else len(devices)
@@ -113,22 +114,30 @@ async def forward(problem, pde, *args, **kwargs):
 
     @runtime.async_for(shot_ids, safe=safe)
     async def loop(worker, shot_id):
-        logger.info('\n')
-        logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
+        _kwargs = kwargs.copy()
+
+        logger.perf('\n')
+        logger.perf('Giving shot %d to %s' % (shot_id, worker.uid))
 
         sub_problem = problem.sub_problem(shot_id)
         wavelets = sub_problem.shot.wavelets
 
         if using_gpu:
-            devito_args = kwargs.get('devito_args', {})
-            devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
-            kwargs['devito_args'] = devito_args
+            deviceid = devices[worker.indices[1] % num_gpus]
+            if platform == 'nvidia-acc':
+                devito_args = _kwargs.get('devito_args', {})
+                devito_args['deviceid'] = deviceid
+                _kwargs['devito_args'] = devito_args
+            elif platform == 'gpu':
+                _kwargs['deviceid'] = deviceid
+            else:
+                raise ValueError('Unknown platform %s' % platform)
 
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
-                           runtime=worker, **kwargs).result()
+                           runtime=worker, **_kwargs).result()
 
-        logger.info('Shot %d retrieved' % sub_problem.shot_id)
+        logger.perf('Shot %d retrieved' % sub_problem.shot_id)
 
         shot = problem.acquisitions.get(shot_id)
         shot.observed.data[:] = traces.data
@@ -137,7 +146,7 @@ async def forward(problem, pde, *args, **kwargs):
             shot.append_observed(path=problem.output_folder,
                                  project_name=problem.name)
 
-            logger.info('Appended traces for shot %d to observed file' % sub_problem.shot_id)
+            logger.perf('Appended traces for shot %d to observed file' % sub_problem.shot_id)
 
         if deallocate is True:
             shot.observed.deallocate()
@@ -197,16 +206,24 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     restart_id = kwargs.pop('restart_id', -1)
 
     dump = kwargs.pop('dump', True)
-    safe = kwargs.pop('safe', False)
+    safe = kwargs.pop('safe', True)
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
+    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.25)
+    filter_traces_relaxation = kwargs.pop('filter_traces_relaxation', 0.75)
     process_wavelets = ProcessWavelets.remote(f_min=f_min, f_max=f_max,
+                                              filter_relaxation=filter_wavelets_relaxation,
+                                              len=runtime.num_workers, **kwargs)
+    process_observed = ProcessObserved.remote(f_min=f_min, f_max=f_max,
+                                              filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
+                                          filter_relaxation=filter_traces_relaxation,
                                           len=runtime.num_workers, **kwargs)
 
-    using_gpu = kwargs.get('platform', 'cpu') == 'nvidia-acc'
+    platform = kwargs.get('platform', 'cpu')
+    using_gpu = platform in ['nvidia-acc', 'gpu']
     if using_gpu:
         devices = kwargs.pop('devices', None)
         num_gpus = gpu_count() if devices is None else len(devices)
@@ -218,28 +235,30 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         published_args = [runtime.put(each, publish=True) for each in args]
         published_args = await asyncio.gather(*published_args)
 
-        logger.info('Starting iteration %d (out of %d), '
+        logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
                     (iteration.id, block.num_iterations, block.id,
                      optimisation_loop.num_blocks))
 
         if dump and block.restart and not optimisation_loop.started:
-            if iteration.abs_id-1 >= 0:
+            if iteration.abs_id > 0:
                 try:
                     optimiser.variable.load(path=problem.output_folder,
                                             project_name=problem.name,
-                                            version=iteration.abs_id-1)
+                                            version=iteration.abs_id)
                 except OSError:
                     raise OSError('Optimisation loop cannot be restarted,'
                                   'variable version %d cannot be found.' %
-                                  iteration.abs_id-1)
+                                  iteration.abs_id)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
-            logger.info('\n')
-            logger.info('Giving shot %d to %s' % (shot_id, worker.uid))
+            _kwargs = kwargs.copy()
+
+            logger.perf('\n')
+            logger.perf('Giving shot %d to %s' % (shot_id, worker.uid))
 
             sub_problem = problem.sub_problem(shot_id)
             wavelets = sub_problem.shot.wavelets
@@ -252,26 +271,45 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 raise RuntimeError('Shot %d has no observed data' % shot_id)
 
             if using_gpu:
-                devito_args = kwargs.get('devito_args', {})
-                devito_args['deviceid'] = devices[worker.indices[1] % num_gpus]
-                kwargs['devito_args'] = devito_args
+                deviceid = devices[worker.indices[1] % num_gpus]
+                if platform == 'nvidia-acc':
+                    devito_args = _kwargs.get('devito_args', {})
+                    devito_args['deviceid'] = deviceid
+                    _kwargs['devito_args'] = devito_args
+                elif platform == 'gpu':
+                    _kwargs['deviceid'] = deviceid
+                else:
+                    raise ValueError('Unknown platform %s' % platform)
 
-            wavelets = process_wavelets(wavelets, runtime=worker, **kwargs)
+            # pre-process wavelets and observed traces
+            wavelets = process_wavelets(wavelets,
+                                        problem=sub_problem, runtime=worker, **_kwargs)
             await wavelets.init_future
-            modelled = pde(wavelets, *published_args, problem=sub_problem, runtime=worker, **kwargs)
+            observed = process_observed(observed,
+                                        problem=sub_problem, runtime=worker, **_kwargs)
+            await observed.init_future
+
+            # run PDE
+            modelled = pde(wavelets, *published_args,
+                           problem=sub_problem, runtime=worker, **_kwargs)
             await modelled.init_future
 
-            traces = process_traces(modelled, observed, runtime=worker, **kwargs)
+            # post-process modelled and observed traces
+            traces = process_traces(modelled, observed,
+                                    problem=sub_problem, runtime=worker, **_kwargs)
             await traces.init_future
+
+            # calculate loss
             fun = await loss(traces.outputs[0], traces.outputs[1],
-                             problem=sub_problem, runtime=worker, **kwargs).result()
+                             problem=sub_problem, runtime=worker, **_kwargs).result()
 
             iteration.add_fun(fun)
-            logger.info('Functional value for shot %d: %s' % (shot_id, fun))
+            logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
 
-            await fun.adjoint(**kwargs)
+            # run adjoint
+            await fun.adjoint(**_kwargs)
 
-            logger.info('Retrieved gradient for shot %d' % sub_problem.shot_id)
+            logger.perf('Retrieved gradient for shot %d' % sub_problem.shot_id)
 
         await loop
 
@@ -280,10 +318,10 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if dump:
             optimiser.variable.dump(path=problem.output_folder,
                                     project_name=problem.name,
-                                    version=iteration.abs_id)
+                                    version=iteration.abs_id+1)
 
-        logger.info('Done iteration %d (out of %d), '
+        logger.perf('Done iteration %d (out of %d), '
                     'block %d (out of %d) - Total loss %e' %
                     (iteration.id, block.num_iterations, block.id,
                      optimisation_loop.num_blocks, iteration.fun_value))
-        logger.info('====================================================================')
+        logger.perf('====================================================================')

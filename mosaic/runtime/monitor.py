@@ -96,13 +96,6 @@ class Monitor(Runtime):
         -------
 
         """
-        if self.mode == 'cluster':
-            num_cpus = cpu_count()
-
-            monitor_cpus = max(1, min(int(num_cpus // 8), 8))
-            available_cpus = list(range(num_cpus))
-            psutil.Process().cpu_affinity(available_cpus[-monitor_cpus:])
-
         await super().init(**kwargs)
 
         # Start local cluster
@@ -163,6 +156,7 @@ class Monitor(Runtime):
 
         self._nodes[node_proxy.uid] = node_proxy
         await self._comms.wait_for(node_proxy.uid)
+
         while node_proxy.uid not in self._monitored_nodes:
             await asyncio.sleep(0.1)
 
@@ -194,6 +188,7 @@ class Monitor(Runtime):
         ssh_flags = os.environ.get('SSH_FLAGS', '')
         ssh_commands = os.environ.get('SSH_COMMANDS', None)
         ssh_commands = ssh_commands + ';' if ssh_commands else ''
+        reuse_head = '--reuse-head' if self.reuse_head else '--free-head'
 
         in_slurm = os.environ.get('SLURM_NODELIST', None) is not None
 
@@ -206,14 +201,16 @@ class Monitor(Runtime):
                           f'mrun --node -i {node_index} '
                           f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
                           f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
-                          f'--cluster --{log_level}')
+                          f'--cluster --{log_level} {reuse_head}')
 
             if in_slurm:
                 cpu_mask = _cpu_mask(1, 1, num_cpus)
 
                 cmd = (f'srun {ssh_flags} --nodes=1 --ntasks=1 --tasks-per-node={num_cpus} '
-                       f'--cpu-bind=mask_cpu:{cpu_mask} '
+                       f'--cpu-bind=mask_cpu:{cpu_mask} --mem-bind=local '
                        f'--oversubscribe '
+                       f'--distribution=block:block '
+                       f'--hint=nomultithread --no-kill '
                        f'--nodelist={node_address} '
                        f'{remote_cmd}')
 
@@ -230,8 +227,10 @@ class Monitor(Runtime):
 
             async def wait_for(proxy):
                 await self._comms.wait_for(proxy.uid)
-                while node_proxy.uid not in self._monitored_nodes:
+
+                while proxy.uid not in self._monitored_nodes:
                     await asyncio.sleep(0.1)
+
                 return proxy
 
             tasks.append(wait_for(node_proxy))
@@ -437,10 +436,11 @@ class Monitor(Runtime):
                 continue
 
             pending_tasks.append(task)
+        self.logger.info('Pending barrier tasks %d' % len(pending_tasks))
 
         tic = time.time()
         while pending_tasks:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.5)
 
             for task in pending_tasks:
                 if task.state in ['done', 'failed', 'collected']:

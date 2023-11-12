@@ -48,6 +48,7 @@ class Subprocess:
         name = kwargs.pop('name', None)
         target = kwargs.pop('target', None)
         cpu_affinity = kwargs.pop('cpu_affinity', None)
+        mem_affinity = kwargs.pop('mem_affinity', None)
         is_daemon = kwargs.pop('daemon', False)
 
         if target is None or not callable(target):
@@ -85,6 +86,7 @@ class Subprocess:
                                                          parent_alive_pipe,
                                                          self._keep_child_alive,
                                                          cpu_affinity,
+                                                         mem_affinity,
                                                          *parent_args,
                                                          args, kwargs))
         self._ps_process = None
@@ -189,15 +191,19 @@ class Subprocess:
                        is_daemon,
                        child_start_pipe,
                        parent_alive_pipe, keep_child_alive,
-                       cpu_affinity,
+                       cpu_affinity, mem_affinity,
                        parent_id, parent_address, parent_port, args, kwargs):
         self._state = 'running'
+        self._ps_process = psutil.Process(self._mp_process.pid)
 
         child_start_pipe.send(True)
         child_start_pipe.close()
 
         if sys.platform == 'linux' and cpu_affinity is not None:
-            psutil.Process().cpu_affinity(cpu_affinity)
+            self.cpu_affinity(cpu_affinity)
+
+        if sys.platform == 'linux' and mem_affinity is not None:
+            self.mem_affinity(mem_affinity)
 
         keep_child_alive.close()
         if not is_daemon:
@@ -246,8 +252,6 @@ class Subprocess:
                 # anyway - if, for example, the system is getting bogged down
                 # due to the running out of memory, exiting sooner rather than
                 # later might be needed to restore normal system function.
-                # If this is in appropriate for your use case, please file a
-                # bug.
                 os._exit(-1)
 
         thread = threading.Thread(target=monitor_parent)
@@ -350,6 +354,30 @@ class Subprocess:
             numa.schedule.run_on_cpus(self.pid, *cpus)
         else:
             self._ps_process.cpu_affinity(cpus)
+
+    def mem_affinity(self, nodes):
+        """
+        Set memory affinity for this process.
+
+        Parameters
+        ----------
+        nodes : list
+            List of NUMA nodes.
+
+        Returns
+        -------
+
+        """
+        try:
+            import numa
+            from numa import LIBNUMA
+        except Exception:
+            return
+
+        numa.memory.set_membind_nodes(*nodes)
+        op_res = LIBNUMA.numa_set_bind_policy(0)
+        if op_res == -1:
+            raise Exception('set_bind_policy failed')
 
 
 def subprocess(target):
