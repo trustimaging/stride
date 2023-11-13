@@ -272,18 +272,6 @@ class Tessera(RemoteBase):
                 self._put_run_queue(sender_id=sender_id, task=task, future=None)
                 break
 
-            if self.runtime.uid == 'warehouse':
-                max_runtime_mem = float(os.environ.get('MOSAIC_WAREHOUSE_QUEUE_MEM', 0.85))
-            elif 'worker' in self.runtime.uid:
-                max_runtime_mem = float(os.environ.get('MOSAIC_WORKER_QUEUE_MEM', 0.95))
-            else:
-                max_runtime_mem = float(os.environ.get('MOSAIC_RUNTIME_QUEUE_MEM', 0.85))
-
-            runtime_mem = self.runtime.total_memory_fraction()
-            while runtime_mem > max_runtime_mem:
-                await asyncio.sleep(0.1)
-                runtime_mem = self.runtime.total_memory_fraction()
-
             future = await task.prepare_args()
 
             if self.is_async:
@@ -314,6 +302,9 @@ class Tessera(RemoteBase):
             if type(task) is str and task == 'stop':
                 break
 
+            self.runtime.dec_pending_tasks()
+            self.runtime.inc_running_tasks()
+
             await future
 
             if task.state == 'failed':
@@ -338,6 +329,7 @@ class Tessera(RemoteBase):
 
             del task
             del method
+            self.runtime.dec_running_tasks()
 
         self.state_changed('stopped')
 
@@ -582,14 +574,15 @@ class ParameterMixin:
     def _serialisation_helper(self):
         state = dict(
             uid=self._tessera.uid,
-            tessera=self._tessera
+            tessera=self._tessera,
+            ref=self._ref,
         )
 
         return state
 
     @classmethod
     def _deserialisation_helper(cls, state):
-        instance = WarehouseObject(uid=state['uid'])
+        instance = state['ref']
         instance._tessera = state['tessera']
 
         return instance
@@ -771,7 +764,7 @@ class TesseraProxy(ProxyBase):
 
         obj = self._cls.cls(*args, **kwargs)
         setattr(obj, '_tessera', self)
-        setattr(obj, '_ref', WarehouseObject(uid=self.uid))
+        setattr(obj, '_ref', WarehouseObject(uid=self.uid, obj=obj))
         setattr(obj, '_cached', cached)
 
         return obj

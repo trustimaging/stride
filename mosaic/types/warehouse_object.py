@@ -2,6 +2,7 @@
 import uuid
 
 import mosaic
+from ..utils import sizeof
 
 
 __all__ = ['WarehouseObject']
@@ -18,15 +19,7 @@ class WarehouseObject:
 
     """
 
-    def __init__(self, obj=None, uid=None):
-        """
-
-        Parameters
-        ----------
-        obj
-        uid
-
-        """
+    def __init__(self, obj=None, uid=None, size=None):
         if uid is None:
             self._name = obj.__class__.__name__.lower()
             self._uid = '%s-%s-%s' % ('ware',
@@ -45,6 +38,7 @@ class WarehouseObject:
         self._node_id = node_id
         self._warehouse_id = runtime._local_warehouse.uid
         self._tessera = None
+        self._size = sizeof(obj) if size is None else size
 
     @property
     def state(self):
@@ -115,6 +109,13 @@ class WarehouseObject:
 
         """
         return await self.runtime.drop(self)
+
+    async def size(self, pending=False):
+        """
+        Size of the object in bytes.
+
+        """
+        return self._size
 
     def __await__(self):
         return self.value().__await__()

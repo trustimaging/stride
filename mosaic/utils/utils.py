@@ -1,11 +1,15 @@
 
 import sys
 import psutil
+import asyncio
 import traceback
 import threading
 import numpy as np
 
-__all__ = ['sizeof', 'set_main_thread', 'memory_limit', 'cpu_count', 'gpu_count', 'MultiError']
+import mosaic
+
+__all__ = ['sizeof', 'remote_sizeof', 'set_main_thread', 'memory_limit',
+           'cpu_count', 'gpu_count', 'MultiError']
 
 
 def sizeof(obj, seen=None):
@@ -41,10 +45,60 @@ def sizeof(obj, seen=None):
         if isinstance(obj, dict):
             size += sum([sizeof(v, seen) for v in obj.values()])
             size += sum([sizeof(k, seen) for k in obj.keys()])
-        elif hasattr(obj, '__dict__'):
-            size += sizeof(obj.__dict__, seen)
         elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
             size += sum([sizeof(i, seen) for i in obj])
+    except RuntimeError:
+        pass
+
+    return size
+
+
+async def remote_sizeof(obj, seen=None, pending=False):
+    """
+    Recursively finds size of remote objects.
+
+    Parameters
+    ----------
+    obj : object
+        Object to check size.
+    pending : bool
+        Only count pending objects.
+    seen
+
+    Returns
+    -------
+    float
+        Size in bytes.
+
+    """
+    if isinstance(obj, mosaic.types.awaitable_types):
+        size = await obj.size(pending=pending)
+    else:
+        if pending:
+            size = 0
+        else:
+            if isinstance(obj, np.ndarray):
+                size = obj.nbytes
+            else:
+                size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+
+    try:
+        if isinstance(obj, dict):
+            _size = await asyncio.gather(*(remote_sizeof(v, seen, pending) for v in obj.values()))
+            size += sum(_size)
+            _size = await asyncio.gather(*(remote_sizeof(k, seen, pending) for k in obj.keys()))
+            size += sum(_size)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            _size = await asyncio.gather(*(remote_sizeof(i, seen, pending) for i in obj))
+            size += sum(_size)
     except RuntimeError:
         pass
 

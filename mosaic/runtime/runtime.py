@@ -166,6 +166,8 @@ class Runtime(BaseRPC):
         self._tessera_proxy_array = weakref.WeakValueDictionary()
         self._task = dict()
         self._task_proxy = weakref.WeakValueDictionary()
+        self._pending_tasks = 0
+        self._running_tasks = 0
 
         self._dealloc_queue = []
         self._maintenance_queue = []
@@ -292,16 +294,22 @@ class Runtime(BaseRPC):
         """
         # OSX does not allow accessing information on external processes
         try:
-            return self.ps_process.memory_info().rss
+            mem = self.ps_process.memory_info().rss
         except psutil.AccessDenied:
-            pass
+            mem = 0
 
-        return 0
+        if self.uid == 'warehouse':
+            max_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.95))
+        elif 'worker' in self.uid:
+            max_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.95))
+        else:
+            max_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.95))
 
-    def memory_fraction(self):
+        return mem*max_fraction
+
+    def available_memory(self):
         """
-        Amount of RSS memory being consumed by the runtime
-        as a percentage.
+        Amount of RSS memory available to the runtime.
 
         Returns
         -------
@@ -309,32 +317,21 @@ class Runtime(BaseRPC):
             RSS memory.
 
         """
-        # OSX does not allow accessing information on external processes
-        try:
-            return self.ps_process.memory_percent()/100
-        except psutil.AccessDenied:
-            pass
+        mem = psutil.virtual_memory().total
 
-        return 0
+        if self.uid == 'warehouse':
+            max_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.95))
+        elif 'worker' in self.uid:
+            max_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.95))
+        else:
+            max_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.95))
 
-    def total_memory_fraction(self):
-        """
-        Amount of RSS memory being consumed by the node
-        as a percentage.
+        return mem*max_fraction
 
-        Returns
-        -------
-        float
-            RSS memory.
-
-        """
-        # OSX does not allow accessing information on external processes
-        try:
-            return psutil.virtual_memory().percent/100
-        except psutil.AccessDenied:
-            pass
-
-        return 0
+    def fits_in_memory(self, nbytes):
+        runtime_mem = self.memory()
+        available_mem = self.available_memory()
+        return runtime_mem + nbytes < available_mem
 
     def cpu_load(self):
         """
@@ -1343,6 +1340,19 @@ class Runtime(BaseRPC):
 
         tessera.queue_task((sender_id, task))
         task.state_changed('pending')
+        self.inc_pending_tasks()
+
+    def inc_pending_tasks(self):
+        self._pending_tasks += 1
+
+    def dec_pending_tasks(self):
+        self._pending_tasks -= 1
+
+    def inc_running_tasks(self):
+        self._running_tasks += 1
+
+    def dec_running_tasks(self):
+        self._running_tasks -= 1
 
 
 class RuntimeProxy(BaseRPC):

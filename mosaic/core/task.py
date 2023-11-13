@@ -10,7 +10,7 @@ from cached_property import cached_property
 from .. import types
 from .base import Base, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
-from ..utils import Future, MultiError, sizeof
+from ..utils import Future, MultiError, sizeof, remote_sizeof
 
 
 __all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone']
@@ -78,6 +78,7 @@ class Task(RemoteBase):
         self._tic = 0
         self._elapsed = None
 
+        self._arg_size = 0
         self._args_pending = set()
         self._kwargs_pending = set()
 
@@ -271,7 +272,7 @@ class Task(RemoteBase):
         kwargs['tessera_id'] = self.tessera_id
         return super().add_profile(profile, **kwargs)
 
-    async def prepare_args(self):
+    async def __prepare_args(self):
         """
         Prepare the arguments of the task for execution.
 
@@ -356,6 +357,79 @@ class Task(RemoteBase):
 
         return self._ready_future
 
+    async def prepare_args(self):
+        """
+        Prepare the arguments of the task for execution.
+
+        Returns
+        -------
+        Future
+
+        """
+        tasks = []
+
+        async def await_size(_arg):
+            self._arg_size += await _arg.size(pending=True)
+
+        for index in range(len(self.args)):
+            arg = self.args[index]
+
+            if type(arg) in types.awaitable_types:
+                self._args_state[index] = arg.state
+                if not isinstance(arg, TaskDone):
+                    self._args_value[index] = None
+
+                if arg.state != 'done':
+                    self._args_pending.add(arg)
+
+                    def callback(_index, _arg):
+                        def _callback(fut):
+                            self.loop.run(self._set_arg_done, fut, _index, _arg)
+
+                        return _callback
+
+                    arg.add_done_callback(callback(index, arg))
+
+                else:
+                    tasks.append(
+                        await_size(arg)
+                    )
+
+            else:
+                self._args_state[index] = 'ready'
+                self._args_value[index] = arg
+
+        for key, value in self.kwargs.items():
+            if type(value) in types.awaitable_types:
+                self._kwargs_state[key] = value.state
+                if not isinstance(value, TaskDone):
+                    self._kwargs_value[key] = None
+
+                if value.state != 'done':
+                    self._kwargs_pending.add(value)
+
+                    def callback(_key, _arg):
+                        def _callback(fut):
+                            self.loop.run(self._set_kwarg_done, fut, _key, _arg)
+
+                        return _callback
+
+                    value.add_done_callback(callback(key, value))
+
+                else:
+                    tasks.append(
+                        await_size(value)
+                    )
+
+            else:
+                self._kwargs_state[key] = 'ready'
+                self._kwargs_value[key] = value
+
+        await asyncio.gather(*tasks)
+        await self._check_ready()
+
+        return self._ready_future
+
     async def set_exception(self, exc):
         """
         Set task exception
@@ -393,11 +467,8 @@ class Task(RemoteBase):
         if not (await self._check_exception(fut, arg)):
             return
 
-        result = await arg.result()
-
-        self._args_state[index] = 'ready'
-        if not isinstance(arg, TaskDone):
-            self._args_value[index] = result
+        self._arg_size += await arg.size(pending=True)
+        self._args_state[index] = 'done'
 
         try:
             self._args_pending.remove(arg)
@@ -409,11 +480,8 @@ class Task(RemoteBase):
         if not (await self._check_exception(fut, arg)):
             return
 
-        result = await arg.result()
-
-        self._kwargs_state[index] = 'ready'
-        if not isinstance(arg, TaskDone):
-            self._kwargs_value[index] = result
+        self._arg_size += await arg.size(pending=True)
+        self._kwargs_state[index] = 'done'
 
         try:
             self._kwargs_pending.remove(arg)
@@ -455,11 +523,62 @@ class Task(RemoteBase):
             return True
 
     async def _check_ready(self):
-        if not len(self._args_pending) and not len(self._kwargs_pending):
-            self.state_changed('ready')
+        if len(self._args_pending) or len(self._kwargs_pending):
+            return
 
-            if not self._ready_future.done():
+        # make sure there's enough memory to pull the arguments
+        while not self.runtime.fits_in_memory(self._arg_size):
+            if self.runtime._running_tasks <= 0:
+                await self.set_exception(
+                    MemoryOverflowError('Not enough memory to allocate %d bytes '
+                                        'for task %s' % (self._arg_size, self))
+                )
                 self._ready_future.set_result(True)
+                return
+
+            await asyncio.sleep(0.1)
+
+        # pull all arguments
+        awaitable_args = []
+
+        for index in range(len(self.args)):
+            arg = self.args[index]
+
+            if type(arg) in types.awaitable_types:
+                self._args_state[index] = 'ready'
+
+                async def _await_arg(_index, _arg):
+                    _result = await _arg.result()
+                    _attr = self._args_value if not isinstance(_arg, TaskDone) else None
+                    return _attr, _index, _result
+
+                awaitable_args.append(
+                    _await_arg(index, arg)
+                )
+
+        for key, value in self.kwargs.items():
+            if type(value) in types.awaitable_types:
+                self._kwargs_state[key] = 'ready'
+
+                async def _await_kwarg(_key, _arg):
+                    _result = await _arg.result()
+                    _attr = self._kwargs_value if not isinstance(_arg, TaskDone) else None
+                    return _attr, _key, _result
+
+                awaitable_args.append(
+                    _await_kwarg(key, value)
+                )
+
+        for task in asyncio.as_completed(awaitable_args):
+            attr, key, result = await task
+            if attr is not None:
+                attr[key] = result
+
+        # set task ready
+        self.state_changed('ready')
+
+        if not self._ready_future.done():
+            self._ready_future.set_result(True)
 
     def __del__(self):
         result = self._result
@@ -729,6 +848,24 @@ class TaskProxy(ProxyBase):
         kwargs['tessera_id'] = self.tessera_id
         return super().add_profile(profile, **kwargs)
 
+    async def size(self, pending=False):
+        """
+        Size of the task result in bytes.
+
+        Returns
+        -------
+
+        """
+        await self
+
+        if hasattr(self, '_retrieved'):
+            if pending:
+                return 0
+            else:
+                return sizeof(self._retrieved)
+
+        return await remote_sizeof(self._result, pending=pending)
+
     async def result(self):
         """
         Gather remote result from the task.
@@ -921,6 +1058,9 @@ class TaskOutputBase(Base):
     async def result(self):
         pass
 
+    async def size(self, pending=False):
+        pass
+
     def add_done_callback(self, fun):
         self._task_proxy.add_done_callback(fun)
 
@@ -951,6 +1091,25 @@ class TaskOutput(TaskOutputBase):
             result = (result,)
 
         return result[self._key]
+
+    async def size(self, pending=False):
+        """
+        Size of the task result in bytes.
+
+        Returns
+        -------
+
+        """
+        await self
+
+        if self._result is not None:
+            if pending:
+                return 0
+            else:
+                return sizeof(self._result)
+
+        result = self._select_result(self._task_proxy._result)
+        return await remote_sizeof(result, pending=pending)
 
     async def result(self):
         """
@@ -983,6 +1142,9 @@ class TaskDone(TaskOutputBase):
                (self.__class__.__name__, id(self),
                 self.uid, runtime_id, self.state)
 
+    async def size(self, pending=False):
+        return 0
+
     async def result(self):
         """
         Wait for task termination.
@@ -996,6 +1158,10 @@ class TaskDone(TaskOutputBase):
         self._result = True
 
         return self._result
+
+
+class MemoryOverflowError(Exception):
+    pass
 
 
 types.awaitable_types += (TaskProxy, TaskOutput, TaskDone)
