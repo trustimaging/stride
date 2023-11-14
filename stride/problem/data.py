@@ -320,8 +320,12 @@ class StructuredData(Data):
             return
 
         if self.grad is None:
-            self.grad = self.alike(name='%s_grad' % self.name)
-            self.grad.prec = self.alike(name='%s_prec' % self.name)
+            self.grad = self.alike(name='%s_grad' % self.name,
+                                   shape=self.shape, extended_shape=self.shape,
+                                   inner=None)
+            self.grad.prec = self.alike(name='%s_prec' % self.name,
+                                        shape=self.shape, extended_shape=self.shape,
+                                        inner=None)
 
         self.grad.fill(0.)
         self.grad.prec.fill(0.)

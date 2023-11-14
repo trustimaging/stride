@@ -827,21 +827,27 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         """
         variable_grad = self.dev_grid.vars.grad_vp
-        variable_grad = np.asarray(variable_grad.data, dtype=np.float32)
+        variable_grad = np.asarray(variable_grad.data[self.space.inner], dtype=np.float32)
 
         variable_prec = self.dev_grid.vars.prec_vp
-        variable_prec = np.asarray(variable_prec.data, dtype=np.float32)
+        variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
 
-        variable_grad *= -2 / vp.extended_data**3
-        variable_prec *= +4 / vp.extended_data**6 * self.time.step**2
+        variable_grad *= -2 / vp.data**3
+        variable_prec *= +4 / vp.data**6 * self.time.step**2
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:
             self.dev_grid.deallocate('grad_vp')
             self.dev_grid.deallocate('prec_vp')
 
-        grad = vp.alike(name='vp_grad', data=variable_grad)
-        grad.prec = vp.alike(name='vp_prec', data=variable_prec)
+        grad = vp.alike(name='vp_grad', data=variable_grad,
+                        shape=variable_grad.shape,
+                        extended_shape=variable_grad.shape,
+                        inner=None)
+        grad.prec = vp.alike(name='vp_prec', data=variable_prec,
+                             shape=variable_prec.shape,
+                             extended_shape=variable_prec.shape,
+                             inner=None)
 
         return grad
 
@@ -917,18 +923,24 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         """
         variable_grad = self.dev_grid.vars.grad_rho
-        variable_grad = np.asarray(variable_grad.data, dtype=np.float32)
+        variable_grad = np.asarray(variable_grad.data[self.space.inner], dtype=np.float32)
 
         variable_prec = self.dev_grid.vars.prec_rho
-        variable_prec = np.asarray(variable_prec.data, dtype=np.float32)
+        variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:
             self.dev_grid.deallocate('grad_rho')
             self.dev_grid.deallocate('prec_rho')
 
-        grad = rho.alike(name='rho_grad', data=variable_grad)
-        grad.prec = rho.alike(name='rho_prec', data=variable_prec)
+        grad = rho.alike(name='rho_grad', data=variable_grad,
+                         shape=variable_grad.shape,
+                         extended_shape=variable_grad.shape,
+                         inner=None)
+        grad.prec = rho.alike(name='rho_prec', data=variable_prec,
+                              shape=variable_grad.shape,
+                              extended_shape=variable_grad.shape,
+                              inner=None)
 
         return grad
 

@@ -87,8 +87,8 @@ class ProcessTraces(Pipeline):
         elif norm_per_shot:
             steps.append('norm_per_shot')
 
-        scale_per_shot = kwargs.pop('scale_per_shot', norm_per_trace)
-        scale_per_trace = kwargs.pop('scale_per_trace', norm_per_shot)
+        scale_per_shot = kwargs.pop('scale_per_shot', False)
+        scale_per_trace = kwargs.pop('scale_per_trace', False)
         if scale_per_shot:
             steps.append('scale_per_shot')
         elif scale_per_trace:

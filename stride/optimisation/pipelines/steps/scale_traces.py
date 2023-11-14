@@ -101,8 +101,16 @@ class ScalePerTrace(Scale):
     def _apply(self, traces, scale_to, relative_scale, **kwargs):
         out_traces = traces.alike(name='scaled_%s' % traces.name)
 
+        norms = []
         for index in range(traces.extended_shape[0]):
             norm_value = np.sqrt(np.sum(scale_to.extended_data[index]**2))
+            norms.append(norm_value)
+
+        avg_norm = np.mean(norms)
+        std_norm = np.std(norms)
+        for index in range(traces.extended_shape[0]):
+            # prevent outlier traces with large or small norms
+            norm_value = max(avg_norm-std_norm, min(norms[index], avg_norm+std_norm))
             out_traces.extended_data[index] = traces.extended_data[index] * norm_value / relative_scale
 
         return out_traces
