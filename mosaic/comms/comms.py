@@ -408,14 +408,14 @@ class InboundConnection(Connection):
         return self._process_rcv(multipart_msg)
 
     def _process_rcv(self, multipart_msg):
-        sender_id = multipart_msg[1]
+        sender_id = multipart_msg[0]
         multipart_msg = multipart_msg[2:]
         num_parts = int(multipart_msg[0])
 
         if len(multipart_msg) != num_parts:
             raise ValueError('Wrong number of parts')
 
-        sender_id = str(sender_id)
+        sender_id = bytes(sender_id.buffer).decode()
         header = deserialise(multipart_msg[1], [])
 
         if num_parts > 3:
@@ -478,7 +478,7 @@ class OutboundConnection(Connection):
 
         validate_address(address, port)
 
-        self._socket = self._zmq_context.socket(zmq.DEALER,
+        self._socket = self._zmq_context.socket(zmq.ROUTER,
                                                 copy_threshold=zmq.COPY_THRESHOLD,
                                                 io_loop=self._loop.get_event_loop())
 
@@ -715,7 +715,8 @@ class OutboundConnection(Connection):
 
         header = serialise(header)[0]
 
-        multipart_msg = [self._runtime.uid.encode()]
+        multipart_msg = [self._uid.encode()]
+        multipart_msg += [b'']
         multipart_msg += [str(3 + len(compressed_msg[1])).encode()]
         multipart_msg += [header]
         multipart_msg += [compressed_msg[0]]
@@ -1077,7 +1078,8 @@ class CommsManager:
         -------
 
         """
-        return self.connected(uid) and self._send_socket[uid].shaken
+        return self.connected(uid) \
+            and uid in self._send_socket.keys() and self._send_socket[uid].shaken
 
     def disconnect_recv(self):
         """
@@ -1628,15 +1630,20 @@ class CommsManager:
         self.connect_send(uid, address, port)
         self._runtime.connect(uid, uid, address, port)
 
-        await self.send_async(uid,
-                              method='hand',
-                              address=self._recv_socket.address, port=self._recv_socket.port)
+        # zmq.ROUTER messages will be dropped if endpoint not yet connected
+        await asyncio.sleep(0.1)
 
         while True:
-            sender_id, response = await self.recv_async()
+            await self.send_async(uid,
+                                  method='hand',
+                                  address=self._recv_socket.address, port=self._recv_socket.port)
 
-            if uid == sender_id and response.method == 'shake':
-                break
+            try:
+                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=5)
+                if uid == sender_id and response.method == 'shake':
+                    break
+            except asyncio.TimeoutError:
+                pass
 
         await self.shake(sender_id, **response.kwargs)
         await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
@@ -1660,7 +1667,7 @@ class CommsManager:
         -------
 
         """
-        if self._state == 'disconnected':
+        if self._state == 'disconnected' or self.shaken(sender_id):
             return
 
         for connected_id, connection in self._send_socket.items():
@@ -1670,13 +1677,24 @@ class CommsManager:
 
         self.connect_send(sender_id, address, port)
 
+        # zmq.ROUTER messages will be dropped if endpoint not yet connected
+        await asyncio.sleep(0.1)
+
         network = {}
         for connected_id, connection in self._send_socket.items():
             network[connected_id] = (connection.address, connection.port)
 
-        await self.send_async(sender_id,
-                              method='shake',
-                              network=network)
+        while not self.shaken(sender_id):
+            try:
+                fut = await self.send_async(sender_id,
+                                            method='shake',
+                                            network=network,
+                                            reply=True)
+                fut.add_done_callback(lambda _: self._send_socket[sender_id].shake())
+                await asyncio.wait_for(fut, timeout=5)
+                break
+            except asyncio.TimeoutError:
+                pass
 
     async def shake(self, sender_id, network):
         """
@@ -1697,10 +1715,16 @@ class CommsManager:
             return
 
         for uid, address in network.items():
+            if self.shaken(uid):
+                continue
+
             self.connect_send(uid, *address)
 
             if uid in self._send_socket:
                 self._send_socket[uid].shake()
+
+        # zmq.ROUTER messages will be dropped if endpoint not yet connected
+        await asyncio.sleep(0.1)
 
     async def heart(self, sender_id):
         """

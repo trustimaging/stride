@@ -538,6 +538,8 @@ class Task(RemoteBase):
 
             await asyncio.sleep(0.1)
 
+        self.runtime.inc_committed_mem(self._arg_size)  # reserve memory to pull args
+
         # pull all arguments
         awaitable_args = []
 
@@ -573,6 +575,8 @@ class Task(RemoteBase):
             attr, key, result = await task
             if attr is not None:
                 attr[key] = result
+
+        self.runtime.dec_committed_mem(self._arg_size)  # return reserved memory
 
         # set task ready
         self.state_changed('ready')

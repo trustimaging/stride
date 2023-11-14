@@ -11,7 +11,7 @@ from cached_property import cached_property
 
 import mosaic
 from ..types import WarehouseObject
-from ..utils import subprocess
+from ..utils import subprocess, memory_limit, memory_used
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task, RuntimeDisconnectedError
@@ -168,11 +168,19 @@ class Runtime(BaseRPC):
         self._task_proxy = weakref.WeakValueDictionary()
         self._pending_tasks = 0
         self._running_tasks = 0
+        self._committed_mem = 0
 
         self._dealloc_queue = []
         self._maintenance_queue = []
 
         self._inside_async_for = False
+
+        if self.uid == 'warehouse':
+            self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.95))
+        elif 'worker' in self.uid:
+            self._mem_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.95))
+        else:
+            self._mem_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.95))
 
     async def init(self, **kwargs):
         """
@@ -282,32 +290,7 @@ class Runtime(BaseRPC):
     def ps_process(self):
         return psutil.Process(os.getpid())
 
-    def memory(self):
-        """
-        Amount of RSS memory being consumed by the runtime.
-
-        Returns
-        -------
-        float
-            RSS memory.
-
-        """
-        # OSX does not allow accessing information on external processes
-        try:
-            mem = self.ps_process.memory_info().rss
-        except psutil.AccessDenied:
-            mem = 0
-
-        if self.uid == 'warehouse':
-            max_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.95))
-        elif 'worker' in self.uid:
-            max_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.95))
-        else:
-            max_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.95))
-
-        return mem*max_fraction
-
-    def available_memory(self):
+    def memory_limit(self):
         """
         Amount of RSS memory available to the runtime.
 
@@ -317,21 +300,13 @@ class Runtime(BaseRPC):
             RSS memory.
 
         """
-        mem = psutil.virtual_memory().total
-
-        if self.uid == 'warehouse':
-            max_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.95))
-        elif 'worker' in self.uid:
-            max_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.95))
-        else:
-            max_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.95))
-
-        return mem*max_fraction
+        mem = memory_limit()
+        return mem*self._mem_fraction
 
     def fits_in_memory(self, nbytes):
-        runtime_mem = self.memory()
-        available_mem = self.available_memory()
-        return runtime_mem + nbytes < available_mem
+        mem_used = memory_used()
+        mem_limit = self.memory_limit()
+        return mem_used + nbytes < mem_limit
 
     def cpu_load(self):
         """
@@ -1347,12 +1322,21 @@ class Runtime(BaseRPC):
 
     def dec_pending_tasks(self):
         self._pending_tasks -= 1
+        self._pending_tasks = max(0, self._pending_tasks)
 
     def inc_running_tasks(self):
         self._running_tasks += 1
 
     def dec_running_tasks(self):
         self._running_tasks -= 1
+        self._running_tasks = max(0, self._running_tasks)
+
+    def inc_committed_mem(self, nbytes):
+        self._committed_mem += nbytes
+
+    def dec_committed_mem(self, nbytes):
+        self._committed_mem -= nbytes
+        self._committed_mem = max(0, self._committed_mem)
 
 
 class RuntimeProxy(BaseRPC):
