@@ -527,18 +527,27 @@ class Task(RemoteBase):
             return
 
         # make sure there's enough memory to pull the arguments
+        wait = 0.1
         while not self.runtime.fits_in_memory(self._arg_size):
             if self.runtime._running_tasks <= 0:
-                await self.set_exception(
-                    MemoryOverflowError('Not enough memory to allocate %d bytes '
-                                        'for task %s' % (self._arg_size, self))
-                )
+                try:
+                    raise MemoryOverflowError('Not enough memory to allocate %d bytes '
+                                              'for task %s' % (self._arg_size, self))
+                except MemoryOverflowError:
+                    et, ev, tb = sys.exc_info()
+                    tb = tblib.Traceback(tb)
+
+                    await self.set_exception((et, ev, tb))
+
                 self._ready_future.set_result(True)
                 return
 
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(wait)
+            wait *= 2
 
         self.runtime.inc_committed_mem(self._arg_size)  # reserve memory to pull args
+        self.runtime.dec_pending_tasks()
+        self.runtime.inc_running_tasks()
 
         # pull all arguments
         awaitable_args = []

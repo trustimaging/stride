@@ -302,9 +302,6 @@ class Tessera(RemoteBase):
             if type(task) is str and task == 'stop':
                 break
 
-            self.runtime.dec_pending_tasks()
-            self.runtime.inc_running_tasks()
-
             await future
 
             if task.state == 'failed':

@@ -176,11 +176,11 @@ class Runtime(BaseRPC):
         self._inside_async_for = False
 
         if self.uid == 'warehouse':
-            self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.95))
+            self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.85))
         elif 'worker' in self.uid:
-            self._mem_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.95))
+            self._mem_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.85))
         else:
-            self._mem_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.95))
+            self._mem_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.85))
 
     async def init(self, **kwargs):
         """
@@ -306,6 +306,11 @@ class Runtime(BaseRPC):
     def fits_in_memory(self, nbytes):
         mem_used = memory_used()
         mem_limit = self.memory_limit()
+        print('used', mem_used/1024**3,
+              'committed', self._committed_mem/1024**3,
+              'n', nbytes/1024**3,
+              'limit', mem_limit/1024**3,
+              't', self._running_tasks)
         return mem_used + self._committed_mem + nbytes < mem_limit
 
     def cpu_load(self):

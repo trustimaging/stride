@@ -502,7 +502,7 @@ class Variable:
         if grad is None or not self.needs_grad or self.grad is None:
             return
 
-        self.grad = await _maybe_sum(self.grad, grad)
+        self.grad += grad
 
     def __repr__(self):
         return self.name
