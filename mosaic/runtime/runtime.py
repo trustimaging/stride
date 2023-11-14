@@ -306,7 +306,7 @@ class Runtime(BaseRPC):
     def fits_in_memory(self, nbytes):
         mem_used = memory_used()
         mem_limit = self.memory_limit()
-        return mem_used + nbytes < mem_limit
+        return mem_used + self._committed_mem + nbytes < mem_limit
 
     def cpu_load(self):
         """
@@ -552,7 +552,7 @@ class Runtime(BaseRPC):
                 try:
                     import numa
                     available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
-                    num_cpus = min([len(cpus) for cpus in available_cpus.values()])//2
+                    num_cpus = min([len(cpus) for cpus in available_cpus.values()])//4
                 except Exception:
                     num_cpus = cpu_count()//8
 
