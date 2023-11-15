@@ -94,7 +94,7 @@ class Task(RemoteBase):
 
         self._state = None
         self.runtime.register(self)
-        self.state_changed('init')
+        self.state_changed('pending')
         self.register_proxy(self._sender_id)
 
     @property
@@ -588,8 +588,6 @@ class Task(RemoteBase):
         self.runtime.dec_committed_mem(self._arg_size)  # return reserved memory
 
         # set task ready
-        self.state_changed('ready')
-
         if not self._ready_future.done():
             self._ready_future.set_result(True)
 
@@ -644,8 +642,6 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        self.state_changed('init')
-
         self.runtime.register(self)
 
         task = {
@@ -658,7 +654,7 @@ class TaskProxy(ProxyBase):
         await self.remote_runtime.init_task(task=task, uid=self._uid,
                                             reply=True)
 
-        if self._state == 'init':
+        if self._state == 'pending':
             self.state_changed('queued')
 
     def deregister_runtime(self, uid):

@@ -172,6 +172,7 @@ class Runtime(BaseRPC):
 
         self._dealloc_queue = []
         self._maintenance_queue = []
+        self._maintenance_msgs = {}
 
         self._inside_async_for = False
 
@@ -306,11 +307,11 @@ class Runtime(BaseRPC):
     def fits_in_memory(self, nbytes):
         mem_used = memory_used()
         mem_limit = self.memory_limit()
-        print('used', mem_used/1024**3,
-              'committed', self._committed_mem/1024**3,
-              'n', nbytes/1024**3,
-              'limit', mem_limit/1024**3,
-              't', self._running_tasks)
+        self.logger.info(f'used {mem_used/1024**3} '
+              f'committed {self._committed_mem/1024**3} '
+              f'n {nbytes/1024**3} '
+              f'limit {mem_limit/1024**3} '
+              f't {self._running_tasks} p {self._pending_tasks}')
         return mem_used + self._committed_mem + nbytes < mem_limit
 
     def cpu_load(self):
@@ -1116,9 +1117,12 @@ class Runtime(BaseRPC):
         -------
 
         """
+        tasks = []
+
         if len(self._dealloc_queue):
             uncollectables = []
-            deregisters = []
+            deregisters = {}
+            dec_refs = {}
             for obj in self._dealloc_queue:
                 # If not collectable, defer until next cycle
                 if not obj.collectable:
@@ -1142,22 +1146,35 @@ class Runtime(BaseRPC):
 
                 # Execute object deregister
                 if hasattr(obj, 'deregister'):
-                    deregisters.append(obj.deregister())
+                    try:
+                        runtime_uid, dec_ref, kwargs = await obj.deregister()
+                        if runtime_uid not in deregisters:
+                            deregisters[runtime_uid] = []
+                            dec_refs[runtime_uid] = dec_ref
+                        deregisters[runtime_uid].append(kwargs)
+                    except TypeError:
+                        pass
 
             self._dealloc_queue = uncollectables
 
-            await asyncio.gather(*deregisters)
-
-            gc.collect()
+            for runtime_uid, dec_ref in dec_refs.items():
+                tasks.append(dec_ref(msgs=deregisters[runtime_uid]))
 
         if len(self._maintenance_queue):
-            funs = []
-            for fun in self._maintenance_queue:
-                funs.append(fun())
+            for task in self._maintenance_queue:
+                tasks.append(task())
 
             self._maintenance_queue = []
 
-            await asyncio.gather(*funs)
+        if len(self._maintenance_msgs):
+            for method_name, msgs in self._maintenance_msgs.items():
+                method = getattr(self._monitor, method_name)
+                tasks.append(method(msgs=msgs))
+
+            self._maintenance_msgs = {}
+
+        await asyncio.gather(*tasks)
+        gc.collect()
 
     def maintenance_queue(self, fun):
         """
@@ -1172,6 +1189,23 @@ class Runtime(BaseRPC):
 
         """
         self._maintenance_queue.append(fun)
+
+    def maintenance_msg(self, method, msg):
+        """
+        Add message to maintenance queue
+
+        Parameters
+        ----------
+        method : callable
+        msg : dict
+
+        Returns
+        -------
+
+        """
+        if method not in self._maintenance_msgs:
+            self._maintenance_msgs[method] = []
+        self._maintenance_msgs[method].append(msg)
 
     def cmd(self, sender_id, cmd):
         """
@@ -1232,6 +1266,27 @@ class Runtime(BaseRPC):
         obj = obj_store[obj_uid]
         obj.inc_ref()
         obj.register_proxy(uid=sender_id)
+
+    def dec_refs(self, sender_id, msgs):
+        """
+        Decrease reference count for multiple resident objects.
+
+        If reference count decreases below 1, deregister the object.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        msgs : list
+            UIDs of the object being referenced.
+
+        Returns
+        -------
+
+        """
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self.dec_ref(sender_id, **msg)
 
     def dec_ref(self, sender_id, uid, type):
         """

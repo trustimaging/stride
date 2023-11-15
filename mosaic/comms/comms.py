@@ -1319,6 +1319,8 @@ class CommsManager:
 
         if self._runtime.uid in ['monitor', 'head']:
             self.logger.info('Listening at %s' % self)
+        else:
+            self.logger.debug('Listening at %s' % self)
 
         while self._state != 'disconnected':
             sender_id, msg = await self.recv_async()
@@ -1639,7 +1641,7 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
-        while uid not in self._send_conn.keys() and uid != self._runtime.uid:
+        while not self.shaken(uid) and uid != self._runtime.uid:
             await asyncio.sleep(0.1)
 
     async def disconnect(self, sender_id, uid, notify=False):

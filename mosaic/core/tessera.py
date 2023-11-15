@@ -661,8 +661,6 @@ class TesseraProxy(ProxyBase):
         Asynchronous correlate of ``__init__``.
 
         """
-        self.state_changed('init')
-
         kwargs = self._fill_config(**kwargs)
         kwargs.pop('runtime', None)
 

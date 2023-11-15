@@ -258,7 +258,27 @@ class Monitor(Runtime):
         node.update(update, **sub_resources)
         self._monitor_strategy.update_node(node)
 
-    def add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
+    def add_tessera_event(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_tessera_event(sender_id, **msg)
+
+    def add_task_event(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_task_event(sender_id, **msg)
+
+    def add_tessera_profile(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_tessera_profile(sender_id, **msg)
+
+    def add_task_profile(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_task_profile(sender_id, **msg)
+
+    def _add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
 
@@ -267,7 +287,7 @@ class Monitor(Runtime):
         self._monitor_strategy.update_tessera(obj)
         self._dirty_tessera.add(uid)
 
-    def add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
+    def _add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
 
@@ -276,7 +296,7 @@ class Monitor(Runtime):
         self._monitor_strategy.update_task(obj)
         self._dirty_tasks.add(uid)
 
-    def add_tessera_profile(self, sender_id, runtime_id, uid, profile):
+    def _add_tessera_profile(self, sender_id, runtime_id, uid, profile):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
 
@@ -284,7 +304,7 @@ class Monitor(Runtime):
         obj.add_profile(sender_id, profile)
         self._dirty_tessera.add(uid)
 
-    def add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
+    def _add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
 
