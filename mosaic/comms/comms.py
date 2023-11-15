@@ -1715,7 +1715,7 @@ class CommsManager:
                                   address=self.address, port=self.port)
 
             try:
-                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=5)
+                sender_id, response = await self.recv_async()
                 if uid == sender_id and response.method == 'shake':
                     break
             except asyncio.TimeoutError:
@@ -1760,17 +1760,11 @@ class CommsManager:
         for connected_id, connection in self._send_conn.items():
             network[connected_id] = (connection.address, connection.port)
 
-        while not self.shaken(sender_id):
-            try:
-                fut = await self.send_async(sender_id,
-                                            method='shake',
-                                            network=network,
-                                            reply=True)
-                fut.add_done_callback(lambda _: self._send_conn[sender_id].shake())
-                await asyncio.wait_for(fut, timeout=5)
-                break
-            except asyncio.TimeoutError:
-                pass
+        await self.send_async(sender_id,
+                              method='shake',
+                              network=network,
+                              reply=False)
+        self._send_conn[sender_id].shake()
 
     async def shake(self, sender_id, network):
         """
@@ -1798,9 +1792,6 @@ class CommsManager:
 
             if uid in self._send_conn:
                 self._send_conn[uid].shake()
-
-        # zmq.ROUTER messages will be dropped if endpoint not yet connected
-        await asyncio.sleep(0.1)
 
     async def heart(self, sender_id):
         """

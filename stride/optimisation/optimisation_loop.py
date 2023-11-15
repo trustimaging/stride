@@ -31,6 +31,8 @@ class Iteration:
 
         self._block = block
         self._optimisation_loop = opt_loop
+        self._submitted_shots = []
+        self._completed_shots = []
         self._fun = OrderedDict()
         self._step_fun = OrderedDict()
 
@@ -50,6 +52,22 @@ class Iteration:
 
         """
         return sum([each.fun_value for each in self._step_fun.values()])
+
+    @property
+    def num_submitted(self):
+        """
+        Number of shots submitted in this iteration.
+
+        """
+        return len(self._submitted_shots)
+
+    @property
+    def num_completed(self):
+        """
+        Number of shots completed in this iteration
+
+        """
+        return len(self._completed_shots)
 
     def add_fun(self, fun):
         """
@@ -79,10 +97,40 @@ class Iteration:
         """
         self._step_fun[fun.shot_id] = fun
 
+    def add_submitted(self, shot):
+        """
+        Add a submitted shot.
+
+        Parameters
+        ----------
+        shot : Shot
+
+        Returns
+        -------
+
+        """
+        self._submitted_shots.append(shot.id)
+
+    def add_completed(self, shot):
+        """
+        Add a completed shot.
+
+        Parameters
+        ----------
+        shot : Shot
+
+        Returns
+        -------
+
+        """
+        self._completed_shots.append(shot.id)
+
     def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'abs_id': self.abs_id,
+            'submitted_shots': self._submitted_shots,
+            'completed_shots': self._completed_shots,
             'functional_values': [],
         }
 
@@ -97,6 +145,8 @@ class Iteration:
     def __set_desc__(self, description):
         self.id = description.id
         self.abs_id = description.abs_id
+        self._submitted_shots = description.submitted_shots
+        self._completed_shots = description.completed_shots
 
         for fun_desc in description.functional_values:
             fun = FunctionalValue(fun_desc.fun_value, fun_desc.shot_id)

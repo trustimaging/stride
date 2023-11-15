@@ -261,15 +261,19 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                   iteration.abs_id)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
+        num_shots = len(shot_ids)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
             _kwargs = kwargs.copy()
 
             logger.perf('\n')
-            logger.perf('Giving shot %d to %s' % (shot_id, worker.uid))
+            logger.perf('Giving shot %d to %s (%d out of %d)'
+                        % (shot_id, worker.uid,
+                           iteration.num_submitted, num_shots))
 
             sub_problem = problem.sub_problem(shot_id)
+            iteration.add_submitted(sub_problem.shot)
             wavelets = sub_problem.shot.wavelets
             observed = sub_problem.shot.observed
 
@@ -318,8 +322,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             # run adjoint
             await fun.adjoint(**_kwargs)
+            iteration.add_completed(sub_problem.shot)
 
-            logger.perf('Retrieved gradient for shot %d' % sub_problem.shot_id)
+            logger.perf('Retrieved gradient for shot %d (%d out of %d)'
+                        % (sub_problem.shot_id,
+                           iteration.num_completed, num_shots))
 
         await loop
 
