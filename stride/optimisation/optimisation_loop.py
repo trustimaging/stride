@@ -452,7 +452,7 @@ class OptimisationLoop(Saved):
                                          'restarted from that point' % restart_id)
 
                     self._current_block = self._blocks[restart_id]
-                    last_iter = self._current_block._iterations[self._current_block.num_iterations - 1]
+                    last_iter = list(self._current_block._iterations.values())[-1]
                     self.running_id = last_iter.abs_id
 
                     if restart_id-1 in self._blocks:

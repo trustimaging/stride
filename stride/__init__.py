@@ -238,6 +238,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         num_gpus = gpu_count() if devices is None else len(devices)
         devices = list(range(num_gpus)) if devices is None else devices
 
+    problem.acquisitions.reset_selection()
+
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         optimiser.clear_grad()
 

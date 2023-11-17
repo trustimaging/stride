@@ -928,6 +928,17 @@ class Acquisitions(ProblemBase):
 
         self._sequences[item.id] = item
 
+    def reset_selection(self):
+        """
+        Reset the shot and sequence selection.
+
+        Returns
+        -------
+
+        """
+        self._shot_selection = []
+        self._sequence_selection = []
+
     def select_shot_ids(self, shot_ids=None, start=None, end=None, num=None, every=1, randomly=False):
         """
         Select a number of shots according to the rules given in the arguments to the method.
