@@ -171,7 +171,7 @@ def go(cmd=None, **kwargs):
 
     def _rm_dirs():
         os.remove(filename)
-        shutil.rmtree(path, ignore_errors=True)
+        # shutil.rmtree(path, ignore_errors=True)
 
     at_exit.add(_rm_dirs)
 
@@ -197,7 +197,7 @@ def go(cmd=None, **kwargs):
 
         try:
             os.remove(filename)
-            shutil.rmtree(path)
+            # shutil.rmtree(path)
 
         except Exception:
             pass

@@ -1,11 +1,12 @@
 
 import os
 import copy
+import shutil
 import asyncio
 
 from .runtime import Runtime
 from ..types import WarehouseObject
-from ..utils import LoggerManager, SpillBuffer
+from ..utils import LoggerManager, SpillBuffer, at_exit
 from ..utils.utils import memory_limit
 from ..profile import global_profiler
 
@@ -33,19 +34,26 @@ class Warehouse(Runtime):
         super().__init__(**kwargs)
 
         self._warehouses = dict()
+        self._spill_directory = None
 
     async def init(self, **kwargs):
         await super().init(**kwargs)
 
         # Set up local warehouse
-        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', '%s-storage' % self.uid)
-        if not os.path.exists(spill_directory):
-            os.makedirs(spill_directory)
+        self._spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', '%s-storage' % self.uid)
+        self._spill_directory.replace(':', '-')
+        if not os.path.exists(self._spill_directory):
+            os.makedirs(self._spill_directory)
+
+        def _rm_dirs():
+            shutil.rmtree(self._spill_directory, ignore_errors=True)
+
+        at_exit.add(_rm_dirs)
 
         warehouse_memory_fraction = kwargs.pop('warehouse_memory_fraction', 0.80)
         warehouse_memory = memory_limit() * warehouse_memory_fraction
 
-        self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
+        self._local_warehouse = SpillBuffer(self._spill_directory, warehouse_memory)
 
     def set_logger(self):
         """
@@ -339,3 +347,7 @@ class Warehouse(Runtime):
         tessera.register_proxy(sender_id)
 
         return tessera._cls_attr_names
+
+    async def stop(self, sender_id=None):
+        await super().stop(sender_id=sender_id)
+        shutil.rmtree(self._spill_directory, ignore_errors=True)

@@ -1,4 +1,5 @@
 
+import os
 import sys
 import asyncio
 import logging
@@ -195,6 +196,10 @@ class LoggerManager:
         self._log_level = 'perf'
         self._log_location = None
 
+        self._log_path = os.path.join(os.getcwd(), 'mosaic-workspace')
+        if not os.path.exists(self._log_path):
+            os.makedirs(self._log_path)
+
     def set_default(self, format='interactive'):
         """
         Set up default loggers.
@@ -256,11 +261,17 @@ class LoggerManager:
         sys.stdout = self._stdout
         sys.stderr = self._stderr
 
+        runtime = mosaic.runtime()
+        log_file = f'{runtime.uid}.log'.replace(':', '-')
+        file_handler = logging.FileHandler(os.path.join(self._log_path, log_file), mode='w')
         handler = logging.StreamHandler(self._stdout)
+
         if format == 'interactive':
             handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
+            file_handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
         else:
             handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
+            file_handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
         logger.setLevel(_local_log_levels[log_level])
@@ -269,6 +280,7 @@ class LoggerManager:
             logger.handlers.clear()
 
         logger.addHandler(handler)
+        logger.addHandler(file_handler)
 
         self._info_logger = LocalLogger(logger, log_level=_local_log_levels['info'])
         self._perf_logger = LocalLogger(logger, log_level=_local_log_levels['perf'])
@@ -317,11 +329,17 @@ class LoggerManager:
         sys.stdout = self._info_logger
         sys.stderr = self._error_logger
 
+        runtime = mosaic.runtime()
+        log_file = f'{runtime.uid}.log'.replace(':', '-')
+        file_handler = logging.FileHandler(os.path.join(self._log_path, log_file), mode='w')
         handler = logging.StreamHandler(sys.stdout)
+
         if format == 'interactive':
             handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
+            file_handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
         else:
             handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
+            file_handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
         logger.setLevel(_local_log_levels[log_level])
@@ -330,6 +348,7 @@ class LoggerManager:
             logger.handlers.clear()
 
         logger.addHandler(handler)
+        logger.addHandler(file_handler)
 
         logging.basicConfig(
             stream=sys.stdout,

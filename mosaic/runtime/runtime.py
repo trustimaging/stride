@@ -204,10 +204,6 @@ class Runtime(BaseRPC):
         self.set_logger()
 
         # Start warehouse
-        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', '%s-storage' % self.uid)
-        if not os.path.exists(spill_directory):
-            os.makedirs(spill_directory)
-
         self._remote_warehouse = self.proxy('warehouse')
         if len(self.indices):
             self._local_warehouse = self.proxy('warehouse', indices=self.indices[0])
