@@ -58,9 +58,9 @@ class LoggerBase:
 
 
 class LocalLogger(LoggerBase):
-    def __init__(self, logger, log_level=logging.INFO):
+    def __init__(self, logger, log_level='info'):
         self._logger = logger
-        self._log_level = log_level
+        self._log_level = _local_log_levels[log_level]
         self._linebuf = ''
 
     def write(self, buf, uid=None):
@@ -113,9 +113,11 @@ class LocalLogger(LoggerBase):
 
 
 class RemoteLogger(LoggerBase):
-    def __init__(self, runtime_id, log_level='log_info'):
+    def __init__(self, logger, runtime_id, log_level='info'):
+        self._logger = logger
         self._runtime_id = runtime_id
-        self._log_level = log_level
+        self._local_log_level = _local_log_levels[log_level]
+        self._remote_log_level = _remote_log_levels[log_level]
         self._linebuf = ''
         self._queuebuf = ''
 
@@ -169,9 +171,17 @@ class RemoteLogger(LoggerBase):
                 self._queuebuf += '\n'
             self._queuebuf += buf
 
+        if self.runtime is not None:
+            uid = self.runtime.uid
+        else:
+            uid = ''
+        uid = uid.upper()
+
+        self._logger.log(self._local_log_level, buf.rstrip(), extra={'runtime_id': uid})
+
     async def send(self):
         if len(self._queuebuf):
-            await self.remote_runtime[self._log_level](buf=self._queuebuf)
+            await self.remote_runtime[self._remote_log_level](buf=self._queuebuf)
             self._queuebuf = ''
 
 
@@ -229,11 +239,11 @@ class LoggerManager:
 
         logger.addHandler(handler)
 
-        self._info_logger = LocalLogger(logger, log_level=_local_log_levels['info'])
-        self._perf_logger = LocalLogger(logger, log_level=_local_log_levels['perf'])
-        self._debug_logger = LocalLogger(logger, log_level=_local_log_levels['debug'])
-        self._error_logger = LocalLogger(logger, log_level=_local_log_levels['error'])
-        self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
+        self._info_logger = LocalLogger(logger, log_level='info')
+        self._perf_logger = LocalLogger(logger, log_level='perf')
+        self._debug_logger = LocalLogger(logger, log_level='debug')
+        self._error_logger = LocalLogger(logger, log_level='error')
+        self._warn_logger = LocalLogger(logger, log_level='warning')
 
         sys.stdout.flush()
 
@@ -282,11 +292,11 @@ class LoggerManager:
         logger.addHandler(handler)
         logger.addHandler(file_handler)
 
-        self._info_logger = LocalLogger(logger, log_level=_local_log_levels['info'])
-        self._perf_logger = LocalLogger(logger, log_level=_local_log_levels['perf'])
-        self._debug_logger = LocalLogger(logger, log_level=_local_log_levels['debug'])
-        self._error_logger = LocalLogger(logger, log_level=_local_log_levels['error'])
-        self._warn_logger = LocalLogger(logger, log_level=_local_log_levels['warning'])
+        self._info_logger = LocalLogger(logger, log_level='info')
+        self._perf_logger = LocalLogger(logger, log_level='perf')
+        self._debug_logger = LocalLogger(logger, log_level='debug')
+        self._error_logger = LocalLogger(logger, log_level='error')
+        self._warn_logger = LocalLogger(logger, log_level='warning')
 
         sys.stdout.flush()
 
@@ -319,26 +329,13 @@ class LoggerManager:
         sys.stdout = self._stdout
         sys.stderr = self._stderr
 
-        self._info_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['info'])
-        self._perf_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['perf'])
-        self._debug_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['debug'])
-        self._error_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['error'])
-        self._warn_logger = RemoteLogger(runtime_id=runtime_id, log_level=_remote_log_levels['warning'])
-
-        sys.stdout.flush()
-        sys.stdout = self._info_logger
-        sys.stderr = self._error_logger
-
         runtime = mosaic.runtime()
         log_file = f'{runtime.uid}.log'.replace(':', '-')
         file_handler = logging.FileHandler(os.path.join(self._log_path, log_file), mode='w')
-        handler = logging.StreamHandler(sys.stdout)
 
         if format == 'interactive':
-            handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
             file_handler.setFormatter(CustomFormatter('%(runtime_id)-15s %(message)s'))
         else:
-            handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
             file_handler.setFormatter(CustomFormatter('%(asctime)s - %(levelname)-10s %(runtime_id)-15s %(message)s'))
 
         logger = logging.getLogger('mosaic')
@@ -347,8 +344,17 @@ class LoggerManager:
         if logger.hasHandlers():
             logger.handlers.clear()
 
-        logger.addHandler(handler)
         logger.addHandler(file_handler)
+
+        self._info_logger = RemoteLogger(logger, runtime_id=runtime_id, log_level='info')
+        self._perf_logger = RemoteLogger(logger, runtime_id=runtime_id, log_level='perf')
+        self._debug_logger = RemoteLogger(logger, runtime_id=runtime_id, log_level='debug')
+        self._error_logger = RemoteLogger(logger, runtime_id=runtime_id, log_level='error')
+        self._warn_logger = RemoteLogger(logger, runtime_id=runtime_id, log_level='warning')
+
+        sys.stdout.flush()
+        sys.stdout = self._info_logger
+        sys.stderr = self._error_logger
 
         logging.basicConfig(
             stream=sys.stdout,
