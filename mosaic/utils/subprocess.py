@@ -78,6 +78,15 @@ class Subprocess:
         else:
             parent_args = (None, None, None)
 
+        self._monitor_runtime = self._parent_runtime.get_monitor()
+        if self._monitor_runtime is not None:
+            monitor_args = (self._monitor_runtime.uid,
+                            self._monitor_runtime.address,
+                            self._monitor_runtime.port,)
+
+        else:
+            monitor_args = (None, None, None)
+
         self._mp_process = multiprocessing.Process(target=self._start_process,
                                                    name=name,
                                                    args=(target,
@@ -88,6 +97,7 @@ class Subprocess:
                                                          cpu_affinity,
                                                          mem_affinity,
                                                          *parent_args,
+                                                         *monitor_args,
                                                          args, kwargs))
         self._ps_process = None
         self._target = target
@@ -192,7 +202,9 @@ class Subprocess:
                        child_start_pipe,
                        parent_alive_pipe, keep_child_alive,
                        cpu_affinity, mem_affinity,
-                       parent_id, parent_address, parent_port, args, kwargs):
+                       parent_id, parent_address, parent_port,
+                       monitor_id, monitor_address, monitor_port,
+                       args, kwargs):
         self._state = 'running'
         self._ps_process = psutil.Process(self._mp_process.pid)
 
@@ -227,7 +239,10 @@ class Subprocess:
             self._obj = self._target(*args, **kwargs,
                                      parent_id=parent_id,
                                      parent_address=parent_address,
-                                     parent_port=parent_port)
+                                     parent_port=parent_port,
+                                     monitor_id=monitor_id,
+                                     monitor_address=monitor_address,
+                                     monitor_port=monitor_port)
 
             if hasattr(self._obj, 'run') and callable(self._obj.run):
                 self._obj.run()

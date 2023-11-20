@@ -1,4 +1,5 @@
 
+import time
 import asyncio
 
 import mosaic
@@ -42,8 +43,12 @@ class Head(Runtime):
             await self.init_monitor(**kwargs)
 
         # Wait for workers to be ready
+        tic = time.time()
         num_workers = kwargs.pop('num_workers')
+        timeout = 180
         while len(self.workers) < num_workers:
+            if timeout is not None and (time.time() - tic) > timeout:
+                raise RuntimeError('Timed out while waiting for %d workers to connect' % num_workers)
             await asyncio.sleep(0.1)
 
     async def init_monitor(self, **kwargs):

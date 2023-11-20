@@ -217,18 +217,19 @@ class Runtime(BaseRPC):
         # Start maintenance loop
         self._loop.interval(self.maintenance, interval=0.5)
 
-        # Connect to parent if necessary
-        parent_id = kwargs.pop('parent_id', None)
-        parent_address = kwargs.pop('parent_address', None)
-        parent_port = kwargs.pop('parent_port', None)
-        if parent_id is not None and parent_address is not None and parent_port is not None:
-            await self._comms.handshake(parent_id, parent_address, parent_port)
-
-        # Connect to monitor if necessary
+        # Connect to monitor first
         monitor_address = kwargs.get('monitor_address', None)
         monitor_port = kwargs.get('monitor_port', None)
         if not self.is_monitor and monitor_address is not None and monitor_port is not None:
             await self._comms.handshake('monitor', monitor_address, monitor_port)
+
+        # Connect to parent if necessary
+        parent_id = kwargs.pop('parent_id', None)
+        parent_address = kwargs.pop('parent_address', None)
+        parent_port = kwargs.pop('parent_port', None)
+        if parent_id is not None and parent_id != 'monitor' \
+                and parent_address is not None and parent_port is not None:
+            await self._comms.handshake(parent_id, parent_address, parent_port)
 
         # Start listening
         self._comms.listen()
@@ -307,11 +308,6 @@ class Runtime(BaseRPC):
     def fits_in_memory(self, nbytes):
         mem_used = memory_used()
         mem_limit = self.memory_limit()
-        self.logger.info(f'used {mem_used/1024**3} '
-              f'committed {self._committed_mem/1024**3} '
-              f'n {nbytes/1024**3} '
-              f'limit {mem_limit/1024**3} '
-              f't {self._running_tasks} p {self._pending_tasks}')
         return mem_used + self._committed_mem + nbytes < mem_limit
 
     def cpu_load(self):
@@ -607,6 +603,8 @@ class Runtime(BaseRPC):
         -------
 
         """
+        if self.uid == 'monitor':
+            return self
         return self._monitor
 
     def get_node(self, uid=None):

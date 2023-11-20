@@ -527,7 +527,7 @@ class Task(RemoteBase):
             return
 
         # make sure there's enough memory to pull the arguments
-        wait = 0.1
+        wait = 1
         while not self.runtime.fits_in_memory(self._arg_size):
             if self.runtime._running_tasks <= 0:
                 try:
@@ -543,7 +543,7 @@ class Task(RemoteBase):
                 return
 
             await asyncio.sleep(wait)
-            wait *= 2
+            wait *= 1.2
 
         self.runtime.inc_committed_mem(self._arg_size)  # reserve memory to pull args
         self.runtime.dec_pending_tasks()

@@ -113,13 +113,9 @@ def init(runtime_type='head', runtime_indices=(),
         runtime_config['parent_address'] = parent_address
         runtime_config['parent_port'] = parent_port
 
-    elif monitor_address is not None and monitor_port is not None:
+    if monitor_address is not None and monitor_port is not None:
         runtime_config['monitor_address'] = monitor_address
         runtime_config['monitor_port'] = monitor_port
-
-    elif runtime_type != 'head':
-        ValueError('Either parent address:port or the monitor address:port are needed to '
-                   'init a %s' % runtime_type)
 
     # Create global runtime
     try:
@@ -266,7 +262,7 @@ def run(main, *args, **kwargs):
                     if arg_start == '[ARGS]':
                         for line in file:
                             key, value = line.strip().split('=')
-                            kwargs[key] = eval(value)
+                            kwargs[key] = kwargs.get(key, eval(value))
 
     init(*args, **kwargs)
 

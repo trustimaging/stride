@@ -550,7 +550,7 @@ class OutboundConnection(Connection):
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
         self._heartbeat_max_attempts = 5
-        self._heartbeat_interval = 1
+        self._heartbeat_interval = 5
 
         self._shaken = False
 
@@ -1621,6 +1621,8 @@ class CommsManager:
 
         if notify is True:
             for connected_id, connection in self._send_conn.items():
+                if connected_id == uid or not self.shaken(connected_id):
+                    continue
                 await self.send_async(connected_id,
                                       method='connect',
                                       uid=uid, address=address, port=port)
@@ -1709,17 +1711,18 @@ class CommsManager:
         # zmq.ROUTER messages will be dropped if endpoint not yet connected
         await asyncio.sleep(0.1)
 
+        wait = 10
         while True:
             await self.send_async(uid,
                                   method='hand',
                                   address=self.address, port=self.port)
 
             try:
-                sender_id, response = await self.recv_async()
+                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=wait)
                 if uid == sender_id and response.method == 'shake':
                     break
             except asyncio.TimeoutError:
-                pass
+                wait *= 1.2
 
         await self.shake(sender_id, **response.kwargs)
         await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
@@ -1746,10 +1749,13 @@ class CommsManager:
         if self._state == 'disconnected' or self.shaken(sender_id):
             return
 
-        for connected_id, connection in self._send_conn.items():
-            await self.send_async(connected_id,
-                                  method='connect',
-                                  uid=sender_id, address=address, port=port)
+        if self._runtime.uid == 'monitor':
+            for connected_id, connection in self._send_conn.items():
+                if connected_id == sender_id or not self.shaken(connected_id):
+                    continue
+                await self.send_async(connected_id,
+                                      method='connect',
+                                      uid=sender_id, address=address, port=port)
 
         self.connect_send(sender_id, address, port)
 
@@ -1757,8 +1763,9 @@ class CommsManager:
         await asyncio.sleep(0.1)
 
         network = {}
-        for connected_id, connection in self._send_conn.items():
-            network[connected_id] = (connection.address, connection.port)
+        if self._runtime.uid == 'monitor':
+            for connected_id, connection in self._send_conn.items():
+                network[connected_id] = (connection.address, connection.port)
 
         await self.send_async(sender_id,
                               method='shake',
