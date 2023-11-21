@@ -40,6 +40,8 @@ from ..utils.logger import _stdout, _stderr
               help='IP address of the monitor')
 @click.option('--monitor-port', type=int, required=False, show_default=True,
               help='port of the monitor')
+@click.option('--pubsub-port', type=int, required=False, show_default=True,
+              help='publishing port of the monitor')
 # cluster options
 @click.option('--local/--cluster', '-l/-c', default=False, required=True, show_default=True,
               help='whether to run mosaic locally or in a cluster system')
@@ -110,6 +112,7 @@ def go(cmd=None, **kwargs):
         'port': kwargs.get('port', None),
         'monitor_address': kwargs.get('monitor_address', None),
         'monitor_port': kwargs.get('monitor_port', None),
+        'pubsub_port': kwargs.get('pubsub_port', None),
         'num_nodes': num_nodes,
         'num_workers': num_workers,
         'num_threads': num_threads,
@@ -145,6 +148,7 @@ def go(cmd=None, **kwargs):
     runtime_id = _runtime.uid
     runtime_address = _runtime.address
     runtime_port = _runtime.port
+    pubsub_port = _runtime.pubsub_port
 
     # Store runtime ID, address and port in a tmp file for the
     # head to use
@@ -158,6 +162,7 @@ def go(cmd=None, **kwargs):
         file.write('UID=%s\n' % runtime_id)
         file.write('ADD=%s\n' % runtime_address)
         file.write('PRT=%s\n' % runtime_port)
+        file.write('PUB=%s\n' % pubsub_port)
         file.write('[ARGS]\n')
 
         for key, value in runtime_config.items():

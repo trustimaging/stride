@@ -26,7 +26,7 @@ _runtime_types = {
 def init(runtime_type='head', runtime_indices=(),
          address=None, port=None,
          parent_id=None, parent_address=None, parent_port=None,
-         monitor_address=None, monitor_port=None,
+         monitor_address=None, monitor_port=None, pubsub_port=None,
          num_workers=1, num_threads=None,
          mode='local', reuse_head=False, monitor_strategy='round-robin',
          log_level='perf', profile=False, node_list=None,
@@ -57,6 +57,8 @@ def init(runtime_type='head', runtime_indices=(),
         Address of the monitor to connect to.
     monitor_port : int, optional
         Port of the monitor to connect to.
+    pubsub_port : int, optional
+        Publishing port of the monitor to connect to.
     num_workers : int, optional
         Number of workers to instantiate in each node, defaults to 1.
     num_threads : int, optional
@@ -113,9 +115,10 @@ def init(runtime_type='head', runtime_indices=(),
         runtime_config['parent_address'] = parent_address
         runtime_config['parent_port'] = parent_port
 
-    if monitor_address is not None and monitor_port is not None:
+    if monitor_address is not None and monitor_port is not None and pubsub_port is not None:
         runtime_config['monitor_address'] = monitor_address
         runtime_config['monitor_port'] = monitor_port
+        runtime_config['pubsub_port'] = pubsub_port
 
     # Create global runtime
     try:
@@ -250,9 +253,11 @@ def run(main, *args, **kwargs):
                 _ = file.readline().split('=')[1].strip()
                 parent_address = file.readline().split('=')[1].strip()
                 parent_port = file.readline().split('=')[1].strip()
+                pubsub_port = file.readline().split('=')[1].strip()
 
                 kwargs['monitor_address'] = parent_address
                 kwargs['monitor_port'] = int(parent_port)
+                kwargs['pubsub_port'] = int(pubsub_port)
 
                 try:
                     arg_start = file.readline().strip()

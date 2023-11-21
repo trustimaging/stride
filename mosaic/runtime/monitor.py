@@ -166,6 +166,7 @@ class Monitor(Runtime):
         log_level = kwargs.get('log_level', 'info')
         runtime_address = self.address
         runtime_port = self.port
+        pubsub_port = self.pubsub_port
 
         ssh_flags = os.environ.get('SSH_FLAGS', '')
         ssh_commands = os.environ.get('SSH_COMMANDS', None)
@@ -182,6 +183,7 @@ class Monitor(Runtime):
             remote_cmd = (f'{ssh_commands} '
                           f'mrun --node -i {node_index} '
                           f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
+                          f'--pubsub-port {pubsub_port} '
                           f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
                           f'--cluster --{log_level} {reuse_head}')
 

@@ -216,8 +216,10 @@ class Runtime(BaseRPC):
         # Connect to monitor first
         monitor_address = kwargs.get('monitor_address', None)
         monitor_port = kwargs.get('monitor_port', None)
-        if not self.is_monitor and monitor_address is not None and monitor_port is not None:
-            await self._comms.handshake('monitor', monitor_address, monitor_port)
+        pubsub_port = kwargs.get('pubsub_port', None)
+        if not self.is_monitor and monitor_address is not None and monitor_port is not None \
+                and pubsub_port is not None:
+            await self._comms.handshake('monitor', monitor_address, monitor_port, pubsub_port)
 
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)
@@ -427,6 +429,14 @@ class Runtime(BaseRPC):
 
         """
         return self._comms.port
+
+    @property
+    def pubsub_port(self):
+        """
+        Pub-sub port of the runtime.
+
+        """
+        return self._comms.pubsub_port
 
     @property
     def num_nodes(self):
@@ -1440,6 +1450,14 @@ class RuntimeProxy(BaseRPC):
 
         """
         return self.comms.uid_port(self.uid)
+
+    @property
+    def pubsub_port(self):
+        """
+        Remote pub-sub port.
+
+        """
+        return self.comms.pubsub_port
 
     @property
     def subprocess(self):

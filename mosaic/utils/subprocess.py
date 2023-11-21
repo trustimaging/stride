@@ -82,10 +82,11 @@ class Subprocess:
         if self._monitor_runtime is not None:
             monitor_args = (self._monitor_runtime.uid,
                             self._monitor_runtime.address,
-                            self._monitor_runtime.port,)
+                            self._monitor_runtime.port,
+                            self._monitor_runtime.pubsub_port,)
 
         else:
-            monitor_args = (None, None, None)
+            monitor_args = (None, None, None, None)
 
         self._mp_process = multiprocessing.Process(target=self._start_process,
                                                    name=name,
@@ -203,7 +204,7 @@ class Subprocess:
                        parent_alive_pipe, keep_child_alive,
                        cpu_affinity, mem_affinity,
                        parent_id, parent_address, parent_port,
-                       monitor_id, monitor_address, monitor_port,
+                       monitor_id, monitor_address, monitor_port, pubsub_port,
                        args, kwargs):
         self._state = 'running'
         self._ps_process = psutil.Process(self._mp_process.pid)
@@ -242,7 +243,8 @@ class Subprocess:
                                      parent_port=parent_port,
                                      monitor_id=monitor_id,
                                      monitor_address=monitor_address,
-                                     monitor_port=monitor_port)
+                                     monitor_port=monitor_port,
+                                     pubsub_port=pubsub_port)
 
             if hasattr(self._obj, 'run') and callable(self._obj.run):
                 self._obj.run()
