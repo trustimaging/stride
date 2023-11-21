@@ -1617,11 +1617,17 @@ class Traces(StructuredData):
             processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)
 
             # # Mute (post-resample) & Hann window
-            # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
-            # processed_data[:, mute_start_new] = 0
-            # win = scipy.signal.hann(len_hann, sym=True)
+            # processed_data[:, mute_start_new] = 0  # apply mute
 
-            # processed_data[:, mute_start_new] = 0  # multiply by Hann around mute
+            # len_hann = 10  # build CDF for hann window
+            # win = scipy.signal.hann(len_hann, sym=True)
+            # win = np.cumsum(win)/np.cumsum(win).max()
+
+            # start = mute_start_new-int(np.floor(len_hann/2))  # locate mute
+            # start_min = max(0, start)  # don't go below zero
+            # stop = mute_start_new+int(np.ceil(len_hann/2))
+
+            # processed_data[:, start_min:stop] *= win[start_min-start:]  # apply window
 
             # Fill object
             new_traces = Traces(name=self.name, grid=self.grid, data=processed_data)
