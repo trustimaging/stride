@@ -35,6 +35,8 @@ class Node(Runtime):
         self._memory_limit = memory_limit()
 
         self._monitored_node = MonitoredResource(self.uid)
+        self._monitor_interval = None
+        self._update_interval = None
 
     async def init(self, **kwargs):
         """
@@ -156,9 +158,6 @@ class Node(Runtime):
 
         await self.update_monitored_node()
 
-        self._loop.interval(self.resource_monitor, interval=1)
-        self._loop.interval(self.update_monitored_node, interval=10)
-
     def set_logger(self):
         """
         Set up logging.
@@ -261,6 +260,11 @@ class Node(Runtime):
                                          cpu_load=cpu_load,
                                          memory_limit=self._memory_limit,
                                          memory_fraction=memory_fraction))
+
+    async def heart(self, sender_id=None):
+        if self._monitor_interval is None:
+            self._monitor_interval = self._loop.interval(self.resource_monitor, interval=1)
+            self._update_interval = self._loop.interval(self.update_monitored_node, interval=10)
 
     async def stop(self, sender_id=None):
         """
