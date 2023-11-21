@@ -4,15 +4,6 @@ import numpy as np
 from collections import OrderedDict
 from cached_property import cached_property
 
-try:
-    import matplotlib.pyplot as plt
-    from matplotlib.widgets import Slider
-
-    ENABLED_2D_PLOTTING = True
-
-except ModuleNotFoundError:
-    ENABLED_2D_PLOTTING = False
-
 from mosaic.file_manipulation import h5
 
 from .data import Traces
@@ -1056,7 +1047,10 @@ class Acquisitions(ProblemBase):
             plotting.show()
 
     def _plot(self, update, **kwargs):
-        if not ENABLED_2D_PLOTTING:
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.widgets import Slider
+        except ModuleNotFoundError:
             return None
 
         axis = kwargs.pop('axis', None)
