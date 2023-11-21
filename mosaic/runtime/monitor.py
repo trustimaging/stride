@@ -219,8 +219,11 @@ class Monitor(Runtime):
 
         for node_proxy in asyncio.as_completed(tasks):
             node_proxy = await node_proxy
-            self._comms.start_heartbeat(node_proxy.uid)
             self.logger.debug('Started node %s' % node_proxy.uid)
+
+        for node_uid in self._nodes.keys():
+            self._comms.start_heartbeat(node_uid)
+            self.logger.debug('Started heartbeat with node %s' % node_uid)
 
         self.logger.info('Listening at <NODE:%d-%d | '
                          'WORKER:0:0-%d:%d address=%s>' % (0, num_nodes, num_nodes, num_workers,
