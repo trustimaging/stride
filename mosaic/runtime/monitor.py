@@ -138,6 +138,8 @@ class Monitor(Runtime):
         while node_proxy.uid not in self._monitored_nodes:
             await asyncio.sleep(0.1)
 
+        self._comms.start_heartbeat(node_proxy.uid)
+
         self.logger.info('Listening at <NODE:0 | WORKER:0:0-0:%d>' % num_workers)
 
     async def init_cluster(self, **kwargs):
@@ -217,6 +219,7 @@ class Monitor(Runtime):
 
         for node_proxy in asyncio.as_completed(tasks):
             node_proxy = await node_proxy
+            self._comms.start_heartbeat(node_proxy.uid)
             self.logger.debug('Started node %s' % node_proxy.uid)
 
         self.logger.info('Listening at <NODE:%d-%d | '

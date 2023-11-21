@@ -575,7 +575,6 @@ class OutboundConnection(Connection):
 
         self._socket.connect(self.connect_address)
         self._socket.set_sync_socket()
-        self.start_heartbeat()
 
         self._state = 'connected'
 
@@ -651,6 +650,9 @@ class OutboundConnection(Connection):
         -------
 
         """
+        if self._heartbeat_timeout is None:
+            return
+
         self._heartbeat_attempts = self._heartbeat_max_attempts + 1
 
         self.stop_heartbeat()
@@ -1121,6 +1123,22 @@ class CommsManager:
                                                       context=self._zmq_context,
                                                       loop=self._loop)
             self._send_conn[uid].connect()
+
+    def start_heartbeat(self, uid):
+        """
+        Start the heartbeat procedure with the remote endpoint.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
+        if uid in self._send_conn:
+            self._send_conn[uid].start_heartbeat()
 
     def connected(self, uid):
         """
