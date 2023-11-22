@@ -213,14 +213,6 @@ class Runtime(BaseRPC):
         # Start maintenance loop
         self._loop.interval(self.maintenance, interval=0.5)
 
-        # Connect to monitor first
-        monitor_address = kwargs.get('monitor_address', None)
-        monitor_port = kwargs.get('monitor_port', None)
-        pubsub_port = kwargs.get('pubsub_port', None)
-        if not self.is_monitor and monitor_address is not None and monitor_port is not None \
-                and pubsub_port is not None:
-            await self._comms.handshake('monitor', monitor_address, monitor_port, pubsub_port)
-
         # Connect to parent if necessary
         parent_id = kwargs.pop('parent_id', None)
         parent_address = kwargs.pop('parent_address', None)
@@ -228,6 +220,14 @@ class Runtime(BaseRPC):
         if parent_id is not None and parent_id != 'monitor' \
                 and parent_address is not None and parent_port is not None:
             await self._comms.handshake(parent_id, parent_address, parent_port)
+
+        # Connect to monitor after
+        monitor_address = kwargs.get('monitor_address', None)
+        monitor_port = kwargs.get('monitor_port', None)
+        pubsub_port = kwargs.get('pubsub_port', None)
+        if not self.is_monitor and monitor_address is not None and monitor_port is not None \
+                and pubsub_port is not None:
+            await self._comms.handshake('monitor', monitor_address, monitor_port, pubsub_port)
 
         # Start listening
         self._comms.listen()

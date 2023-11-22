@@ -1799,11 +1799,11 @@ class CommsManager:
             if exception is not None:
                 raise exception
 
-        self._listen_future = self._loop.run(self.listen_async, self.recv_async)
-        self._listen_future.add_done_callback(done)
         if not self._runtime.is_monitor:
             self._pubsub_future = self._loop.run(self.listen_async, self.recv_pubsub_async)
             self._pubsub_future.add_done_callback(done)
+        self._listen_future = self._loop.run(self.listen_async, self.recv_async)
+        self._listen_future.add_done_callback(done)
 
         if self._runtime.uid in ['monitor', 'head']:
             self.logger.info('Listening at %s' % self)
@@ -2277,25 +2277,26 @@ class CommsManager:
         # zmq.ROUTER messages will be dropped if endpoint not yet connected
         await asyncio.sleep(0.1)
 
-        wait = 10
-        while True:
-            await self.send_async(uid,
-                                  method='hand',
-                                  address=self.address, port=self.port)
+        await self.send_async(uid,
+                              method='hand',
+                              address=self.address, port=self.port)
 
+        while True:
             try:
-                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=wait)
-                if uid == sender_id and response.method == 'shake':
+                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=60)
+                if (uid == sender_id and response.method == 'shake') or self.shaken(uid):
                     break
             except asyncio.TimeoutError:
-                wait *= 1.2
-
-        await self.shake(sender_id, **response.kwargs)
-        await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
+                await self.send_async(uid,
+                                      method='hand',
+                                      address=self.address, port=self.port)
 
         self._send_conn[uid].shake()
         if pubsub_port is not None:
             self._pubsub_conn.shake()
+
+        await self.shake(sender_id, **response.kwargs)
+        await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
 
     async def hand(self, sender_id, address, port):
         """
