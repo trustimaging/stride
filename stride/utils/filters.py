@@ -112,7 +112,6 @@ def lowpass_filter_butterworth(data, f_max, padding=0, order=8,
     if adjoint:
         data = np.flip(data, axis=axis)
 
-    import IPython.terminal.debugger as ipdb; ipdb.set_trace()
     filtered = method(sos, data, axis=axis)
 
     if adjoint:
