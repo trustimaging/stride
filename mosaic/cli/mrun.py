@@ -1,12 +1,11 @@
 
-import os
 import click
 import subprocess as cmd_subprocess
 
 from . import clusters
 from .. import init, stop, runtime
 from ..comms import get_hostname
-from ..utils import subprocess, at_exit
+from ..utils import subprocess
 from ..utils.logger import _stdout, _stderr
 
 
