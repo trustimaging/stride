@@ -31,6 +31,9 @@ class Space:
     """
 
     def __init__(self, shape=None, spacing=None, extra=None, absorbing=None):
+        self._set_properties(shape=shape, spacing=spacing, extra=extra, absorbing=absorbing)
+
+    def _set_properties(self, shape, spacing, extra, absorbing):
         if isinstance(spacing, float):
             spacing = (spacing,)*len(shape)
 
@@ -74,21 +77,21 @@ class Space:
         """
         return self.extended_limit
 
-    def resample(self, spacing, extra=None, absorbing=None):
-        if isinstance(spacing, float):
-            spacing = (spacing,)*self.dim
+    def resample(self, new_spacing, new_extra=None, new_absorbing=None):
+        if isinstance(new_spacing, float):
+            new_spacing = (new_spacing,)*self.dim
 
-        shape = tuple((np.array(self.size) / np.array(spacing) + 1).astype(int))
+        new_shape = tuple((np.array(self.size) / np.array(new_spacing) + 1).astype(int))
 
-        if extra is None:
-            extra = tuple((np.array(self.spacing) * (np.array(self.extra) - 1) /
-                           np.array(spacing) + 1).astype(int))
+        if new_extra is None:
+            new_extra = tuple((np.array(self.spacing) * (np.array(self.extra) - 1) /
+                           np.array(new_spacing) + 1).astype(int))
 
-        if absorbing is None:
-            absorbing = tuple((np.array(self.spacing) * (np.array(self.absorbing) - 1) /
-                               np.array(spacing) + 1).astype(int))
+        if new_absorbing is None:
+            new_absorbing = tuple((np.array(self.spacing) * (np.array(self.absorbing) - 1) /
+                               np.array(new_spacing) + 1).astype(int))
 
-        return Space(shape=shape, spacing=spacing, extra=extra, absorbing=absorbing)
+        self._set_properties(shape=new_shape, spacing=new_spacing, extra=new_extra, absorbing=new_absorbing)
 
     @property
     def inner(self):

@@ -900,14 +900,16 @@ class ScalarField(StructuredData):
 
         return interp
 
-    def resample(self, space=None, **kwargs):
+    def _resample(self, old_spacing, new_spacing, **kwargs):
         """
         Resample the internal (non-padded) data given some new space object.
 
         Parameters
         ----------
-        space : Space
-            New space.
+        old_spacing: float
+            The old spacing.
+        new_spacing: float 
+            The new spacing.
         order : int, optional
             Order of the interplation, default is 3.
         prefilter : bool, optional
@@ -932,18 +934,22 @@ class ScalarField(StructuredData):
 
             interp = []
             for t in range(data.shape[0]):
-                interp.append(self.resample_data(data[t], space, **kwargs))
+                interp.append(self._resample_data(data[t], old_spacing, new_spacing, **kwargs))
 
             interp = np.stack(interp, axis=0)
 
         else:
-            interp = self.resample_data(self.data, space, **kwargs)
+            interp = self._resample_data(self.data, old_spacing, new_spacing, **kwargs)
 
-        self.grid.space = space
-        self._init_shape()
-        self._data = self.pad_data(interp)
+        new_field = ScalarField(name=self.name, grid=self.grid, data=interp)
+        new_field.pad()
 
-    def resample_data(self, data, space, **kwargs):
+        # self.grid.space = space  # TODO tackle inheritance this correctly by creating a new ScalarField
+        # self._init_shape()
+        # self._data = self.pad_data(interp)
+        return new_field
+
+    def _resample_data(self, data, old_spacing, new_spacing, **kwargs):
         """
         Resample the data given some new space object.
 
@@ -951,8 +957,10 @@ class ScalarField(StructuredData):
         ----------
         data : ndarray
             Data to stagger.
-        space : Space
-            New space.
+        old_spacing: float
+            The old spacing.
+        new_spacing: float 
+            The new spacing.
         order : int, optional
             Order of the interpolation, default is 3.
         prefilter : bool, optional
@@ -976,8 +984,10 @@ class ScalarField(StructuredData):
         order = kwargs.pop('order', 3)
         prefilter = kwargs.pop('prefilter', True)
 
+        # resampling_factors = np.array([dx_old/dx_new
+        #                      for dx_old, dx_new in zip(self.space.spacing, space.spacing)])
         resampling_factors = np.array([dx_old/dx_new
-                             for dx_old, dx_new in zip(self.space.spacing, space.spacing)])
+                             for dx_old, dx_new in zip(old_spacing, new_spacing)])
 
         # Anti-aliasing is only required for down-sampling interpolation
         if any(factor < 1 for factor in resampling_factors):

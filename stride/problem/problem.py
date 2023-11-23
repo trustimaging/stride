@@ -123,6 +123,29 @@ class Problem(Gridded):
                 if getattr(problem_property, grid_property) is None:
                     setattr(problem_property._grid, grid_property, getattr(self, grid_property))
 
+    def space_resample(self, new_spacing, new_extra=None, new_absorbing=None, **kwargs):
+        '''
+        In-place operation to resample the wavelets and data into a grid with new
+        time-spacing. Sinc interpolation is used.
+
+        Parameters
+        ----------
+        new_spacing : float
+            The space spacing for the interpolated grid.
+        new_extra : int
+            The extra grid-points for the interpolated grid. Defaults to rescaling existing extra.
+        new_absorbing : float
+            The absorbing grid-points for the interpolated grid. Defaults to rescaling existing absorbing.
+
+        Returns
+        -------
+        '''
+        old_spacing = self.grid.space.spacing
+        self.grid.space.resample(new_spacing=new_spacing)
+        new_spacing = self.grid.space.spacing
+        
+        self.medium.vp = self.medium.vp.resample(old_spacing, new_spacing, **kwargs)
+
     def time_resample(self, new_step, new_num=None, **kwargs):
         '''
         In-place operation to resample the wavelets and data into a grid with new
