@@ -213,15 +213,7 @@ class Runtime(BaseRPC):
         # Start maintenance loop
         self._loop.interval(self.maintenance, interval=0.5)
 
-        # Connect to parent if necessary
-        parent_id = kwargs.pop('parent_id', None)
-        parent_address = kwargs.pop('parent_address', None)
-        parent_port = kwargs.pop('parent_port', None)
-        if parent_id is not None and parent_id != 'monitor' \
-                and parent_address is not None and parent_port is not None:
-            await self._comms.handshake(parent_id, parent_address, parent_port)
-
-        # Connect to monitor after
+        # Connect to monitor
         monitor_address = kwargs.get('monitor_address', None)
         monitor_port = kwargs.get('monitor_port', None)
         pubsub_port = kwargs.get('pubsub_port', None)
@@ -1093,7 +1085,10 @@ class Runtime(BaseRPC):
         needs_registering = obj_uid not in obj_store.keys()
 
         if not needs_registering:
-            obj = obj_store[obj_uid]
+            try:
+                obj = obj_store[obj_uid]
+            except KeyError:
+                pass
 
         return needs_registering, obj
 

@@ -1550,6 +1550,7 @@ class CommsManager:
                                                       context=self._zmq_context,
                                                       loop=self._loop)
             self._send_conn[uid].connect()
+            self._send_conn[uid].shake()
 
     def connect_pubsub(self, uid, address, port):
         """
@@ -2315,12 +2316,8 @@ class CommsManager:
         -------
 
         """
-        if self._state == 'disconnected' or self.shaken(sender_id):
+        if self._state == 'disconnected':
             return
-
-        if self._runtime.uid == 'monitor':
-            await self.send_pubsub_async(method='connect',
-                                         uid=sender_id, address=address, port=port)
 
         self.connect_send(sender_id, address, port)
 
@@ -2337,6 +2334,10 @@ class CommsManager:
                               network=network,
                               reply=False)
         self._send_conn[sender_id].shake()
+
+        if self._runtime.uid == 'monitor':
+            await self.send_pubsub_async(method='connect',
+                                         uid=sender_id, address=address, port=port)
 
     async def shake(self, sender_id, network):
         """

@@ -607,13 +607,13 @@ class ProxyBase(CMDBase):
         runtime = mosaic.runtime()
         needs_registering, reg_instance = runtime.needs_registering(obj_type, obj_uid)
 
-        if not needs_registering:
+        if not needs_registering and reg_instance is not None:
             return reg_instance
 
         instance = super()._deserialisation_helper(state)
         instance._registered = False
 
-        if instance.runtime.uid == 'monitor':
+        if instance.runtime.uid == 'monitor' or not needs_registering:
             return instance
 
         obj_type = cls.remote_type()
@@ -634,4 +634,3 @@ class ProxyBase(CMDBase):
         return self.remote_runtime.uid, \
             self.remote_runtime.dec_refs, \
             dict(uid=self.uid, type=self.remote_type())
-        # await self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type())
