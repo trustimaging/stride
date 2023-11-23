@@ -1,7 +1,6 @@
 
 import os
 import click
-import shutil
 import subprocess as cmd_subprocess
 
 from . import clusters
