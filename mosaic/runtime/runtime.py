@@ -7,15 +7,16 @@ import psutil
 import asyncio
 import contextlib
 import weakref
+from cached_property import cached_property
 
 import mosaic
-from .utils import WarehouseObject
-from ..utils import SpillBuffer
+from ..types import WarehouseObject
+from ..utils import subprocess, memory_limit, memory_used
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
-from ..utils.utils import memory_limit, cpu_count
+from ..utils.utils import cpu_count
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -165,11 +166,22 @@ class Runtime(BaseRPC):
         self._tessera_proxy_array = weakref.WeakValueDictionary()
         self._task = dict()
         self._task_proxy = weakref.WeakValueDictionary()
+        self._pending_tasks = 0
+        self._running_tasks = 0
+        self._committed_mem = 0
 
         self._dealloc_queue = []
         self._maintenance_queue = []
+        self._maintenance_msgs = {}
 
         self._inside_async_for = False
+
+        if self.uid == 'warehouse':
+            self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.85))
+        elif 'worker' in self.uid:
+            self._mem_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.85))
+        else:
+            self._mem_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.85))
 
     async def init(self, **kwargs):
         """
@@ -192,31 +204,22 @@ class Runtime(BaseRPC):
         self.set_logger()
 
         # Start warehouse
-        spill_directory = os.path.join(os.getcwd(), 'mosaic-workspace', '%s-storage' % self.uid)
-        if not os.path.exists(spill_directory):
-            os.makedirs(spill_directory)
-
-        warehouse_memory_fraction = kwargs.pop('warehouse_memory_fraction', 0.25)
-        warehouse_memory = memory_limit() * warehouse_memory_fraction
-
         self._remote_warehouse = self.proxy('warehouse')
-        self._local_warehouse = SpillBuffer(spill_directory, warehouse_memory)
+        if len(self.indices):
+            self._local_warehouse = self.proxy('warehouse', indices=self.indices[0])
+        else:
+            self._local_warehouse = self._remote_warehouse
 
         # Start maintenance loop
         self._loop.interval(self.maintenance, interval=0.5)
 
-        # Connect to parent if necessary
-        parent_id = kwargs.pop('parent_id', None)
-        parent_address = kwargs.pop('parent_address', None)
-        parent_port = kwargs.pop('parent_port', None)
-        if parent_id is not None and parent_address is not None and parent_port is not None:
-            await self._comms.handshake(parent_id, parent_address, parent_port)
-
-        # Connect to monitor if necessary
+        # Connect to monitor
         monitor_address = kwargs.get('monitor_address', None)
         monitor_port = kwargs.get('monitor_port', None)
-        if not self.is_monitor and monitor_address is not None and monitor_port is not None:
-            await self._comms.handshake('monitor', monitor_address, monitor_port)
+        pubsub_port = kwargs.get('pubsub_port', None)
+        if not self.is_monitor and monitor_address is not None and monitor_port is not None \
+                and pubsub_port is not None:
+            await self._comms.handshake('monitor', monitor_address, monitor_port, pubsub_port)
 
         # Start listening
         self._comms.listen()
@@ -225,6 +228,39 @@ class Runtime(BaseRPC):
         profile = kwargs.get('profile', False)
         if profile:
             self.set_profiler()
+
+    async def init_warehouse(self, **kwargs):
+        """
+        Init warehouse process.
+
+        Parameters
+        ----------
+        kwargs
+
+        Returns
+        -------
+
+        """
+        warehouse_indices = kwargs.pop('indices', -1)
+        if warehouse_indices < 0:
+            warehouse_proxy = RuntimeProxy(name='warehouse')
+        else:
+            warehouse_proxy = RuntimeProxy(name='warehouse', indices=warehouse_indices)
+        indices = warehouse_proxy.indices
+
+        def start_warehouse(*args, **extra_kwargs):
+            kwargs.update(extra_kwargs)
+            kwargs['runtime_indices'] = indices
+            mosaic.init('warehouse', *args, **kwargs, wait=True)
+
+        warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)
+        warehouse_subprocess.start_process()
+        warehouse_proxy.subprocess = warehouse_subprocess
+
+        self._local_warehouse = warehouse_proxy
+        if self.uid == 'monitor':
+            self._remote_warehouse = warehouse_proxy
+        await self._comms.wait_for(warehouse_proxy.uid)
 
     def wait(self, wait=False):
         """
@@ -241,6 +277,46 @@ class Runtime(BaseRPC):
         """
         if wait is True:
             self._comms.wait()
+
+    @cached_property
+    def ps_process(self):
+        return psutil.Process(os.getpid())
+
+    def memory_limit(self):
+        """
+        Amount of RSS memory available to the runtime.
+
+        Returns
+        -------
+        float
+            RSS memory.
+
+        """
+        mem = memory_limit()
+        return mem*self._mem_fraction
+
+    def fits_in_memory(self, nbytes):
+        mem_used = memory_used()
+        mem_limit = self.memory_limit()
+        return mem_used + self._committed_mem + nbytes < mem_limit
+
+    def cpu_load(self):
+        """
+        CPU load of this runtime as a percentage.
+
+        Returns
+        -------
+        float
+            CPU load.
+
+        """
+        # OSX does not allow accessing information on external processes
+        try:
+            return self.ps_process.cpu_percent(interval=None)
+        except psutil.AccessDenied:
+            pass
+
+        return 0
 
     async def barrier(self, timeout=None):
         """
@@ -260,7 +336,7 @@ class Runtime(BaseRPC):
         await monitor.barrier(timeout=timeout, reply=True)
 
     def async_for(self, *iterables, **kwargs):
-        assert not self._inside_async_for
+        assert not self._inside_async_for, 'async_for cannot be nested'
 
         safe = kwargs.pop('safe', True)
         timeout = kwargs.pop('timeout', None)
@@ -292,22 +368,28 @@ class Runtime(BaseRPC):
                 try:
                     res = await task
                     gather.append(res)
-                except Exception as exc:
+                except RuntimeDisconnectedError as exc:
                     if safe:
-                        self.logger.info('Runtime failed, retiring worker: %s' % exc)
+                        self.logger.warn('Runtime failed, retiring worker: %s' % exc)
                         available_workers -= 1
                         if available_workers <= 0:
                             for other_task in tasks:
                                 other_task.cancel()
-                                with contextlib.suppress(RuntimeDisconnectedError, asyncio.CancelledError):
+                                try:
                                     await other_task
+                                except (RuntimeDisconnectedError, asyncio.CancelledError):
+                                    pass
                             raise RuntimeError('No workers available to complete async workload')
                     else:
                         raise
 
                 if max_await is not None and len(gather) > max_await:
                     for other_task in tasks:
-                        other_task.close()
+                        other_task.cancel()
+                        try:
+                            await other_task
+                        except (RuntimeDisconnectedError, asyncio.CancelledError):
+                            pass
                     break
 
             await self.barrier()
@@ -339,6 +421,14 @@ class Runtime(BaseRPC):
 
         """
         return self._comms.port
+
+    @property
+    def pubsub_port(self):
+        """
+        Pub-sub port of the runtime.
+
+        """
+        return self._comms.pubsub_port
 
     @property
     def num_nodes(self):
@@ -434,7 +524,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        return self._remote_warehouse
+        return self._local_warehouse
 
     def get_local_warehouse(self):
         """
@@ -459,7 +549,13 @@ class Runtime(BaseRPC):
 
             # Set thread pool for ZMQ
             try:
-                num_cpus = min(len(psutil.Process().cpu_affinity()), cpu_count())-1
+                try:
+                    import numa
+                    available_cpus = numa.info.numa_hardware_info()['node_cpu_info']
+                    num_cpus = min([len(cpus) for cpus in available_cpus.values()])//4
+                except Exception:
+                    num_cpus = cpu_count()//8
+
                 num_cpus = os.environ.get('MOSAIC_ZMQ_NUM_THREADS', num_cpus)
                 num_cpus = max(1, int(num_cpus))
 
@@ -505,6 +601,8 @@ class Runtime(BaseRPC):
         -------
 
         """
+        if self.uid == 'monitor':
+            return self
         return self._monitor
 
     def get_node(self, uid=None):
@@ -620,7 +718,10 @@ class Runtime(BaseRPC):
         proxy = proxy or self.proxy(uid=uid)
 
         if hasattr(self, '_' + proxy.name + 's'):
-            del getattr(self, '_' + proxy.name + 's')[uid]
+            try:
+                del getattr(self, '_' + proxy.name + 's')[uid]
+            except KeyError:
+                pass
 
         elif hasattr(self, '_' + proxy.name):
             setattr(self, '_' + proxy.name, None)
@@ -897,7 +998,7 @@ class Runtime(BaseRPC):
         """
         global_profiler.send_profile()
 
-    async def put(self, obj, publish=False):
+    async def put(self, obj, publish=False, reply=False):
         """
         Put an object into the warehouse.
 
@@ -905,6 +1006,7 @@ class Runtime(BaseRPC):
         ----------
         obj
         publish
+        reply
 
         Returns
         -------
@@ -912,14 +1014,14 @@ class Runtime(BaseRPC):
         """
         if hasattr(obj, 'has_tessera') and obj.is_proxy:
             await obj.push(publish=publish)
-
             return obj.ref
 
         else:
+            warehouse = self._local_warehouse
             warehouse_obj = WarehouseObject(obj)
 
-            await self._remote_warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
-                                                    publish=publish, reply=publish)
+            await warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
+                                       publish=publish, reply=reply or publish)
 
             return warehouse_obj
 
@@ -935,18 +1037,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        if isinstance(uid, WarehouseObject):
-            uid = uid.uid
-
-        if uid in self._local_warehouse:
-            return self._local_warehouse[uid]
-
-        obj = await self._remote_warehouse.get_remote(uid=uid, reply=True)
-
-        if not hasattr(obj, 'cached') or obj.cached:
-            self._local_warehouse[uid] = obj
-
-        return obj
+        return await self._local_warehouse.get_remote(uid=uid, reply=True)
 
     async def drop(self, uid):
         """
@@ -960,47 +1051,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        if uid in self._local_warehouse:
-            del self._local_warehouse[uid]
-
-        await self._remote_warehouse.drop_remote(uid=uid)
-
-    async def force_put(self, sender_id, obj, uid=None):
-        """
-
-        Parameters
-        ----------
-        sender_id
-        obj
-        uid
-
-        Returns
-        -------
-
-        """
-        if uid not in self._local_warehouse:
-            self._local_warehouse[uid] = obj
-
-    async def force_push(self, sender_id, __dict__, uid=None):
-        """
-
-        Parameters
-        ----------
-        sender_id
-        __dict__
-        uid
-
-        Returns
-        -------
-
-        """
-        if uid in self._local_warehouse:
-            obj = self._local_warehouse[uid]
-            for key, value in __dict__.items():
-                setattr(obj, key, value)
-
-        else:
-            await self.get(uid)
+        await self._local_warehouse.drop_remote(uid=uid)
 
     # Command and task management methods
 
@@ -1034,7 +1085,10 @@ class Runtime(BaseRPC):
         needs_registering = obj_uid not in obj_store.keys()
 
         if not needs_registering:
-            obj = obj_store[obj_uid]
+            try:
+                obj = obj_store[obj_uid]
+            except KeyError:
+                pass
 
         return needs_registering, obj
 
@@ -1062,9 +1116,12 @@ class Runtime(BaseRPC):
         -------
 
         """
+        tasks = []
+
         if len(self._dealloc_queue):
             uncollectables = []
-            deregisters = []
+            deregisters = {}
+            dec_refs = {}
             for obj in self._dealloc_queue:
                 # If not collectable, defer until next cycle
                 if not obj.collectable:
@@ -1082,27 +1139,41 @@ class Runtime(BaseRPC):
                     obj.queue_task((None, 'stop'))
 
                 # Remove from local warehouse
-                if obj_uid in self._local_warehouse:
-                    del self._local_warehouse[obj_uid]
+                if 'warehouse' in self.uid and obj_uid in self._local_warehouse:
+                    if self._local_warehouse[obj_uid] is obj:
+                        del self._local_warehouse[obj_uid]
 
                 # Execute object deregister
                 if hasattr(obj, 'deregister'):
-                    deregisters.append(obj.deregister())
+                    try:
+                        runtime_uid, dec_ref, kwargs = await obj.deregister()
+                        if runtime_uid not in deregisters:
+                            deregisters[runtime_uid] = []
+                            dec_refs[runtime_uid] = dec_ref
+                        deregisters[runtime_uid].append(kwargs)
+                    except TypeError:
+                        pass
 
             self._dealloc_queue = uncollectables
 
-            await asyncio.gather(*deregisters)
-
-            gc.collect()
+            for runtime_uid, dec_ref in dec_refs.items():
+                tasks.append(dec_ref(msgs=deregisters[runtime_uid]))
 
         if len(self._maintenance_queue):
-            funs = []
-            for fun in self._maintenance_queue:
-                funs.append(fun())
+            for task in self._maintenance_queue:
+                tasks.append(task())
 
             self._maintenance_queue = []
 
-            await asyncio.gather(*funs)
+        if len(self._maintenance_msgs):
+            for method_name, msgs in self._maintenance_msgs.items():
+                method = getattr(self._monitor, method_name)
+                tasks.append(method(msgs=msgs))
+
+            self._maintenance_msgs = {}
+
+        await asyncio.gather(*tasks)
+        gc.collect()
 
     def maintenance_queue(self, fun):
         """
@@ -1117,6 +1188,23 @@ class Runtime(BaseRPC):
 
         """
         self._maintenance_queue.append(fun)
+
+    def maintenance_msg(self, method, msg):
+        """
+        Add message to maintenance queue
+
+        Parameters
+        ----------
+        method : callable
+        msg : dict
+
+        Returns
+        -------
+
+        """
+        if method not in self._maintenance_msgs:
+            self._maintenance_msgs[method] = []
+        self._maintenance_msgs[method].append(msg)
 
     def cmd(self, sender_id, cmd):
         """
@@ -1177,6 +1265,27 @@ class Runtime(BaseRPC):
         obj = obj_store[obj_uid]
         obj.inc_ref()
         obj.register_proxy(uid=sender_id)
+
+    def dec_refs(self, sender_id, msgs):
+        """
+        Decrease reference count for multiple resident objects.
+
+        If reference count decreases below 1, deregister the object.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        msgs : list
+            UIDs of the object being referenced.
+
+        Returns
+        -------
+
+        """
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self.dec_ref(sender_id, **msg)
 
     def dec_ref(self, sender_id, uid, type):
         """
@@ -1265,6 +1374,28 @@ class Runtime(BaseRPC):
 
         tessera.queue_task((sender_id, task))
         task.state_changed('pending')
+        self.inc_pending_tasks()
+
+    def inc_pending_tasks(self):
+        self._pending_tasks += 1
+
+    def dec_pending_tasks(self):
+        self._pending_tasks -= 1
+        self._pending_tasks = max(0, self._pending_tasks)
+
+    def inc_running_tasks(self):
+        self._running_tasks += 1
+
+    def dec_running_tasks(self):
+        self._running_tasks -= 1
+        self._running_tasks = max(0, self._running_tasks)
+
+    def inc_committed_mem(self, nbytes):
+        self._committed_mem += nbytes
+
+    def dec_committed_mem(self, nbytes):
+        self._committed_mem -= nbytes
+        self._committed_mem = max(0, self._committed_mem)
 
 
 class RuntimeProxy(BaseRPC):
@@ -1314,6 +1445,14 @@ class RuntimeProxy(BaseRPC):
 
         """
         return self.comms.uid_port(self.uid)
+
+    @property
+    def pubsub_port(self):
+        """
+        Remote pub-sub port.
+
+        """
+        return self.comms.pubsub_port
 
     @property
     def subprocess(self):

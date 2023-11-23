@@ -320,8 +320,12 @@ class StructuredData(Data):
             return
 
         if self.grad is None:
-            self.grad = self.alike(name='%s_grad' % self.name)
-            self.grad.prec = self.alike(name='%s_prec' % self.name)
+            self.grad = self.alike(name='%s_grad' % self.name,
+                                   shape=self.shape, extended_shape=self.shape,
+                                   inner=None)
+            self.grad.prec = self.alike(name='%s_prec' % self.name,
+                                        shape=self.shape, extended_shape=self.shape,
+                                        inner=None)
 
         self.grad.fill(0.)
         self.grad.prec.fill(0.)
@@ -339,7 +343,7 @@ class StructuredData(Data):
         """
         self.grad = None
 
-    def process_grad(self, prec_scale=0.15, **kwargs):
+    def process_grad(self, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
@@ -355,10 +359,10 @@ class StructuredData(Data):
         if not self.needs_grad:
             return
 
-        self.grad.apply_prec(prec_scale=prec_scale, **kwargs)
+        self.grad.apply_prec(**kwargs)
         return self.grad
 
-    def apply_prec(self, prec_scale=0.15, prec=None, **kwargs):
+    def apply_prec(self, prec_scale=0.25, prec_op=None, prec=None, **kwargs):
         """
         Apply a pre-conditioner to the current field.
 
@@ -366,6 +370,8 @@ class StructuredData(Data):
         ----------
         prec_scale : float, optional
             Condition scaling for the preconditioner.
+        prec_op : callable, optional
+            Additional operation to apply to the preconditioner.
         prec : StructuredData, optional
             Pre-conditioner to apply. Defaults to self.prec.
 
@@ -376,12 +382,15 @@ class StructuredData(Data):
         prec = self.prec if prec is None else prec
 
         if prec is not None:
-            prec_factor = np.sum(prec.data)
+            prec_factor = np.sum(np.abs(prec.data))
 
             if prec_factor > 1e-31:
                 num_points = np.prod(prec.shape)
                 prec_factor = prec_scale * num_points / prec_factor
-                prec.data[:] = np.sqrt(prec.data * prec_factor + 1)
+                prec.data[:] = prec.data * prec_factor + 1
+                if prec_op is not None:
+                    prec.data[:] = prec_op(prec.data)
+
                 non_zero = np.abs(prec.data) > 0.
                 self.data[non_zero] /= prec.data[non_zero]
 

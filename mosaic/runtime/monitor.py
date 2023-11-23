@@ -11,7 +11,7 @@ from .runtime import Runtime, RuntimeProxy
 from .utils import MonitoredResource, MonitoredObject
 from .strategies import RoundRobin
 from ..file_manipulation import h5
-from ..utils import subprocess
+from ..utils import subprocess, at_exit
 from ..utils.utils import memory_limit, cpu_count
 from ..utils.logger import LoggerManager, _stdout, _stderr
 from ..profile import profiler, global_profiler
@@ -80,6 +80,7 @@ class Monitor(Runtime):
 
         now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         self._profile_filename = '%s.profile.h5' % now
+        self._init_filename = None
 
         self._start_t = time.time()
         self._end_t = None
@@ -98,6 +99,10 @@ class Monitor(Runtime):
         """
         await super().init(**kwargs)
 
+        # Maybe dump file
+        if kwargs.get('dump_init', False):
+            self.init_file({})
+
         # Start local cluster
         await self.init_warehouse(**kwargs)
 
@@ -106,30 +111,6 @@ class Monitor(Runtime):
 
         else:
             await self.init_cluster(**kwargs)
-
-    async def init_warehouse(self, **kwargs):
-        """
-        Init warehouse process.
-
-        Parameters
-        ----------
-        kwargs
-
-        Returns
-        -------
-
-        """
-        def start_warehouse(*args, **extra_kwargs):
-            kwargs.update(extra_kwargs)
-            mosaic.init('warehouse', *args, **kwargs, wait=True)
-
-        warehouse_proxy = RuntimeProxy(name='warehouse')
-        warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)
-        warehouse_subprocess.start_process()
-        warehouse_proxy.subprocess = warehouse_subprocess
-
-        self._remote_warehouse = warehouse_proxy
-        await self._comms.wait_for(warehouse_proxy.uid)
 
     async def init_local(self, **kwargs):
         """
@@ -143,6 +124,8 @@ class Monitor(Runtime):
         -------
 
         """
+        num_workers = kwargs.get('num_workers', 1)
+
         def start_node(*args, **extra_kwargs):
             kwargs.update(extra_kwargs)
             kwargs['runtime_indices'] = 0
@@ -159,6 +142,10 @@ class Monitor(Runtime):
 
         while node_proxy.uid not in self._monitored_nodes:
             await asyncio.sleep(0.1)
+
+        self._comms.start_heartbeat(node_proxy.uid)
+
+        self.logger.info('Listening at <NODE:0 | WORKER:0:0-0:%d>' % num_workers)
 
     async def init_cluster(self, **kwargs):
         """
@@ -184,6 +171,7 @@ class Monitor(Runtime):
         log_level = kwargs.get('log_level', 'info')
         runtime_address = self.address
         runtime_port = self.port
+        pubsub_port = self.pubsub_port
 
         ssh_flags = os.environ.get('SSH_FLAGS', '')
         ssh_commands = os.environ.get('SSH_COMMANDS', None)
@@ -200,6 +188,7 @@ class Monitor(Runtime):
             remote_cmd = (f'{ssh_commands} '
                           f'mrun --node -i {node_index} '
                           f'--monitor-address {runtime_address} --monitor-port {runtime_port} '
+                          f'--pubsub-port {pubsub_port} '
                           f'-n {num_nodes} -nw {num_workers} -nth {num_threads} '
                           f'--cluster --{log_level} {reuse_head}')
 
@@ -237,7 +226,50 @@ class Monitor(Runtime):
 
         for node_proxy in asyncio.as_completed(tasks):
             node_proxy = await node_proxy
-            self.logger.info('Started node %s' % node_proxy.uid)
+            self.logger.debug('Started node %s' % node_proxy.uid)
+
+        for node_uid in self._nodes.keys():
+            self._comms.start_heartbeat(node_uid)
+            self.logger.debug('Started heartbeat with node %s' % node_uid)
+
+        self.logger.info('Listening at <NODE:%d-%d | '
+                         'WORKER:0:0-%d:%d address=%s>' % (0, num_nodes, num_nodes, num_workers,
+                                                           ', '.join(node_list)))
+
+    def init_file(self, runtime_config):
+        runtime_id = self.uid
+        runtime_address = self.address
+        runtime_port = self.port
+        pubsub_port = self.pubsub_port
+
+        # Store runtime ID, address and port in a tmp file for the
+        # head to use
+        path = os.path.join(os.getcwd(), 'mosaic-workspace')
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        self._init_filename = os.path.join(path, 'monitor.key')
+        with open(self._init_filename, 'w') as file:
+            file.write('[ADDRESS]\n')
+            file.write('UID=%s\n' % runtime_id)
+            file.write('ADD=%s\n' % runtime_address)
+            file.write('PRT=%s\n' % runtime_port)
+            file.write('PUB=%s\n' % pubsub_port)
+            file.write('[ARGS]\n')
+
+            for key, value in runtime_config.items():
+                if key in ['runtime_indices', 'address', 'port',
+                           'monitor_address', 'monitor_port', 'node_list']:
+                    continue
+                if isinstance(value, str):
+                    file.write('%s="%s"\n' % (key, value))
+                else:
+                    file.write('%s=%s\n' % (key, value))
+
+        def _rm_dirs():
+            os.remove(self._init_filename)
+
+        at_exit.add(_rm_dirs)
 
     def set_logger(self):
         """
@@ -274,7 +306,27 @@ class Monitor(Runtime):
         node.update(update, **sub_resources)
         self._monitor_strategy.update_node(node)
 
-    def add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
+    def add_tessera_event(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_tessera_event(sender_id, **msg)
+
+    def add_task_event(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_task_event(sender_id, **msg)
+
+    def add_tessera_profile(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_tessera_profile(sender_id, **msg)
+
+    def add_task_profile(self, sender_id, msgs):
+        msgs = [msgs] if not isinstance(msgs, list) else msgs
+        for msg in msgs:
+            self._add_task_profile(sender_id, **msg)
+
+    def _add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
 
@@ -283,7 +335,7 @@ class Monitor(Runtime):
         self._monitor_strategy.update_tessera(obj)
         self._dirty_tessera.add(uid)
 
-    def add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
+    def _add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
 
@@ -292,7 +344,7 @@ class Monitor(Runtime):
         self._monitor_strategy.update_task(obj)
         self._dirty_tasks.add(uid)
 
-    def add_tessera_profile(self, sender_id, runtime_id, uid, profile):
+    def _add_tessera_profile(self, sender_id, runtime_id, uid, profile):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
 
@@ -300,7 +352,7 @@ class Monitor(Runtime):
         obj.add_profile(sender_id, profile)
         self._dirty_tessera.add(uid)
 
-    def add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
+    def _add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
 
@@ -356,6 +408,13 @@ class Monitor(Runtime):
         -------
 
         """
+        # Delete files
+        if self._init_filename is not None:
+            try:
+                os.remove(self._init_filename)
+            except Exception:
+                pass
+
         # Get final profile updates before closing
         if profiler.tracing:
             profiler.stop()
@@ -378,8 +437,8 @@ class Monitor(Runtime):
             self._append_description(description)
 
         # Close warehouse
-        await self._remote_warehouse.stop()
-        self._remote_warehouse.subprocess.join_process()
+        await self._local_warehouse.stop()
+        self._local_warehouse.subprocess.join_process()
 
         # Close nodes
         for node_id, node in self._nodes.items():

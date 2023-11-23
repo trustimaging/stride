@@ -54,7 +54,7 @@ class GradientDescent(LocalOptimiser):
                                                 **kwargs)
         direction = processed_grad
 
-        self.variable -= step_size*direction
+        self.variable.data[:] -= step_size*direction.data
 
         await self.post_process(**kwargs)
 

@@ -81,6 +81,11 @@ class CMDBase(Base):
     async def __init_async__(self, *args, **kwargs):
         await self.init(*args, **kwargs)
 
+        if self._init_future.done():
+            exc = self._init_future.exception()
+            if exc is not None:
+                raise exc
+
         self._init_future.set_result(True)
 
         return self
@@ -354,7 +359,7 @@ class CMDBase(Base):
             return
 
         obj_type = self.type.split('_')[0]
-        method = getattr(self.monitor, 'add_%s_event' % obj_type)
+        method_name = 'add_%s_event' % obj_type
 
         event_type = 'proxy' if self.is_proxy else 'remote'
         event_t = time.time()
@@ -372,18 +377,15 @@ class CMDBase(Base):
                      event_name=event_name,
                      event_t=event_t, **kwargs)
 
-        async def add_event_async():
-            await method(**event, as_async=True)
-
         runtime = mosaic.runtime()
-        runtime.maintenance_queue(add_event_async)
+        runtime.maintenance_msg(method_name, event)
 
     def add_profile(self, profile, **kwargs):
         if self.runtime.uid == 'monitor' or self.is_proxy:
             return
 
         obj_type = self.type.split('_')[0]
-        method = getattr(self.monitor, 'add_%s_profile' % obj_type)
+        method_name = 'add_%s_profile' % obj_type
 
         profile_type = 'proxy' if self.is_proxy else 'remote'
 
@@ -399,11 +401,8 @@ class CMDBase(Base):
                               profile=profile,
                               **kwargs)
 
-        async def add_profile_async():
-            await method(**profile_update, as_async=True)
-
         runtime = mosaic.runtime()
-        runtime.maintenance_queue(add_profile_async)
+        runtime.maintenance_msg(method_name, profile_update)
 
     _serialisation_attrs = ['_uid', '_state']
 
@@ -607,13 +606,13 @@ class ProxyBase(CMDBase):
         runtime = mosaic.runtime()
         needs_registering, reg_instance = runtime.needs_registering(obj_type, obj_uid)
 
-        if not needs_registering:
+        if not needs_registering and reg_instance is not None:
             return reg_instance
 
         instance = super()._deserialisation_helper(state)
         instance._registered = False
 
-        if instance.runtime.uid == 'monitor':
+        if instance.runtime.uid == 'monitor' or not needs_registering:
             return instance
 
         obj_type = cls.remote_type()
@@ -631,4 +630,6 @@ class ProxyBase(CMDBase):
 
     async def deregister(self):
         await super().deregister()
-        await self.remote_runtime.dec_ref(uid=self.uid, type=self.remote_type())
+        return self.remote_runtime.uid, \
+            self.remote_runtime.dec_refs, \
+            dict(uid=self.uid, type=self.remote_type())

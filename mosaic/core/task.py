@@ -9,7 +9,8 @@ from cached_property import cached_property
 
 from .. import types
 from .base import Base, RemoteBase, ProxyBase, RuntimeDisconnectedError
-from ..utils import Future, MultiError
+from ..types import WarehouseObject
+from ..utils import Future, MultiError, sizeof, remote_sizeof
 
 
 __all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone']
@@ -77,6 +78,7 @@ class Task(RemoteBase):
         self._tic = 0
         self._elapsed = None
 
+        self._arg_size = 0
         self._args_pending = set()
         self._kwargs_pending = set()
 
@@ -92,7 +94,7 @@ class Task(RemoteBase):
 
         self._state = None
         self.runtime.register(self)
-        self.state_changed('init')
+        self.state_changed('pending')
         self.register_proxy(self._sender_id)
 
     @property
@@ -167,7 +169,7 @@ class Task(RemoteBase):
         """
         return self._kwargs_value
 
-    def set_result(self, result):
+    async def set_result(self, result):
         """
         Set task result.
 
@@ -179,37 +181,57 @@ class Task(RemoteBase):
         -------
 
         """
-        self._result = result
+        if not isinstance(result, (tuple, dict)):
+            result = (result,)
 
-    def get_result(self, key=None):
-        """
-        Get task result.
+        min_size = 1e4
+        if isinstance(result, tuple):
+            async def store(_value):
+                return await self.runtime.put(_value, reply=True)
 
-        Parameters
-        ----------
-        key : optional
-            Access particular item within the result, defaults to None.
+            async def noop(_value):
+                return _value
 
-        Returns
-        -------
+            tasks = []
+            for value in result:
+                obj_size = sizeof(value)
 
-        """
-        if self._state == 'failed':
-            raise Exception('Tried to get the result on failed task %s' % self._uid)
+                if obj_size > min_size:
+                    tasks.append(store(value))
+                else:
+                    tasks.append(noop(value))
 
-        if self._state != 'done':
-            raise Exception('Tried to get result of task not done, this should never happen!')
+            stored_result = await asyncio.gather(*tasks)
+            stored_result = tuple(stored_result)
 
-        if key is None:
-            return self._result
+        elif isinstance(result, dict):
+            async def store(_key, _value):
+                return _key, await self.runtime.put(_value, reply=True)
+
+            async def noop(_key, _value):
+                return _key, _value
+
+            tasks = []
+            for key, value in result.items():
+                obj_size = sizeof(value)
+
+                if obj_size > min_size:
+                    tasks.append(store(key, value))
+                else:
+                    tasks.append(noop(key, value))
+
+            stored_result = {}
+            tasks = await asyncio.gather(*tasks)
+            for key, value in tasks:
+                stored_result[key] = value
 
         else:
-            result = self._result
+            assert False
 
-            if not hasattr(type(result), '__getitem__'):
-                result = (result,)
+        await self.cmd_async(method='set_result', result=stored_result)
+        self._result = stored_result
 
-            return result[key]
+        await self.set_done()
 
     def check_result(self):
         """
@@ -227,7 +249,7 @@ class Task(RemoteBase):
             return 'failed', self._exception
 
         else:
-            return self._state, None
+            return self._state, self._result
 
     def _cleanup(self):
         self.args = None
@@ -250,8 +272,7 @@ class Task(RemoteBase):
         kwargs['tessera_id'] = self.tessera_id
         return super().add_profile(profile, **kwargs)
 
-    # TODO Await all of the remote results together using gather
-    async def prepare_args(self):
+    async def __prepare_args(self):
         """
         Prepare the arguments of the task for execution.
 
@@ -260,6 +281,8 @@ class Task(RemoteBase):
         Future
 
         """
+
+        awaitable_args = []
 
         for index in range(len(self.args)):
             arg = self.args[index]
@@ -281,9 +304,14 @@ class Task(RemoteBase):
                     arg.add_done_callback(callback(index, arg))
 
                 else:
-                    result = await arg.result()
-                    if not isinstance(arg, TaskDone):
-                        self._args_value[index] = result
+                    async def _await_arg(_index, _arg):
+                        _result = await _arg.result()
+                        _attr = self._args_value if not isinstance(_arg, TaskDone) else None
+                        return _attr, _index, _result
+
+                    awaitable_args.append(
+                        _await_arg(index, arg)
+                    )
 
             else:
                 self._args_state[index] = 'ready'
@@ -307,14 +335,97 @@ class Task(RemoteBase):
                     value.add_done_callback(callback(key, value))
 
                 else:
-                    result = await value.result()
-                    if not isinstance(value, TaskDone):
-                        self._kwargs_value[key] = result
+                    async def _await_kwarg(_key, _arg):
+                        _result = await _arg.result()
+                        _attr = self._kwargs_value if not isinstance(_arg, TaskDone) else None
+                        return _attr, _key, _result
+
+                    awaitable_args.append(
+                        _await_kwarg(key, value)
+                    )
 
             else:
                 self._kwargs_state[key] = 'ready'
                 self._kwargs_value[key] = value
 
+        for task in asyncio.as_completed(awaitable_args):
+            attr, key, result = await task
+            if attr is not None:
+                attr[key] = result
+
+        await self._check_ready()
+
+        return self._ready_future
+
+    async def prepare_args(self):
+        """
+        Prepare the arguments of the task for execution.
+
+        Returns
+        -------
+        Future
+
+        """
+        tasks = []
+
+        async def await_size(_arg):
+            self._arg_size += await _arg.size(pending=True)
+
+        for index in range(len(self.args)):
+            arg = self.args[index]
+
+            if type(arg) in types.awaitable_types:
+                self._args_state[index] = arg.state
+                if not isinstance(arg, TaskDone):
+                    self._args_value[index] = None
+
+                if arg.state != 'done':
+                    self._args_pending.add(arg)
+
+                    def callback(_index, _arg):
+                        def _callback(fut):
+                            self.loop.run(self._set_arg_done, fut, _index, _arg)
+
+                        return _callback
+
+                    arg.add_done_callback(callback(index, arg))
+
+                else:
+                    tasks.append(
+                        await_size(arg)
+                    )
+
+            else:
+                self._args_state[index] = 'ready'
+                self._args_value[index] = arg
+
+        for key, value in self.kwargs.items():
+            if type(value) in types.awaitable_types:
+                self._kwargs_state[key] = value.state
+                if not isinstance(value, TaskDone):
+                    self._kwargs_value[key] = None
+
+                if value.state != 'done':
+                    self._kwargs_pending.add(value)
+
+                    def callback(_key, _arg):
+                        def _callback(fut):
+                            self.loop.run(self._set_kwarg_done, fut, _key, _arg)
+
+                        return _callback
+
+                    value.add_done_callback(callback(key, value))
+
+                else:
+                    tasks.append(
+                        await_size(value)
+                    )
+
+            else:
+                self._kwargs_state[key] = 'ready'
+                self._kwargs_value[key] = value
+
+        await asyncio.gather(*tasks)
         await self._check_ready()
 
         return self._ready_future
@@ -349,8 +460,6 @@ class Task(RemoteBase):
         """
         self.state_changed('done')
 
-        await self.cmd_async(method='set_done')
-
         # Once done release local copy of the arguments
         self._cleanup()
 
@@ -358,11 +467,8 @@ class Task(RemoteBase):
         if not (await self._check_exception(fut, arg)):
             return
 
-        result = await arg.result()
-
-        self._args_state[index] = 'ready'
-        if not isinstance(arg, TaskDone):
-            self._args_value[index] = result
+        self._arg_size += await arg.size(pending=True)
+        self._args_state[index] = 'done'
 
         try:
             self._args_pending.remove(arg)
@@ -374,11 +480,8 @@ class Task(RemoteBase):
         if not (await self._check_exception(fut, arg)):
             return
 
-        result = await arg.result()
-
-        self._kwargs_state[index] = 'ready'
-        if not isinstance(arg, TaskDone):
-            self._kwargs_value[index] = result
+        self._arg_size += await arg.size(pending=True)
+        self._kwargs_state[index] = 'done'
 
         try:
             self._kwargs_pending.remove(arg)
@@ -420,11 +523,85 @@ class Task(RemoteBase):
             return True
 
     async def _check_ready(self):
-        if not len(self._args_pending) and not len(self._kwargs_pending):
-            self.state_changed('ready')
+        if len(self._args_pending) or len(self._kwargs_pending):
+            return
 
-            if not self._ready_future.done():
+        # make sure there's enough memory to pull the arguments
+        wait = 1
+        while not self.runtime.fits_in_memory(self._arg_size):
+            if self.runtime._running_tasks <= 0:
+                try:
+                    raise MemoryOverflowError('Not enough memory to allocate %d bytes '
+                                              'for task %s' % (self._arg_size, self))
+                except MemoryOverflowError:
+                    et, ev, tb = sys.exc_info()
+                    tb = tblib.Traceback(tb)
+
+                    await self.set_exception((et, ev, tb))
+
                 self._ready_future.set_result(True)
+                return
+
+            await asyncio.sleep(wait)
+            wait *= 1.2
+
+        self.runtime.inc_committed_mem(self._arg_size)  # reserve memory to pull args
+        self.runtime.dec_pending_tasks()
+        self.runtime.inc_running_tasks()
+
+        # pull all arguments
+        awaitable_args = []
+
+        for index in range(len(self.args)):
+            arg = self.args[index]
+
+            if type(arg) in types.awaitable_types:
+                self._args_state[index] = 'ready'
+
+                async def _await_arg(_index, _arg):
+                    _result = await _arg.result()
+                    _attr = self._args_value if not isinstance(_arg, TaskDone) else None
+                    return _attr, _index, _result
+
+                awaitable_args.append(
+                    _await_arg(index, arg)
+                )
+
+        for key, value in self.kwargs.items():
+            if type(value) in types.awaitable_types:
+                self._kwargs_state[key] = 'ready'
+
+                async def _await_kwarg(_key, _arg):
+                    _result = await _arg.result()
+                    _attr = self._kwargs_value if not isinstance(_arg, TaskDone) else None
+                    return _attr, _key, _result
+
+                awaitable_args.append(
+                    _await_kwarg(key, value)
+                )
+
+        for task in asyncio.as_completed(awaitable_args):
+            attr, key, result = await task
+            if attr is not None:
+                attr[key] = result
+
+        self.runtime.dec_committed_mem(self._arg_size)  # return reserved memory
+
+        # set task ready
+        if not self._ready_future.done():
+            self._ready_future.set_result(True)
+
+    def __del__(self):
+        result = self._result
+        if isinstance(result, tuple):
+            for value in result:
+                if isinstance(value, WarehouseObject):
+                    self.loop.run(self.runtime.drop, value.uid)
+
+        elif isinstance(result, dict):
+            for value in result.values():
+                if isinstance(value, WarehouseObject):
+                    self.loop.run(self.runtime.drop, value.uid)
 
 
 class TaskProxy(ProxyBase):
@@ -465,8 +642,6 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        self.state_changed('init')
-
         self.runtime.register(self)
 
         task = {
@@ -479,7 +654,7 @@ class TaskProxy(ProxyBase):
         await self.remote_runtime.init_task(task=task, uid=self._uid,
                                             reply=True)
 
-        if self._state == 'init':
+        if self._state == 'pending':
             self.state_changed('queued')
 
     def deregister_runtime(self, uid):
@@ -602,6 +777,21 @@ class TaskProxy(ProxyBase):
         # Once done release local copy of the arguments
         self._cleanup()
 
+    def set_result(self, result):
+        """
+        Set task result.
+
+        Parameters
+        ----------
+        result
+
+        Returns
+        -------
+
+        """
+        self._result = result
+        self.set_done()
+
     def set_exception(self, exc):
         """
         Set exception during task execution.
@@ -667,6 +857,24 @@ class TaskProxy(ProxyBase):
         kwargs['tessera_id'] = self.tessera_id
         return super().add_profile(profile, **kwargs)
 
+    async def size(self, pending=False):
+        """
+        Size of the task result in bytes.
+
+        Returns
+        -------
+
+        """
+        await self
+
+        if hasattr(self, '_retrieved'):
+            if pending:
+                return 0
+            else:
+                return sizeof(self._retrieved)
+
+        return await remote_sizeof(self._result, pending=pending)
+
     async def result(self):
         """
         Gather remote result from the task.
@@ -678,12 +886,55 @@ class TaskProxy(ProxyBase):
         """
         await self
 
-        if self._result is not None:
-            return self._result
+        if hasattr(self, '_retrieved'):
+            return self._retrieved
 
-        self._result = await self.cmd_recv_async(method='get_result')
+        result = self._result
+        if isinstance(result, tuple):
+            async def retrieve(_value):
+                return await self.runtime.get(_value)
 
-        return self._result
+            async def noop(_value):
+                return _value
+
+            tasks = []
+            for value in result:
+                if isinstance(value, WarehouseObject):
+                    tasks.append(retrieve(value))
+                else:
+                    tasks.append(noop(value))
+
+            retrieved = await asyncio.gather(*tasks)
+            retrieved = tuple(retrieved)
+            if len(retrieved) == 1:
+                retrieved = retrieved[0]
+
+        elif isinstance(result, dict):
+            async def retrieve(_key, _value):
+                return _key, await self.runtime.get(_value)
+
+            async def noop(_key, _value):
+                return _key, _value
+
+            tasks = []
+            for key, value in result.items():
+                if isinstance(value, WarehouseObject):
+                    tasks.append(retrieve(key, value))
+                else:
+                    tasks.append(noop(key, value))
+
+            tasks = await asyncio.gather(*tasks)
+            retrieved = {}
+            for key, value in tasks:
+                retrieved[key] = value
+
+        else:
+            assert False
+
+        self._result = None
+        setattr(self, '_retrieved', retrieved)
+
+        return retrieved
 
     async def check_result(self):
         """
@@ -694,13 +945,13 @@ class TaskProxy(ProxyBase):
 
         """
         if self._state != 'done' and self._state != 'failed':
-            state, exc = await self.cmd_recv_async(method='check_result')
+            state, result = await self.cmd_recv_async(method='check_result')
 
             if state == 'done':
-                self.set_done()
+                self.set_result(result)
 
             elif state == 'failed':
-                self.set_exception(exc)
+                self.set_exception(result)
 
     def __await__(self):
         yield from self._done_future.__await__()
@@ -816,6 +1067,9 @@ class TaskOutputBase(Base):
     async def result(self):
         pass
 
+    async def size(self, pending=False):
+        pass
+
     def add_done_callback(self, fun):
         self._task_proxy.add_done_callback(fun)
 
@@ -847,6 +1101,25 @@ class TaskOutput(TaskOutputBase):
 
         return result[self._key]
 
+    async def size(self, pending=False):
+        """
+        Size of the task result in bytes.
+
+        Returns
+        -------
+
+        """
+        await self
+
+        if self._result is not None:
+            if pending:
+                return 0
+            else:
+                return sizeof(self._result)
+
+        result = self._select_result(self._task_proxy._result)
+        return await remote_sizeof(result, pending=pending)
+
     async def result(self):
         """
         Gather output from the remote task.
@@ -858,13 +1131,9 @@ class TaskOutput(TaskOutputBase):
         """
         await self
 
-        if self._result is None and self._task_proxy._result is not None:
-            self._result = self._select_result(self._task_proxy._result)
-
-        if self._result is not None:
-            return self._result
-
-        self._result = await self._task_proxy.cmd_recv_async(method='get_result', key=self._key)
+        if self._result is None:
+            result = await self._task_proxy.result()
+            self._result = self._select_result(result)
 
         return self._result
 
@@ -882,6 +1151,9 @@ class TaskDone(TaskOutputBase):
                (self.__class__.__name__, id(self),
                 self.uid, runtime_id, self.state)
 
+    async def size(self, pending=False):
+        return 0
+
     async def result(self):
         """
         Wait for task termination.
@@ -895,6 +1167,10 @@ class TaskDone(TaskOutputBase):
         self._result = True
 
         return self._result
+
+
+class MemoryOverflowError(Exception):
+    pass
 
 
 types.awaitable_types += (TaskProxy, TaskOutput, TaskDone)

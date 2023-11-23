@@ -30,7 +30,10 @@ def node_list(host_name, reuse_head):
         try:
             slurm_list.remove(host_name)
         except ValueError:
-            slurm_list.remove(host_name.split('.')[0])
+            try:
+                slurm_list.remove(host_name.split('.')[0])
+            except ValueError:
+                pass
 
     return slurm_list
 

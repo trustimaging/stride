@@ -4,15 +4,6 @@ import numpy as np
 from collections import OrderedDict
 from cached_property import cached_property
 
-try:
-    import matplotlib.pyplot as plt
-    from matplotlib.widgets import Slider
-
-    ENABLED_2D_PLOTTING = True
-
-except ModuleNotFoundError:
-    ENABLED_2D_PLOTTING = False
-
 from mosaic.file_manipulation import h5
 
 from .data import Traces
@@ -928,6 +919,17 @@ class Acquisitions(ProblemBase):
 
         self._sequences[item.id] = item
 
+    def reset_selection(self):
+        """
+        Reset the shot and sequence selection.
+
+        Returns
+        -------
+
+        """
+        self._shot_selection = []
+        self._sequence_selection = []
+
     def select_shot_ids(self, shot_ids=None, start=None, end=None, num=None, every=1, randomly=False):
         """
         Select a number of shots according to the rules given in the arguments to the method.
@@ -1045,7 +1047,10 @@ class Acquisitions(ProblemBase):
             plotting.show()
 
     def _plot(self, update, **kwargs):
-        if not ENABLED_2D_PLOTTING:
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.widgets import Slider
+        except ModuleNotFoundError:
             return None
 
         axis = kwargs.pop('axis', None)

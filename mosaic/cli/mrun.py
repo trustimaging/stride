@@ -1,13 +1,11 @@
 
-import os
 import click
-import shutil
 import subprocess as cmd_subprocess
 
 from . import clusters
 from .. import init, stop, runtime
 from ..comms import get_hostname
-from ..utils import subprocess, at_exit
+from ..utils import subprocess
 from ..utils.logger import _stdout, _stderr
 
 
@@ -40,6 +38,8 @@ from ..utils.logger import _stdout, _stderr
               help='IP address of the monitor')
 @click.option('--monitor-port', type=int, required=False, show_default=True,
               help='port of the monitor')
+@click.option('--pubsub-port', type=int, required=False, show_default=True,
+              help='publishing port of the monitor')
 # cluster options
 @click.option('--local/--cluster', '-l/-c', default=False, required=True, show_default=True,
               help='whether to run mosaic locally or in a cluster system')
@@ -65,7 +65,7 @@ def go(cmd=None, **kwargs):
     reuse_head = kwargs.get('reuse_head', False)
 
     if runtime_indices is not None:
-        runtime_indices = tuple(runtime_indices.split(':'))
+        runtime_indices = tuple([int(i) for i in runtime_indices.split(':')])
 
     if not local:
         num_nodes = kwargs.get('nnodes', 1)
@@ -110,6 +110,7 @@ def go(cmd=None, **kwargs):
         'port': kwargs.get('port', None),
         'monitor_address': kwargs.get('monitor_address', None),
         'monitor_port': kwargs.get('monitor_port', None),
+        'pubsub_port': kwargs.get('pubsub_port', None),
         'num_nodes': num_nodes,
         'num_workers': num_workers,
         'num_threads': num_threads,
@@ -142,38 +143,7 @@ def go(cmd=None, **kwargs):
 
     # Get the initialised runtime
     loop = _runtime.get_event_loop()
-    runtime_id = _runtime.uid
-    runtime_address = _runtime.address
-    runtime_port = _runtime.port
-
-    # Store runtime ID, address and port in a tmp file for the
-    # head to use
-    path = os.path.join(os.getcwd(), 'mosaic-workspace')
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    filename = os.path.join(path, 'monitor.key')
-    with open(filename, 'w') as file:
-        file.write('[ADDRESS]\n')
-        file.write('UID=%s\n' % runtime_id)
-        file.write('ADD=%s\n' % runtime_address)
-        file.write('PRT=%s\n' % runtime_port)
-        file.write('[ARGS]\n')
-
-        for key, value in runtime_config.items():
-            if key in ['runtime_indices', 'address', 'port',
-                       'monitor_address', 'monitor_port', 'node_list']:
-                continue
-            if isinstance(value, str):
-                file.write('%s="%s"\n' % (key, value))
-            else:
-                file.write('%s=%s\n' % (key, value))
-
-    def _rm_dirs():
-        os.remove(filename)
-        shutil.rmtree(path, ignore_errors=True)
-
-    at_exit.add(_rm_dirs)
+    _runtime.init_file(runtime_config)
 
     def run_head():
         process = cmd_subprocess.run(cmd,
@@ -194,13 +164,6 @@ def go(cmd=None, **kwargs):
 
     finally:
         stop()
-
-        try:
-            os.remove(filename)
-            shutil.rmtree(path)
-
-        except Exception:
-            pass
 
 
 if __name__ == '__main__':
