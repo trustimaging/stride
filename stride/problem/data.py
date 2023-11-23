@@ -1568,9 +1568,9 @@ class Traces(StructuredData):
 
         if self.allocated:
             data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
-            new_traces = Traces(name=self.name, grid=self.grid, data=data)
+            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=data)
         else:
-            new_traces = Traces(name=self.name, grid=self.grid)
+            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)
 
         return new_traces
 
