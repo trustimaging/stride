@@ -1,11 +1,15 @@
 
 import sys
 import psutil
+import asyncio
 import traceback
 import threading
 import numpy as np
 
-__all__ = ['sizeof', 'set_main_thread', 'memory_limit', 'cpu_count', 'gpu_count', 'MultiError']
+import mosaic
+
+__all__ = ['sizeof', 'remote_sizeof', 'set_main_thread', 'memory_limit',
+           'memory_used', 'cpu_count', 'gpu_count', 'MultiError']
 
 
 def sizeof(obj, seen=None):
@@ -24,6 +28,8 @@ def sizeof(obj, seen=None):
         Size in bytes.
 
     """
+    if isinstance(obj, asyncio.Future):
+        return 0
     if isinstance(obj, np.ndarray):
         size = obj.nbytes
     else:
@@ -51,6 +57,62 @@ def sizeof(obj, seen=None):
     return size
 
 
+async def remote_sizeof(obj, seen=None, pending=False):
+    """
+    Recursively finds size of remote objects.
+
+    Parameters
+    ----------
+    obj : object
+        Object to check size.
+    pending : bool
+        Only count pending objects.
+    seen
+
+    Returns
+    -------
+    float
+        Size in bytes.
+
+    """
+    if isinstance(obj, asyncio.Future):
+        return 0
+    if isinstance(obj, mosaic.types.awaitable_types):
+        size = await obj.size(pending=pending)
+    else:
+        if pending:
+            size = 0
+        else:
+            if isinstance(obj, np.ndarray):
+                size = obj.nbytes
+            else:
+                size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    # Important mark as seen *before* entering recursion to gracefully handle
+    # self-referential objects
+    seen.add(obj_id)
+
+    try:
+        if isinstance(obj, dict):
+            _size = await asyncio.gather(*(remote_sizeof(v, seen, pending) for v in obj.values()))
+            size += sum(_size)
+            _size = await asyncio.gather(*(remote_sizeof(k, seen, pending) for k in obj.keys()))
+            size += sum(_size)
+        elif hasattr(obj, '__dict__'):
+            size += await remote_sizeof(obj.__dict__, seen, pending)
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+            _size = await asyncio.gather(*(remote_sizeof(i, seen, pending) for i in obj))
+            size += sum(_size)
+    except RuntimeError:
+        pass
+
+    return size
+
+
 def set_main_thread():
     """
     Set current thread as main thread.
@@ -61,6 +123,32 @@ def set_main_thread():
     """
     threading.current_thread().name = 'MainThread'
     threading.current_thread().__class__ = threading._MainThread
+
+
+def memory_used(pid=None):
+    """
+    Get the memory currently being used by the system.
+
+    Parameters
+    ----------
+    pid : int, optional
+        PID for which to get memory.
+
+    Returns
+    -------
+    float
+        Memory used.
+
+    """
+    if pid is None:
+        mem_total = memory_limit()
+        mem = max(mem_total - psutil.virtual_memory().available,
+                  psutil.virtual_memory().used)
+    else:
+        proc = psutil.Process(pid)
+        mem = proc.memory_info().rss
+
+    return mem
 
 
 def memory_limit():

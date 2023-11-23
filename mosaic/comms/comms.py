@@ -27,8 +27,8 @@ __all__ = ['CommsManager', 'get_hostname']
 _protocol_version = '0.1'
 
 
-def join_address(address, port, interface='tcp'):
-    return '%s://%s:%d' % (interface, address, port)
+def join_address(address, port, transport='tcp'):
+    return '%s://%s:%d' % (transport, address, port)
 
 
 def validate_address(address, port=False):
@@ -116,6 +116,111 @@ class Reply(Future):
     pass
 
 
+class Socket:
+
+    def __init__(self, runtime=None, comms=None, context=None, loop=None):
+        self._runtime = runtime or mosaic.runtime()
+        self._comms = comms or mosaic.get_comms()
+        self._loop = loop or mosaic.get_event_loop()
+        self._zmq_context = context or mosaic.get_zmq_context()
+
+        self._socket = self.init_socket()
+        self._socket.setsockopt(zmq.IDENTITY, self._runtime.uid.encode())
+        self._socket.setsockopt(zmq.SNDHWM, 0)
+        self._socket.setsockopt(zmq.RCVHWM, 0)
+
+        self._sync_socket = None
+        self._state = 'disconnected'
+
+    def init_socket(self):
+        pass
+
+    @property
+    def socket(self):
+        """
+        Connection ZMQ socket.
+
+        """
+        return self._socket
+
+    @property
+    def sync_socket(self):
+        """
+        Connection synchronous ZMQ socket.
+
+        """
+        return self._sync_socket
+
+    @property
+    def state(self):
+        """
+        Connection state.
+
+        """
+        return self._state
+
+    def bind(self, addr):
+        self._socket.bind(addr)
+
+    def connect(self, addr):
+        self._socket.connect(addr)
+
+    def disconnect(self, addr):
+        self._socket.disconnect(addr)
+
+    def unbind(self, addr):
+        self._socket.unbind(addr)
+
+    def set_sync_socket(self):
+        self._sync_socket = zmq.Socket.shadow(self._socket.underlying)
+
+    async def recv_async(self, **kwargs):
+        multipart_msg = await self._socket.recv_multipart(**kwargs)
+        return multipart_msg
+
+    def recv_sync(self, **kwargs):
+        multipart_msg = self._sync_socket.recv_multipart(**kwargs)
+        return multipart_msg
+
+    async def send_async(self, multipart_msg, **kwargs):
+        return await self._socket.send_multipart(multipart_msg, **kwargs)
+
+    def send_sync(self, multipart_msg, **kwargs):
+        return self._sync_socket.send_multipart(multipart_msg, **kwargs)
+
+    def close(self):
+        self._socket.close()
+        if self._sync_socket is not None:
+            self._sync_socket.close()
+        self._state = 'disconnected'
+
+
+class PeerSocket(Socket):
+
+    def init_socket(self):
+        return self._zmq_context.socket(zmq.ROUTER,
+                                        copy_threshold=zmq.COPY_THRESHOLD,
+                                        io_loop=self._loop.get_event_loop())
+
+
+class PubSocket(Socket):
+
+    def init_socket(self):
+        return self._zmq_context.socket(zmq.PUB,
+                                        copy_threshold=zmq.COPY_THRESHOLD,
+                                        io_loop=self._loop.get_event_loop())
+
+
+class SubSocket(Socket):
+
+    def init_socket(self):
+        socket = self._zmq_context.socket(zmq.SUB,
+                                          copy_threshold=zmq.COPY_THRESHOLD,
+                                          io_loop=self._loop.get_event_loop())
+        socket.setsockopt(zmq.SUBSCRIBE, b'')
+        return socket
+
+
 class Connection:
     """
     Socket connection through ZMQ.
@@ -128,12 +233,12 @@ class Connection:
         IP address of the connection.
     port : int
         Port to use for the connection.
+    socket : PeerSocket
+        Wrapped ZMQ socket.
     runtime : Runtime, optional
         Current runtime, defaults to global runtime.
     comms : CommsManager, optional
         Comms to which the connection belongs, defaults to global comms.
-    in_node : bool, optional
-        Whether the connection is inside the node or not, defaults to False.
     context : zmq.Context, optional
         ZMQ socket context, defaults to global context.
     loop : EventLoop, optional
@@ -143,20 +248,19 @@ class Connection:
     """
 
     def __init__(self, uid, address, port,
-                 runtime=None, comms=None, in_node=False, context=None, loop=None):
+                 socket=None, runtime=None, comms=None, context=None, loop=None):
         self._runtime = runtime or mosaic.runtime()
         self._comms = comms or mosaic.get_comms()
         self._loop = loop or mosaic.get_event_loop()
         self._zmq_context = context or mosaic.get_zmq_context()
 
         self._uid = uid
-        self._interface = os.environ.get('MOSAIC_ZMQ_INTERFACE', 'tcp')
+        self._transport = os.environ.get('MOSAIC_ZMQ_TRANSPORT', 'tcp')
         self._address = address
         self._port = port
-        self._in_node = in_node
+        self._local = self._runtime.mode == 'local'
 
-        self._socket = None
-        self._sync_socket = None
+        self._socket = socket
         self._state = 'disconnected'
 
     def __repr__(self):
@@ -173,12 +277,12 @@ class Connection:
         return self._uid
 
     @property
-    def interface(self):
+    def transport(self):
         """
-        Connection interface.
+        Connection transport.
 
         """
-        return self._interface
+        return self._transport
 
     @property
     def address(self):
@@ -218,11 +322,11 @@ class Connection:
         Full formatted address for connection.
 
         """
-        if self._in_node is True:
-            return join_address('127.0.0.1', self.port, interface=self.interface)
+        if self._local is True:
+            return join_address('127.0.0.1', self.port, transport=self.transport)
 
         else:
-            return join_address(self.address, self.port, interface=self.interface)
+            return join_address(self.address, self.port, transport=self.transport)
 
     @property
     def bind_address(self):
@@ -230,7 +334,7 @@ class Connection:
         Full formatted address for binding.
 
         """
-        return join_address('*', self.port, interface=self.interface)
+        return join_address('*', self.port, transport=self.transport)
 
     @property
     def logger(self):
@@ -251,8 +355,6 @@ class Connection:
         if self._state != 'connected':
             return
 
-        self._socket.close()
-        self._sync_socket.close()
         self._state = 'disconnected'
 
 
@@ -272,8 +374,6 @@ class InboundConnection(Connection):
         Current runtime, defaults to global runtime.
     comms : CommsManager, optional
         Comms to which the connection belongs, defaults to global comms.
-    in_node : bool, optional
-        Whether the connection is inside the node or not, defaults to False.
     context : zmq.Context, optional
         ZMQ socket context, defaults to global context.
     loop : EventLoop, optional
@@ -281,17 +381,8 @@ class InboundConnection(Connection):
 
     """
 
-    def __init__(self, uid, address, port=None,
-                 runtime=None, comms=None, in_node=False, context=None, loop=None):
-        super().__init__(uid, address, port,
-                         runtime=runtime, comms=comms, in_node=in_node, context=context, loop=loop)
-
-        self._socket = self._zmq_context.socket(zmq.ROUTER,
-                                                copy_threshold=zmq.COPY_THRESHOLD,
-                                                io_loop=self._loop.get_event_loop())
-
-        self._socket.setsockopt(zmq.IDENTITY, self._runtime.uid.encode())
-        self._socket.setsockopt(zmq.RCVHWM, 0)
+    def __init__(self, uid, address, port, **kwargs):
+        super().__init__(uid, address, port, **kwargs)
 
     @property
     def address(self):
@@ -363,7 +454,7 @@ class InboundConnection(Connection):
             except zmq.error.ZMQError:
                 self._port += 1
 
-        self._sync_socket = zmq.Socket.shadow(self._socket.underlying)
+        self._socket.set_sync_socket()
 
         self._state = 'connected'
 
@@ -383,7 +474,7 @@ class InboundConnection(Connection):
             warnings.warn('Trying to receive in a disconnected InboundConnection "%s"' % self.uid, Warning)
             return
 
-        multipart_msg = await self._socket.recv_multipart(copy=False)
+        multipart_msg = await self._socket.recv_async(copy=False)
 
         return self._process_rcv(multipart_msg)
 
@@ -403,19 +494,19 @@ class InboundConnection(Connection):
             warnings.warn('Trying to receive in a disconnected InboundConnection "%s"' % self.uid, Warning)
             return
 
-        multipart_msg = self._sync_socket.recv_multipart(copy=False)
+        multipart_msg = self._socket.recv_sync(copy=False)
 
         return self._process_rcv(multipart_msg)
 
     def _process_rcv(self, multipart_msg):
-        sender_id = multipart_msg[1]
+        sender_id = multipart_msg[0]
         multipart_msg = multipart_msg[2:]
         num_parts = int(multipart_msg[0])
 
         if len(multipart_msg) != num_parts:
             raise ValueError('Wrong number of parts')
 
-        sender_id = str(sender_id)
+        sender_id = bytes(sender_id.buffer).decode()
         header = deserialise(multipart_msg[1], [])
 
         if num_parts > 3:
@@ -445,6 +536,14 @@ class InboundConnection(Connection):
 
         return sender_id, msg
 
+    def disconnect(self):
+        if self._state != 'connected':
+            return
+
+        bind_address = self._socket._socket.getsockopt(zmq.LAST_ENDPOINT)
+        self._socket.unbind(bind_address)
+        super().disconnect()
+
 
 class OutboundConnection(Connection):
     """
@@ -462,8 +561,6 @@ class OutboundConnection(Connection):
         Current runtime, defaults to global runtime.
     comms : CommsManager, optional
         Comms to which the connection belongs, defaults to global comms.
-    in_node : bool, optional
-        Whether the connection is inside the node or not, defaults to False.
     context : zmq.Context, optional
         ZMQ socket context, defaults to global context.
     loop : EventLoop, optional
@@ -471,31 +568,22 @@ class OutboundConnection(Connection):
 
     """
 
-    def __init__(self, uid, address, port,
-                 runtime=None, comms=None, in_node=False, context=None, loop=None):
-        super().__init__(uid, address, port,
-                         runtime=runtime, comms=comms, in_node=in_node, context=context, loop=loop)
+    def __init__(self, uid, address, port, **kwargs):
+        super().__init__(uid, address, port, **kwargs)
 
         validate_address(address, port)
-
-        self._socket = self._zmq_context.socket(zmq.DEALER,
-                                                copy_threshold=zmq.COPY_THRESHOLD,
-                                                io_loop=self._loop.get_event_loop())
-
-        self._socket.setsockopt(zmq.IDENTITY, self._runtime.uid.encode())
-        self._socket.setsockopt(zmq.SNDHWM, 0)
 
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
         self._heartbeat_max_attempts = 5
-        self._heartbeat_interval = 1
+        self._heartbeat_interval = 5
 
         self._shaken = False
 
     @property
     def shaken(self):
         """
-        Whether or not the handshake has happened.
+        Whether the handshake has happened.
 
         """
         return self._shaken
@@ -512,8 +600,7 @@ class OutboundConnection(Connection):
             return
 
         self._socket.connect(self.connect_address)
-        self._sync_socket = zmq.Socket.shadow(self._socket.underlying)
-        self.start_heartbeat()
+        self._socket.set_sync_socket()
 
         self._state = 'connected'
 
@@ -539,7 +626,7 @@ class OutboundConnection(Connection):
         -------
 
         """
-        if not self._runtime.is_monitor or not self.uid.startswith('node'):
+        if not self._runtime.is_monitor:
             return
 
         if self._heartbeat_timeout is not None:
@@ -579,7 +666,7 @@ class OutboundConnection(Connection):
         interval = self._heartbeat_interval * self._heartbeat_max_attempts/self._heartbeat_attempts
         self._heartbeat_timeout = self._loop.timeout(self.heart, timeout=interval)
 
-        await self.send(method='heart')
+        await self.send_async(method='heart')
 
     async def beat(self):
         """
@@ -589,6 +676,9 @@ class OutboundConnection(Connection):
         -------
 
         """
+        if self._heartbeat_timeout is None:
+            return
+
         self._heartbeat_attempts = self._heartbeat_max_attempts + 1
 
         self.stop_heartbeat()
@@ -607,7 +697,7 @@ class OutboundConnection(Connection):
         reply : bool, optional
             Whether the connection should wait for a reply, defaults to False.
         kwargs : optional
-            Keywird arguments for the remote method.
+            Keyword arguments for the remote method.
 
         Returns
         -------
@@ -616,12 +706,13 @@ class OutboundConnection(Connection):
 
         """
         if self._state == 'disconnected':
-            warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
+            warnings.warn('Trying to send %s in a disconnected '
+                          'OutboundConnection "%s"' % (method, self.uid), Warning)
             return
 
         reply_future, msg_size, multipart_msg = self._process_send(method, cmd=cmd, reply=reply, **kwargs)
 
-        await self._socket.send_multipart(multipart_msg, copy=msg_size < zmq.COPY_THRESHOLD)
+        await self._socket.send_async(multipart_msg, copy=msg_size < zmq.COPY_THRESHOLD)
 
         return reply_future
 
@@ -638,7 +729,7 @@ class OutboundConnection(Connection):
         reply : bool, optional
             Whether the connection should wait for a reply, defaults to False.
         kwargs : optional
-            Keywird arguments for the remote method.
+            Keyword arguments for the remote method.
 
         Returns
         -------
@@ -647,12 +738,13 @@ class OutboundConnection(Connection):
 
         """
         if self._state == 'disconnected':
-            warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
+            warnings.warn('Trying to send %s in a disconnected '
+                          'OutboundConnection "%s"' % (method, self.uid), Warning)
             return
 
         reply_future, msg_size, multipart_msg = self._process_send(method, cmd=cmd, reply=reply, **kwargs)
 
-        self._sync_socket.send_multipart(multipart_msg, copy=msg_size < zmq.COPY_THRESHOLD)
+        self._socket.send_sync(multipart_msg, copy=msg_size < zmq.COPY_THRESHOLD)
 
         return reply_future
 
@@ -713,13 +805,392 @@ class OutboundConnection(Connection):
 
         header = serialise(header)[0]
 
-        multipart_msg = [self._runtime.uid.encode()]
+        multipart_msg = [self._uid.encode()]
+        multipart_msg += [b'']
         multipart_msg += [str(3 + len(compressed_msg[1])).encode()]
         multipart_msg += [header]
         multipart_msg += [compressed_msg[0]]
         multipart_msg += compressed_msg[1]
 
         return reply_future, msg_size, multipart_msg
+
+    def disconnect(self):
+        if self._state != 'connected':
+            return
+
+        self._socket.disconnect(self.connect_address)
+        super().disconnect()
+
+
+class Publication(Connection):
+    """
+    Object encapsulating an incoming connection to the CommsManager.
+
+    Parameters
+    ----------
+    uid : str
+        UID of the current runtime.
+    address : str
+        IP address of the connection.
+    port : int
+        Port to use for the connection.
+    runtime : Runtime, optional
+        Current runtime, defaults to global runtime.
+    comms : CommsManager, optional
+        Comms to which the connection belongs, defaults to global comms.
+    context : zmq.Context, optional
+        ZMQ socket context, defaults to global context.
+    loop : EventLoop, optional
+        Event loop to use, defaults to global event loop.
+
+    """
+
+    def __init__(self, uid, address, port, **kwargs):
+        super().__init__(uid, address, port, **kwargs)
+
+    @property
+    def address(self):
+        """
+        Connection address.
+
+        If no address is set, it will try to discover it.
+
+        """
+        if self._address is None:
+            # Try using a hostname first
+            self._address = get_hostname()
+
+            try:
+                validate_address(self._address)
+            except ValueError:
+                # Try to find an IP address otherwise
+                address, port = '8.8.8.8', '53'
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    # This command will raise an exception if there is no internet
+                    # connection.
+                    s.connect((address, int(port)))
+                    self._address = s.getsockname()[0]
+                except OSError as e:
+                    self._address = '127.0.0.1'
+                    # [Errno 101] Network is unreachable
+                    if e.errno == errno.ENETUNREACH:
+                        try:
+                            # try get node ip address from host name
+                            host_name = get_hostname()
+                            self._address = socket.gethostbyname(host_name)
+                        except Exception:
+                            pass
+                finally:
+                    s.close()
+
+        return self._address
+
+    def connect(self):
+        """
+        Connect the socket.
+
+        Returns
+        -------
+
+        """
+        if self._state != 'disconnected':
+            return
+
+        # OSX does not like looking into other processes connections
+        try:
+            existing_ports = [each.laddr.port for each in psutil.net_connections()]
+        except psutil.AccessDenied:
+            existing_ports = []
+
+        if self._port is None:
+            self._port = 3000
+
+        while self._port in existing_ports:
+            self._port += 1
+
+        # If no existing ports were retrieved, we might need to do
+        # some trial and error
+        while True:
+            try:
+                self._socket.bind(self.bind_address)
+                break
+            except zmq.error.ZMQError:
+                self._port += 1
+
+        self._socket.set_sync_socket()
+
+        self._state = 'connected'
+
+    async def send_async(self, method, cmd=None, **kwargs):
+        """
+        Send message through the connection.
+
+        Parameters
+        ----------
+        method : str
+            Remote method.
+        cmd : dict, optional
+            If the method is ``cmd`` a description of the command has to be provided.
+        kwargs : optional
+            Keyword arguments for the remote method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
+        if self._state == 'disconnected':
+            warnings.warn('Trying to send %s in a disconnected '
+                          'Publication' % method, Warning)
+            return
+
+        msg_size, multipart_msg = self._process_send(method, cmd=cmd, **kwargs)
+
+        await self._socket.send_async(multipart_msg, copy=msg_size < zmq.COPY_THRESHOLD)
+
+    def send_sync(self, method, cmd=None, **kwargs):
+        """
+        Send synchronous message through the connection.
+
+        Parameters
+        ----------
+        method : str
+            Remote method.
+        cmd : dict, optional
+            If the method is ``cmd`` a description of the command has to be provided.
+        kwargs : optional
+            Keyword arguments for the remote method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
+        if self._state == 'disconnected':
+            warnings.warn('Trying to send %s in a disconnected '
+                          'Publication' % method, Warning)
+            return
+
+        msg_size, multipart_msg = self._process_send(method, cmd=cmd, **kwargs)
+
+        self._socket.send_sync(multipart_msg, copy=msg_size < zmq.COPY_THRESHOLD)
+
+    def _process_send(self, method, cmd=None, **kwargs):
+        msg_id = '%s.%s' % (self._runtime.uid, uuid.uuid4().hex)
+
+        msg = {
+            'id': msg_id,
+            'method': method,
+            'runtime_id': self.uid,
+            'kwargs': kwargs,
+            'reply': False,
+            'cmd': cmd,
+        }
+
+        if not method.startswith('log') and not method.startswith('update_monitored_node'):
+            if method == 'cmd':
+                method = '%s:%s.%s' % (method, cmd['type'], cmd['method'])
+
+                self.logger.debug('Publishing cmd %s %s (%s) from %s' % (method, cmd['method'], cmd['uid'],
+                                                                         self._runtime.uid))
+            else:
+                self.logger.debug('Publishing msg %s from %s' % (method, self._runtime.uid))
+
+        msg = serialise(msg)
+        msg_size = sizeof(msg)
+
+        compression = []
+        compressed_msg = []
+
+        _compression, _compressed_msg = maybe_compress(msg[0])
+        compression.append(_compression)
+        compressed_msg.append(_compressed_msg)
+
+        if len(msg[1]) > 0:
+            _compression, _compressed_msg = zip(*map(maybe_compress, msg[1]))
+            compression.append(_compression)
+            compressed_msg.append(_compressed_msg)
+
+        else:
+            compression.append([])
+            compressed_msg.append([])
+
+        header = {
+            'version': _protocol_version,
+            'compression': compression,
+        }
+
+        header = serialise(header)[0]
+
+        multipart_msg = [self._uid.encode()]
+        multipart_msg += [b'']
+        multipart_msg += [str(3 + len(compressed_msg[1])).encode()]
+        multipart_msg += [header]
+        multipart_msg += [compressed_msg[0]]
+        multipart_msg += compressed_msg[1]
+
+        return msg_size, multipart_msg
+
+    def disconnect(self):
+        if self._state != 'connected':
+            return
+
+        bind_address = self._socket._socket.getsockopt(zmq.LAST_ENDPOINT)
+        self._socket.unbind(bind_address)
+        super().disconnect()
+
+
+class Subscription(Connection):
+    """
+    Object encapsulating an outgoing connection from the CommsManager.
+
+    Parameters
+    ----------
+    uid : str
+        UID of the connected runtime.
+    address : str
+        IP address of the connection.
+    port : int
+        Port to use for the connection.
+    runtime : Runtime, optional
+        Current runtime, defaults to global runtime.
+    comms : CommsManager, optional
+        Comms to which the connection belongs, defaults to global comms.
+    context : zmq.Context, optional
+        ZMQ socket context, defaults to global context.
+    loop : EventLoop, optional
+        Event loop to use, defaults to global event loop.
+
+    """
+
+    def __init__(self, uid, address, port, **kwargs):
+        super().__init__(uid, address, port, **kwargs)
+
+        validate_address(address, port)
+
+        self._shaken = False
+
+    @property
+    def shaken(self):
+        """
+        Whether the handshake has happened.
+
+        """
+        return self._shaken
+
+    def connect(self):
+        """
+        Connect the socket.
+
+        Returns
+        -------
+
+        """
+        if self._state != 'disconnected':
+            return
+
+        self._socket.connect(self.connect_address)
+        self._socket.set_sync_socket()
+
+        self._state = 'connected'
+
+    def shake(self):
+        """
+        Complete the handshake.
+
+        Returns
+        -------
+
+        """
+        self._shaken = True
+
+    async def recv_async(self):
+        """
+        Asynchronously receive on the socket.
+
+        Returns
+        -------
+        str
+            Sender UID.
+        Message
+            Message object.
+
+        """
+        if self._state == 'disconnected':
+            warnings.warn('Trying to receive in a disconnected Subscription "%s"' % self.uid, Warning)
+            return
+
+        multipart_msg = await self._socket.recv_async(copy=False)
+
+        return self._process_rcv(multipart_msg)
+
+    def recv_sync(self):
+        """
+        Synchronously receive on the socket.
+
+        Returns
+        -------
+        str
+            Sender UID.
+        Message
+            Message object.
+
+        """
+        if self._state == 'disconnected':
+            warnings.warn('Trying to receive in a disconnected Subscription "%s"' % self.uid, Warning)
+            return
+
+        multipart_msg = self._socket.recv_sync(copy=False)
+
+        return self._process_rcv(multipart_msg)
+
+    def _process_rcv(self, multipart_msg):
+        sender_id = multipart_msg[0]
+        multipart_msg = multipart_msg[2:]
+        num_parts = int(multipart_msg[0])
+
+        if len(multipart_msg) != num_parts:
+            raise ValueError('Wrong number of parts')
+
+        sender_id = bytes(sender_id.buffer).decode()
+        header = deserialise(multipart_msg[1], [])
+
+        if num_parts > 3:
+            compressed_msg = [multipart_msg[2], multipart_msg[3:]]
+        else:
+            compressed_msg = [multipart_msg[2], []]
+
+        msg = []
+
+        _msg = decompress(header['compression'][0], compressed_msg[0])
+        msg.append(_msg)
+
+        _msg = [decompress(compression, payload)
+                for compression, payload in zip(header['compression'][1], compressed_msg[1])]
+        msg.append(_msg)
+
+        msg = deserialise(msg[0], msg[1])
+        msg = Message(sender_id, msg)
+
+        if not msg.method.startswith('log') and not msg.method.startswith('update_monitored_node'):
+            if msg.method == 'cmd':
+                self.logger.debug('Subscribed cmd %s %s from %s at %s (%s)' % (msg.method, msg.cmd.method,
+                                                                               sender_id, self._runtime.uid,
+                                                                               msg.cmd.uid))
+            else:
+                self.logger.debug('Subscribed msg %s from %s at %s' % (msg.method, sender_id, self._runtime.uid))
+
+        return sender_id, msg
+
+    def disconnect(self):
+        if self._state != 'connected':
+            return
+
+        self._socket.disconnect(self.connect_address)
+        super().disconnect()
 
 
 class CircularConnection(Connection):
@@ -738,8 +1209,6 @@ class CircularConnection(Connection):
         Current runtime, defaults to global runtime.
     comms : CommsManager, optional
         Comms to which the connection belongs, defaults to global comms.
-    in_node : bool, optional
-        Whether the connection is inside the node or not, defaults to False.
     context : zmq.Context, optional
         ZMQ socket context, defaults to global context.
     loop : EventLoop, optional
@@ -747,12 +1216,9 @@ class CircularConnection(Connection):
 
     """
 
-    def __init__(self, uid, address, port,
-                 runtime=None, comms=None, in_node=False, context=None, loop=None):
-        super().__init__(uid, address, port,
-                         runtime=runtime, comms=comms, in_node=in_node, context=context, loop=loop)
+    def __init__(self, uid, address, port, **kwargs):
+        super().__init__(uid, address, port, **kwargs)
 
-        self._socket = None
         self._state = 'connected'
         self._shaken = True
 
@@ -779,7 +1245,7 @@ class CircularConnection(Connection):
         reply : bool, optional
             Whether the connection should wait for a reply, defaults to False.
         kwargs : optional
-            Keywird arguments for the remote method.
+            Keyword arguments for the remote method.
 
         Returns
         -------
@@ -788,7 +1254,8 @@ class CircularConnection(Connection):
 
         """
         if self._state == 'disconnected':
-            warnings.warn('Trying to send in a disconnected OutboundConnection "%s"' % self.uid, Warning)
+            warnings.warn('Trying to send %s in a disconnected '
+                          'OutboundConnection "%s"' % (method, self.uid), Warning)
             return
 
         reply_future, msg = self._process_send(method, cmd=cmd, reply=reply, **kwargs)
@@ -810,7 +1277,7 @@ class CircularConnection(Connection):
         reply : bool, optional
             Whether the connection should wait for a reply, defaults to False.
         kwargs : optional
-            Keywird arguments for the remote method.
+            Keyword arguments for the remote method.
 
         Returns
         -------
@@ -894,22 +1361,50 @@ class CommsManager:
         self._loop = loop or mosaic.get_event_loop()
         self._zmq_context = context or mosaic.get_zmq_context()
 
-        self._recv_socket = InboundConnection(self._runtime.uid, address, port,
-                                              runtime=self._runtime,
-                                              comms=self,
-                                              in_node=False,
-                                              context=self._zmq_context,
-                                              loop=self._loop)
+        self._recv_socket = PeerSocket(runtime=self._runtime,
+                                       comms=self,
+                                       context=self._zmq_context,
+                                       loop=self._loop)
+        self._send_socket = PeerSocket(runtime=self._runtime,
+                                       comms=self,
+                                       context=self._zmq_context,
+                                       loop=self._loop)
+        if self._runtime.is_monitor:
+            self._pubsub_socket = PubSocket(runtime=self._runtime,
+                                            comms=self,
+                                            context=self._zmq_context,
+                                            loop=self._loop)
+        else:
+            self._pubsub_socket = SubSocket(runtime=self._runtime,
+                                            comms=self,
+                                            context=self._zmq_context,
+                                            loop=self._loop)
 
-        self._send_socket = dict()
-        self._circ_socket = CircularConnection(self._runtime.uid, self.address, self.port,
-                                               runtime=self._runtime,
-                                               comms=self,
-                                               in_node=False,
-                                               context=self._zmq_context,
-                                               loop=self._loop)
+        self._recv_conn = InboundConnection(self._runtime.uid, address, port,
+                                            socket=self._recv_socket,
+                                            runtime=self._runtime,
+                                            comms=self,
+                                            context=self._zmq_context,
+                                            loop=self._loop)
+        if self._runtime.is_monitor:
+            self._pubsub_conn = Publication(self._runtime.uid, address, port,
+                                            socket=self._pubsub_socket,
+                                            runtime=self._runtime,
+                                            comms=self,
+                                            context=self._zmq_context,
+                                            loop=self._loop)
+        else:
+            self._pubsub_conn = None
+        self._circ_conn = CircularConnection(self._runtime.uid, self.address, self.port,
+                                             socket=None,
+                                             runtime=self._runtime,
+                                             comms=self,
+                                             context=self._zmq_context,
+                                             loop=self._loop)
+        self._send_conn = dict()
 
         self._listen_future = None
+        self._pubsub_future = None
         self._reply_futures = weakref.WeakValueDictionary()
 
         self._state = 'disconnected'
@@ -917,7 +1412,7 @@ class CommsManager:
     def __repr__(self):
         return "<CommsManager object at %s, uid=%s, address=%s, port=%d, state=%s>" % \
                (id(self), self._runtime.uid,
-                self._recv_socket.address, self._recv_socket.port, self._state)
+                self._recv_conn.address, self._recv_conn.port, self._state)
 
     def __await__(self):
         if self._listen_future is None:
@@ -949,7 +1444,7 @@ class CommsManager:
         Connection address.
 
         """
-        return self._recv_socket.address
+        return self._recv_conn.address
 
     @property
     def port(self):
@@ -957,7 +1452,15 @@ class CommsManager:
         Connection port.
 
         """
-        return self._recv_socket.port
+        return self._recv_conn.port
+
+    @property
+    def pubsub_port(self):
+        """
+        Connection port.
+
+        """
+        return self._pubsub_conn.port
 
     @property
     def logger(self):
@@ -982,7 +1485,7 @@ class CommsManager:
             Address.
 
         """
-        return self._send_socket[uid].address
+        return self._send_conn[uid].address
 
     def uid_port(self, uid):
         """
@@ -999,7 +1502,7 @@ class CommsManager:
             Port.
 
         """
-        return self._send_socket[uid].port
+        return self._send_conn[uid].port
 
     def connect_recv(self):
         """
@@ -1012,8 +1515,10 @@ class CommsManager:
         if self._state != 'disconnected':
             return
 
-        self._recv_socket.connect()
-        self._circ_socket.connect()
+        self._recv_conn.connect()
+        if self._pubsub_conn is not None:
+            self._pubsub_conn.connect()
+        self._circ_conn.connect()
 
         self._state = 'connected'
 
@@ -1037,14 +1542,60 @@ class CommsManager:
         """
         validate_address(address, port)
 
-        if uid not in self._send_socket.keys() and uid != self._runtime.uid:
-            self._send_socket[uid] = OutboundConnection(uid, address, port,
-                                                        runtime=self._runtime,
-                                                        comms=self,
-                                                        in_node=False,
-                                                        context=self._zmq_context,
-                                                        loop=self._loop)
-            self._send_socket[uid].connect()
+        if uid not in self._send_conn.keys() and uid != self._runtime.uid:
+            self._send_conn[uid] = OutboundConnection(uid, address, port,
+                                                      socket=self._send_socket,
+                                                      runtime=self._runtime,
+                                                      comms=self,
+                                                      context=self._zmq_context,
+                                                      loop=self._loop)
+            self._send_conn[uid].connect()
+            self._send_conn[uid].shake()
+
+    def connect_pubsub(self, uid, address, port):
+        """
+        Create and connect pub-sub connection for a remote runtime,
+        with a given address and port.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+        address : str
+            Remote address.
+        port : int
+            Remote port.
+
+        Returns
+        -------
+
+        """
+        validate_address(address, port)
+
+        if self._pubsub_conn is None and uid != self._runtime.uid:
+            self._pubsub_conn = Subscription(uid, address, port,
+                                             socket=self._pubsub_socket,
+                                             runtime=self._runtime,
+                                             comms=self,
+                                             context=self._zmq_context,
+                                             loop=self._loop)
+            self._pubsub_conn.connect()
+
+    def start_heartbeat(self, uid):
+        """
+        Start the heartbeat procedure.
+
+        Parameters
+        ----------
+        uid : str
+            Remote UID.
+
+        Returns
+        -------
+
+        """
+        if uid in self._send_conn.keys() and uid != self._runtime.uid:
+            self._send_conn[uid].start_heartbeat()
 
     def connected(self, uid):
         """
@@ -1059,7 +1610,7 @@ class CommsManager:
         -------
 
         """
-        return uid in self._send_socket.keys() or uid == self._runtime.uid
+        return uid in self._send_conn.keys() or uid == self._runtime.uid
 
     def shaken(self, uid):
         """
@@ -1074,7 +1625,8 @@ class CommsManager:
         -------
 
         """
-        return self.connected(uid) and self._send_socket[uid].shaken
+        return self.connected(uid) \
+            and uid in self._send_conn.keys() and self._send_conn[uid].shaken
 
     def disconnect_recv(self):
         """
@@ -1084,7 +1636,10 @@ class CommsManager:
         -------
 
         """
-        self._recv_socket.disconnect()
+        self._recv_conn.disconnect()
+        if self._pubsub_conn is not None:
+            self._pubsub_conn.disconnect()
+        self._recv_socket.close()
 
     def disconnect_send(self):
         """
@@ -1094,8 +1649,9 @@ class CommsManager:
         -------
 
         """
-        for sender_id, connection in self._send_socket.items():
+        for sender_id, connection in self._send_conn.items():
             connection.disconnect()
+        self._send_socket.close()
 
     def send(self, *args, **kwargs):
         """
@@ -1115,6 +1671,24 @@ class CommsManager:
         """
         return self._cmd_any(*args, **kwargs, sync=True)
 
+    def send_pubsub(self, *args, **kwargs):
+        """
+        Synchronously send message to remote runtime.
+
+        For arguments and return values check ``Comms.send_async``.
+
+        """
+        return self._send_any(*args, **kwargs, sync=True, pubsub=True)
+
+    def cmd_pubsub(self, *args, **kwargs):
+        """
+        Synchronously send command to remote runtime.
+
+        For arguments and return values check ``Comms.cmd_async``.
+
+        """
+        return self._cmd_any(*args, **kwargs, sync=True, pubsub=True)
+
     def recv(self, **kwargs):
         """
         Synchronously receive message from remote runtime.
@@ -1123,6 +1697,15 @@ class CommsManager:
 
         """
         return self._recv_any(sync=True)
+
+    def recv_pubsub(self, **kwargs):
+        """
+        Synchronously receive message from remote runtime.
+
+        For arguments and return values check ``Comms.recv_async``.
+
+        """
+        return self._recv_any(sync=True, pubsub=True)
 
     def send_recv(self, *args, **kwargs):
         """
@@ -1217,12 +1800,20 @@ class CommsManager:
             if exception is not None:
                 raise exception
 
-        self._listen_future = self._loop.run(self.listen_async)
+        if not self._runtime.is_monitor:
+            self._pubsub_future = self._loop.run(self.listen_async, self.recv_pubsub_async)
+            self._pubsub_future.add_done_callback(done)
+        self._listen_future = self._loop.run(self.listen_async, self.recv_async)
         self._listen_future.add_done_callback(done)
+
+        if self._runtime.uid in ['monitor', 'head']:
+            self.logger.info('Listening at %s' % self)
+        else:
+            self.logger.debug('Listening at %s' % self)
 
         return self._listen_future
 
-    async def listen_async(self):
+    async def listen_async(self, recv_async):
         """
         Asynchronous listening loop.
 
@@ -1233,15 +1824,10 @@ class CommsManager:
         -------
 
         """
-        if self._state != 'connected':
-            return
-
         self._state = 'listening'
 
-        self.logger.info('Listening at %s' % self)
-
         while self._state != 'disconnected':
-            sender_id, msg = await self.recv_async()
+            sender_id, msg = await recv_async()
             await self.process_msg(sender_id, msg)
 
             if msg.method == 'stop':
@@ -1418,6 +2004,50 @@ class CommsManager:
 
         return await self._cmd_any(*args, **kwargs, sync=False)
 
+    async def send_pubsub_async(self, *args, **kwargs):
+        """
+        Send message to ``sender_id`` with given arguments and keyword arguments.
+
+        Parameters
+        ----------
+        args : tuple, optional
+            Any arguments for the message.
+        kwargs : optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
+        if self._state == 'disconnected':
+            return
+
+        return await self._send_any(*args, **kwargs, sync=False, pubsub=True)
+
+    async def cmd_pubsub_async(self, *args, **kwargs):
+        """
+        Send command with given arguments and keyword arguments.
+
+        Parameters
+        ----------
+        args : tuple, optional
+            Any arguments for the message.
+        kwargs : optional
+            Keyword arguments for the method.
+
+        Returns
+        -------
+        Reply or None
+            Depending on whether a reply is expected or not.
+
+        """
+        if self._state == 'disconnected':
+            return
+
+        return await self._cmd_any(*args, **kwargs, sync=False, pubsub=True)
+
     async def recv_async(self):
         """
         Wait for received message from the inbound socket.
@@ -1434,6 +2064,23 @@ class CommsManager:
             return
 
         return await self._recv_any(sync=False)
+
+    async def recv_pubsub_async(self):
+        """
+        Wait for received message from the inbound pub-sub socket.
+
+        Returns
+        -------
+        str
+            Sender UID.
+        Message
+            Received message.
+
+        """
+        if self._state == 'disconnected':
+            return
+
+        return await self._recv_any(sync=False, pubsub=True)
 
     async def send_recv_async(self, send_uid, *args, **kwargs):
         """
@@ -1538,10 +2185,8 @@ class CommsManager:
         self.connect_send(uid, address, port)
 
         if notify is True:
-            for connected_id, connection in self._send_socket.items():
-                await self.send_async(connected_id,
-                                      method='connect',
-                                      uid=uid, address=address, port=port)
+            await self.send_pubsub_async(method='connect',
+                                         uid=uid, address=address, port=port)
 
     async def wait_for(self, uid):
         """
@@ -1559,7 +2204,7 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
-        while uid not in self._send_socket.keys() and uid != self._runtime.uid:
+        while not self.shaken(uid) and uid != self._runtime.uid:
             await asyncio.sleep(0.1)
 
     async def disconnect(self, sender_id, uid, notify=False):
@@ -1582,24 +2227,24 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
-        if uid in self._send_socket.keys():
-            self._send_socket[uid].disconnect()
+        if uid in self._send_conn.keys():
+            self._send_conn[uid].disconnect()
 
         if notify is True:
-            for connected_id, connection in self._send_socket.items():
+            for connected_id, connection in self._send_conn.items():
                 if connection.state == 'disconnected':
                     continue
                 await self.send_async(connected_id,
                                       method='disconnect',
                                       uid=uid)
 
-        if 'node' in uid and uid in self._runtime._nodes:
-            node_index = self._runtime._nodes[uid].indices[0]
-            for worker in self._runtime.workers:
-                if worker.indices[0] == node_index:
-                    await self.disconnect(sender_id, worker.uid, notify=notify)
+            if 'node' in uid and uid in self._runtime._nodes:
+                node_index = self._runtime._nodes[uid].indices[0]
+                for worker in self._runtime.workers:
+                    if worker.indices[0] == node_index:
+                        await self.disconnect(sender_id, worker.uid, notify=notify)
 
-    async def handshake(self, uid, address, port):
+    async def handshake(self, uid, address, port, pubsub_port=None):
         """
         Start handshake with remote ``uid``, located at a certain ``address`` and ``port``.
 
@@ -1611,6 +2256,8 @@ class CommsManager:
             Remote address.
         port : int
             Remote port.
+        pubsub_port : int, optional
+            Publishing port.
 
         Returns
         -------
@@ -1620,24 +2267,37 @@ class CommsManager:
             return
 
         validate_address(address, port)
+        if pubsub_port is not None:
+            validate_address(address, pubsub_port)
 
         self.connect_send(uid, address, port)
+        if pubsub_port is not None:
+            self.connect_pubsub(uid, address, pubsub_port)
         self._runtime.connect(uid, uid, address, port)
+
+        # zmq.ROUTER messages will be dropped if endpoint not yet connected
+        await asyncio.sleep(0.1)
 
         await self.send_async(uid,
                               method='hand',
-                              address=self._recv_socket.address, port=self._recv_socket.port)
+                              address=self.address, port=self.port)
 
         while True:
-            sender_id, response = await self.recv_async()
+            try:
+                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=60)
+                if (uid == sender_id and response.method == 'shake') or self.shaken(uid):
+                    break
+            except asyncio.TimeoutError:
+                await self.send_async(uid,
+                                      method='hand',
+                                      address=self.address, port=self.port)
 
-            if uid == sender_id and response.method == 'shake':
-                break
+        self._send_conn[uid].shake()
+        if pubsub_port is not None:
+            self._pubsub_conn.shake()
 
         await self.shake(sender_id, **response.kwargs)
         await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
-
-        self._send_socket[uid].shake()
 
     async def hand(self, sender_id, address, port):
         """
@@ -1659,20 +2319,25 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
-        for connected_id, connection in self._send_socket.items():
-            await self.send_async(connected_id,
-                                  method='connect',
-                                  uid=sender_id, address=address, port=port)
-
         self.connect_send(sender_id, address, port)
 
+        # zmq.ROUTER messages will be dropped if endpoint not yet connected
+        await asyncio.sleep(0.1)
+
         network = {}
-        for connected_id, connection in self._send_socket.items():
-            network[connected_id] = (connection.address, connection.port)
+        if self._runtime.uid == 'monitor':
+            for connected_id, connection in self._send_conn.items():
+                network[connected_id] = (connection.address, connection.port)
 
         await self.send_async(sender_id,
                               method='shake',
-                              network=network)
+                              network=network,
+                              reply=False)
+        self._send_conn[sender_id].shake()
+
+        if self._runtime.uid == 'monitor':
+            await self.send_pubsub_async(method='connect',
+                                         uid=sender_id, address=address, port=port)
 
     async def shake(self, sender_id, network):
         """
@@ -1693,10 +2358,13 @@ class CommsManager:
             return
 
         for uid, address in network.items():
+            if self.shaken(uid):
+                continue
+
             self.connect_send(uid, *address)
 
-            if uid in self._send_socket:
-                self._send_socket[uid].shake()
+            if uid in self._send_conn:
+                self._send_conn[uid].shake()
 
     async def heart(self, sender_id):
         """
@@ -1711,7 +2379,7 @@ class CommsManager:
         -------
 
         """
-        if self._state == 'disconnected':
+        if self._state == 'disconnected' or 'node' not in self._runtime.uid:
             return
 
         await self.send_async(sender_id,
@@ -1733,10 +2401,10 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
-        if sender_id not in self._send_socket.keys():
+        if sender_id not in self._send_conn.keys():
             return
 
-        await self._send_socket[sender_id].beat()
+        await self._send_conn[sender_id].beat()
 
     async def stop(self, sender_id):
         """
@@ -1755,35 +2423,38 @@ class CommsManager:
             return
 
         self._listen_future.cancel()
+        if self._pubsub_future is not None:
+            self._pubsub_future.cancel()
 
         self.disconnect_send()
         self.disconnect_recv()
 
         self._state = 'disconnected'
 
-    def _send_any(self, send_uid, *args, **kwargs):
+    def _send_any(self, *args, **kwargs):
         if self._state == 'disconnected':
             return
 
         sync = kwargs.pop('sync', False)
+        pubsub = kwargs.pop('pubsub', False)
+
+        if pubsub:
+            conn = self._pubsub_conn
+        else:
+            send_uid = args[0]
+            args = args[1:] if len(args) > 1 else ()
+            if send_uid == self._runtime.uid:
+                conn = self._circ_conn
+            else:
+                if send_uid not in self._send_conn.keys():
+                    raise KeyError('Endpoint %s is not connected' % send_uid)
+                conn = self._send_conn[send_uid]
 
         def send_sync():
-            if send_uid == self._runtime.uid:
-                return self._circ_socket.send_sync(*args, **kwargs)
-
-            if send_uid not in self._send_socket.keys():
-                raise KeyError('Endpoint %s is not connected' % send_uid)
-
-            return self._send_socket[send_uid].send_sync(*args, **kwargs)
+            return conn.send_sync(*args, **kwargs)
 
         async def send_async():
-            if send_uid == self._runtime.uid:
-                return await self._circ_socket.send_async(*args, **kwargs)
-
-            if send_uid not in self._send_socket.keys():
-                raise KeyError('Endpoint %s is not connected' % send_uid)
-
-            return await self._send_socket[send_uid].send_async(*args, **kwargs)
+            return await conn.send_async(*args, **kwargs)
 
         if sync:
             return send_sync()
@@ -1815,16 +2486,21 @@ class CommsManager:
         else:
             return cmd_async()
 
-    def _recv_any(self, sync=False):
+    def _recv_any(self, sync=False, pubsub=False):
         if self._state == 'disconnected':
             return None, None
 
+        if pubsub:
+            conn = self._pubsub_conn
+        else:
+            conn = self._recv_conn
+
         def recv_sync():
-            sender_id, msg = self._recv_socket.recv_sync()
+            sender_id, msg = conn.recv_sync()
             return sender_id, msg
 
         async def recv_async():
-            sender_id, msg = await self._recv_socket.recv_async()
+            sender_id, msg = await conn.recv_async()
             return sender_id, msg
 
         if sync:
@@ -1840,25 +2516,25 @@ class CommsManager:
 
         def send_recv_sync():
             if send_uid == self._runtime.uid:
-                future = self._circ_socket.send_sync(*args, reply=True, **kwargs)
+                future = self._circ_conn.send_sync(*args, reply=True, **kwargs)
 
             else:
-                if send_uid not in self._send_socket.keys():
+                if send_uid not in self._send_conn.keys():
                     raise KeyError('Endpoint %s is not connected' % send_uid)
 
-                future = self._send_socket[send_uid].send_sync(*args, reply=True, **kwargs)
+                future = self._send_conn[send_uid].send_sync(*args, reply=True, **kwargs)
 
             return future
 
         async def send_recv_async():
             if send_uid == self._runtime.uid:
-                future = await self._circ_socket.send_async(*args, reply=True, **kwargs)
+                future = await self._circ_conn.send_async(*args, reply=True, **kwargs)
 
             else:
-                if send_uid not in self._send_socket.keys():
+                if send_uid not in self._send_conn.keys():
                     raise KeyError('Endpoint %s is not connected' % send_uid)
 
-                future = await self._send_socket[send_uid].send_async(*args, reply=True, **kwargs)
+                future = await self._send_conn[send_uid].send_async(*args, reply=True, **kwargs)
 
             return await future
 

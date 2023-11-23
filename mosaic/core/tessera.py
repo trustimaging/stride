@@ -13,8 +13,8 @@ from cached_property import cached_property
 
 import mosaic
 from .task import TaskProxy
-from .base import Base, CMDBase, RemoteBase, ProxyBase
-from ..runtime import WarehouseObject
+from .base import Base, CMDBase, RemoteBase, ProxyBase, RuntimeDisconnectedError
+from ..types import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
 
 
@@ -320,10 +320,12 @@ class Tessera(RemoteBase):
             await asyncio.sleep(0)
             self.state_changed('running')
             task.state_changed('running')
+            await self.logger.send()
             await self.call_safe(sender_id, method, task)
 
             del task
             del method
+            self.runtime.dec_running_tasks()
 
         self.state_changed('stopped')
 
@@ -358,11 +360,8 @@ class Tessera(RemoteBase):
                                                        **task.kwargs_value())
 
                 result = await future
-                # TODO Dodgy
-                await asyncio.sleep(0)
 
-                task.set_result(result)
-                await task.set_done()
+                await task.set_result(result)
 
     @contextlib.asynccontextmanager
     async def send_exception(self, sender_id=None, method=None, task=None):
@@ -456,8 +455,7 @@ class ParameterMixin:
 
     @property
     def ref(self):
-        warehouse_obj = WarehouseObject(uid=self._tessera.uid)
-        return warehouse_obj
+        return self._ref
 
     @property
     def cached(self):
@@ -468,7 +466,7 @@ class ParameterMixin:
             await self
 
             warehouse = mosaic.get_warehouse()
-            await warehouse.publish(uid=self._tessera.uid, reply=True)
+            await warehouse.publish(uid=self.ref, reply=True)
 
     async def push(self, attr=None, publish=False):
         if self.has_tessera:
@@ -495,7 +493,7 @@ class ParameterMixin:
 
             warehouse = mosaic.get_warehouse()
             await warehouse.push_remote(__dict__=__dict__,
-                                        uid=self._tessera.uid,
+                                        uid=self.ref,
                                         publish=publish, reply=publish)
 
     async def pull(self, attr=None):
@@ -503,7 +501,7 @@ class ParameterMixin:
             await self
 
             warehouse = mosaic.get_warehouse()
-            __dict__ = await warehouse.pull_remote(uid=self._tessera.uid, attr=attr, reply=True)
+            __dict__ = await warehouse.pull_remote(uid=self.ref, attr=attr, reply=True)
 
             for key, value in __dict__.items():
                 setattr(self, key, value)
@@ -572,14 +570,15 @@ class ParameterMixin:
     def _serialisation_helper(self):
         state = dict(
             uid=self._tessera.uid,
-            tessera=self._tessera
+            tessera=self._tessera,
+            ref=self._ref,
         )
 
         return state
 
     @classmethod
     def _deserialisation_helper(cls, state):
-        instance = WarehouseObject(uid=state['uid'])
+        instance = state['ref']
         instance._tessera = state['tessera']
 
         return instance
@@ -661,8 +660,6 @@ class TesseraProxy(ProxyBase):
         Asynchronous correlate of ``__init__``.
 
         """
-        self.state_changed('init')
-
         kwargs = self._fill_config(**kwargs)
         kwargs.pop('runtime', None)
 
@@ -761,6 +758,7 @@ class TesseraProxy(ProxyBase):
 
         obj = self._cls.cls(*args, **kwargs)
         setattr(obj, '_tessera', self)
+        setattr(obj, '_ref', WarehouseObject(uid=self.uid, obj=obj))
         setattr(obj, '_cached', cached)
 
         return obj
@@ -940,13 +938,33 @@ class ArrayProxy(CMDBase):
         Asynchronous correlate of ``__init__``.
 
         """
+        safe = kwargs.pop('safe', True)
+        timeout = kwargs.pop('timeout', None)
+        available_workers = self._len
+
         inits = []
         for proxy in self._proxies:
-            inits.append(proxy.__init_async__(*args, **kwargs))
+            inits.append(asyncio.create_task(proxy.__init_async__(*args, **kwargs)))
             self._runtime_id.append(proxy.runtime_id)
             self._cls_attr_names = proxy._cls_attr_names
 
-        await asyncio.gather(*inits)
+        for task in asyncio.as_completed(inits, timeout=timeout):
+            try:
+                await task
+            except RuntimeDisconnectedError as exc:
+                if safe:
+                    self.logger.warn('Runtime failed, retiring worker: %s' % exc)
+                    available_workers -= 1
+                    if available_workers <= 0:
+                        for other_task in inits:
+                            other_task.cancel()
+                            try:
+                                await other_task
+                            except (RuntimeDisconnectedError, asyncio.CancelledError):
+                                pass
+                        raise RuntimeError('No workers available to complete async workload')
+                else:
+                    raise
 
         self.runtime.register(self)
 

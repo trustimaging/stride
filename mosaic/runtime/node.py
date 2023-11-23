@@ -35,6 +35,8 @@ class Node(Runtime):
         self._memory_limit = memory_limit()
 
         self._monitored_node = MonitoredResource(self.uid)
+        self._monitor_interval = None
+        self._update_interval = None
 
     async def init(self, **kwargs):
         """
@@ -50,7 +52,8 @@ class Node(Runtime):
         """
         await super().init(**kwargs)
 
-        # Start local workers
+        # Start local cluster
+        await self.init_warehouse(indices=self.indices[0], **kwargs)
         await self.init_workers(**kwargs)
 
     async def init_workers(self, **kwargs):
@@ -155,9 +158,6 @@ class Node(Runtime):
 
         await self.update_monitored_node()
 
-        self._loop.interval(self.resource_monitor, interval=0.1)
-        self._loop.interval(self.update_monitored_node, interval=1)
-
     def set_logger(self):
         """
         Set up logging.
@@ -261,6 +261,11 @@ class Node(Runtime):
                                          memory_limit=self._memory_limit,
                                          memory_fraction=memory_fraction))
 
+    async def heart(self, sender_id=None):
+        if self._monitor_interval is None:
+            self._monitor_interval = self._loop.interval(self.resource_monitor, interval=1)
+            self._update_interval = self._loop.interval(self.update_monitored_node, interval=10)
+
     async def stop(self, sender_id=None):
         """
         Stop runtime.
@@ -276,6 +281,11 @@ class Node(Runtime):
         if profiler.tracing:
             profiler.stop()
 
+        # Close warehouse
+        await self._local_warehouse.stop()
+        self._local_warehouse.subprocess.join_process()
+
+        # Close workers
         for worker_id, worker in self._own_workers.items():
             await worker.stop()
             worker.subprocess.join_process()

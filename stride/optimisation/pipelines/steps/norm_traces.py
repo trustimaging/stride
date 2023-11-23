@@ -4,36 +4,24 @@ import numpy as np
 from ....core import Operator
 
 
-class NormPerTrace(Operator):
+class Norm(Operator):
     """
-    Normalised a series of time traces individually.
+    Normalised a series of time traces.
 
     Parameters
     ----------
-    amplitude : bool, optional
-        Whether to keep the true amplitude of the modelled after
-        normalisation.
 
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.amplitude = kwargs.pop('amplitude', False)
-
         self._num_traces = None
 
     def forward(self, *traces, **kwargs):
         self._num_traces = len(traces)
 
-        amplitude = kwargs.pop('amplitude', self.amplitude)
-
-        if amplitude:
-            scaling = self._norm(traces[0], **kwargs)
-        else:
-            scaling = 1.
-
-        normed = tuple([self._apply(each, scaling=scaling, **kwargs) for each in traces])
+        normed = tuple([self._apply(each, **kwargs) for each in traces])
 
         if len(normed) == 1:
             normed = normed[0]
@@ -54,15 +42,44 @@ class NormPerTrace(Operator):
         for index in range(traces.extended_shape[0]):
             norm_value += np.sum(traces.extended_data[index] ** 2)
 
-        norm_value = np.sqrt(norm_value / traces.extended_shape[0]) + 1e-31
+        return np.sqrt(norm_value / traces.extended_shape[0])
 
-        return norm_value
+    def _apply(self, traces, **kwargs):
+        pass
 
-    def _apply(self, traces, scaling, **kwargs):
+
+class NormPerShot(Norm):
+    """
+    Normalise a series of time traces to the norm value of the set.
+
+    Parameters
+    ----------
+
+    """
+
+    def _apply(self, traces, **kwargs):
+        norm_value = self._norm(traces, **kwargs) + 1e-31
+
+        out_traces = traces.alike(name='normed_%s' % traces.name)
+        out_traces.extended_data[:] = traces.extended_data / norm_value
+
+        return out_traces
+
+
+class NormPerTrace(Norm):
+    """
+    Normalise a series of time traces individually.
+
+    Parameters
+    ----------
+
+    """
+
+    def _apply(self, traces, **kwargs):
         out_traces = traces.alike(name='normed_%s' % traces.name)
 
         for index in range(traces.extended_shape[0]):
             norm_value = np.sqrt(np.sum(traces.extended_data[index]**2)) + 1e-31
-            out_traces.extended_data[index] = scaling * traces.extended_data[index] / norm_value
+            out_traces.extended_data[index] = traces.extended_data[index] / norm_value
 
         return out_traces

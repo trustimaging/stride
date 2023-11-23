@@ -95,19 +95,19 @@ class LocalOptimiser(ABC):
 
                 grad = self.variable.process_grad(**kwargs)
 
-            min_dir = np.min(grad.extended_data)
-            max_dir = np.max(grad.extended_data)
+            min_dir = np.min(grad.data)
+            max_dir = np.max(grad.data)
 
             logger.perf('\t grad before processing in range [%e, %e]' %
                         (min_dir, max_dir))
 
             processed_grad = await self._process_grad(grad, **kwargs)
 
-        min_dir = np.min(processed_grad.extended_data)
-        max_dir = np.max(processed_grad.extended_data)
+        min_dir = np.min(processed_grad.data)
+        max_dir = np.max(processed_grad.data)
 
-        min_var = np.min(self.variable.extended_data)
-        max_var = np.max(self.variable.extended_data)
+        min_var = np.min(self.variable.data)
+        max_var = np.max(self.variable.data)
 
         logger.perf('\t grad after processing in range [%e, %e]' %
                     (min_dir, max_dir))
