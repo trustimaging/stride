@@ -1,4 +1,5 @@
 
+import os
 import time
 import asyncio
 
@@ -35,12 +36,33 @@ class Head(Runtime):
         -------
 
         """
-        await super().init(**kwargs)
-
         # Start monitor if necessary and handshake in reverse
         monitor_address = kwargs.get('monitor_address', None)
         if not self.is_monitor and monitor_address is None:
             await self.init_monitor(**kwargs)
+
+            path = os.path.join(os.getcwd(), 'mosaic-workspace')
+            if not os.path.exists(path):
+                os.makedirs(path)
+
+            filename = os.path.join(path, 'monitor.key')
+
+            while not os.path.exists(filename):
+                await asyncio.sleep(0.1)
+
+            with open(filename, 'r') as file:
+                file.readline()
+
+                _ = file.readline().split('=')[1].strip()
+                parent_address = file.readline().split('=')[1].strip()
+                parent_port = file.readline().split('=')[1].strip()
+                pubsub_port = file.readline().split('=')[1].strip()
+
+                kwargs['monitor_address'] = parent_address
+                kwargs['monitor_port'] = int(parent_port)
+                kwargs['pubsub_port'] = int(pubsub_port)
+
+        await super().init(**kwargs)
 
         # Wait for workers to be ready
         tic = time.time()
@@ -65,6 +87,7 @@ class Head(Runtime):
         """
         def start_monitor(*args, **extra_kwargs):
             kwargs.update(extra_kwargs)
+            kwargs['dump_init'] = True
             mosaic.init('monitor', *args, **kwargs, wait=True)
 
         monitor_proxy = RuntimeProxy(name='monitor')
@@ -74,7 +97,6 @@ class Head(Runtime):
         monitor_proxy.subprocess = monitor_subprocess
 
         self._monitor = monitor_proxy
-        await self._comms.wait_for(monitor_proxy.uid)
 
     async def stop(self, sender_id=None):
         """

@@ -11,7 +11,7 @@ from .runtime import Runtime, RuntimeProxy
 from .utils import MonitoredResource, MonitoredObject
 from .strategies import RoundRobin
 from ..file_manipulation import h5
-from ..utils import subprocess
+from ..utils import subprocess, at_exit
 from ..utils.utils import memory_limit, cpu_count
 from ..utils.logger import LoggerManager, _stdout, _stderr
 from ..profile import profiler, global_profiler
@@ -80,6 +80,7 @@ class Monitor(Runtime):
 
         now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         self._profile_filename = '%s.profile.h5' % now
+        self._init_filename = None
 
         self._start_t = time.time()
         self._end_t = None
@@ -97,6 +98,10 @@ class Monitor(Runtime):
 
         """
         await super().init(**kwargs)
+
+        # Maybe dump file
+        if kwargs.get('dump_init', False):
+            self.init_file({})
 
         # Start local cluster
         await self.init_warehouse(**kwargs)
@@ -230,6 +235,41 @@ class Monitor(Runtime):
         self.logger.info('Listening at <NODE:%d-%d | '
                          'WORKER:0:0-%d:%d address=%s>' % (0, num_nodes, num_nodes, num_workers,
                                                            ', '.join(node_list)))
+
+    def init_file(self, runtime_config):
+        runtime_id = self.uid
+        runtime_address = self.address
+        runtime_port = self.port
+        pubsub_port = self.pubsub_port
+
+        # Store runtime ID, address and port in a tmp file for the
+        # head to use
+        path = os.path.join(os.getcwd(), 'mosaic-workspace')
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        self._init_filename = os.path.join(path, 'monitor.key')
+        with open(self._init_filename, 'w') as file:
+            file.write('[ADDRESS]\n')
+            file.write('UID=%s\n' % runtime_id)
+            file.write('ADD=%s\n' % runtime_address)
+            file.write('PRT=%s\n' % runtime_port)
+            file.write('PUB=%s\n' % pubsub_port)
+            file.write('[ARGS]\n')
+
+            for key, value in runtime_config.items():
+                if key in ['runtime_indices', 'address', 'port',
+                           'monitor_address', 'monitor_port', 'node_list']:
+                    continue
+                if isinstance(value, str):
+                    file.write('%s="%s"\n' % (key, value))
+                else:
+                    file.write('%s=%s\n' % (key, value))
+
+        def _rm_dirs():
+            os.remove(self._init_filename)
+
+        at_exit.add(_rm_dirs)
 
     def set_logger(self):
         """
@@ -368,6 +408,13 @@ class Monitor(Runtime):
         -------
 
         """
+        # Delete files
+        if self._init_filename is not None:
+            try:
+                os.remove(self._init_filename)
+            except Exception:
+                pass
+
         # Get final profile updates before closing
         if profiler.tracing:
             profiler.stop()

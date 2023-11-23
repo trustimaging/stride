@@ -30,7 +30,7 @@ def init(runtime_type='head', runtime_indices=(),
          num_workers=1, num_threads=None,
          mode='local', reuse_head=False, monitor_strategy='round-robin',
          log_level='perf', profile=False, node_list=None,
-         asyncio_loop=None, wait=False,
+         asyncio_loop=None, dump_init=False, wait=False,
          **kwargs):
     """
     Starts the global mosaic runtime.
@@ -78,6 +78,8 @@ def init(runtime_type='head', runtime_indices=(),
         List of available node addresses to connect to.
     asyncio_loop: object, optional
         Async loop to use in our mosaic event loop, defaults to new loop.
+    dump_init : bool, optional
+        Whether to dump initialisation file.
     wait : bool, optional
         Whether or not to return control to calling frame, defaults to False.
     kwargs : optional
@@ -104,6 +106,7 @@ def init(runtime_type='head', runtime_indices=(),
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,
+        'dump_init': dump_init,
     }
 
     if address is not None and port is not None:
