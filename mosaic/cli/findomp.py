@@ -9,7 +9,7 @@ def go():
     comp_path = None
 
     # Try to get from environment variables
-    envs = ['CUDA_HOME', 'CUDA_ROOT']
+    envs = ['CUDA_HOME', 'NVHPC_CUDA_HOME', 'CUDA_ROOT']
     for env in envs:
         cuda_home = os.environ.get(env, None)
         if cuda_home:

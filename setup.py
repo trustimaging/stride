@@ -48,7 +48,8 @@ setup(
                   sources=['mosaic/profile/_profile.c'])
     ],
     scripts=[
-        'mosaic/cli/mrun'
+        'mosaic/cli/mrun',
+        'mosaic/cli/imrun',
     ],
     entry_points={
         'console_scripts': [
