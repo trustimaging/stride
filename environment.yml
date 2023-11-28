@@ -25,22 +25,26 @@ dependencies:
   - pyflakes
   - pytest
   - pytest-cov
+  - pytest-runner
+  - pytorch
   - pyyaml>=5.4
   - pyqt5-sip
-  - pytest-runner
   - pyzmq>=22.1
   - scikit-image
   - scipy>=1.6
   - sphinx
   - sphinx_rtd_theme
   - tornado>=6.1
+  - tqdm
   - traitsui
+  - ipympl
   - uvloop
   - zlib
   - zict>=3.0.0
   - pip:
       - devito>=4.6
+      - ndsplines
       - python-daemon
       - py-libnuma
-      - tblib
       - resampy
+      - tblib

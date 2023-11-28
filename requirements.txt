@@ -8,9 +8,11 @@ devito
 flake8
 gputil
 h5py>=3.2
-nbval
-numpy>=1.20
 multiprocess
+nbval
+ndsplines
+numpy>=1.20
+notebook>=6.4
 pre_commit
 psutil
 pyflakes
@@ -26,6 +28,10 @@ scikit-image
 scipy>=1.6
 sphinx
 sphinx_rtd_theme
+tornado>=6.1
 tblib
+torch
+tqdm
+ipympl
 uvloop
 zict>=3.0.0
