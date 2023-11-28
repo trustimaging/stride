@@ -25,6 +25,7 @@ dependencies:
   - pyflakes
   - pytest
   - pytest-cov
+  - pytorch
   - pyyaml>=5.4
   - pyqt5-sip
   - pytest-runner

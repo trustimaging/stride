@@ -27,5 +27,6 @@ scipy>=1.6
 sphinx
 sphinx_rtd_theme
 tblib
+torch
 uvloop
 zict>=3.0.0
