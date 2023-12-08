@@ -144,7 +144,7 @@ class Problem(Gridded):
         self.grid.space.resample(new_spacing=new_spacing)
         new_spacing = self.grid.space.spacing
         
-        self.medium.vp = self.medium.vp.resample(old_spacing, new_spacing, **kwargs)
+        self.medium.vp = self.medium.vp._resample(old_spacing, new_spacing, **kwargs)
 
     def time_resample(self, new_step, new_num=None, **kwargs):
         '''
