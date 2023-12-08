@@ -1603,7 +1603,11 @@ class Traces(StructuredData):
             # Detect starting mute
             if mute_start is None: # detect
                 _, mute_idx = np.where(processed_data==0)
-                mute_start_old = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
+                if not np.any(mute_idx):
+                    mute_start_old = 0
+                else:
+                    mute_start_old = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
+                
             else:
                 mute_start_old = mute_start
 
