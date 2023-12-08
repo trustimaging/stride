@@ -81,7 +81,8 @@ class Space:
         if isinstance(new_spacing, float):
             new_spacing = (new_spacing,)*self.dim
 
-        new_shape = tuple((np.array(self.size) / np.array(new_spacing) + 1).astype(int))
+        new_shape = tuple(np.ceil(np.array(self.size) / np.array(new_spacing) + 1).astype(int))
+        # TODO there is a risk that rounding errors are introduced here
 
         if new_extra is None:
             new_extra = tuple((np.array(self.spacing) * (np.array(self.extra) - 1) /
