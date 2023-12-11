@@ -1522,7 +1522,10 @@ class Traces(StructuredData):
         """
         title = kwargs.pop('title', self.name)
         plot = kwargs.pop('plot', True)
-        time_axis = self.time.grid / 1e-6
+        if self.time.num == self.shape[1]:
+            time_axis = self.time.grid / 1e-6
+        else:
+            time_axis = np.arange(self.shape[1])
 
         axis = plotting.plot_gather(self.transducer_ids, time_axis, self.data,
                                     title=title, **kwargs)

@@ -1155,10 +1155,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Get the subs
         if self.drp:
             extra_functions = ()
-            if rho_fun is not None:
-                extra_functions = (rho_fun, buoy_fun,)
-
-            subs = self._symbolic_coefficients(field, laplacian, vp_fun,
+            subs = self._symbolic_coefficients(field, laplacian,
                                                *extra_functions)
         else:
             subs = None
@@ -1180,6 +1177,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set up the boundary
         boundary_field = laplacian if self.kernel != 'OT2' and 'PML' in self.boundary_type else field
         boundary_term, eq_before, eq_after = self.boundary.apply(boundary_field, vp.extended_data,
+                                                                 velocity_fun=vp_fun,
                                                                  direction=direction, subs=subs,
                                                                  f_centre=self._bandwidth[1])
 
@@ -1224,21 +1222,29 @@ class IsoAcousticDevito(ProblemTypeBase):
                                           coefficients=subs)
             stencils.append(stencil_laplacian)
 
-        stencil_interior = devito.Eq(u_next, eq_boundary,
-                                     subdomain=abox,
+        if 'hybrid' in self.boundary_type:
+            domain = abox
+        else:
+            domain = interior
+
+        stencil_interior = devito.Eq(u_next, eq_interior,
+                                     subdomain=domain,
                                      coefficients=subs)
         stencils.append(stencil_interior)
 
-        # stencil_boundary = [devito.Eq(u_next, eq_boundary,
-        #                               subdomain=dom,
-        #                               coefficients=subs) for dom in boundary]
-        # stencils += stencil_boundary
+        if 'hybrid' in self.boundary_type:
+            stencil_boundary = []
+        else:
+            stencil_boundary = [devito.Eq(u_next, eq_boundary,
+                                          subdomain=dom,
+                                          coefficients=subs) for dom in boundary]
+        stencils += stencil_boundary
 
         return sub_befores + eq_before + stencils + eq_after + sub_afters
 
     def _medium_functions(self, vp, rho=None, alpha=None, **kwargs):
         _kwargs = {
-            'coefficients': 'symbolic' if self.drp else 'standard',
+            # 'coefficients': 'symbolic' if self.drp else 'standard',
         }
 
         vp_fun = self.dev_grid.function('vp', **_kwargs)

@@ -133,12 +133,14 @@ async def forward(problem, pde, *args, **kwargs):
             else:
                 raise ValueError('Unknown platform %s' % platform)
 
+        # run PDE
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
                            runtime=worker, **_kwargs).result()
 
         logger.perf('Shot %d retrieved' % sub_problem.shot_id)
 
+        # save data
         shot = problem.acquisitions.get(shot_id)
         shot.observed.data[:] = traces.data
 

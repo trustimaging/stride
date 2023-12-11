@@ -352,7 +352,7 @@ def _make_filter_cos(filter_length):
 
     q = 0.
     for i in range(filter_length):
-        table[i] = 1. - np.cos(2*np.pi * (i + 1) / (filter_length + 1))
+        table[i] = 1. - np.cos(2*np.pi * (i + 1) / (filter_length + 2))
         q += table[i]
 
     table /= q
@@ -360,7 +360,7 @@ def _make_filter_cos(filter_length):
     return table
 
 
-def lowpass_filter_cos(data, f_max, order=2,
+def lowpass_filter_cos(data, f_max, order=1,
                        zero_phase=True, adjoint=False, axis=-1, **kwargs):
     """
     Apply a cosine lowpass filter.

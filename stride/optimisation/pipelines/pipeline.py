@@ -1,4 +1,6 @@
 
+import re
+
 from mosaic import tessera
 
 from .steps import steps_registry
@@ -30,6 +32,24 @@ class Pipeline(Operator):
         self._kwargs = kwargs
 
         steps = steps or []
+
+        dump_re = re.compile(r'^dump_(before|after)_(\S+)$')
+        for k, v in kwargs.items():
+            match = dump_re.match(k)
+            if dump_re.match(k) and v is True:
+                pos = match.group(1)
+                step = match.group(2)
+
+                if step in steps:
+                    idx = steps.index(step)
+                elif (step, False) in steps:
+                    idx = steps.index((step, False))
+
+                if pos == 'before':
+                    steps.insert(idx, 'dump')
+                else:
+                    steps.insert(idx+1, 'dump')
+
         self._steps = []
         for step in steps:
             do_raise = True

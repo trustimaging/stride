@@ -4,7 +4,6 @@ import psutil
 import asyncio
 import traceback
 import threading
-import numpy as np
 
 import mosaic
 
@@ -28,11 +27,15 @@ def sizeof(obj, seen=None):
         Size in bytes.
 
     """
-    if isinstance(obj, asyncio.Future):
+    ignore = (asyncio.Future,) + mosaic.types.remote_types
+    if isinstance(obj, ignore):
         return 0
-    if isinstance(obj, np.ndarray):
-        size = obj.nbytes
-    else:
+    try:
+        if hasattr(obj, 'nbytes') and isinstance(obj.nbytes, int):
+            size = obj.nbytes
+        else:
+            size = sys.getsizeof(obj)
+    except Exception:
         size = sys.getsizeof(obj)
     if seen is None:
         seen = set()
@@ -49,8 +52,12 @@ def sizeof(obj, seen=None):
             size += sum([sizeof(k, seen) for k in obj.keys()])
         elif hasattr(obj, '__dict__'):
             size += sizeof(obj.__dict__, seen)
+
         elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
-            size += sum([sizeof(i, seen) for i in obj])
+            try:
+                size += sum([sizeof(i, seen) for i in obj])
+            except TypeError:
+                pass
     except RuntimeError:
         pass
 
@@ -83,9 +90,12 @@ async def remote_sizeof(obj, seen=None, pending=False):
         if pending:
             size = 0
         else:
-            if isinstance(obj, np.ndarray):
-                size = obj.nbytes
-            else:
+            try:
+                if hasattr(obj, 'nbytes') and isinstance(obj.nbytes, int):
+                    size = obj.nbytes
+                else:
+                    size = sys.getsizeof(obj)
+            except Exception:
                 size = sys.getsizeof(obj)
     if seen is None:
         seen = set()

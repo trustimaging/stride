@@ -104,6 +104,24 @@ class PMLCorner(devito.SubDomain):
         return domain
 
 
+class PMLCentreCorner(devito.SubDomain):
+
+    def __init__(self, space_order, extra, *sides):
+        self.sides = sides
+        self.name = 'pml_centre_corner_' + '_'.join(sides)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: (side, extra) if side != 'middle' else ('middle', extra, extra)
+                  for dimension, side, extra in zip(dimensions, self.sides, self.extra)}
+
+        return domain
+
+
 class PMLPartial(devito.SubDomain):
 
     def __init__(self, space_order, extra, dim, side):
@@ -234,6 +252,7 @@ class GridDevito(Gridded):
             self.pml_right = tuple()
             self.pml_centres = tuple()
             self.pml_partials = tuple()
+            self.pml_centre_corners = tuple()
 
             for dim in range(space.dim):
                 self.pml_left += (PMLSide(space_order, extra, dim, 'left'),)
@@ -242,6 +261,11 @@ class GridDevito(Gridded):
                                      PMLCentre(space_order, extra, dim, 'right'))
                 self.pml_partials += (PMLPartial(space_order, extra, dim, 'left'),
                                       PMLPartial(space_order, extra, dim, 'right'))
+
+                for sides in itertools.product(['left', 'right'], repeat=space.dim-1):
+                    sides = list(sides)
+                    sides.insert(dim, 'middle')
+                    self.pml_centre_corners += (PMLCentreCorner(space_order, extra, *sides),)
 
             self.pml_corners = [PMLCorner(space_order, extra, *sides)
                                 for sides in itertools.product(['left', 'right'],
@@ -252,7 +276,7 @@ class GridDevito(Gridded):
 
             grid_kwargs['subdomains'] = (self.full, self.interior,) + \
                                          self.pml + self.pml_left + self.pml_right + \
-                                         self.pml_centres + self.pml_corners
+                                         self.pml_centres + self.pml_corners + self.pml_centre_corners
 
         dimensions = None
         time_dimension = None
@@ -710,7 +734,7 @@ class GridDevito(Gridded):
             if collect:
                 devito.clear_cache(force=True)
 
-    def with_halo(self, data, value=None, time_dependent=False, is_vector=False):
+    def with_halo(self, data, value=None, time_dependent=False, is_vector=False, **kwargs):
         """
         Pad ndarray with appropriate halo given the grid space order.
 
@@ -733,7 +757,8 @@ class GridDevito(Gridded):
             Padded array.
 
         """
-        pad_widths = [[self.space_order, self.space_order]
+        space_order = kwargs.pop('space_order', self.space_order)
+        pad_widths = [[space_order, space_order]
                       for _ in self.space.shape]
 
         if time_dependent:

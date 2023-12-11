@@ -1174,3 +1174,5 @@ class MemoryOverflowError(Exception):
 
 
 types.awaitable_types += (TaskProxy, TaskOutput, TaskDone)
+types.remote_types += (Task,)
+types.proxy_types += (TaskProxy,)

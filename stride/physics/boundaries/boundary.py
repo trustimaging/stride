@@ -124,6 +124,13 @@ class Boundary(ABC):
 
                     val = dimension_coefficient * pos
 
+                elif damping_type == 'cosine':
+                    pos = np.cos(np.pi / 2 * (1 - pos))
+                    if mask:
+                        pos = 1 - pos
+
+                    val = pos
+
                 elif damping_type == 'power':
                     pos = pos**power_degree
                     if mask:
@@ -135,7 +142,7 @@ class Boundary(ABC):
                     raise ValueError('Allowed dumping type are (`sine`, `power`)')
 
                 # : slices
-                all_ind = [slice(0, d) for d in damp.shape]
+                all_ind = [slice(index, s-index) for s in shape]
 
                 # Left slice for dampening for dimension
                 all_ind[dim_i] = slice(index, index + 1)
@@ -143,6 +150,9 @@ class Boundary(ABC):
                     damp[tuple(all_ind)] = val
                 else:
                     damp[tuple(all_ind)] += val
+
+                # : slices
+                all_ind = [slice(index, s-index) for s in shape]
 
                 # right slice for dampening for dimension
                 all_ind[dim_i] = slice(damp.shape[dim_i] - index - 1, damp.shape[dim_i] - index)
