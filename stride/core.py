@@ -91,8 +91,8 @@ class Node:
         self.idx = idx
         self.next = nxt or []
 
-        if hasattr(op, '_tessera') and \
-                (not hasattr(op, 'has_tessera') or not op.has_tessera):
+        if hasattr(op, '_tessera') or \
+                (hasattr(op, 'has_tessera') and op.has_tessera and op.is_proxy):
             op = getattr(op, '_tessera')
 
         self.op = op if self.method != '__noop__' else None
@@ -313,7 +313,7 @@ class Variable:
         # no need to run graph
         if self.prev_op is None:
             await self.__call_adjoint__(grad, **kwargs)
-            self.graph = Graph()
+            self.clear_graph()
             return
 
         prev = dict()
@@ -329,12 +329,8 @@ class Variable:
             output_grads = [prev[each] for each in output_names]
 
             # call adjoint method
-            if hasattr(node.op, 'has_tessera') and node.op.has_tessera and node.op.is_proxy:
-                method = getattr(node.op._tessera, node.method)
-                ret = method(*output_grads, **kwargs)
-            else:
-                method = getattr(node.op, node.method)
-                ret = method(*output_grads, **kwargs)
+            method = getattr(node.op, node.method)
+            ret = method(*output_grads, **kwargs)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
                 ret = await ret
@@ -372,8 +368,7 @@ class Variable:
 
         await asyncio.gather(*returns)
 
-        self.graph = Graph()
-        self.prev_op = None
+        self.clear_graph()
 
     def detach(self, *args, **kwargs):
         """
@@ -457,6 +452,17 @@ class Variable:
         kwargs['propagate_tessera'] = kwargs.pop('propagate_tessera', False)
         return self.copy(*args, **kwargs)
 
+    def clear_graph(self):
+        """
+        Clear the adjoint graph of the variable.
+
+        Returns
+        -------
+
+        """
+        self.graph = Graph()
+        self.prev_op = None
+
     def clear_grad(self):
         """
         Clear the gradient buffer of the variable.
@@ -496,7 +502,7 @@ class Variable:
         if grad is None or not self.needs_grad or self.grad is None:
             return
 
-        self.grad = await _maybe_sum(self.grad, grad)
+        self.grad += grad
 
     def __repr__(self):
         return self.name

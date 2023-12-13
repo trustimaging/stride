@@ -47,11 +47,17 @@ setup(
         Extension('_profile',
                   sources=['mosaic/profile/_profile.c'])
     ],
+    scripts=[
+        'mosaic/cli/mrun',
+        'mosaic/cli/imrun',
+    ],
     entry_points={
         'console_scripts': [
             'mrun=mosaic.cli.mrun:go',
+            'mrun_=mosaic.cli.mrun:go',
             'mscript=mosaic.cli.mscript:go',
             'mprof=mosaic.cli.mprof:go',
+            'findomp=mosaic.cli.findomp:go',
         ]
     },
     zip_safe=False,

@@ -1,0 +1,3 @@
+#!/bin/bash
+preload=$((findomp) 2>&1)
+LD_PRELOAD="$preload" jupyter "$@"

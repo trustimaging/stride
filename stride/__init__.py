@@ -210,15 +210,24 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
-    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.25)
-    filter_traces_relaxation = kwargs.pop('filter_traces_relaxation', 0.75)
+
+    filter_wavelets = kwargs.pop('filter_wavelets', True)
+    filter_traces = kwargs.pop('filter_traces', True)
+
+    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.75)
+    filter_traces_relaxation = kwargs.pop('filter_traces_relaxation',
+                                          0.75 if filter_wavelets else 1.00)
+
     process_wavelets = ProcessWavelets.remote(f_min=f_min, f_max=f_max,
+                                              filter_traces=filter_wavelets,
                                               filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
     process_observed = ProcessObserved.remote(f_min=f_min, f_max=f_max,
+                                              filter_traces=filter_wavelets,
                                               filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
+                                          filter_traces=filter_traces,
                                           filter_relaxation=filter_traces_relaxation,
                                           len=runtime.num_workers, **kwargs)
 
@@ -228,6 +237,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         devices = kwargs.pop('devices', None)
         num_gpus = gpu_count() if devices is None else len(devices)
         devices = list(range(num_gpus)) if devices is None else devices
+
+    problem.acquisitions.reset_selection()
 
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         optimiser.clear_grad()
@@ -252,15 +263,19 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                   iteration.abs_id)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
+        num_shots = len(shot_ids)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
             _kwargs = kwargs.copy()
 
             logger.perf('\n')
-            logger.perf('Giving shot %d to %s' % (shot_id, worker.uid))
+            logger.perf('Giving shot %d to %s (%d out of %d)'
+                        % (shot_id, worker.uid,
+                           iteration.num_submitted, num_shots))
 
             sub_problem = problem.sub_problem(shot_id)
+            iteration.add_submitted(sub_problem.shot)
             wavelets = sub_problem.shot.wavelets
             observed = sub_problem.shot.observed
 
@@ -296,6 +311,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             # post-process modelled and observed traces
             traces = process_traces(modelled, observed,
+                                    scale_to=sub_problem.shot.observed,
                                     problem=sub_problem, runtime=worker, **_kwargs)
             await traces.init_future
 
@@ -308,8 +324,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             # run adjoint
             await fun.adjoint(**_kwargs)
+            iteration.add_completed(sub_problem.shot)
 
-            logger.perf('Retrieved gradient for shot %d' % sub_problem.shot_id)
+            logger.perf('Retrieved gradient for shot %d (%d out of %d)'
+                        % (sub_problem.shot_id,
+                           iteration.num_completed, num_shots))
 
         await loop
 

@@ -327,7 +327,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 if self._needs_grad(wavelets, rho, alpha):
                     p_saved_expr = p
                 else:
-                    p_saved_expr = p.dt2
+                    p_saved_expr = self._forward_save(p)
                 abox, full, interior, boundary = self.subdomains
                 update_saved = [devito.Eq(p_saved, p_saved_expr, subdomain=abox)]
                 devicecreate = (self.dev_grid.vars.p, self.dev_grid.vars.p_saved,)
@@ -415,7 +415,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         -------
 
         """
-
         functions = dict(
             vp=self.dev_grid.vars.vp,
             src=self.dev_grid.vars.src,
@@ -613,7 +612,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.p_a.data_with_halo.fill(0.)
         self.boundary.clear()
-        await self.init_grad(wavelets, vp, rho, alpha)
+        await self.init_grad(wavelets, vp, rho, alpha, **kwargs)
 
         # Set wavefield if necessary
         cache_forward = kwargs.pop('cache_forward', False)
@@ -768,31 +767,28 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         """
         p = self.dev_grid.vars.p_saved
-        p_a = self.dev_grid.vars.p_a
+        p_a = self._adjoint_save(self.dev_grid.vars.p_a)
 
         abox, full, interior, boundary = self.subdomains
         subdomain = abox if self.adaptive_boxes else interior
 
         wavelets, _, rho, alpha = kwargs.get('wrt')
         if self._needs_grad(wavelets, rho, alpha):
-            p_dt2 = self.dev_grid.undersampled_time_derivative(p, self.undersampling_factor,
-                                                               bounds=kwargs.pop('save_bounds', None),
-                                                               deriv_order=2, fd_order=2)
-
-            p_dt2_fun = self.dev_grid.function('p_dt2', space_order=0)
-            p_dt2_update = (devito.Eq(p_dt2_fun, p_dt2, subdomain=subdomain),)
+            p_dt = self._forward_save_undersampled(p, **kwargs)
+            p_dt_fun = self.dev_grid.function('p_dt', space_order=0)
+            p_dt_update = (devito.Eq(p_dt_fun, p_dt, subdomain=subdomain),)
         else:
-            p_dt2 = p
-            p_dt2_fun = p_dt2
-            p_dt2_update = ()
+            p_dt = p
+            p_dt_fun = p_dt
+            p_dt_update = ()
 
         grad = self.dev_grid.function('grad_vp', space_order=0)
-        grad_update = devito.Inc(grad, p_dt2_fun * p_a, subdomain=subdomain)
+        grad_update = devito.Inc(grad, p_dt_fun * p_a, subdomain=subdomain)
 
         prec = self.dev_grid.function('prec_vp', space_order=0)
-        prec_update = devito.Inc(prec, p_dt2_fun * p_dt2_fun, subdomain=subdomain)
+        prec_update = devito.Inc(prec, p_dt_fun * p_dt_fun, subdomain=subdomain)
 
-        return p_dt2_update + (grad_update, prec_update)
+        return p_dt_update + (grad_update, prec_update)
 
     async def init_grad_vp(self, vp, **kwargs):
         """
@@ -831,21 +827,27 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         """
         variable_grad = self.dev_grid.vars.grad_vp
-        variable_grad = np.asarray(variable_grad.data, dtype=np.float32)
+        variable_grad = np.asarray(variable_grad.data[self.space.inner], dtype=np.float32)
 
         variable_prec = self.dev_grid.vars.prec_vp
-        variable_prec = np.asarray(variable_prec.data, dtype=np.float32)
+        variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
 
-        variable_grad *= -2 / vp.extended_data**3
-        variable_prec *= +4 / vp.extended_data**6 * self.time.step**2
+        variable_grad *= -2 / vp.data**3
+        variable_prec *= +4 / vp.data**6 * self.time.step**2
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:
             self.dev_grid.deallocate('grad_vp')
             self.dev_grid.deallocate('prec_vp')
 
-        grad = vp.alike(name='vp_grad', data=variable_grad)
-        grad.prec = vp.alike(name='vp_prec', data=variable_prec)
+        grad = vp.alike(name='vp_grad', data=variable_grad,
+                        shape=variable_grad.shape,
+                        extended_shape=variable_grad.shape,
+                        inner=None)
+        grad.prec = vp.alike(name='vp_prec', data=variable_prec,
+                             shape=variable_prec.shape,
+                             extended_shape=variable_prec.shape,
+                             inner=None)
 
         return grad
 
@@ -921,18 +923,24 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         """
         variable_grad = self.dev_grid.vars.grad_rho
-        variable_grad = np.asarray(variable_grad.data, dtype=np.float32)
+        variable_grad = np.asarray(variable_grad.data[self.space.inner], dtype=np.float32)
 
         variable_prec = self.dev_grid.vars.prec_rho
-        variable_prec = np.asarray(variable_prec.data, dtype=np.float32)
+        variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:
             self.dev_grid.deallocate('grad_rho')
             self.dev_grid.deallocate('prec_rho')
 
-        grad = rho.alike(name='rho_grad', data=variable_grad)
-        grad.prec = rho.alike(name='rho_prec', data=variable_prec)
+        grad = rho.alike(name='rho_grad', data=variable_grad,
+                         shape=variable_grad.shape,
+                         extended_shape=variable_grad.shape,
+                         inner=None)
+        grad.prec = rho.alike(name='rho_prec', data=variable_prec,
+                              shape=variable_grad.shape,
+                              extended_shape=variable_grad.shape,
+                              inner=None)
 
         return grad
 
@@ -1272,12 +1280,8 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         if buoy is None:
             return vp2 * field.laplace
-
         else:
-            if self.drp:
-                return vp2 * (field.laplace + rho * devito.grad(buoy, shift=-0.5).dot(devito.grad(field, shift=-0.5)))
-            else:
-                return vp2 * rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
+            return vp2 * rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
 
     def _subdomains(self, *args, **kwargs):
         problem = kwargs.get('problem')
@@ -1304,3 +1308,14 @@ class IsoAcousticDevito(ProblemTypeBase):
 
     def _needs_grad(self, *wrt):
         return any(v is not None and v.needs_grad for v in wrt)
+
+    def _forward_save(self, field):
+        return field.dt2
+
+    def _forward_save_undersampled(self, field, **kwargs):
+        return self.dev_grid.undersampled_time_derivative(field, self.undersampling_factor,
+                                                          bounds=kwargs.pop('save_bounds', None),
+                                                          deriv_order=2, fd_order=2)
+
+    def _adjoint_save(self, field):
+        return field

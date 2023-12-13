@@ -509,7 +509,9 @@ class GridDevito(Gridded):
                                                  factor=factor,
                                                  condition=condition)
 
-        buffer_size = (bounds[1] - bounds[0] + factor) // factor + 1
+        # buffer_size = (bounds[1] - bounds[0] + factor) // factor + 1
+        # TODO Force larger buffer size to prevent devito issue
+        buffer_size = (self.time.extended_num - 1 - 0 + factor) // factor + 1
 
         return time_under, buffer_size
 

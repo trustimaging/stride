@@ -26,11 +26,11 @@ _runtime_types = {
 def init(runtime_type='head', runtime_indices=(),
          address=None, port=None,
          parent_id=None, parent_address=None, parent_port=None,
-         monitor_address=None, monitor_port=None,
+         monitor_address=None, monitor_port=None, pubsub_port=None,
          num_workers=1, num_threads=None,
          mode='local', reuse_head=False, monitor_strategy='round-robin',
          log_level='perf', profile=False, node_list=None,
-         asyncio_loop=None, wait=False,
+         asyncio_loop=None, dump_init=False, wait=False,
          **kwargs):
     """
     Starts the global mosaic runtime.
@@ -57,6 +57,8 @@ def init(runtime_type='head', runtime_indices=(),
         Address of the monitor to connect to.
     monitor_port : int, optional
         Port of the monitor to connect to.
+    pubsub_port : int, optional
+        Publishing port of the monitor to connect to.
     num_workers : int, optional
         Number of workers to instantiate in each node, defaults to 1.
     num_threads : int, optional
@@ -76,6 +78,8 @@ def init(runtime_type='head', runtime_indices=(),
         List of available node addresses to connect to.
     asyncio_loop: object, optional
         Async loop to use in our mosaic event loop, defaults to new loop.
+    dump_init : bool, optional
+        Whether to dump initialisation file.
     wait : bool, optional
         Whether or not to return control to calling frame, defaults to False.
     kwargs : optional
@@ -102,6 +106,7 @@ def init(runtime_type='head', runtime_indices=(),
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,
+        'dump_init': dump_init,
     }
 
     if address is not None and port is not None:
@@ -113,13 +118,10 @@ def init(runtime_type='head', runtime_indices=(),
         runtime_config['parent_address'] = parent_address
         runtime_config['parent_port'] = parent_port
 
-    elif monitor_address is not None and monitor_port is not None:
+    if monitor_address is not None and monitor_port is not None and pubsub_port is not None:
         runtime_config['monitor_address'] = monitor_address
         runtime_config['monitor_port'] = monitor_port
-
-    elif runtime_type != 'head':
-        ValueError('Either parent address:port or the monitor address:port are needed to '
-                   'init a %s' % runtime_type)
+        runtime_config['pubsub_port'] = pubsub_port
 
     # Create global runtime
     try:
@@ -254,9 +256,11 @@ def run(main, *args, **kwargs):
                 _ = file.readline().split('=')[1].strip()
                 parent_address = file.readline().split('=')[1].strip()
                 parent_port = file.readline().split('=')[1].strip()
+                pubsub_port = file.readline().split('=')[1].strip()
 
                 kwargs['monitor_address'] = parent_address
                 kwargs['monitor_port'] = int(parent_port)
+                kwargs['pubsub_port'] = int(pubsub_port)
 
                 try:
                     arg_start = file.readline().strip()
@@ -266,7 +270,7 @@ def run(main, *args, **kwargs):
                     if arg_start == '[ARGS]':
                         for line in file:
                             key, value = line.strip().split('=')
-                            kwargs[key] = eval(value)
+                            kwargs[key] = kwargs.get(key, eval(value))
 
     init(*args, **kwargs)
 
