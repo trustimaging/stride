@@ -1608,56 +1608,14 @@ class Traces(StructuredData):
 
         if self.allocated:
             processed_data = self.data
-
-            # Detect starting mute
-            if mute_start is None: # detect
-                _, mute_idx = np.where(processed_data==0)
-                if not np.any(mute_idx):
-                    mute_start_old = 0
-                else:
-                    mute_start_old = (np.where(np.diff(mute_idx) != 1)[0]+1)[0]
-                
-            else:
-                mute_start_old = mute_start
-
-            mute_start_new = int(np.ceil((mute_start_old/sr_orig) * sr_new))  # adjust for new sampling rate
-
-            # Anit-aliasing filter
-            method_name = 'lowpass_filter_%s' % (filter_type_antialias)  # select anti-aliasing filter
-            method = getattr(filters, method_name, None)
-
-            if method is None:
-                raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
-
-            if freq_niquist != 1.0: # run anti-aliasing filter
-                processed_data = method(
-                    processed_data,
-                    f_max=freq_niquist,
-                    zero_phase=True,
-                    order=filter_order_antialias)
-
             # Resample
             processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)
-
-            # # Mute (post-resample) & Hann window
-            # processed_data[:, mute_start_new] = 0  # apply mute
-
-            # len_hann = 10  # build CDF for hann window
-            # win = scipy.signal.hann(len_hann, sym=True)
-            # win = np.cumsum(win)/np.cumsum(win).max()
-
-            # start = mute_start_new-int(np.floor(len_hann/2))  # locate mute
-            # start_min = max(0, start)  # don't go below zero
-            # stop = mute_start_new+int(np.ceil(len_hann/2))
-
-            # processed_data[:, start_min:stop] *= win[start_min-start:]  # apply window
 
             # Fill object
             new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=processed_data)
 
         else:
             new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)
-
 
         return new_traces
 

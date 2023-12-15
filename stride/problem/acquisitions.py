@@ -121,9 +121,9 @@ class Shot(ProblemBase):
             for receiver in receivers:
                 self._receivers[receiver.id] = receiver
 
-            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
-            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
-            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1), grid=self.grid)
+            self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
+            self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
+            self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1), grid=self.grid)
 
             if delays is not None:
                 self.delays.data[:, 0] = delays
@@ -402,6 +402,12 @@ class Shot(ProblemBase):
         else:
             self._acquisitions.dump(*args, **kwargs)
 
+    def _traces(self, name, transducer_ids, grid, shape=None):
+        if shape == None:
+            return Traces(name=name, transducer_ids=transducer_ids, grid=grid)
+        else:
+            return Traces(name=name, transducer_ids=transducer_ids, shape=shape, grid=grid)
+
     def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
@@ -439,15 +445,15 @@ class Shot(ProblemBase):
                 receiver = None
             self._receivers[receiver_id] = receiver
 
-        self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
+        self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
         if 'wavelets' in description:
             self.wavelets.__set_desc__(description.wavelets)
 
-        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
+        self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
         if 'observed' in description:
             self.observed.__set_desc__(description.observed)
 
-        self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
+        self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
         if 'delays' in description:
             self.delays.__set_desc__(description.delays)
 
