@@ -140,11 +140,14 @@ class Problem(Gridded):
         Returns
         -------
         '''
+
+        # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
         old_spacing = self.grid.space.spacing
         self.grid.space.resample(new_spacing=new_spacing)
         new_spacing = self.grid.space.spacing
         
-        self.medium.vp = self.medium.vp._resample(old_spacing, new_spacing, **kwargs)
+        self.medium.vp._resample(old_spacing, new_spacing, **kwargs)  # NOTE this is in-place
+        return self.medium.vp
 
     def time_resample(self, new_step, new_num=None, **kwargs):
         '''
