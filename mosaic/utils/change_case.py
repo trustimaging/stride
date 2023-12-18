@@ -41,10 +41,10 @@ def camel_case(name):
         String in camelcase
 
     """
-    name = re.sub(r"^[\-_\.]", '', str(name))
+    name = re.sub(r"^[\_\.]", '', str(name))
     if not name:
         return name
-    return uppercase(name[0]) + re.sub(r"[\-_\.\s]([a-zA-Z0-9])", lambda matched: uppercase(matched.group(1)), name[1:])
+    return uppercase(name[0]) + re.sub(r"[\_\.\s]([a-zA-Z0-9])", lambda matched: uppercase(matched.group(1)), name[1:])
 
 
 def lowercase(name):

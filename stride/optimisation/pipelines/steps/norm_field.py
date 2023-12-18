@@ -1,6 +1,7 @@
 
 import numpy as np
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -25,7 +26,7 @@ class NormField(Operator):
         if self.norm_value is None or not global_norm:
             self.norm_value = np.max(np.abs(field.extended_data)) + 1e-31
 
-        out_field = field.alike(name='normed_%s' % field.name)
+        out_field = field.alike(name=name_from_op_name(self, field))
         out_field.extended_data[:] = field.extended_data
         out_field.extended_data[:] /= self.norm_value
 

@@ -1,6 +1,7 @@
 
 import numpy as np
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -24,7 +25,7 @@ class Clip(Operator):
         self.max = kwargs.pop('max', None)
 
     def forward(self, field, **kwargs):
-        out_field = field.alike(name='clipped_%s' % field.name)
+        out_field = field.alike(name=name_from_op_name(self, field))
         out_field.extended_data[:] = field.extended_data
 
         if self.min is not None or self.max is not None:

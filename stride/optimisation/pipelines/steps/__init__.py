@@ -8,6 +8,7 @@ from .mask import Mask
 from .mute_traces import MuteTraces
 from .clip import Clip
 from .check_traces import CheckTraces
+from .dump import Dump
 
 
 steps_registry = {
@@ -22,4 +23,5 @@ steps_registry = {
     'mute_traces': MuteTraces,
     'clip': Clip,
     'check_traces': CheckTraces,
+    'dump': Dump,
 }

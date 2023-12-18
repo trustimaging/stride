@@ -82,13 +82,13 @@ class Warehouse(Runtime):
         global_profiler.set_remote('monitor')
         super().set_profiler()
 
-    async def put(self, obj, uid=None, publish=False):
+    async def put(self, obj, uid=None, publish=False, **kwargs):
         return await self.put_remote(self.uid, obj, uid=uid)
 
-    async def get(self, uid):
+    async def get(self, uid, **kwargs):
         return await self.get_remote(self.uid, uid=uid)
 
-    async def drop(self, uid):
+    async def drop(self, uid, **kwargs):
         return await self.drop_remote(self.uid, uid=uid)
 
     async def put_remote(self, sender_id, obj, uid=None, publish=False):
