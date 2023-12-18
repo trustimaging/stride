@@ -140,8 +140,6 @@ class Problem(Gridded):
         Returns
         -------
         '''
-
-        # import IPython.terminal.debugger as ipdb; ipdb.set_trace()
         old_spacing = self.grid.space.spacing
         self.grid.space.resample(new_spacing=new_spacing)
         new_spacing = self.grid.space.spacing
