@@ -42,9 +42,11 @@ class Dump(Operator):
 
     def _apply(self, data, prefix=None, **kwargs):
         problem = kwargs.pop('problem', None)
-        if problem is None:
+        iteration = kwargs.pop('iteration', None)
+        if problem is None or iteration is None:
             return
 
+        shot_id = problem.shot_id if hasattr(problem, 'shot_id') else None
         prev_step = kwargs.pop('prev_step', None)
         parameter = data.name.split('_')[-1].strip('_')
         if prev_step:
@@ -52,7 +54,9 @@ class Dump(Operator):
             parameter = '%s_%s' % (prev_step, parameter)
         if prefix:
             parameter = '%s_%s' % (prefix, parameter)
+        if shot_id is not None:
+            parameter = '%s-Shot%05d' % (parameter, shot_id)
 
         data.dump(path=problem.output_folder,
                   project_name=problem.name,
-                  version=0, parameter=parameter)
+                  version=iteration.abs_id+1, parameter=parameter)

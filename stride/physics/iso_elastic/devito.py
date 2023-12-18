@@ -53,7 +53,7 @@ class IsoElasticDevito(ProblemTypeBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.boundary_type = 'SpongeBoundary1'
+        self.boundary_type = 'sponge_boundary_1'
         self.interpolation_type = 'linear'
 
         self.wavefield = None

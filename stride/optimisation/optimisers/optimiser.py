@@ -94,17 +94,18 @@ class LocalOptimiser(ABC):
                     await self.variable.pull(attr='grad')
 
                 problem = kwargs.pop('problem', None)
+                iteration = kwargs.pop('iteration', None)
                 dump_grad = kwargs.pop('dump_grad', self.dump_grad)
                 dump_prec = kwargs.pop('dump_prec', self.dump_prec)
                 if dump_grad and problem is not None:
                     self.variable.grad.dump(path=problem.output_folder,
                                             project_name=problem.name,
-                                            version=0)
+                                            version=iteration.abs_id+1)
 
                 if dump_prec and self.variable.grad.prec is not None and problem is not None:
                     self.variable.grad.prec.dump(path=problem.output_folder,
                                                  project_name=problem.name,
-                                                 version=0)
+                                                 version=iteration.abs_id+1)
 
                 grad = self.variable.process_grad(**kwargs)
 
