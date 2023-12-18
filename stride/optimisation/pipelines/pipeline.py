@@ -2,8 +2,10 @@
 import re
 
 from mosaic import tessera
+from mosaic.utils import snake_case
 
 from .steps import steps_registry
+from .steps.dump import Dump
 from ...core import Operator, no_grad
 
 
@@ -33,6 +35,7 @@ class Pipeline(Operator):
 
         steps = steps or []
 
+        cls_name = snake_case(self.__class__.__name__)
         dump_re = re.compile(r'^dump_(before|after)_(\S+)$')
         for k, v in kwargs.items():
             match = dump_re.match(k)
@@ -40,10 +43,17 @@ class Pipeline(Operator):
                 pos = match.group(1)
                 step = match.group(2)
 
-                if step in steps:
+                if step == cls_name:
+                    if pos == 'before':
+                        idx = 0
+                    else:
+                        idx = len(steps)-1
+                elif step in steps:
                     idx = steps.index(step)
                 elif (step, False) in steps:
                     idx = steps.index((step, False))
+                else:
+                    continue
 
                 if pos == 'before':
                     steps.insert(idx, 'dump')
@@ -73,13 +83,17 @@ class Pipeline(Operator):
         """
         next_args = args
 
+        prev_step = None
         for step in self._steps:
             if self._no_grad:
                 with no_grad(*next_args, **kwargs):
-                    next_args = await step(*next_args, **{**self._kwargs, **kwargs})
+                    next_args = await step(*next_args, **{**self._kwargs, **kwargs},
+                                           prev_step=prev_step)
             else:
-                next_args = await step(*next_args, **{**self._kwargs, **kwargs})
+                next_args = await step(*next_args, **{**self._kwargs, **kwargs},
+                                       prev_step=prev_step)
             next_args = (next_args,) if len(args) == 1 else next_args
+            prev_step = None if isinstance(step, Dump) else step
 
         if len(args) == 1:
             return next_args[0]
@@ -92,8 +106,11 @@ class Pipeline(Operator):
 
         outputs = args[:self.num_outputs]
 
-        for step in self._steps:
-            outputs = step.adjoint(*outputs, *input_args, **{**self._kwargs, **kwargs})
+        prev_step = None
+        for step in reversed(self._steps):
+            outputs = step.adjoint(*outputs, *input_args, **{**self._kwargs, **kwargs},
+                                   prev_step=prev_step)
+            prev_step = None if isinstance(step, Dump) else step
 
         if len(outputs) == 1:
             return outputs[0]

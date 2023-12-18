@@ -351,9 +351,9 @@ def _make_filter_cos(filter_length):
     table = np.zeros((filter_length,))
 
     q = 0.
-    for i in range(filter_length):
-        table[i] = 1. - np.cos(2*np.pi * (i + 1) / (filter_length + 2))
-        q += table[i]
+    for i in range(1, filter_length+1):
+        table[i-1] = 1. - np.cos(2*np.pi * i / (filter_length + 1))
+        q += table[i-1]
 
     table /= q
 
@@ -389,7 +389,7 @@ def lowpass_filter_cos(data, f_max, order=1,
     f_max = f_max / 0.5
 
     period = int(1 / f_max)
-    filter_length = 2*period + 1
+    filter_length = 2*period + 2
 
     table = _make_filter_cos(filter_length)
 
@@ -403,7 +403,7 @@ def lowpass_filter_cos(data, f_max, order=1,
 
     filtered = data
     for _ in range(order):
-        filtered = scipy.ndimage.convolve1d(filtered, table, mode='nearest', axis=axis)
+        filtered = scipy.ndimage.convolve1d(filtered, table, mode='constant', axis=axis)
 
     if not zero_phase:
         filtered = filtered.take(range(0, filtered.shape[-1]-period), axis=-1)

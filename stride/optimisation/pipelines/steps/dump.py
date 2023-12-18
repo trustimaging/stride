@@ -1,5 +1,5 @@
 
-import numpy as np
+from mosaic.utils import snake_case
 
 from ....core import Operator
 
@@ -29,11 +29,11 @@ class Dump(Operator):
 
         return data
 
-    def adjoint(self, *d_traces, **kwargs):
-        d_data = d_traces[:self._num_data]
+    def adjoint(self, *d_data, **kwargs):
+        d_data = d_data[:self._num_data]
 
         for each in d_data:
-            self._apply(each, prefix='adjoint_', **kwargs)
+            self._apply(each, prefix='adjoint', **kwargs)
 
         if len(d_data) == 1:
             d_data = d_data[0]
@@ -45,9 +45,13 @@ class Dump(Operator):
         if problem is None:
             return
 
-        parameter = data.name
+        prev_step = kwargs.pop('prev_step', None)
+        parameter = data.name.split('_')[-1].strip('_')
+        if prev_step:
+            prev_step = snake_case(prev_step.__class__.__name__)
+            parameter = '%s_%s' % (prev_step, parameter)
         if prefix:
-            parameter = prefix + parameter
+            parameter = '%s_%s' % (prefix, parameter)
 
         data.dump(path=problem.output_folder,
                   project_name=problem.name,

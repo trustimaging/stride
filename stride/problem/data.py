@@ -225,7 +225,7 @@ class StructuredData(Data):
             Newly created StructuredData.
 
         """
-        cpy = self.alike(name=self._init_name, **kwargs)
+        cpy = self.alike(name=kwargs.pop('name', self._init_name), **kwargs)
         cpy.extended_data[:] = self.extended_data
         cpy.needs_grad = self.needs_grad
 
@@ -761,6 +761,9 @@ class ScalarField(StructuredData):
 
         if self.space is not None and self._shape is None:
             self._init_shape()
+        elif data is not None:
+            self._shape = self._extended_shape = data.shape
+            self._inner = (slice(0, None),)*data.ndim
 
         if data is not None:
             self._data = self.pad_data(data)
@@ -1030,10 +1033,16 @@ class ScalarField(StructuredData):
 
         """
         plot = kwargs.pop('plot', True)
-        origin = kwargs.pop('origin', self.space.origin)
-        limit = kwargs.pop('limit', self.space.limit)
+        try:
+            dim = self.space.dim
+            origin = kwargs.pop('origin', self.space.origin)
+            limit = kwargs.pop('limit', self.space.limit)
+        except AttributeError:
+            dim = self.ndim
+            origin = (0,)*self.ndim
+            limit = self.shape
 
-        if (self.time_dependent or self.slow_time_dependent) and self.space.dim == 2:
+        if (self.time_dependent or self.slow_time_dependent) and dim == 2:
             def update(figure, axis, step):
                 if len(axis.images):
                     axis.images[-1].colorbar.remove()
@@ -1075,10 +1084,16 @@ class ScalarField(StructuredData):
 
         """
         plot = kwargs.pop('plot', True)
-        origin = kwargs.pop('origin', self.space.pml_origin)
-        limit = kwargs.pop('limit', self.space.extended_limit)
+        try:
+            dim = self.space.dim
+            origin = kwargs.pop('origin', self.space.pml_origin)
+            limit = kwargs.pop('limit', self.space.extended_limit)
+        except AttributeError:
+            dim = self.ndim
+            origin = (0,)*self.ndim
+            limit = self.extended_shape
 
-        if (self.time_dependent or self.slow_time_dependent) and self.space.dim == 2:
+        if (self.time_dependent or self.slow_time_dependent) and dim == 2:
             def update(figure, axis, step):
                 if len(axis.images):
                     axis.images[-1].colorbar.remove()

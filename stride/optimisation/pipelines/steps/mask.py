@@ -1,6 +1,7 @@
 
 import numpy as np
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -24,7 +25,7 @@ class Mask(Operator):
             self._mask[field.inner] = 1
         mask = self._mask
 
-        out_field = field.alike(name='masked_%s' % field.name)
+        out_field = field.alike(name=name_from_op_name(self, field))
         out_field.extended_data[:] = field.extended_data
         out_field *= mask
 

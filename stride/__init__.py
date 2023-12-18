@@ -334,7 +334,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         await loop
 
-        await optimiser.step()
+        await optimiser.step(problem=problem, **kwargs)
 
         if dump:
             optimiser.variable.dump(path=problem.output_folder,

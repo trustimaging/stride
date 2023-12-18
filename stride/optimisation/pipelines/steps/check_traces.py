@@ -2,6 +2,7 @@ import numpy as np
 
 import mosaic
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -55,7 +56,7 @@ class CheckTraces(Operator):
         raise_incorrect = kwargs.pop('raise_incorrect', self.raise_incorrect)
         filter_incorrect = kwargs.pop('filter_incorrect', self.filter_incorrect)
 
-        out_traces = traces.alike(name='checked_%s' % traces.name)
+        out_traces = traces.alike(name=name_from_op_name(self, traces))
         filtered = traces.extended_data.copy()
 
         is_nan = np.any(np.isnan(filtered), axis=-1)

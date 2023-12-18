@@ -81,6 +81,9 @@ class ProcessTraces(Pipeline):
         if kwargs.pop('filter_traces', True):
             steps.append('filter_traces')
 
+        if kwargs.pop('time_weighting', True):
+            steps.append(('time_weighting', False))
+
         if kwargs.pop('agc', False):
             steps.append(('agc', False))
 
