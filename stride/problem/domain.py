@@ -78,19 +78,23 @@ class Space:
         return self.extended_limit
 
     def resample(self, new_spacing, new_extra=None, new_absorbing=None):
+        '''
+        Resample space
+        '''
+
         if isinstance(new_spacing, float):
             new_spacing = (new_spacing,)*self.dim
 
-        new_shape = tuple(np.ceil(np.array(self.size) / np.array(new_spacing) + 1).astype(int))
-        # TODO there is a risk that rounding errors are introduced here
+        new_shape = tuple((np.round(np.array(self.size) / np.array(new_spacing)) + 1).astype(int))
+        # TODO there is possibly a rounding error
 
         if new_extra is None:
-            new_extra = tuple((np.array(self.spacing) * (np.array(self.extra) - 1) /
-                           np.array(new_spacing) + 1).astype(int))
+            new_extra = tuple((np.round(np.array(self.spacing) * (np.array(self.extra) - 1) /
+                           np.array(new_spacing)) + 1).astype(int))
 
         if new_absorbing is None:
-            new_absorbing = tuple((np.array(self.spacing) * (np.array(self.absorbing) - 1) /
-                               np.array(new_spacing) + 1).astype(int))
+            new_absorbing = tuple((np.round(np.array(self.spacing) * (np.array(self.absorbing) - 1) /
+                               np.array(new_spacing)) + 1).astype(int))
 
         self._set_properties(shape=new_shape, spacing=new_spacing, extra=new_extra, absorbing=new_absorbing)
 
