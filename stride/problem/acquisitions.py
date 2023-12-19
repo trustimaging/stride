@@ -403,7 +403,7 @@ class Shot(ProblemBase):
             self._acquisitions.dump(*args, **kwargs)
 
     @staticmethod
-    def _traces(self, *args, **kwargs):
+    def _traces(*args, **kwargs):
         return Traces(*args, **kwargs)
 
     def __get_desc__(self, **kwargs):
