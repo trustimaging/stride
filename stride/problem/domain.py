@@ -79,7 +79,21 @@ class Space:
 
     def resample(self, new_spacing, new_extra=None, new_absorbing=None):
         '''
-        Resample space
+        Method updates Space to the properties of the domain after resampling.
+
+        Parameters
+        ----------
+        new_spacing: float or tuple(float)
+            The new grid spacing.
+        new_extra: int, optional
+            The shape of the boundary for the new grid. Defaults to rescaling existing extra.
+        new_absorbing: int, optional
+            The shape of the absorbing boundary for the new grid. Defaults to rescaling
+            existing absorbing.
+
+        Returns
+        -------
+
         '''
 
         if isinstance(new_spacing, float):
@@ -97,6 +111,31 @@ class Space:
                                np.array(new_spacing)) + 1).astype(int))
 
         self._set_properties(shape=new_shape, spacing=new_spacing, extra=new_extra, absorbing=new_absorbing)
+        self._clear_cache('mesh_indices')
+        self._clear_cache('extended_mesh_indices')
+        self._clear_cache('mesh')
+        self._clear_cache('extended_mesh')
+        self._clear_cache('indices')
+        self._clear_cache('extended_indices')
+        self._clear_cache('grid')
+        self._clear_cache('extended_grid')
+
+    def _clear_cache(self, cached_property):
+        '''
+        Clear a cached property
+
+        Parameters
+        ----------
+        cached_property: str
+            The name of the property to remove from the cache 
+
+        Returns
+        -------
+        '''
+        try:
+            del self.__dict__[cached_property]
+        except:
+            pass
 
     @property
     def inner(self):

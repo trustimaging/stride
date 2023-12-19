@@ -1503,35 +1503,21 @@ class Traces(StructuredData):
 
         return axis
 
-    def _resample(self, old_step, new_step, new_num, freq_niquist, len_hann=None, mute_start=None, **kwargs):
+    def _resample(self, old_step, new_step, new_num, **kwargs):
         '''
         In-place operation to resample a trace to a new time-spacing.
         Sinc interpolation is used.
 
         Parameters
         ----------
-        factor
-            The ratio dt_old/dt_new.
+        old_step: float
+            The original time step
+        new_step: float
+            The new time step
         new_num
             The length of the trace. 
-        freq_niquist
-            min(fs_old, fs_new), where fs is the sampling frequency.
-        len_hann
-            The length of the Hann window applied around the edge of the mute.
-        mute_start, default: None
-            The length of the starting mute in num_samples.
-        filter_type_antialias, default: cos
-            The method used by the anti-aliasing filter. Options are butterworth, fir & cos.
-        filter_order_antialias, default: 8
-            The order of the anti-aliasing filter.
-
-        Returns
-        -------
         '''
-
-        filter_type_antialias = kwargs.pop('filter_type_antialias', 'cos')
-        filter_order_antialias = kwargs.pop('filter_order_antialias', 2)
-
+        
         factor = old_step/new_step
         sr_orig = 1
         sr_new = factor

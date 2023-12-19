@@ -207,7 +207,6 @@ def lowpass_filter_hann(data, order, f_max, padding=0,
         data = np.pad(data, pad, mode='constant', constant_values=0.)
 
     win = scipy.signal.firwin(order, freq_max, pass_zero='lowpass', window='hann', scale=True)
-    # filt = scipy.signal.firwin(order, [f_min, f_max], pass_zero='bandpass', window=('kaiser', beta), scale=True)
 
     if zero_phase:
         method = scipy.signal.filtfilt

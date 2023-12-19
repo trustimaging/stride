@@ -125,16 +125,15 @@ class Problem(Gridded):
 
     def space_resample(self, new_spacing, new_extra=None, new_absorbing=None, **kwargs):
         '''
-        In-place operation to resample the wavelets and data into a grid with new
-        time-spacing. Sinc interpolation is used.
+        In-place operation to resample models onto a grid with new space-spacing.
 
         Parameters
         ----------
-        new_spacing : float
+        new_spacing: float or tuple(float)
             The space spacing for the interpolated grid.
-        new_extra : int
+        new_extra : int or tuple(int)
             The extra grid-points for the interpolated grid. Defaults to rescaling existing extra.
-        new_absorbing : float
+        new_absorbing : int or tuple(int)
             The absorbing grid-points for the interpolated grid. Defaults to rescaling existing absorbing.
 
         Returns
@@ -168,22 +167,18 @@ class Problem(Gridded):
         old_num = self.time.num
         self.grid.time.resample(new_step=new_step, new_num=new_num)
 
-        freq_niquist_hz = min(1/old_step, 1/new_step)  # anti-aliasing filter using max sampling frequency
-
-        for shot in self.acquisitions.shots:  # TODO, implement low-pass filtering with freq_max as pass band
+        for shot in self.acquisitions.shots:
 
             shot.wavelets = shot.wavelets._resample(  # resample wavelet
                                 old_step=old_step,
                                 new_step=new_step,
                                 new_num=new_num,
-                                freq_niquist=freq_niquist_hz*old_step,  # Convert [Hz] to dimensionless frequency
                                 **kwargs)
 
             shot.observed = shot.observed._resample(  # resample observed
                                 old_step=old_step,
                                 new_step=new_step,
                                 new_num=new_num,
-                                freq_niquist=freq_niquist_hz*old_step,
                                 **kwargs)
 
     def dump(self, *args, **kwargs):

@@ -402,11 +402,9 @@ class Shot(ProblemBase):
         else:
             self._acquisitions.dump(*args, **kwargs)
 
-    def _traces(self, name, transducer_ids, grid, shape=None):
-        if shape == None:
-            return Traces(name=name, transducer_ids=transducer_ids, grid=grid)
-        else:
-            return Traces(name=name, transducer_ids=transducer_ids, shape=shape, grid=grid)
+    @staticmethod
+    def _traces(self, *args, **kwargs):
+        return Traces(*args, **kwargs)
 
     def __get_desc__(self, **kwargs):
         description = {
