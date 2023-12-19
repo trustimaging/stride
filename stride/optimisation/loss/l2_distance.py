@@ -34,18 +34,18 @@ class L2DistanceLoss(Operator):
         self.residual = residual
 
         fun_data = 0.5 * np.sum(residual.data ** 2)
-        fun = FunctionalValue(fun_data, shot_id, residual)
+        fun = FunctionalValue(fun_data, shot_id, residual, **kwargs)
 
         return fun
 
     async def adjoint(self, d_fun, modelled, observed, **kwargs):
         grad_modelled = None
         if modelled.needs_grad:
-            grad_modelled = +np.asarray(d_fun) * self.residual
+            grad_modelled = +np.asarray(d_fun) * self.residual.copy(name='modelledresidual')
 
         grad_observed = None
         if observed.needs_grad:
-            grad_observed = -np.asarray(d_fun) * self.residual
+            grad_observed = -np.asarray(d_fun) * self.residual.copy(name='observedresidual')
 
         self.residual = None
 

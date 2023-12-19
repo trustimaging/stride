@@ -104,6 +104,24 @@ class PMLCorner(devito.SubDomain):
         return domain
 
 
+class PMLCentreCorner(devito.SubDomain):
+
+    def __init__(self, space_order, extra, *sides):
+        self.sides = sides
+        self.name = 'pml_centre_corner_' + '_'.join(sides)
+
+        super().__init__()
+
+        self.space_order = space_order
+        self.extra = extra
+
+    def define(self, dimensions):
+        domain = {dimension: (side, extra) if side != 'middle' else ('middle', extra, extra)
+                  for dimension, side, extra in zip(dimensions, self.sides, self.extra)}
+
+        return domain
+
+
 class PMLPartial(devito.SubDomain):
 
     def __init__(self, space_order, extra, dim, side):
@@ -234,6 +252,7 @@ class GridDevito(Gridded):
             self.pml_right = tuple()
             self.pml_centres = tuple()
             self.pml_partials = tuple()
+            self.pml_centre_corners = tuple()
 
             for dim in range(space.dim):
                 self.pml_left += (PMLSide(space_order, extra, dim, 'left'),)
@@ -242,6 +261,11 @@ class GridDevito(Gridded):
                                      PMLCentre(space_order, extra, dim, 'right'))
                 self.pml_partials += (PMLPartial(space_order, extra, dim, 'left'),
                                       PMLPartial(space_order, extra, dim, 'right'))
+
+                for sides in itertools.product(['left', 'right'], repeat=space.dim-1):
+                    sides = list(sides)
+                    sides.insert(dim, 'middle')
+                    self.pml_centre_corners += (PMLCentreCorner(space_order, extra, *sides),)
 
             self.pml_corners = [PMLCorner(space_order, extra, *sides)
                                 for sides in itertools.product(['left', 'right'],
@@ -252,7 +276,7 @@ class GridDevito(Gridded):
 
             grid_kwargs['subdomains'] = (self.full, self.interior,) + \
                                          self.pml + self.pml_left + self.pml_right + \
-                                         self.pml_centres + self.pml_corners
+                                         self.pml_centres + self.pml_corners + self.pml_centre_corners
 
         dimensions = None
         time_dimension = None
@@ -439,7 +463,8 @@ class GridDevito(Gridded):
         return fun
 
     @_cached
-    def undersampled_time_function(self, name, factor, bounds=None, space_order=None, time_order=None, **kwargs):
+    def undersampled_time_function(self, name, factor, time_bounds=None,
+                                   space_order=None, time_order=None, **kwargs):
         """
         Create an undersampled version of a Devito function with parameters provided.
 
@@ -449,7 +474,7 @@ class GridDevito(Gridded):
             Name of the function.
         factor : int
             Undersampling factor.
-        bounds : tuple, optional
+        time_bounds : tuple, optional
             Timestep bounds in which the function is sampled, defaults to all timesteps.
         space_order : int, optional
             Space order of the discretisation, defaults to the grid space order.
@@ -464,9 +489,9 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        bounds = bounds or (0, self.time.extended_num-1)
+        time_bounds = time_bounds or (0, self.time.extended_num-1)
 
-        time_under, buffer_size = self._time_undersampled('time_under', factor, bounds)
+        time_under, buffer_size = self._time_undersampled('time_under', factor, time_bounds)
 
         compression = kwargs.pop('compression', None)
 
@@ -481,35 +506,35 @@ class GridDevito(Gridded):
 
         space_dims = fun.dimensions[1:]
 
-        return fun.func(time_under - int(bounds[0] // factor), *space_dims)
+        return fun.func(time_under - int(time_bounds[0] // factor), *space_dims)
 
-    def undersampled_time_derivative(self, fun, factor, bounds=None, offset=None,
+    def undersampled_time_derivative(self, fun, factor, time_bounds=None, offset=None,
                                      deriv_order=1, fd_order=1):
         offset = offset or (0, 0)
 
-        time_under, buffer_size = self._time_undersampled('time_under_d', factor, bounds, offset)
+        time_under, buffer_size = self._time_undersampled('time_under_d', factor, time_bounds, offset)
 
         deriv = devito.Derivative(fun, (fun.dimensions[0], deriv_order), fd_order=fd_order)
         deriv = deriv.xreplace({fun.dimensions[0]: time_under})
 
         return deriv
 
-    def _time_undersampled(self, name, factor, bounds=None, offset=None):
-        bounds = bounds or (0, self.time.extended_num - 1)
+    def _time_undersampled(self, name, factor, time_bounds=None, offset=None):
+        time_bounds = time_bounds or (0, self.time.extended_num - 1)
         offset = offset or (0, 0)
 
         time_dim = self.devito_grid.time_dim
 
         condition = sympy.And(devito.symbolics.CondEq(time_dim % factor, 0),
-                              devito.Ge(time_dim, bounds[0] + offset[0]),
-                              devito.Le(time_dim, bounds[1] - offset[1]), )
+                              devito.Ge(time_dim, time_bounds[0] + offset[0]),
+                              devito.Le(time_dim, time_bounds[1] - offset[1]), )
 
         time_under = devito.ConditionalDimension(name,
                                                  parent=time_dim,
                                                  factor=factor,
                                                  condition=condition)
 
-        # buffer_size = (bounds[1] - bounds[0] + factor) // factor + 1
+        # buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
         # TODO Force larger buffer size to prevent devito issue
         buffer_size = (self.time.extended_num - 1 - 0 + factor) // factor + 1
 
@@ -548,6 +573,7 @@ class GridDevito(Gridded):
         """
         space_order = self.space_order if space_order is None else space_order
         time_order = self.time_order if time_order is None else time_order
+        time_bounds = kwargs.pop('time_bounds', (0, self.time.extended_num))
 
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
@@ -556,7 +582,7 @@ class GridDevito(Gridded):
                              grid=kwargs.pop('grid', self.devito_grid),
                              dimensions=kwargs.get('dimensions', (self.devito_grid.time_dim, p_dim)),
                              npoint=num,
-                             nt=kwargs.get('nt', self.time.extended_num),
+                             nt=time_bounds[1]-0,
                              space_order=space_order,
                              time_order=time_order,
                              dtype=kwargs.pop('dtype', self.dtype))
@@ -710,7 +736,7 @@ class GridDevito(Gridded):
             if collect:
                 devito.clear_cache(force=True)
 
-    def with_halo(self, data, value=None, time_dependent=False, is_vector=False):
+    def with_halo(self, data, value=None, time_dependent=False, is_vector=False, **kwargs):
         """
         Pad ndarray with appropriate halo given the grid space order.
 
@@ -733,7 +759,8 @@ class GridDevito(Gridded):
             Padded array.
 
         """
-        pad_widths = [[self.space_order, self.space_order]
+        space_order = kwargs.pop('space_order', self.space_order)
+        pad_widths = [[space_order, space_order]
                       for _ in self.space.shape]
 
         if time_dependent:
@@ -938,8 +965,6 @@ class OperatorDevito:
             time = self.grid.time_dim
 
             default_kwargs['dt'] = default_kwargs.get('dt', time.step)
-            default_kwargs['time_m'] = default_kwargs.get('time_m', 1)
-            default_kwargs['time_M'] = default_kwargs.get('time_M', time.extended_num-1)
 
             if self.grid.num_inner is not None:
                 default_kwargs['dt_inner'] = default_kwargs.get('dt_inner', time.step/self.grid.num_inner)

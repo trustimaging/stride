@@ -26,8 +26,8 @@ class FunctionalValue(Scalar):
 
         self.shot_id = shot_id
         self.fun_value = fun_value
-        # TODO Residuals use space that we don't always need
-        # self.residuals = residuals
+        if kwargs.pop('keep_residual', False):
+            self.residuals = residuals
 
     def __repr__(self):
         return 'loss %e for shot %d' % (self.fun_value, self.shot_id)

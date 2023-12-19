@@ -1,6 +1,7 @@
 
 from stride.utils import filters
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -72,7 +73,7 @@ class FilterTraces(Operator):
         f_min_dim_less = relaxation*f_min*time.step if f_min is not None else 0
         f_max_dim_less = 1/relaxation*f_max*time.step if f_max is not None else 0
 
-        out_traces = traces.alike(name='filtered_%s' % traces.name)
+        out_traces = traces.alike(name=name_from_op_name(self, traces))
 
         if f_min is None and f_max is not None:
             pass_type = 'lowpass'

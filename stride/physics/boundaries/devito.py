@@ -59,7 +59,7 @@ class SpongeBoundary2(Boundary):
 
         self.damp = damp
 
-        u_dt = field.dt if direction == 'forward' else field.dt.T
+        u_dt = field.dtc if direction == 'forward' else field.dtc.T
 
         damping_term = 2*damp*u_dt + damp**2*field
 
@@ -95,7 +95,7 @@ class ComplexFrequencyShiftPML2(Boundary):
         for dim_i in range(space.dim):
             dim = dimensions[dim_i]
 
-            # Create dumping functions
+            # Create damping functions
             sigma_i = self._grid.function('sigma_%d' % dim_i, space_order=2,
                                           dimensions=(dim,), shape=(shape[dim_i],))
             alpha_i = self._grid.function('alpha_%d' % dim_i, space_order=2,

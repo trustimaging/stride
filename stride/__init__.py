@@ -133,12 +133,14 @@ async def forward(problem, pde, *args, **kwargs):
             else:
                 raise ValueError('Unknown platform %s' % platform)
 
+        # run PDE
         traces = await pde(wavelets, *published_args,
                            problem=sub_problem,
                            runtime=worker, **_kwargs).result()
 
         logger.perf('Shot %d retrieved' % sub_problem.shot_id)
 
+        # save data
         shot = problem.acquisitions.get(shot_id)
         shot.observed.data[:] = traces.data
 
@@ -298,26 +300,31 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             # pre-process wavelets and observed traces
             wavelets = process_wavelets(wavelets,
-                                        problem=sub_problem, runtime=worker, **_kwargs)
+                                        iteration=iteration, problem=sub_problem,
+                                        runtime=worker, **_kwargs)
             await wavelets.init_future
             observed = process_observed(observed,
-                                        problem=sub_problem, runtime=worker, **_kwargs)
+                                        iteration=iteration, problem=sub_problem,
+                                        runtime=worker, **_kwargs)
             await observed.init_future
 
             # run PDE
             modelled = pde(wavelets, *published_args,
-                           problem=sub_problem, runtime=worker, **_kwargs)
+                           iteration=iteration, problem=sub_problem,
+                           runtime=worker, **_kwargs)
             await modelled.init_future
 
             # post-process modelled and observed traces
             traces = process_traces(modelled, observed,
                                     scale_to=sub_problem.shot.observed,
-                                    problem=sub_problem, runtime=worker, **_kwargs)
+                                    iteration=iteration, problem=sub_problem,
+                                    runtime=worker, **_kwargs)
             await traces.init_future
 
             # calculate loss
             fun = await loss(traces.outputs[0], traces.outputs[1],
-                             problem=sub_problem, runtime=worker, **_kwargs).result()
+                             iteration=iteration, problem=sub_problem,
+                             runtime=worker, **_kwargs).result()
 
             iteration.add_fun(fun)
             logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
@@ -332,7 +339,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         await loop
 
-        await optimiser.step()
+        await optimiser.step(iteration=iteration, problem=problem,
+                             **kwargs)
 
         if dump:
             optimiser.variable.dump(path=problem.output_folder,

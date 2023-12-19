@@ -1,6 +1,7 @@
 
 import scipy.ndimage
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -23,7 +24,7 @@ class SmoothField(Operator):
     def forward(self, field, **kwargs):
         sigma = kwargs.pop('sigma', self.sigma)
 
-        out_field = field.alike(name='smoothed_%s' % field.name)
+        out_field = field.alike(name=name_from_op_name(self, field))
 
         out_field.extended_data[:] = scipy.ndimage.gaussian_filter(field.extended_data,
                                                                    sigma=sigma, mode='nearest')

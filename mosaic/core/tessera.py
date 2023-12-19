@@ -12,6 +12,7 @@ import cloudpickle
 from cached_property import cached_property
 
 import mosaic
+from .. import types
 from .task import TaskProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
@@ -1347,3 +1348,7 @@ def tessera(*args, **cmd_config):
                          'or with configuration options within brackets.')
 
     return tessera_wrapper
+
+
+types.remote_types += (Tessera,)
+types.proxy_types += (TesseraProxy, ArrayProxy)

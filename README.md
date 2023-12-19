@@ -147,7 +147,8 @@ await pde(..., platform="nvidia-acc")
 ```
 
 The Devito library uses OpenACC to generate GPU code. The recommended way to access the necessary 
-compilers is to install the [NVIDIA HPC SDK](https://developer.nvidia.com/nvidia-hpc-sdk-downloads).
+compilers is to install the [NVIDIA HPC SDK](https://developer.nvidia.com/nvidia-hpc-sdk-downloads) **before** creating
+the Stride environment.
 
 ```sh
 wget https://developer.download.nvidia.com/hpc-sdk/22.11/nvhpc_2022_2211_Linux_x86_64_cuda_multi.tar.gz
@@ -158,13 +159,18 @@ sudo ./install
 
 During the installation, select the ``single system install`` option.
 
-Once the installation is done, you can add the following lines to your ``~/.bashrc``:
+Once the installation is done, add the following lines to your ``~/.bashrc``:
 
 ```sh
-export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/compilers/bin/:$PATH
-export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/compilers/lib/:$LD_LIBRARY_PATH
-export PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/comm_libs/mpi/bin/:$PATH
-export LD_LIBRARY_PATH=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11/comm_libs/mpi/lib/:$LD_LIBRARY_PATH
+export HPCSDK_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11
+export CUDA_HOME=$HPCSDK_HOME/cuda
+export CUDA_ROOT=$HPCSDK_HOME/cuda/bin
+export PATH=$HPCSDK_HOME/compilers/bin/:$PATH
+export LD_LIBRARY_PATH=$HPCSDK_HOME/compilers/lib/:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$HPCSDK_HOME/cuda/lib/:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$HPCSDK_HOME/cuda/lib64/:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$HPCSDK_HOME/math_libs/lib64/:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$HPCSDK_CUPTI/lib64/:$LD_LIBRARY_PATH
 ```
 
 ## Citing Stride

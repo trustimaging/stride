@@ -1,6 +1,7 @@
 
 import numpy as np
 
+from .utils import name_from_op_name
 from ....core import Operator
 from ....utils import filters
 
@@ -21,7 +22,7 @@ class MuteTraces(Operator):
 
     def forward(self, modelled, observed, **kwargs):
 
-        out_traces = modelled.alike(name='muted_%s' % modelled.name)
+        out_traces = modelled.alike(name=name_from_op_name(self, modelled))
 
         data = modelled.extended_data.copy()
 

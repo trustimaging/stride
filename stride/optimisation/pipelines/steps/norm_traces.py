@@ -1,6 +1,7 @@
 
 import numpy as np
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -60,7 +61,7 @@ class NormPerShot(Norm):
     def _apply(self, traces, **kwargs):
         norm_value = self._norm(traces, **kwargs) + 1e-31
 
-        out_traces = traces.alike(name='normed_%s' % traces.name)
+        out_traces = traces.alike(name=name_from_op_name(self, traces))
         out_traces.extended_data[:] = traces.extended_data / norm_value
 
         return out_traces
@@ -76,7 +77,7 @@ class NormPerTrace(Norm):
     """
 
     def _apply(self, traces, **kwargs):
-        out_traces = traces.alike(name='normed_%s' % traces.name)
+        out_traces = traces.alike(name=name_from_op_name(self, traces))
 
         for index in range(traces.extended_shape[0]):
             norm_value = np.sqrt(np.sum(traces.extended_data[index]**2)) + 1e-31

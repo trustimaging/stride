@@ -1,6 +1,7 @@
 
 import numpy as np
 
+from .utils import name_from_op_name
 from ....core import Operator
 
 
@@ -79,7 +80,7 @@ class ScalePerShot(Scale):
     def _apply(self, traces, scale_to, relative_scale, **kwargs):
         norm_value = self._norm(scale_to, **kwargs)
 
-        out_traces = traces.alike(name='scaled_%s' % traces.name)
+        out_traces = traces.alike(name=name_from_op_name(self, traces))
         out_traces.extended_data[:] = traces.extended_data * norm_value / relative_scale
 
         return out_traces

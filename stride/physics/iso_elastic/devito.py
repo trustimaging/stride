@@ -3,11 +3,10 @@ import numpy as np
 import scipy.signal
 
 import mosaic
-from mosaic.utils import camel_case
 
 from ..common.devito import GridDevito, OperatorDevito, devito
 from ..problem_type import ProblemTypeBase
-from .. import boundaries
+from ..boundaries import boundaries_registry
 
 
 __all__ = ['IsoElasticDevito']
@@ -54,7 +53,7 @@ class IsoElasticDevito(ProblemTypeBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.boundary_type = 'SpongeBoundary1'
+        self.boundary_type = 'sponge_boundary_1'
         self.interpolation_type = 'linear'
 
         self.wavefield = None
@@ -118,8 +117,8 @@ class IsoElasticDevito(ProblemTypeBase):
                                                      coordinates=shot.source_coordinates,
                                                      interpolation_type=self.interpolation_type)
             rec_tau = self.dev_grid.sparse_time_function('rec_tau', num=num_receivers,
-                                                     coordinates=shot.receiver_coordinates,
-                                                     interpolation_type=self.interpolation_type)
+                                                         coordinates=shot.receiver_coordinates,
+                                                         interpolation_type=self.interpolation_type)
 
             step = self.time.step
             # Create stencil
@@ -130,8 +129,7 @@ class IsoElasticDevito(ProblemTypeBase):
             tau = self.dev_grid.tensor_time_function('tau')
 
             # Absorbing boundaries
-            boundaries_module = boundaries.devito
-            self.boundary = getattr(boundaries_module, camel_case(self.boundary_type))(self.dev_grid)
+            self.boundary = boundaries_registry[self.boundary_type](self.dev_grid)
             _, _, _ = self.boundary.apply(vel, vp.extended_data)
 
             # Define the source injection function using a pressure disturbance

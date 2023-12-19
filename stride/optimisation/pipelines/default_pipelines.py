@@ -30,6 +30,9 @@ class ProcessWavelets(Pipeline):
         if kwargs.pop('filter_traces', True):
             steps.append('filter_traces')
 
+        if kwargs.pop('resonance_filter', False):
+            steps.append(('resonance_filter', False))
+
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
 
@@ -46,6 +49,7 @@ class ProcessObserved(ProcessWavelets):
 
     def __init__(self, steps=None, no_grad=False, **kwargs):
         steps = steps or []
+        kwargs['resonance_filter'] = False
         super().__init__(steps, no_grad=no_grad, **kwargs)
 
 
@@ -76,6 +80,9 @@ class ProcessTraces(Pipeline):
 
         if kwargs.pop('filter_traces', True):
             steps.append('filter_traces')
+
+        if kwargs.pop('time_weighting', True):
+            steps.append(('time_weighting', False))
 
         if kwargs.pop('agc', False):
             steps.append(('agc', False))
