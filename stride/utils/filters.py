@@ -173,7 +173,7 @@ def highpass_filter_butterworth(data, f_min, padding=0, order=8,
     return filtered
 
 
-def lowpass_filter_hann(data, order, f_max, padding=0,
+def lowpass_filter_hann(data, order, freq_max, padding=0,
                         zero_phase=True, adjoint=False, axis=-1, **kwargs):
     """
     Apply a Hann lowpass filter using cascaded second-order sections.
@@ -182,17 +182,17 @@ def lowpass_filter_hann(data, order, f_max, padding=0,
     ----------
     data : 2-dimensional array
         Data to apply the filter to, with shape (number_of_traces, number_of_timesteps)
-    width : int
-        Width of the Hann window
+    order : int
+        Order of the filter.
+    freq_max : float
+        Max frequency of Hann filter.
     padding : int, optional
         Padding to apply before AND after the traces to compensate for the filtering, defaults to 0.
-    order : int, optional
-        Order of the filter, defaults to 8.
     zero_phase : bool, optional
         Whether the filter should be zero phase, defaults to True.
     adjoint : bool, optional
         Whether to run the adjoint of the filter, defaults to False.
-    axis : int, optional
+    axis : int, not implemented yet
         Axis on which to perform the filtering, defaults to -1
 
     Returns

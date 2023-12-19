@@ -21,7 +21,6 @@ from mosaic.comms.compression import maybe_compress, decompress
 from .base import GriddedSaved
 from ..core import Variable
 from .. import plotting
-from ..utils import filters
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
@@ -917,7 +916,7 @@ class ScalarField(StructuredData):
         ----------
         old_spacing: float
             The old spacing.
-        new_spacing: float 
+        new_spacing: float
             The new spacing.
         order : int, optional
             Order of the interplation, default is 3.
@@ -939,7 +938,7 @@ class ScalarField(StructuredData):
         else:
             interp = self._resample_data(self.data, old_spacing, new_spacing, **kwargs)
 
-        self._init_shape()  # NOTE this is an in-place operation, unlike time resample 
+        self._init_shape()  # NOTE this is an in-place operation, unlike time resample
         self._data = self.pad_data(interp)
 
     def _resample_data(self, data, old_spacing, new_spacing, **kwargs):
@@ -1511,13 +1510,13 @@ class Traces(StructuredData):
         Parameters
         ----------
         old_step: float
-            The original time step
+            The original time step.
         new_step: float
-            The new time step
+            The new time step.
         new_num
-            The length of the trace. 
+            The length of the trace.
         '''
-        
+
         factor = old_step/new_step
         sr_orig = 1
         sr_new = factor

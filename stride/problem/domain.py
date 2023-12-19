@@ -127,7 +127,7 @@ class Space:
         Parameters
         ----------
         cached_property: str
-            The name of the property to remove from the cache 
+            The name of the property to remove from the cache.
 
         Returns
         -------

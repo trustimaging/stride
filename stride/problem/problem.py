@@ -142,7 +142,7 @@ class Problem(Gridded):
         old_spacing = self.grid.space.spacing
         self.grid.space.resample(new_spacing=new_spacing)
         new_spacing = self.grid.space.spacing
-        
+
         self.medium.vp._resample(old_spacing, new_spacing, **kwargs)  # NOTE this is in-place
         return self.medium.vp
 
