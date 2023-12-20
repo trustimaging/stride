@@ -152,6 +152,29 @@ class Iteration:
             fun = FunctionalValue(fun_desc.fun_value, fun_desc.shot_id)
             self._fun[fun.shot_id] = fun
 
+    _serialisation_attrs = ['id', 'abs_id', '_submitted_shots', '_completed_shots', '_fun']
+
+    def _serialisation_helper(self):
+        state = {}
+
+        for attr in self._serialisation_attrs:
+            state[attr] = getattr(self, attr)
+
+        return state
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        instance = cls.__new__(cls)
+
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+
+        return instance
+
+    def __reduce__(self):
+        state = self._serialisation_helper()
+        return self._deserialisation_helper, (state,)
+
 
 class Block:
     """

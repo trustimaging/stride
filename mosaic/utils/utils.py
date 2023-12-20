@@ -52,7 +52,6 @@ def sizeof(obj, seen=None):
             size += sum([sizeof(k, seen) for k in obj.keys()])
         elif hasattr(obj, '__dict__'):
             size += sizeof(obj.__dict__, seen)
-
         elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
             try:
                 size += sum([sizeof(i, seen) for i in obj])
