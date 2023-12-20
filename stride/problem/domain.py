@@ -99,8 +99,15 @@ class Space:
         if isinstance(new_spacing, float):
             new_spacing = (new_spacing,)*self.dim
 
-        new_shape = tuple((np.round(np.array(self.size) / np.array(new_spacing)) + 1).astype(int))
-        # TODO there is possibly a rounding error
+        # NOTE you must be careful with numerical errors calculating new_shape, using:
+        # new_shape = tuple((np.round(np.array(self.size) / np.array(new_spacing)) + 1).astype(int))
+        # ... is not compatible with the method in scipy.ndimage.zoom 
+        old_spacing = self.spacing
+        old_shape = self.shape
+        resampling_factors = tuple([dx_old/dx_new
+                for dx_old, dx_new in zip(old_spacing, new_spacing)])
+        new_shape = tuple([int(round(n * m))
+                for n, m in zip(old_shape, resampling_factors)])  # method matches scipy zoom
 
         if new_extra is None:
             new_extra = tuple((np.round(np.array(self.spacing) * (np.array(self.extra) - 1) /
