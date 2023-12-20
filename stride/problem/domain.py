@@ -101,7 +101,7 @@ class Space:
 
         # NOTE you must be careful with numerical errors calculating new_shape, using:
         # new_shape = tuple((np.round(np.array(self.size) / np.array(new_spacing)) + 1).astype(int))
-        # ... is not compatible with the method in scipy.ndimage.zoom 
+        # ... is not compatible with the method in scipy.ndimage.zoom
         old_spacing = self.spacing
         old_shape = self.shape
         resampling_factors = tuple([dx_old/dx_new
