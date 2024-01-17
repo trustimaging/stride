@@ -37,6 +37,8 @@ class LocalOptimiser(ABC):
         self.dump_prec = kwargs.pop('dump_prec', False)
         self._process_grad = kwargs.pop('process_grad', ProcessGlobalGradient(**kwargs))
         self._process_model = kwargs.pop('process_model', ProcessModelIteration(**kwargs))
+        self.reset_block = kwargs.pop('reset_block', False)
+        self.reset_iteration = kwargs.pop('reset_iteration', False)
 
     def clear_grad(self):
         """

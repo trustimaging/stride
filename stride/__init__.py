@@ -242,8 +242,14 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     problem.acquisitions.reset_selection()
 
+    if optimiser.reset_block:
+        optimiser.reset()
+
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         optimiser.clear_grad()
+
+        if optimiser.reset_iteration:
+            optimiser.reset()
 
         published_args = [runtime.put(each, publish=True) for each in args]
         published_args = await asyncio.gather(*published_args)
