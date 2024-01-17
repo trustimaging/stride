@@ -27,12 +27,12 @@ class SmoothField(Operator):
 
         sigma = kwargs.pop('smooth_sigma', self.sigma)
         if not np.iterable(sigma):
-            sigma = (sigma,) * space.dim
+            sigma = (sigma,) * space.dim if space is not None else (sigma,)
 
         if all(s <= 0 for s in sigma):
             return field
 
-        axes_offset = field.ndim - space.dim
+        axes_offset = field.ndim - space.dim if space is not None else 0
         axes = tuple(a + axes_offset for a in range(space.dim))
 
         out_field = field.alike(name=name_from_op_name(self, field))
