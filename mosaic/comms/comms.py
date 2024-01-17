@@ -501,7 +501,10 @@ class InboundConnection(Connection):
     def _process_rcv(self, multipart_msg):
         sender_id = multipart_msg[0]
         multipart_msg = multipart_msg[2:]
-        num_parts = int(multipart_msg[0])
+        try:
+            num_parts = int(multipart_msg[0])
+        except ValueError:
+            raise ValueError('Message from %s cannot be decoded!' % bytes(sender_id.buffer).decode())
 
         if len(multipart_msg) != num_parts:
             raise ValueError('Wrong number of parts')

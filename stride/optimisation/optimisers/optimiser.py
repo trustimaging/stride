@@ -100,6 +100,7 @@ class LocalOptimiser(ABC):
                 if dump_grad and problem is not None:
                     self.variable.grad.dump(path=problem.output_folder,
                                             project_name=problem.name,
+                                            parameter='raw_%s' % self.variable.grad.name,
                                             version=iteration.abs_id+1)
 
                 if dump_prec and self.variable.grad.prec is not None and problem is not None:
@@ -109,13 +110,18 @@ class LocalOptimiser(ABC):
 
                 grad = self.variable.process_grad(**kwargs)
 
+                if dump_grad and problem is not None:
+                    grad.dump(path=problem.output_folder,
+                              project_name=problem.name,
+                              version=iteration.abs_id+1)
+
             min_dir = np.min(grad.data)
             max_dir = np.max(grad.data)
 
             logger.perf('\t grad before processing in range [%e, %e]' %
                         (min_dir, max_dir))
 
-            processed_grad = await self._process_grad(grad, **kwargs)
+            processed_grad = await self._process_grad(grad, variable=self.variable, **kwargs)
 
         min_dir = np.min(processed_grad.data)
         max_dir = np.max(processed_grad.data)

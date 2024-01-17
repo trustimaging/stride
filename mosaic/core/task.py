@@ -1116,6 +1116,12 @@ class TaskOutput(TaskOutputBase):
                 return 0
             else:
                 return sizeof(self._result)
+        elif hasattr(self._task_proxy, '_retrieved'):
+            if pending:
+                return 0
+            else:
+                result = self._select_result(self._task_proxy._retrieved)
+                return sizeof(result)
 
         result = self._select_result(self._task_proxy._result)
         return await remote_sizeof(result, pending=pending)
