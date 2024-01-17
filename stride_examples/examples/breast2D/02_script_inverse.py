@@ -1,6 +1,5 @@
 
 from stride import *
-# from stride_private import *
 
 
 async def main(runtime):
@@ -69,16 +68,16 @@ async def main(runtime):
     max_freqs = [0.3e6, 0.4e6, 0.5e6, 0.6e6]
 
     num_blocks = len(max_freqs)
-    num_iters = 1
+    num_iters = 8
 
     for block, freq in optimisation_loop.blocks(num_blocks, max_freqs):
         await adjoint(problem, pde, loss,
                       optimisation_loop, optimiser, vp,
                       num_iters=num_iters,
-                      select_shots=dict(num=16, randomly=False),
+                      select_shots=dict(num=16, randomly=True),
                       f_max=freq, max_freqs=max_freqs)
 
-        vp.plot()
+    vp.plot()
 
 if __name__ == '__main__':
     mosaic.run(main)

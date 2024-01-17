@@ -1032,18 +1032,22 @@ class Runtime(BaseRPC):
 
             return warehouse_obj
 
-    async def get(self, uid):
+    async def get(self, uid, cache=True):
         """
         Retrieve an object from the warehouse.
 
         Parameters
         ----------
         uid
+        cache
 
         Returns
         -------
 
         """
+        if not cache:
+            return await self._local_warehouse.get_remote(uid=uid, reply=True)
+
         obj_uid = uid.uid if hasattr(uid, 'uid') else uid
 
         while obj_uid in self._warehouse_pending:
