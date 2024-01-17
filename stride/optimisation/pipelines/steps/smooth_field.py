@@ -24,16 +24,17 @@ class SmoothField(Operator):
 
     def forward(self, field, **kwargs):
         space = field.space
+        dim = space.dim if space is not None else field.ndim
 
         sigma = kwargs.pop('smooth_sigma', self.sigma)
         if not np.iterable(sigma):
-            sigma = (sigma,) * space.dim if space is not None else (sigma,)
+            sigma = (sigma,) * dim
 
         if all(s <= 0 for s in sigma):
             return field
 
-        axes_offset = field.ndim - space.dim if space is not None else 0
-        axes = tuple(a + axes_offset for a in range(space.dim))
+        axes_offset = field.ndim - dim
+        axes = tuple(a + axes_offset for a in range(dim))
 
         out_field = field.alike(name=name_from_op_name(self, field))
         output = scipy.ndimage.gaussian_filter(field.extended_data,
