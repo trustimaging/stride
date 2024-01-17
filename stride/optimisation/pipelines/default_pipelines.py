@@ -22,7 +22,7 @@ class ProcessWavelets(Pipeline):
 
     """
 
-    def __init__(self, steps=None, no_grad=False, **kwargs):
+    def __init__(self, steps=None, **kwargs):
         steps = steps or []
 
         if kwargs.pop('check_traces', True):
@@ -34,7 +34,7 @@ class ProcessWavelets(Pipeline):
         if kwargs.pop('resonance_filter', False):
             steps.append(('resonance_filter', False))
 
-        super().__init__(steps, no_grad=no_grad, **kwargs)
+        super().__init__(steps, **kwargs)
 
 
 @mosaic.tessera
@@ -49,10 +49,10 @@ class ProcessObserved(ProcessWavelets):
 
     """
 
-    def __init__(self, steps=None, no_grad=False, **kwargs):
+    def __init__(self, steps=None, **kwargs):
         steps = steps or []
         kwargs['resonance_filter'] = False
-        super().__init__(steps, no_grad=no_grad, **kwargs)
+        super().__init__(steps, **kwargs)
 
 
 @mosaic.tessera
@@ -67,13 +67,13 @@ class ProcessWaveletsObserved(Pipeline):
 
     """
 
-    def __init__(self, steps=None, no_grad=False, **kwargs):
+    def __init__(self, steps=None, **kwargs):
         steps = steps or []
 
         if kwargs.pop('differentiate_traces', True):
             steps.append(('differentiate_traces', False))
 
-        super().__init__(steps, no_grad=no_grad, **kwargs)
+        super().__init__(steps, **kwargs)
 
 
 @mosaic.tessera
@@ -93,7 +93,7 @@ class ProcessTraces(Pipeline):
 
     """
 
-    def __init__(self, steps=None, no_grad=False, **kwargs):
+    def __init__(self, steps=None, **kwargs):
         steps = steps or []
 
         if kwargs.pop('check_traces', True):
@@ -135,7 +135,7 @@ class ProcessTraces(Pipeline):
         if kwargs.pop('time_weighting', True):
             steps.append(('time_weighting', False))
 
-        super().__init__(steps, no_grad=no_grad, **kwargs)
+        super().__init__(steps, **kwargs)
 
 
 @mosaic.tessera
@@ -151,7 +151,7 @@ class ProcessGlobalGradient(Pipeline):
 
     """
 
-    def __init__(self, steps=None, no_grad=True, **kwargs):
+    def __init__(self, steps=None, **kwargs):
         steps = steps or []
 
         mask = kwargs.pop('mask', True)
@@ -166,7 +166,7 @@ class ProcessGlobalGradient(Pipeline):
         if norm:
             steps.append('norm_field')
 
-        super().__init__(steps, no_grad=no_grad, **kwargs)
+        super().__init__(steps, **kwargs)
 
 
 @mosaic.tessera
@@ -180,8 +180,8 @@ class ProcessModelIteration(Pipeline):
 
     """
 
-    def __init__(self, steps=None, no_grad=True, **kwargs):
+    def __init__(self, steps=None, **kwargs):
         steps = steps or []
         steps.append('clip')
 
-        super().__init__(steps, no_grad=no_grad, **kwargs)
+        super().__init__(steps, **kwargs)
