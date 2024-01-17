@@ -86,7 +86,7 @@ async def main(runtime):
                       optimisation_loop, optimiser, vp,
                       num_iters=num_iters,
                       select_shots=dict(num=16, randomly=True),
-                      f_min=0.05e6, f_max=freq)
+                      f_max=freq, max_freqs=max_freqs)
 
     vp.plot()
 

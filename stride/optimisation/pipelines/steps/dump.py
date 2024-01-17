@@ -1,4 +1,5 @@
 
+import mosaic
 from mosaic.utils import snake_case
 
 from ....core import Operator
@@ -49,13 +50,21 @@ class Dump(Operator):
         shot_id = problem.shot_id if hasattr(problem, 'shot_id') else None
         prev_step = kwargs.pop('prev_step', None)
         parameter = data.name.split('_')[-1].strip('_')
+        info = 'parameter %s' % parameter
         if prev_step:
             prev_step = snake_case(prev_step.__class__.__name__)
             parameter = '%s_%s' % (prev_step, parameter)
+            info = '%s after step %s' % (info, prev_step)
         if prefix:
             parameter = '%s_%s' % (prefix, parameter)
+            info = '%s %s' % (prefix, info)
+        info = 'Dumping %s' % info
         if shot_id is not None:
             parameter = '%s-Shot%05d' % (parameter, shot_id)
+            info = '(ShotID %d) %s' % (shot_id, info)
+
+        logger = mosaic.logger()
+        logger.perf(info)
 
         data.dump(path=problem.output_folder,
                   project_name=problem.name,

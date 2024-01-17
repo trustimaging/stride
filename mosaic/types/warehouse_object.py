@@ -94,7 +94,7 @@ class WarehouseObject:
         Pull the underlying value from the warehouse.
 
         """
-        return await self.runtime.get(self)
+        return await self.runtime.get(self, cache=False)
 
     async def result(self):
         """

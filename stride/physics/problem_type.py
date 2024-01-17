@@ -78,8 +78,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         self.logger.perf('%sRunning state equation for shot' % pre_str)
         await self.run_forward(*args, **kwargs)
 
-        self.logger.perf('%sCompleted state equation run for shot' % pre_str)
+        self.logger.perf('%sCompleting state equation run for shot' % pre_str)
         output = await self.after_forward(*args, **kwargs)
+        self.logger.perf('%sCompleted state equation run for shot' % pre_str)
 
         return output
 
@@ -105,8 +106,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         self.logger.perf('%sRunning adjoint equation for shot' % pre_str)
         await self.run_adjoint(*args, **kwargs)
 
-        self.logger.perf('%sCompleted adjoint equation run for shot' % pre_str)
+        self.logger.perf('%sCompleting adjoint equation run for shot' % pre_str)
         output = await self.after_adjoint(*args, **kwargs)
+        self.logger.perf('%sCompleted adjoint equation run for shot' % pre_str)
 
         return output
 

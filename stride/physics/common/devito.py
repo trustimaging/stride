@@ -230,6 +230,7 @@ class GridDevito(Gridded):
         self.time_order = time_order
 
         self.time_dim = time_dim if time_dim is not None else self.time
+        self._time_under_count = 0
 
         grid_kwargs = dict()
 
@@ -299,6 +300,32 @@ class GridDevito(Gridded):
                                        time_dimension=time_dimension,
                                        dtype=self.dtype,
                                        **grid_kwargs)
+
+    @_cached
+    def symbol(self, name, dtype=np.float32, **kwargs):
+        """
+        Create a Devito Function with parameters provided.
+
+        Parameters
+        ----------
+        name : str
+            Name of the function.
+        dtype : data-type, optional
+            Data type for the symbol, defaults to float32.
+        kwargs
+            Additional arguments for the Devito constructor.
+
+        Returns
+        -------
+        devito.Symbol
+            Generated symobl.
+
+        """
+        fun = devito.Symbol(name=name,
+                            dtype=dtype,
+                            **kwargs)
+
+        return fun
 
     @_cached
     def function(self, name, space_order=None, **kwargs):
@@ -529,10 +556,11 @@ class GridDevito(Gridded):
                               devito.Ge(time_dim, time_bounds[0] + offset[0]),
                               devito.Le(time_dim, time_bounds[1] - offset[1]), )
 
-        time_under = devito.ConditionalDimension(name,
+        time_under = devito.ConditionalDimension('%s%d' % (name, self._time_under_count),
                                                  parent=time_dim,
                                                  factor=factor,
                                                  condition=condition)
+        self._time_under_count += 1
 
         # buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
         # TODO Force larger buffer size to prevent devito issue
@@ -574,6 +602,7 @@ class GridDevito(Gridded):
         space_order = self.space_order if space_order is None else space_order
         time_order = self.time_order if time_order is None else time_order
         time_bounds = kwargs.pop('time_bounds', (0, self.time.extended_num))
+        smooth = kwargs.pop('smooth', False)
 
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
@@ -594,9 +623,9 @@ class GridDevito(Gridded):
         elif interpolation_type == 'hicks':
             r = sparse_kwargs.pop('r', 7)
 
-            reference_gridpoints, coefficients = self._calculate_hicks(coordinates)
+            reference_gridpoints, coefficients = self._calculate_hicks(coordinates, smooth=smooth)
 
-            fun = devito.PrecomputedSparseTimeFunction(r=r,
+            fun = devito.PrecomputedSparseTimeFunction(r=r+1,
                                                        gridpoints=reference_gridpoints,
                                                        interpolation_coeffs=coefficients,
                                                        **sparse_kwargs)
@@ -774,12 +803,12 @@ class GridDevito(Gridded):
         else:
             return np.pad(data, pad_widths, mode='constant', constant_values=value)
 
-    def _calculate_hicks(self, coordinates):
+    def _calculate_hicks(self, coordinates, smooth=False):
         space = self.space
 
         # Calculate the reference gridpoints and offsets
         grid_coordinates = (coordinates - np.array(space.pml_origin)) / np.array(space.spacing)
-        reference_gridpoints = np.round(grid_coordinates).astype(np.int32)
+        reference_gridpoints = np.floor(grid_coordinates).astype(np.int32)
         offsets = grid_coordinates - reference_gridpoints
 
         # Pre-calculate stuff
@@ -791,20 +820,32 @@ class GridDevito(Gridded):
         # Calculate coefficients
         r = 2*kaiser_half_width+1
         num = coordinates.shape[0]
-        coefficients = np.zeros((num, space.dim, r))
+        coefficients = np.zeros((num, space.dim, r+1))
 
         for grid_point in range(-kaiser_half_width, kaiser_half_width+1):
             index = kaiser_half_width + grid_point
 
-            x = grid_point + offsets
+            x = offsets - grid_point
 
             weights = (x / kaiser_extended_width)**2
             weights[weights > 1] = 1
-            weights = scipy.special.iv(0, kaiser_b * np.sqrt(1 - weights)) / kaiser_den
+            b_weights = scipy.special.iv(0, kaiser_b * np.sqrt(1 - weights)) / kaiser_den
 
-            coefficients[:, :, index] = np.sinc(x) * weights
+            coefficients[:, :, index] = np.sinc(x) * b_weights
 
-        return reference_gridpoints - kaiser_half_width, coefficients
+        # Smooth if needed
+        if smooth:
+            n = kaiser_half_width-1
+            a = coefficients[:, :, n]
+            b = coefficients[:, :, n+1]
+            c = coefficients[:, :, n+2]
+            coefficients[:, :, n-1] = coefficients[:, :, n-1] + a*0.01
+            coefficients[:, :, n] = a*0.98 + b*0.03
+            coefficients[:, :, n+1] = b*0.94 + (a+c)*0.01
+            coefficients[:, :, n+2] = c*0.98 + b*0.03
+            coefficients[:, :, n+3] = coefficients[:, :, n+3] + c*0.01
+
+        return reference_gridpoints, coefficients
 
 
 class OperatorDevito:

@@ -228,6 +228,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                               filter_traces=filter_wavelets,
                                               filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
+    process_wavelets_observed = ProcessWaveletsObserved.remote(f_min=f_min, f_max=f_max,
+                                                               filter_traces=filter_wavelets,
+                                                               len=runtime.num_workers, **kwargs)
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
                                           filter_traces=filter_traces,
                                           filter_relaxation=filter_traces_relaxation,
@@ -307,6 +310,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
             await observed.init_future
+            processed = process_wavelets_observed(wavelets, observed,
+                                                  iteration=iteration, problem=sub_problem,
+                                                  runtime=worker, **_kwargs)
+            await processed.init_future
+            wavelets = processed.outputs[0]
+            observed = processed.outputs[1]
 
             # run PDE
             modelled = pde(wavelets, *published_args,
@@ -320,9 +329,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                     iteration=iteration, problem=sub_problem,
                                     runtime=worker, **_kwargs)
             await traces.init_future
+            modelled = traces.outputs[0]
+            observed = traces.outputs[1]
 
             # calculate loss
-            fun = await loss(traces.outputs[0], traces.outputs[1],
+            fun = await loss(modelled, observed,
                              iteration=iteration, problem=sub_problem,
                              runtime=worker, **_kwargs).result()
 
@@ -340,6 +351,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         await loop
 
         await optimiser.step(iteration=iteration, problem=problem,
+                             f_min=f_min, f_max=f_max,
+                             filter_relaxation=min(filter_wavelets_relaxation, filter_traces_relaxation),
                              **kwargs)
 
         if dump:
