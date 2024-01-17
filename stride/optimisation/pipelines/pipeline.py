@@ -30,7 +30,7 @@ class Pipeline(Operator):
     def __init__(self, steps=None, **kwargs):
         super().__init__(**kwargs)
 
-        self._no_grad = kwargs.pop('no_grad', False)
+        self._no_grad = kwargs.pop('no_grad', True)
         self._kwargs = kwargs
 
         steps = steps or []

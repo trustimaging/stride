@@ -7,11 +7,12 @@ import psutil
 import asyncio
 import contextlib
 import weakref
+from zict import LRU
 from cached_property import cached_property
 
 import mosaic
 from ..types import WarehouseObject
-from ..utils import subprocess, memory_limit, memory_used
+from ..utils import subprocess, memory_limit, memory_used, sizeof
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
 from ..core import Task, RuntimeDisconnectedError
@@ -158,6 +159,11 @@ class Runtime(BaseRPC):
         self._loop = None
         self._remote_warehouse = None
         self._local_warehouse = None
+
+        cache_fraction = float(os.environ.get('MOSAIC_RUNTIME_CACHE_MEM', 0.01))
+        cache_size = min(cache_fraction*memory_limit(), 10*1024**3)
+        self._warehouse_cache = LRU(cache_size, {}, weight=lambda k, v: sizeof(v))
+        self._warehouse_pending = set()
 
         self.logger = None
 
@@ -1019,25 +1025,44 @@ class Runtime(BaseRPC):
         else:
             warehouse = self._local_warehouse
             warehouse_obj = WarehouseObject(obj)
+            self._warehouse_cache[warehouse_obj.uid] = obj
 
             await warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
                                        publish=publish, reply=reply or publish)
 
             return warehouse_obj
 
-    async def get(self, uid):
+    async def get(self, uid, cache=True):
         """
         Retrieve an object from the warehouse.
 
         Parameters
         ----------
         uid
+        cache
 
         Returns
         -------
 
         """
-        return await self._local_warehouse.get_remote(uid=uid, reply=True)
+        if not cache:
+            return await self._local_warehouse.get_remote(uid=uid, reply=True)
+
+        obj_uid = uid.uid if hasattr(uid, 'uid') else uid
+
+        while obj_uid in self._warehouse_pending:
+            await asyncio.sleep(0.1)
+        self._warehouse_pending.add(obj_uid)
+
+        try:
+            obj = self._warehouse_cache[obj_uid]
+        except KeyError:
+            obj = await self._local_warehouse.get_remote(uid=uid, reply=True)
+            self._warehouse_cache[obj_uid] = obj
+
+        self._warehouse_pending.remove(obj_uid)
+
+        return obj
 
     async def drop(self, uid):
         """
