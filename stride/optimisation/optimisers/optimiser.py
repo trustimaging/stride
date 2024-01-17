@@ -66,6 +66,36 @@ class LocalOptimiser(ABC):
         """
         pass
 
+    def dump(self, *args, **kwargs):
+        """
+        Dump latest version of the optimiser.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method
+
+        Returns
+        -------
+
+        """
+        self.variable.dump(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """
+        Load latest version of the optimiser.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method
+
+        Returns
+        -------
+
+        """
+        self.variable.load(*args, **kwargs)
+
     async def pre_process(self, grad=None, processed_grad=None, **kwargs):
         """
         Pre-process the variable gradient before using it to take the step.
