@@ -12,7 +12,7 @@ from mosaic.utils import at_exit
 from mosaic.comms.compression import maybe_compress, decompress
 
 from stride.utils import fft
-from stride.problem import StructuredData, ScalarField
+from stride.problem import StructuredData
 from ..common.devito import GridDevito, OperatorDevito, config_devito, devito
 from ..boundaries import boundaries_registry
 from ..problem_type import ProblemTypeBase

@@ -1,7 +1,7 @@
 
 from devito import *  # noqa: F401
-from devito.types import Symbol
-from devito.symbolics import INT, IntDiv
+from devito.types import Symbol  # noqa: F401
+from devito.symbolics import INT, IntDiv  # noqa: F401
 
 try:
     from devitopro import *  # noqa: F401
