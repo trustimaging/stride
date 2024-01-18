@@ -68,6 +68,22 @@ class LocalOptimiser(ABC):
         """
         pass
 
+    @abstractmethod
+    def reset(self, **kwargs):
+        """
+        Reset optimiser state along with any stored buffers.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method.
+
+        Returns
+        -------
+
+        """
+        pass
+
     def dump(self, *args, **kwargs):
         """
         Dump latest version of the optimiser.
