@@ -99,15 +99,15 @@ class Node(Runtime):
                               for worker_index in range(self._num_workers)}
             allowed_cpus = sum([len(c) for c in available_cpus.values()])
 
+        # Eliminate cores corresponding to hyperthreading
+        for node_index, node_cpus in available_cpus.items():
+            node_cpus = [each for each in node_cpus if each < num_cpus]
+            available_cpus[node_index] = node_cpus
+
         total_cpus = sum([len(c) for c in available_cpus.values()])
         worker_cpus = {}
         worker_nodes = {}
         if total_cpus <= allowed_cpus:
-            # Eliminate cores corresponding to hyperthreading
-            for node_index, node_cpus in available_cpus.items():
-                node_cpus = [each for each in node_cpus if each < num_cpus]
-                available_cpus[node_index] = node_cpus
-
             node_ids = list(available_cpus.keys())
             num_nodes = len(available_cpus)
             num_cpus_per_node = min([len(cpus) for cpus in available_cpus.values()])
