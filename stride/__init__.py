@@ -245,8 +245,14 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     problem.acquisitions.reset_selection()
 
+    if optimiser.reset_block:
+        optimiser.reset()
+
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         optimiser.clear_grad()
+
+        if optimiser.reset_iteration:
+            optimiser.reset()
 
         published_args = [runtime.put(each, publish=True) for each in args]
         published_args = await asyncio.gather(*published_args)
@@ -259,12 +265,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if dump and block.restart and not optimisation_loop.started:
             if iteration.abs_id > 0:
                 try:
-                    optimiser.variable.load(path=problem.output_folder,
-                                            project_name=problem.name,
-                                            version=iteration.abs_id)
+                    optimiser.load(path=problem.output_folder,
+                                   project_name=problem.name,
+                                   version=iteration.abs_id)
                 except OSError:
                     raise OSError('Optimisation loop cannot be restarted,'
-                                  'variable version %d cannot be found.' %
+                                  'variable version or optimiser version %d cannot be found.' %
                                   iteration.abs_id)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
@@ -356,9 +362,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                              **kwargs)
 
         if dump:
-            optimiser.variable.dump(path=problem.output_folder,
-                                    project_name=problem.name,
-                                    version=iteration.abs_id+1)
+            optimiser.dump(path=problem.output_folder,
+                           project_name=problem.name,
+                           version=iteration.abs_id+1)
 
         logger.perf('Done iteration %d (out of %d), '
                     'block %d (out of %d) - Total loss %e' %

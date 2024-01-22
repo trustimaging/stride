@@ -37,6 +37,8 @@ class LocalOptimiser(ABC):
         self.dump_prec = kwargs.pop('dump_prec', False)
         self._process_grad = kwargs.pop('process_grad', ProcessGlobalGradient(**kwargs))
         self._process_model = kwargs.pop('process_model', ProcessModelIteration(**kwargs))
+        self.reset_block = kwargs.pop('reset_block', False)
+        self.reset_iteration = kwargs.pop('reset_iteration', False)
 
     def clear_grad(self):
         """
@@ -65,6 +67,52 @@ class LocalOptimiser(ABC):
 
         """
         pass
+
+    @abstractmethod
+    def reset(self, **kwargs):
+        """
+        Reset optimiser state along with any stored buffers.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method.
+
+        Returns
+        -------
+
+        """
+        pass
+
+    def dump(self, *args, **kwargs):
+        """
+        Dump latest version of the optimiser.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method
+
+        Returns
+        -------
+
+        """
+        self.variable.dump(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """
+        Load latest version of the optimiser.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method
+
+        Returns
+        -------
+
+        """
+        self.variable.load(*args, **kwargs)
 
     async def pre_process(self, grad=None, processed_grad=None, **kwargs):
         """
