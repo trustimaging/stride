@@ -101,6 +101,8 @@ async def forward(problem, pde, *args, **kwargs):
 
     if not isinstance(shot_ids, list):
         shot_ids = [shot_ids]
+    num_shots = len(shot_ids)
+    submitted_shots = []
 
     published_args = [runtime.put(each, publish=True) for each in args]
     published_args = await asyncio.gather(*published_args)
@@ -116,10 +118,15 @@ async def forward(problem, pde, *args, **kwargs):
     async def loop(worker, shot_id):
         _kwargs = kwargs.copy()
 
+        num_submitted = len(submitted_shots)
+
         logger.perf('\n')
-        logger.perf('Giving shot %d to %s' % (shot_id, worker.uid))
+        logger.perf('Giving shot %d to %s (%d out of %d)'
+                    % (shot_id, worker.uid,
+                       num_submitted, num_shots))
 
         sub_problem = problem.sub_problem(shot_id)
+        submitted_shots.append(shot_id)
         wavelets = sub_problem.shot.wavelets
 
         if using_gpu:
