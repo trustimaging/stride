@@ -106,6 +106,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         adaptive_boxes : bool, optional
             Whether to activate adaptive boxes (requires DevitoPRO and only
             available in some versions of Stride). Defaults to False.
+        local_prec : bool, optional
+            Whether to apply local preconditioning. Only available in some versions of Stride. Defaults to
+            True.
         platform : str, optional
             Platform on which to run the operator, ``None`` to run on the CPU or ``nvidia-acc`` to run on
             the GPU with OpenACC. Defaults to ``None``.

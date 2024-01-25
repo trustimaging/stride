@@ -343,12 +343,14 @@ class StructuredData(Data):
         """
         self.grad = None
 
-    def process_grad(self, **kwargs):
+    def process_grad(self, global_prec=True, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
         Parameters
         ----------
+        global_prec : bool, optional
+            Whether to apply preconditioner. Defaults to True.
         prec_scale : float, optional
             Condition scaling for the preconditioner.
 
@@ -359,7 +361,8 @@ class StructuredData(Data):
         if not self.needs_grad:
             return
 
-        self.grad.apply_prec(**kwargs)
+        if global_prec:
+            self.grad.apply_prec(**kwargs)
         return self.grad
 
     def apply_prec(self, prec_scale=0.25, prec_op=None, prec=None, **kwargs):
