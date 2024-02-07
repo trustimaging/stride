@@ -34,7 +34,7 @@ class MarmottantDevito(ProblemTypeBase):
 
     For forward execution of the PDE, the following parameters can be used:
 
-        x_0 : ParticleField
+        x_0 : SparseCoordinates
             Spatial location of the bubble population, in [m].
         r_0 : SparseField
             Initial radius of the bubble population, in [m].
@@ -110,7 +110,7 @@ class MarmottantDevito(ProblemTypeBase):
 
         Parameters
         ----------
-        x_0 : ParticleField
+        x_0 : SparseCoordinates
             Spatial location of the bubble population, in [m].
         r_0 : SparseField
             Initial radius of the bubble population, in [m].

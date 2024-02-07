@@ -24,7 +24,7 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'SparseField', 'ParticleField']
+           'SparseField', 'SparseCoordinates']
 
 
 @mosaic.tessera
@@ -1694,7 +1694,7 @@ class SparseField(StructuredData):
 
         Returns
         -------
-        ParticleField
+        SparseCoordinates
             Newly created ScalarField.
 
         """
@@ -1712,7 +1712,7 @@ class SparseField(StructuredData):
 
         Returns
         -------
-        ParticleField
+        SparseCoordinates
             Detached variable.
 
         """
@@ -1803,9 +1803,9 @@ class SparseField(StructuredData):
 
 
 @mosaic.tessera
-class ParticleField(SparseField):
+class SparseCoordinates(SparseField):
     """
-    Objects of this type describe a sparse particle field defined over the spatial grid. Particle fields
+    Objects of this type describe a sparse set of coordinates defined over the spatial grid. Coordinates
     can also be time-dependent.
 
     Parameters
@@ -1859,20 +1859,23 @@ class ParticleField(SparseField):
         """
         plot = kwargs.pop('plot', True)
 
-        if self.slow_time_dependent and self.space.dim == 2:
-            def update(figure, axis, step):
-                axis.clear()
+        if self.slow_time_dependent:
+            if self.space.dim == 2:
+                def update(figure, axis, step):
+                    axis.clear()
 
-                self._plot(self.data[int(step)], axis=axis, **kwargs)
-                axis.set_title(axis.get_title() + ' - slow time step %d' % step)
+                    self._plot(self.data[int(step)], axis=axis, **kwargs)
+                    axis.set_title(axis.get_title() + ' - slow time step %d' % step)
 
-                figure.canvas.draw_idle()
+                    figure.canvas.draw_idle()
 
-            axis = self._plot_time(update)
+                axis = self._plot_time(update)
 
+            else:
+                slow_t = kwargs.pop('slow_t', 0)
+                axis = self._plot(self.data[slow_t], **kwargs)
         else:
-            slow_t = kwargs.pop('slow_t', 0)
-            axis = self._plot(self.data[slow_t]/np.array(self.space.spacing), **kwargs)
+            axis = self._plot(self.data, **kwargs)
 
         if plot is True:
             plotting.show(axis)
