@@ -220,8 +220,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
 
-    filter_wavelets = kwargs.pop('filter_wavelets', True)
     filter_traces = kwargs.pop('filter_traces', True)
+    filter_wavelets = kwargs.pop('filter_wavelets', filter_traces)
 
     filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.75)
     filter_traces_relaxation = kwargs.pop('filter_traces_relaxation',
