@@ -1883,7 +1883,7 @@ class CommsManager:
                                     sender_id, method, msg.reply,
                                     **msg.kwargs)
 
-            if comms_method is not False:
+            if comms_method is not False and future is not None:
                 try:
                     await future
                 except asyncio.CancelledError:

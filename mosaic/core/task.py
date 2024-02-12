@@ -184,7 +184,7 @@ class Task(RemoteBase):
         if not isinstance(result, (tuple, dict)):
             result = (result,)
 
-        min_size = 1024**2
+        min_size = 1024**1
         if isinstance(result, tuple):
             async def store(_value):
                 return await self.runtime.put(_value, reply=True)
