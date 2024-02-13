@@ -888,7 +888,6 @@ class TaskProxy(ProxyBase):
             if instance.state == 'done':
                 instance.set_done()
 
-        # TODO Unsure about the need for this
         # Synchronise the task state, in case something has happened between
         # the moment when it was pickled until it has been re-registered on
         # this side

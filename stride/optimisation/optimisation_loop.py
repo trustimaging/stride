@@ -152,13 +152,20 @@ class Iteration:
             fun = FunctionalValue(fun_desc.fun_value, fun_desc.shot_id)
             self._fun[fun.shot_id] = fun
 
-    _serialisation_attrs = ['id', 'abs_id', '_submitted_shots', '_completed_shots', '_fun']
+    _serialisation_attrs = ['id', 'abs_id', '_submitted_shots', '_completed_shots']
 
     def _serialisation_helper(self):
         state = {}
 
         for attr in self._serialisation_attrs:
             state[attr] = getattr(self, attr)
+
+        state['_fun'] = OrderedDict()
+        for shot_id, fun in self._fun.items():
+            state['_fun'][shot_id] = {
+                'shot_id': fun.shot_id,
+                'fun_value': fun.fun_value,
+            }
 
         return state
 
@@ -167,7 +174,13 @@ class Iteration:
         instance = cls.__new__(cls)
 
         for attr, value in state.items():
-            setattr(instance, attr, value)
+            if attr == '_fun':
+                setattr(instance, attr, OrderedDict())
+                for shot_id, fun_desc in value.items():
+                    fun = FunctionalValue(fun_desc['fun_value'], shot_id)
+                    instance._fun[shot_id] = fun
+            else:
+                setattr(instance, attr, value)
 
         return instance
 
