@@ -236,7 +236,7 @@ class Runtime(BaseRPC):
         if self.uid == 'head' or 'worker' in self.uid:
             maintenance_interval = max(0.5, min(len(self._workers)*0.5, 60))
         else:
-            maintenance_interval = 10
+            maintenance_interval = 0.5
         self._loop.interval(self.maintenance, interval=maintenance_interval)
 
     async def init_warehouse(self, **kwargs):
