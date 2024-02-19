@@ -228,6 +228,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                               filter_traces=filter_wavelets,
                                               filter_relaxation=filter_wavelets_relaxation,
                                               len=runtime.num_workers, **kwargs)
+    process_wavelets_observed = ProcessWaveletsObserved.remote(f_min=f_min, f_max=f_max,
+                                                               filter_traces=filter_wavelets,
+                                                               len=runtime.num_workers, **kwargs)
     process_traces = ProcessTraces.remote(f_min=f_min, f_max=f_max,
                                           filter_traces=filter_traces,
                                           filter_relaxation=filter_traces_relaxation,
@@ -242,8 +245,14 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     problem.acquisitions.reset_selection()
 
+    if optimiser.reset_block:
+        optimiser.reset()
+
     for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
         optimiser.clear_grad()
+
+        if optimiser.reset_iteration:
+            optimiser.reset()
 
         published_args = [runtime.put(each, publish=True) for each in args]
         published_args = await asyncio.gather(*published_args)
@@ -256,12 +265,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if dump and block.restart and not optimisation_loop.started:
             if iteration.abs_id > 0:
                 try:
-                    optimiser.variable.load(path=problem.output_folder,
-                                            project_name=problem.name,
-                                            version=iteration.abs_id)
+                    optimiser.load(path=problem.output_folder,
+                                   project_name=problem.name,
+                                   version=iteration.abs_id)
                 except OSError:
                     raise OSError('Optimisation loop cannot be restarted,'
-                                  'variable version %d cannot be found.' %
+                                  'variable version or optimiser version %d cannot be found.' %
                                   iteration.abs_id)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
@@ -307,6 +316,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
             await observed.init_future
+            processed = process_wavelets_observed(wavelets, observed,
+                                                  iteration=iteration, problem=sub_problem,
+                                                  runtime=worker, **_kwargs)
+            await processed.init_future
+            wavelets = processed.outputs[0]
+            observed = processed.outputs[1]
 
             # run PDE
             modelled = pde(wavelets, *published_args,
@@ -320,9 +335,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                     iteration=iteration, problem=sub_problem,
                                     runtime=worker, **_kwargs)
             await traces.init_future
+            modelled = traces.outputs[0]
+            observed = traces.outputs[1]
 
             # calculate loss
-            fun = await loss(traces.outputs[0], traces.outputs[1],
+            fun = await loss(modelled, observed,
                              iteration=iteration, problem=sub_problem,
                              runtime=worker, **_kwargs).result()
 
@@ -340,12 +357,14 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         await loop
 
         await optimiser.step(iteration=iteration, problem=problem,
+                             f_min=f_min, f_max=f_max,
+                             filter_relaxation=min(filter_wavelets_relaxation, filter_traces_relaxation),
                              **kwargs)
 
         if dump:
-            optimiser.variable.dump(path=problem.output_folder,
-                                    project_name=problem.name,
-                                    version=iteration.abs_id+1)
+            optimiser.dump(path=problem.output_folder,
+                           project_name=problem.name,
+                           version=iteration.abs_id+1)
 
         logger.perf('Done iteration %d (out of %d), '
                     'block %d (out of %d) - Total loss %e' %

@@ -59,3 +59,18 @@ class GradientDescent(LocalOptimiser):
         await self.post_process(**kwargs)
 
         return self.variable
+
+    def reset(self, **kwargs):
+        """
+        Reset optimiser state along with any stored buffers.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method.
+
+        Returns
+        -------
+
+        """
+        pass

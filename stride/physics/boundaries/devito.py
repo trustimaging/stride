@@ -83,6 +83,7 @@ class ComplexFrequencyShiftPML2(Boundary):
         reflection_coefficient = kwargs.pop('reflection_coefficient', reflection_coefficient)
         f_centre = kwargs.pop('f_centre')
         subs = kwargs.pop('subs', None)
+        abox = kwargs.pop('abox', None)
 
         dimensions = self._grid.devito_grid.dimensions
         shape = space.extended_shape
@@ -149,6 +150,8 @@ class ComplexFrequencyShiftPML2(Boundary):
 
             # with the corresponding stencils
             pml_domain = (self._grid.pml_left[dim_i], self._grid.pml_right[dim_i])
+            pml_domain = [abox.intersection(dom) for dom in pml_domain] \
+                if devito.pro_available and isinstance(abox, devito.ABox) else pml_domain
 
             stencil_3 = [devito.Eq(u_3_next, devito.solve(pde_3, u_3_next, ),
                                    subdomain=dom, coefficients=subs) for dom in pml_domain]
