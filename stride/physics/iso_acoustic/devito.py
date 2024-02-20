@@ -417,6 +417,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                    cached=False)
 
         # Clear all buffers
+        self.dev_grid.deallocate('rec')
         self.dev_grid.vars.rec.data_with_halo.fill(0.)
         self.dev_grid.vars.p.data_with_halo.fill(0.)
         self.boundary.clear()
