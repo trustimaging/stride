@@ -184,6 +184,13 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.state_operator.devito_operator = None
         self.adjoint_operator.devito_operator = None
 
+    def deallocate_wavefield(self, platform='cpu', deallocate=False, **kwargs):
+        if platform and 'nvidia' in platform \
+                or devito.pro_available and isinstance(self._wavefield, devito.CompressedTimeFunction) \
+                or deallocate:
+            self._wavefield = None
+            devito.clear_cache(force=True)
+
     def add_sub_op(self, sub_op):
         sub_op = sub_op(grid=self.grid, parent_grid=self.dev_grid.devito_grid, dtype=self.dev_grid.dtype)
         self._sub_ops.append(sub_op)
@@ -868,11 +875,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             p_dump.dump(path=problem.output_folder, project_name=problem.name,
                         version=version)
 
-        if platform and 'nvidia' in platform \
-                or devito.pro_available and isinstance(self._wavefield, devito.CompressedTimeFunction) \
-                or deallocate:
-            self._wavefield = None
-            devito.clear_cache(force=True)
+        self.deallocate_wavefield(platform=platform, deallocate=deallocate)
 
         if deallocate:
             self.boundary.deallocate()

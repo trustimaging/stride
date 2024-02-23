@@ -27,7 +27,7 @@ class MaskField(Operator):
 
         out_field = field.alike(name=name_from_op_name(self, field))
         out_field.extended_data[:] = field.extended_data
-        out_field *= mask
+        out_field.extended_data[:] *= mask
 
         return out_field
 

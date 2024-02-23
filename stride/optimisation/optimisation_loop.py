@@ -1,11 +1,67 @@
 
-from collections import OrderedDict
+from collections import defaultdict
 
 from ..problem.base import Saved
 from .loss.functional import FunctionalValue
 
 
 __all__ = ['Iteration', 'Block', 'OptimisationLoop']
+
+
+class IterationRun:
+    """
+    Objects of this class contain information about a specific repetition of the iteration.
+
+    """
+
+    def __init__(self, id, iteration):
+        self.id = id
+
+        self._iteration = iteration
+        self.submitted_shots = []
+        self.completed_shots = []
+        self.losses = dict()
+
+    @property
+    def iteration(self):
+        """
+        Corresponding iteration.
+
+        """
+        return self._iteration
+
+    @property
+    def total_loss(self):
+        """
+        Functional value for this iteration across all shots.
+
+        """
+        return sum([each.value for each in self.losses.values()])
+
+    def __get_desc__(self, **kwargs):
+        description = {
+            'id': self.id,
+            'submitted_shots': self.submitted_shots,
+            'completed_shots': self.completed_shots,
+            'losses': [],
+        }
+
+        for loss in self.losses.values():
+            description['losses'].append({
+                'shot_id': loss.shot_id,
+                'value': loss.value,
+            })
+
+        return description
+
+    def __set_desc__(self, description):
+        self.id = description.id
+        self.submitted_shots = description.submitted_shots
+        self.completed_shots = description.completed_shots
+
+        for loss_desc in description.losses:
+            loss = FunctionalValue(loss_desc.value, loss_desc.shot_id)
+            self.losses[loss.shot_id] = loss
 
 
 class Iteration:
@@ -31,27 +87,66 @@ class Iteration:
 
         self._block = block
         self._optimisation_loop = opt_loop
-        self._submitted_shots = []
-        self._completed_shots = []
-        self._fun = OrderedDict()
-        self._step_fun = OrderedDict()
+        self._runs = {
+            0: IterationRun(0, self),
+        }
+        self._curr_run_idx = 0
 
     @property
-    def fun_value(self):
+    def curr_run(self):
+        return self._runs[self._curr_run_idx]
+
+    @property
+    def prev_run(self):
+        if self._curr_run_idx <= 0:
+            return None
+        return self._runs[self._curr_run_idx-1]
+
+    @property
+    def block(self):
+        """
+        Block of the iteration.
+
+        """
+        return self._block
+
+    @property
+    def block_id(self):
+        """
+        ID of the iteration block.
+
+        """
+        return self._block.id
+
+    @property
+    def loop(self):
+        """
+        Optimisation loop.
+
+        """
+        return self._optimisation_loop
+
+    @property
+    def total_loss(self):
         """
         Functional value for this iteration across all shots.
 
         """
-        return sum([each.fun_value for each in self._fun.values()])
+        return self.curr_run.total_loss
 
     @property
-    def step_fun_value(self):
+    def total_loss_change(self):
         """
-        Functional value for this iteration across all shots
-        after step.
+        Functional value change between last two runs
 
         """
-        return sum([each.fun_value for each in self._step_fun.values()])
+        if self._curr_run_idx <= 0:
+            return 0.
+
+        curr_loss = self.curr_run.total_loss
+        prev_loss = self.prev_run.total_loss
+
+        return (curr_loss - prev_loss) / (prev_loss + 1e-6)
 
     @property
     def num_submitted(self):
@@ -59,7 +154,7 @@ class Iteration:
         Number of shots submitted in this iteration.
 
         """
-        return len(self._submitted_shots)
+        return len(self.curr_run.submitted_shots)
 
     @property
     def num_completed(self):
@@ -67,9 +162,21 @@ class Iteration:
         Number of shots completed in this iteration
 
         """
-        return len(self._completed_shots)
+        return len(self.curr_run.completed_shots)
 
-    def add_fun(self, fun):
+    def next_run(self):
+        """
+        Set up next iteration run.
+
+        Returns
+        -------
+
+        """
+        self._curr_run_idx += 1
+        self._runs[self._curr_run_idx] = IterationRun(self._curr_run_idx, self)
+        return self.curr_run
+
+    def add_loss(self, fun):
         """
         Add a functional value for a particular shot to the iteration.
 
@@ -81,21 +188,7 @@ class Iteration:
         -------
 
         """
-        self._fun[fun.shot_id] = fun
-
-    def add_step_fun(self, fun):
-        """
-        Add a functional value, after step, for a particular shot to the iteration.
-
-        Parameters
-        ----------
-        fun : FunctionalValue
-
-        Returns
-        -------
-
-        """
-        self._step_fun[fun.shot_id] = fun
+        self.curr_run.losses[fun.shot_id] = fun
 
     def add_submitted(self, shot):
         """
@@ -109,7 +202,7 @@ class Iteration:
         -------
 
         """
-        self._submitted_shots.append(shot.id)
+        self.curr_run.submitted_shots.append(shot.id)
 
     def add_completed(self, shot):
         """
@@ -123,36 +216,32 @@ class Iteration:
         -------
 
         """
-        self._completed_shots.append(shot.id)
+        self.curr_run.completed_shots.append(shot.id)
 
     def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
             'abs_id': self.abs_id,
-            'submitted_shots': self._submitted_shots,
-            'completed_shots': self._completed_shots,
-            'functional_values': [],
+            'runs': [],
         }
 
-        for fun in self._fun.values():
-            description['functional_values'].append({
-                'shot_id': fun.shot_id,
-                'fun_value': fun.fun_value,
-            })
+        for run in self._runs.values():
+            description['runs'].append(run.__get_desc__(**kwargs))
 
         return description
 
     def __set_desc__(self, description):
         self.id = description.id
         self.abs_id = description.abs_id
-        self._submitted_shots = description.submitted_shots
-        self._completed_shots = description.completed_shots
 
-        for fun_desc in description.functional_values:
-            fun = FunctionalValue(fun_desc.fun_value, fun_desc.shot_id)
-            self._fun[fun.shot_id] = fun
+        self._curr_run_idx = -1
+        for run_desc in description.runs:
+            self._curr_run_idx += 1
+            run = IterationRun(self._curr_run_idx, self)
+            run.__set_desc__(run_desc)
+            self._runs[self._curr_run_idx] = run
 
-    _serialisation_attrs = ['id', 'abs_id', '_submitted_shots', '_completed_shots']
+    _serialisation_attrs = ['id', 'abs_id']
 
     def _serialisation_helper(self):
         state = {}
@@ -160,11 +249,11 @@ class Iteration:
         for attr in self._serialisation_attrs:
             state[attr] = getattr(self, attr)
 
-        state['_fun'] = OrderedDict()
-        for shot_id, fun in self._fun.items():
-            state['_fun'][shot_id] = {
+        state['_losses'] = dict()
+        for shot_id, fun in self.curr_run.losses.items():
+            state['_losses'][shot_id] = {
                 'shot_id': fun.shot_id,
-                'fun_value': fun.fun_value,
+                'value': fun.value,
             }
 
         return state
@@ -172,13 +261,16 @@ class Iteration:
     @classmethod
     def _deserialisation_helper(cls, state):
         instance = cls.__new__(cls)
+        instance._curr_run_idx = 0
 
         for attr, value in state.items():
-            if attr == '_fun':
-                setattr(instance, attr, OrderedDict())
+            if attr == '_losses':
+                setattr(instance, '_runs', {
+                    0: IterationRun(0, instance),
+                })
                 for shot_id, fun_desc in value.items():
-                    fun = FunctionalValue(fun_desc['fun_value'], shot_id)
-                    instance._fun[shot_id] = fun
+                    fun = FunctionalValue(fun_desc['value'], shot_id)
+                    instance.curr_run.losses[shot_id] = fun
             else:
                 setattr(instance, attr, value)
 
@@ -213,7 +305,7 @@ class Block:
         self._optimisation_loop = opt_loop
 
         self._num_iterations = None
-        self._iterations = OrderedDict()
+        self._iterations = dict()
         self._current_iteration = None
         self.restart = False
 
@@ -234,12 +326,12 @@ class Block:
         return self._current_iteration
 
     @property
-    def fun_value(self):
+    def total_loss(self):
         """
         Functional value for this block across all iterations.
 
         """
-        return sum([each.fun_value for each in self._iterations.values()])
+        return sum([each.value for each in self._iterations.values()])
 
     def clear(self):
         """
@@ -250,7 +342,7 @@ class Block:
 
         """
         self._num_iterations = None
-        self._iterations = OrderedDict()
+        self._iterations = dict()
         self._current_iteration = None
 
     def iterations(self, num, *iters, restart=None, restart_id=-1):
@@ -399,7 +491,7 @@ class OptimisationLoop(Saved):
         super().__init__(name=name, **kwargs)
 
         self._num_blocks = None
-        self._blocks = OrderedDict()
+        self._blocks = dict()
         self._current_block = None
         self.restart = False
         self.running_id = 0
@@ -441,7 +533,7 @@ class OptimisationLoop(Saved):
 
         """
         self._num_blocks = None
-        self._blocks = OrderedDict()
+        self._blocks = dict()
         self._current_block = None
         self.running_id = 0
 

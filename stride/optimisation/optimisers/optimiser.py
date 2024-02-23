@@ -19,6 +19,8 @@ class LocalOptimiser(ABC):
     ----------
     variable : Variable
         Variable to which the optimiser refers.
+    step_size : float or LineSearch, optional
+        Step size for the update, defaults to constant 1.
     process_grad : callable, optional
         Optional processing function to apply on the gradient prior to applying it.
     process_model : callable, optional
@@ -33,6 +35,7 @@ class LocalOptimiser(ABC):
             raise ValueError('To be optimised, a variable needs to be set with "needs_grad=True"')
 
         self.variable = variable
+        self.step_size = kwargs.pop('step_size', 1.)
         self.dump_grad = kwargs.pop('dump_grad', False)
         self.dump_prec = kwargs.pop('dump_prec', False)
         self._process_grad = kwargs.pop('process_grad', ProcessGlobalGradient(**kwargs))
@@ -49,70 +52,6 @@ class LocalOptimiser(ABC):
 
         """
         self.variable.clear_grad()
-
-    @abstractmethod
-    def step(self, **kwargs):
-        """
-        Apply the optimiser.
-
-        Parameters
-        ----------
-        kwargs
-            Extra parameters to be used by the method.
-
-        Returns
-        -------
-        Variable
-            Updated variable.
-
-        """
-        pass
-
-    @abstractmethod
-    def reset(self, **kwargs):
-        """
-        Reset optimiser state along with any stored buffers.
-
-        Parameters
-        ----------
-        kwargs
-            Extra parameters to be used by the method.
-
-        Returns
-        -------
-
-        """
-        pass
-
-    def dump(self, *args, **kwargs):
-        """
-        Dump latest version of the optimiser.
-
-        Parameters
-        ----------
-        kwargs
-            Extra parameters to be used by the method
-
-        Returns
-        -------
-
-        """
-        self.variable.dump(*args, **kwargs)
-
-    def load(self, *args, **kwargs):
-        """
-        Load latest version of the optimiser.
-
-        Parameters
-        ----------
-        kwargs
-            Extra parameters to be used by the method
-
-        Returns
-        -------
-
-        """
-        self.variable.load(*args, **kwargs)
 
     async def pre_process(self, grad=None, processed_grad=None, **kwargs):
         """
@@ -184,6 +123,87 @@ class LocalOptimiser(ABC):
 
         return processed_grad
 
+    async def step(self, step_size=None, grad=None, processed_grad=None, **kwargs):
+        """
+        Apply the optimiser.
+
+        Parameters
+        ----------
+        step_size : float, optional
+            Step size to use for this application, defaults to instance step.
+        grad : Data, optional
+            Gradient to use for the step, defaults to variable gradient.
+        processed_grad : Data, optional
+            Processed gradient to use for the step, defaults to processed variable gradient.
+        kwargs
+            Extra parameters to be used by the method.
+
+        Returns
+        -------
+        Variable
+            Updated variable.
+
+        """
+        logger = mosaic.logger()
+
+        # make copy of variable
+        variable_before = self.variable.copy()
+
+        # pre-process gradient to get update direction
+        direction = await self.pre_process(grad=grad,
+                                           processed_grad=processed_grad,
+                                           **kwargs)
+
+        # select test step size
+        step_size = self.step_size if step_size is None else step_size
+        step_loop = kwargs.pop('step_loop', None)
+        if not isinstance(step_size, (int, float)):
+            await step_size.init_search(
+                variable=self.variable,
+                direction=direction,
+                **kwargs
+            )
+
+        # optimal step size search
+        while True:
+            # find optimal step
+            if isinstance(step_size, (int, float)):
+                next_step = step_size
+                done_search = True
+            else:
+                if step_loop is None:
+                    next_step = 1.
+                    done_search = True
+                else:
+                    next_step, done_search = await step_size.next_step(
+                        variable=self.variable,
+                        direction=direction,
+                        **kwargs
+                    )
+
+            if done_search:
+                logger.perf('\t taking final update step of %e' % next_step)
+            else:
+                logger.perf('\t taking test step of %e in line search' % next_step)
+
+            # restore variable
+            self.variable.data[:] = variable_before.data.copy()
+
+            # update variable
+            await self.update_variable(next_step, direction)
+
+            # post-process variable after update
+            await self.post_process(**kwargs)
+
+            # if done, stop search
+            if done_search:
+                break
+
+            # calculate loss change
+            await step_loop()
+
+        return self.variable
+
     async def post_process(self, **kwargs):
         """
         Perform any necessary post-processing of the variable.
@@ -206,3 +226,67 @@ class LocalOptimiser(ABC):
                     (min_var, max_var))
 
         self.variable.release_grad()
+
+    @abstractmethod
+    async def update_variable(self, step_size, direction):
+        """
+
+        Parameters
+        ----------
+        step_size : float
+            Step size to use for updating the variable.
+        direction : Data
+            Direction in which to update the variable.
+
+        Returns
+        -------
+        Variable
+            Updated variable.
+
+        """
+        pass
+
+    def reset(self, **kwargs):
+        """
+        Reset optimiser state along with any stored buffers.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method.
+
+        Returns
+        -------
+
+        """
+        pass
+
+    def dump(self, *args, **kwargs):
+        """
+        Dump latest version of the optimiser.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method
+
+        Returns
+        -------
+
+        """
+        self.variable.dump(*args, **kwargs)
+
+    def load(self, *args, **kwargs):
+        """
+        Load latest version of the optimiser.
+
+        Parameters
+        ----------
+        kwargs
+            Extra parameters to be used by the method
+
+        Returns
+        -------
+
+        """
+        self.variable.load(*args, **kwargs)
