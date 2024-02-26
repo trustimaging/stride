@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 import mosaic
 
+from ..step_length import LineSearch
 from ..pipelines import ProcessGlobalGradient, ProcessModelIteration
 
 
@@ -157,7 +158,7 @@ class LocalOptimiser(ABC):
         # select test step size
         step_size = self.step_size if step_size is None else step_size
         step_loop = kwargs.pop('step_loop', None)
-        if not isinstance(step_size, (int, float)):
+        if isinstance(step_size, LineSearch):
             await step_size.init_search(
                 variable=self.variable,
                 direction=direction,
@@ -167,10 +168,7 @@ class LocalOptimiser(ABC):
         # optimal step size search
         while True:
             # find optimal step
-            if isinstance(step_size, (int, float)):
-                next_step = step_size
-                done_search = True
-            else:
+            if isinstance(step_size, LineSearch):
                 if step_loop is None:
                     next_step = 1.
                     done_search = True
@@ -180,6 +178,9 @@ class LocalOptimiser(ABC):
                         direction=direction,
                         **kwargs
                     )
+            else:
+                next_step = step_size
+                done_search = True
 
             if done_search:
                 logger.perf('\t taking final update step of %e' % next_step)
@@ -200,7 +201,15 @@ class LocalOptimiser(ABC):
                 break
 
             # calculate loss change
-            await step_loop()
+            self.variable.needs_grad = False
+            if hasattr(self.variable, 'push'):
+                await self.variable.push(attr='needs_grad')
+            try:
+                await step_loop()
+            finally:
+                self.variable.needs_grad = True
+                if hasattr(self.variable, 'push'):
+                    await self.variable.push(attr='needs_grad')
 
         return self.variable
 

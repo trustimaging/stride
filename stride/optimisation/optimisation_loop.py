@@ -38,6 +38,20 @@ class IterationRun:
         """
         return sum([each.value for each in self.losses.values()])
 
+    def clear(self):
+        """
+        Clear memory.
+
+        Returns
+        -------
+
+        """
+        for loss in self.losses.values():
+            try:
+                loss.residual = None
+            except AttributeError:
+                pass
+
     def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
@@ -175,6 +189,17 @@ class Iteration:
         self._curr_run_idx += 1
         self._runs[self._curr_run_idx] = IterationRun(self._curr_run_idx, self)
         return self.curr_run
+
+    def clear_run(self):
+        """
+        Clear run memory.
+
+        Returns
+        -------
+
+        """
+        for run in self._runs.values():
+            run.clear()
 
     def add_loss(self, fun):
         """

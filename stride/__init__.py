@@ -446,6 +446,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 fun.clear_graph()
 
                 iteration.add_loss(fun)
+                iteration.add_completed(sub_problem.shot)
                 logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
 
                 logger.perf('Retrieved test step for shot %d (%d out of %d)'
@@ -476,3 +477,5 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                     (iteration.id, block.num_iterations, block.id,
                      optimisation_loop.num_blocks, iteration.total_loss, prev_loss))
         logger.perf('====================================================================')
+
+        iteration.clear_run()
