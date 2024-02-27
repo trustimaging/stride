@@ -275,11 +275,11 @@ class Iteration:
             state[attr] = getattr(self, attr)
 
         state['_losses'] = dict()
-        for shot_id, fun in self.curr_run.losses.items():
-            state['_losses'][shot_id] = {
-                'shot_id': fun.shot_id,
-                'value': fun.value,
-            }
+        # for shot_id, fun in self.curr_run.losses.items():
+        #     state['_losses'][shot_id] = {
+        #         'shot_id': fun.shot_id,
+        #         'value': fun.value,
+        #     }
 
         return state
 
@@ -293,9 +293,9 @@ class Iteration:
                 setattr(instance, '_runs', {
                     0: IterationRun(0, instance),
                 })
-                for shot_id, fun_desc in value.items():
-                    fun = FunctionalValue(fun_desc['value'], shot_id)
-                    instance.curr_run.losses[shot_id] = fun
+                # for shot_id, fun_desc in value.items():
+                #     fun = FunctionalValue(fun_desc['value'], shot_id)
+                #     instance.curr_run.losses[shot_id] = fun
             else:
                 setattr(instance, attr, value)
 
@@ -402,10 +402,11 @@ class Block:
             self.clear()
         else:
             if type(restart_id) is int and restart_id < 0:
-                iteration = Iteration(self._current_iteration.id+1, self._optimisation_loop.running_id,
+                curr_iter_id = self._current_iteration.id if self._current_iteration is not None else -1
+                iteration = Iteration(curr_iter_id+1, self._optimisation_loop.running_id,
                                       self, self._optimisation_loop)
 
-                self._iterations[self._current_iteration.id+1] = iteration
+                self._iterations[curr_iter_id+1] = iteration
                 self._optimisation_loop.running_id += 1
                 self._current_iteration = iteration
 
