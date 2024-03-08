@@ -46,11 +46,10 @@ class IterationRun:
         -------
 
         """
-        for loss in self.losses.values():
-            try:
-                loss.residual = None
-            except AttributeError:
-                pass
+        self.submitted_shots = []
+        self.completed_shots = []
+        for shot_id, loss in self.losses.items():
+            self.losses[shot_id] = FunctionalValue(loss.value, shot_id)
 
     def __get_desc__(self, **kwargs):
         description = {
@@ -274,12 +273,7 @@ class Iteration:
         for attr in self._serialisation_attrs:
             state[attr] = getattr(self, attr)
 
-        state['_losses'] = dict()
-        # for shot_id, fun in self.curr_run.losses.items():
-        #     state['_losses'][shot_id] = {
-        #         'shot_id': fun.shot_id,
-        #         'value': fun.value,
-        #     }
+        state['_runs'] = dict()
 
         return state
 
@@ -289,13 +283,10 @@ class Iteration:
         instance._curr_run_idx = 0
 
         for attr, value in state.items():
-            if attr == '_losses':
+            if attr == '_runs':
                 setattr(instance, '_runs', {
                     0: IterationRun(0, instance),
                 })
-                # for shot_id, fun_desc in value.items():
-                #     fun = FunctionalValue(fun_desc['value'], shot_id)
-                #     instance.curr_run.losses[shot_id] = fun
             else:
                 setattr(instance, attr, value)
 
