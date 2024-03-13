@@ -194,7 +194,7 @@ class LocalOptimiser(ABC):
                 elif max_step < np.inf and next_step < -max_step * 0.75:  # in general, prevent -ve steps
                     next_step = -max_step * 0.75
                 elif next_step < -0.2:
-                    next_step = np.abs(next_step) * 0.25
+                    next_step = next_step * 0.25
 
                 logger.perf('\t taking final update step of %e [unclipped step of %e]' % (next_step, unclipped_step))
             else:
