@@ -1,6 +1,7 @@
 
 import os
 import numpy as np
+from fnmatch import fnmatch
 
 from .base import Gridded
 from . import Medium, Transducers, Geometry, Acquisitions
@@ -144,7 +145,10 @@ class Problem(Gridded):
         new_spacing = self.space.spacing
 
         for field in self.medium.fields:
-            self.medium.fields[field]._resample(old_spacing, new_spacing, **kwargs)  # NOTE this is in-place
+            if fnmatch(field, '*vp*'):
+                self.medium.fields[field]._resample(old_spacing, new_spacing, slowness=True, **kwargs)
+            else:
+                self.medium.fields[field]._resample(old_spacing, new_spacing, **kwargs)
         return [self.medium.fields[field] for field in self.medium.fields]
 
     def time_resample(self, new_step, new_num=None, **kwargs):
