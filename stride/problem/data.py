@@ -930,7 +930,7 @@ class ScalarField(StructuredData):
         """
 
         old_spacing = (old_spacing,)*self.space.dim if isinstance(old_spacing, float) else old_spacing
-        new_spacing = (new_spacing ,)*self.space.dim if isinstance(new_spacing, float) else new_spacing 
+        new_spacing = (new_spacing,)*self.space.dim if isinstance(new_spacing, float) else new_spacing
 
         if self.time_dependent or self.slow_time_dependent:
             data = self.data

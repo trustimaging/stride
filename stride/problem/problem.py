@@ -143,8 +143,9 @@ class Problem(Gridded):
         self.space.resample(new_spacing=new_spacing)
         new_spacing = self.space.spacing
 
-        self.medium.vp._resample(old_spacing, new_spacing, **kwargs)  # NOTE this is in-place
-        return self.medium.vp
+        for field in self.medium.fields:
+            self.medium.fields[field]._resample(old_spacing, new_spacing, **kwargs)  # NOTE this is in-place
+        return [self.medium.fields[field] for field in self.medium.fields]
 
     def time_resample(self, new_step, new_num=None, **kwargs):
         '''
