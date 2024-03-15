@@ -139,9 +139,9 @@ class Problem(Gridded):
         Returns
         -------
         '''
-        old_spacing = self.grid.space.spacing
-        self.grid.space.resample(new_spacing=new_spacing)
-        new_spacing = self.grid.space.spacing
+        old_spacing = self.space.spacing
+        self.space.resample(new_spacing=new_spacing)
+        new_spacing = self.space.spacing
 
         self.medium.vp._resample(old_spacing, new_spacing, **kwargs)  # NOTE this is in-place
         return self.medium.vp
@@ -165,7 +165,7 @@ class Problem(Gridded):
 
         old_step = self.time.step
         old_num = self.time.num
-        self.grid.time.resample(new_step=new_step, new_num=new_num)
+        self.time.resample(new_step=new_step, new_num=new_num)
 
         for shot in self.acquisitions.shots:
 

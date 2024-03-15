@@ -913,13 +913,13 @@ class ScalarField(StructuredData):
 
     def _resample(self, old_spacing, new_spacing, **kwargs):
         """
-        Resample the internal (non-padded) data given some new space object.
+        An in-place operation to resample the internal (non-padded) data given a new spacing.
 
         Parameters
         ----------
-        old_spacing: float
+        old_spacing : float or tuple(float)
             The old spacing.
-        new_spacing: float
+        new_spacing: float or tuple(float)
             The new spacing.
         order : int, optional
             Order of the interplation, default is 3.
@@ -928,6 +928,9 @@ class ScalarField(StructuredData):
         -------
 
         """
+
+        old_spacing = (old_spacing,)*self.space.dim if isinstance(old_spacing, float) else old_spacing
+        new_spacing = (new_spacing ,)*self.space.dim if isinstance(new_spacing, float) else new_spacing 
 
         if self.time_dependent or self.slow_time_dependent:
             data = self.data
@@ -1522,8 +1525,7 @@ class Traces(StructuredData):
 
     def _resample(self, old_step, new_step, new_num, **kwargs):
         '''
-        In-place operation to resample a trace to a new time-spacing.
-        Sinc interpolation is used.
+        Resample the current trace to a new time-spacing.
 
         Parameters
         ----------

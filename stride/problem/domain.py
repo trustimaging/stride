@@ -85,9 +85,9 @@ class Space:
         ----------
         new_spacing: float or tuple(float)
             The new grid spacing.
-        new_extra: int, optional
+        new_extra: tuple(int), optional
             The shape of the boundary for the new grid. Defaults to rescaling existing extra.
-        new_absorbing: int, optional
+        new_absorbing: tuple(int), optional
             The shape of the absorbing boundary for the new grid. Defaults to rescaling
             existing absorbing.
 
@@ -348,6 +348,23 @@ class Time:
 
         try:
             del self.__dict__['extended_grid']
+        except:
+            pass
+
+    def _clear_cache(self, cached_property):
+        '''
+        Clear a cached property
+
+        Parameters
+        ----------
+        cached_property: str
+            The name of the property to remove from the cache.
+
+        Returns
+        -------
+        '''
+        try:
+            del self.__dict__[cached_property]
         except:
             pass
 
