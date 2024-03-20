@@ -31,6 +31,9 @@ class ProcessWavelets(Pipeline):
         if kwargs.pop('filter_traces', True):
             steps.append('filter_traces')
 
+        if kwargs.pop('fw3d_mode', False):
+            steps.append('shift_traces')
+
         if kwargs.pop('resonance_filter', False):
             steps.append(('resonance_filter', False))
 

@@ -37,6 +37,7 @@ class LocalOptimiser(ABC):
 
         self.variable = variable
         self.step_size = kwargs.pop('step_size', 1.)
+        self.test_step_size = kwargs.pop('test_step_size', 1.)
         self.dump_grad = kwargs.pop('dump_grad', False)
         self.dump_prec = kwargs.pop('dump_prec', False)
         self._process_grad = kwargs.pop('process_grad', ProcessGlobalGradient(**kwargs))
@@ -110,6 +111,9 @@ class LocalOptimiser(ABC):
                         (min_dir, max_dir))
 
             processed_grad = await self._process_grad(grad, variable=self.variable, **kwargs)
+
+        test_step_size = kwargs.pop('test_step_size', self.test_step_size)
+        processed_grad.data[:] *= test_step_size
 
         min_dir = np.min(processed_grad.data)
         max_dir = np.max(processed_grad.data)

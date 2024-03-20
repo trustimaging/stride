@@ -70,7 +70,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             compression in 2D and ``bitcomp`` in 3D.
         save_interpolation : bool, optional
             Whether to interpolate the saved wavefield using natural cubic splines (only
-            available in some versions of Stride). Defaults to True.
+            available in some versions of Stride). Defaults to False.
         dump_forward_wavefield : bool or int, optional
             If True or a positive integer, the forward wavefield will be dumped after running the
             forward kernel. If True, the wavefield will be sampled every ``save_undersampling``
@@ -185,8 +185,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.adjoint_operator.devito_operator = None
 
     def deallocate_wavefield(self, platform='cpu', deallocate=False, **kwargs):
-        if platform and 'nvidia' in platform \
-                or devito.pro_available and isinstance(self._wavefield, devito.CompressedTimeFunction) \
+        if (platform and 'nvidia' in platform) \
+                or (devito.pro_available and isinstance(self._wavefield, devito.CompressedTimeFunction)) \
                 or deallocate:
             self._wavefield = None
             devito.clear_cache(force=True)
@@ -316,6 +316,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
         diff_source = kwargs.pop('diff_source', False)
+        fw3d_mode = kwargs.pop('fw3d_mode', False)
         save_compression = kwargs.get('save_compression',
                                       'bitcomp' if self.space.dim > 2 else None)
         save_compression = save_compression if (is_nvidia or is_nvc) and devito.pro_available else None
@@ -349,7 +350,10 @@ class IsoAcousticDevito(ProblemTypeBase):
                 src_scale /= self.time.step
 
             src_term = src.inject(field=p.forward, expr=src * src_scale)
-            rec_term = rec.interpolate(expr=p)
+            if not fw3d_mode:
+                rec_term = rec.interpolate(expr=p)
+            else:
+                rec_term = rec.interpolate(expr=p.forward)
 
             # Define the saving of the wavefield
             if save_wavefield is True:
@@ -450,6 +454,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         # Set geometry and wavelet
         wavelets = wavelets.data
+
+        if fw3d_mode:
+            wavelets[:, 1:] = wavelets[:, :-1]
 
         if diff_source:
             wavelets = np.gradient(wavelets, self.time.step, axis=-1)
@@ -650,6 +657,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
 
+        fw3d_mode = kwargs.pop('fw3d_mode', False)
         platform = kwargs.get('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
 
@@ -674,7 +682,10 @@ class IsoAcousticDevito(ProblemTypeBase):
             # Define the source injection function to generate the corresponding code
             t = rec.time_dim
             vp2 = self.dev_grid.vars.vp**2
-            rec_term = rec.inject(field=p_a.backward, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
+            if not fw3d_mode:
+                rec_term = rec.inject(field=p_a.backward, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
+            else:
+                rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step ** 2 * vp2)
 
             if wavelets.needs_grad:
                 src_term = src.interpolate(expr=p_a)
@@ -778,6 +789,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         # Set geometry and adjoint source
         adjoint_source = adjoint_source.data
+
+        if fw3d_mode:
+            adjoint_source[:, 1:] = adjoint_source[:, :-1]
 
         window = scipy.signal.get_window(('tukey', 0.001), time_bounds[1]-time_bounds[0], False)
         window = np.pad(window, ((time_bounds[0], self.time.num-time_bounds[1]),), mode='constant', constant_values=0.)
