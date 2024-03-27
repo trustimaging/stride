@@ -1,5 +1,6 @@
 
 import os
+import numpy as np
 
 
 def volume_slicer(*args, **kwargs):
@@ -147,6 +148,24 @@ def volume_slicer(*args, **kwargs):
                                                             colormap=self.colourmap,
                                                             vmin=self.data_range[0], vmax=self.data_range[1])
             setattr(self, 'plane_widget_%s' % axis_name, plane_widget)
+
+            # set colour map
+            try:
+                import stride_private
+
+                cmap_name = 'brain'
+                cmap_filename = os.path.join(os.path.dirname(stride_private.__file__),
+                                             'plotting/cmaps/' + cmap_name + '.txt')
+                cmap_ = np.genfromtxt(cmap_filename, delimiter=',', dtype=np.float32)
+
+                lut = plane_widget.module_manager.scalar_lut_manager.lut
+                lut.number_of_colors = cmap_.shape[0]
+                lut.build()
+
+                for i, v in enumerate(np.linspace(0, 1, cmap_.shape[0])):
+                    lut.set_table_value(i, cmap_[i, 0], cmap_[i, 1], cmap_[i, 2])
+            except ImportError:
+                pass
 
             # Synchronize positions between the corresponding image plane
             # widgets on different views.

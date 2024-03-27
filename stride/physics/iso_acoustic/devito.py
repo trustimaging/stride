@@ -510,6 +510,11 @@ class IsoAcousticDevito(ProblemTypeBase):
                 devito_args['nbits'] = kwargs.get('nbits_compression',
                                                   devito_args.get('nbits', 9))
 
+        if np.linalg.norm(wavelets.data) < 1e-31:
+            problem = kwargs.pop('problem')
+            self.logger.warn('(ShotID %d) Empty wavelets, not running forward' % problem.shot_id)
+            return
+
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
         self.state_operator.run(dt=self.time.step,
                                 time_m=1,
@@ -836,6 +841,11 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         if wavelets.needs_grad:
             functions['src'] = self.dev_grid.vars.src
+
+        if np.linalg.norm(adjoint_source.data) < 1e-31:
+            problem = kwargs.pop('problem')
+            self.logger.warn('(ShotID %d) Empty adjoint source, not running adjoint' % problem.shot_id)
+            return
 
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
         self.adjoint_operator.run(dt=self.time.step,

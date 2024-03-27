@@ -2,6 +2,7 @@
 import uuid
 import asyncio
 import inspect
+import numpy as np
 from abc import abstractmethod
 from collections import OrderedDict
 
@@ -500,6 +501,21 @@ class Variable:
 
         """
         if grad is None or not self.needs_grad or self.grad is None:
+            return
+
+        grad_data = grad.data if hasattr(grad, 'data') else grad
+        is_nan = np.any(np.isnan(grad_data))
+        is_inf = np.any(np.isinf(grad_data))
+
+        if is_nan or is_inf:
+            msg = 'Nan or inf detected in %s' % self.name
+
+            problem = kwargs.pop('problem', None)
+            shot_id = problem.shot.id if problem is not None else kwargs.pop('shot_id', None)
+            if shot_id is not None:
+                msg = '(ShotID %d) ' % shot_id + msg
+
+            mosaic.logger().warn(msg)
             return
 
         self.grad += grad
