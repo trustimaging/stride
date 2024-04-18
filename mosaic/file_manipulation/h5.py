@@ -212,7 +212,7 @@ class HDF5:
     or as a context manager,
 
     >>> with HDF5(...) as file:
-    >>>     file.write(...)
+    >>>     file.dump(...)
 
     If a particular version is given, the filename will be generated without checks. If no version is given,
     the ``path`` will be checked for the latest available version of the file.
@@ -258,11 +258,15 @@ class HDF5:
 
             file_parameter = camel_case(parameter)
             version = kwargs.pop('version', None)
+            version_start = kwargs.pop('version_start', 0)
             extension = kwargs.pop('extension', '.h5')
 
             if version is None or version < 0:
-                version = 0
-                filename = _abs_filename('%s-%s%s' % (project_name, file_parameter, extension), path)
+                version = version_start
+                if version > 0:
+                    filename = _abs_filename('%s-%s-%05d%s' % (project_name, file_parameter, version, extension), path)
+                else:
+                    filename = _abs_filename('%s-%s%s' % (project_name, file_parameter, extension), path)
                 while os.path.exists(filename):
                     version += 1
                     filename = _abs_filename('%s-%s-%05d%s' % (project_name, file_parameter, version, extension), path)

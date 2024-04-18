@@ -120,21 +120,21 @@ class Boundary(ABC):
                 if damping_type == 'sine':
                     pos = pos - np.sin(2 * np.pi * pos) / (2 * np.pi)
                     if mask:
-                        pos = 1 - pos
+                        pos = - pos
 
                     val = dimension_coefficient * pos
 
                 elif damping_type == 'cosine':
                     pos = np.cos(np.pi / 2 * (1 - pos))
                     if mask:
-                        pos = 1 - pos
+                        pos = - pos
 
                     val = pos
 
                 elif damping_type == 'power':
                     pos = pos**power_degree
                     if mask:
-                        pos = 1 - pos
+                        pos = - pos
 
                     val = dimension_coefficient * pos
 

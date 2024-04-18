@@ -58,22 +58,24 @@ def volume_slicer(*args, **kwargs):
 
         # Default values
         def _data_source_default(self):
+            colourmap = self.colourmap if self.colourmap != 'brain' else 'viridis'
             if self.is_vector:
                 return mlab.pipeline.vector_field(self.data,
                                                   figure=self.scene3d.mayavi_scene,
-                                                  colormap=self.colourmap,
+                                                  colormap=colourmap,
                                                   vmin=self.data_range[0], vmax=self.data_range[1])
 
             else:
                 return mlab.pipeline.scalar_field(self.data,
                                                   figure=self.scene3d.mayavi_scene,
-                                                  colormap=self.colourmap,
+                                                  colormap=colourmap,
                                                   vmin=self.data_range[0], vmax=self.data_range[1])
 
         def make_plane_widget_3d(self, axis_name):
+            colourmap = self.colourmap if self.colourmap != 'brain' else 'viridis'
             plane_widget = mlab.pipeline.image_plane_widget(self.data_source,
                                                             figure=self.scene3d.mayavi_scene,
-                                                            colormap=self.colourmap,
+                                                            colormap=colourmap,
                                                             plane_orientation='%s_axes' % axis_name)
 
             return plane_widget
@@ -90,9 +92,10 @@ def volume_slicer(*args, **kwargs):
         # Scene activation callbaks
         @on_trait_change('scene3d.activated')
         def display_scene3d(self):
+            colourmap = self.colourmap if self.colourmap != 'brain' else 'viridis'
             outline = mlab.pipeline.outline(self.data_source,
                                             figure=self.scene3d.mayavi_scene,
-                                            colormap=self.colourmap,
+                                            colormap=colourmap,
                                             vmin=self.data_range[0], vmax=self.data_range[1])
 
             vmin = self.data_range[0] or self.data.min()
@@ -131,6 +134,7 @@ def volume_slicer(*args, **kwargs):
             self.scene3d.scene.interactor.interactor_style = tvtk.InteractorStyleTerrain()
 
         def make_side_view(self, axis_name):
+            colourmap = self.colourmap if self.colourmap != 'brain' else 'viridis'
             scene = getattr(self, 'scene_%s' % axis_name)
 
             # To avoid copying the data, we take a reference to the
@@ -140,32 +144,31 @@ def volume_slicer(*args, **kwargs):
             # added on the figure we are interested in.
             outline = mlab.pipeline.outline(self.data_source.mlab_source.dataset,
                                             figure=scene.mayavi_scene,
-                                            colormap=self.colourmap,
+                                            colormap=colourmap,
                                             vmin=self.data_range[0], vmax=self.data_range[1])
 
             plane_widget = mlab.pipeline.image_plane_widget(outline,
                                                             plane_orientation='%s_axes' % axis_name,
-                                                            colormap=self.colourmap,
+                                                            colormap=colourmap,
                                                             vmin=self.data_range[0], vmax=self.data_range[1])
             setattr(self, 'plane_widget_%s' % axis_name, plane_widget)
 
             # set colour map
-            try:
-                import stride_private
+            if self.colourmap == 'brain':
+                try:
+                    import stride_private
+                    cmap_filename = os.path.join(os.path.dirname(stride_private.__file__),
+                                                 'plotting/cmaps/' + self.colourmap + '.txt')
+                    cmap_ = np.genfromtxt(cmap_filename, delimiter=',', dtype=np.float32)
 
-                cmap_name = 'brain'
-                cmap_filename = os.path.join(os.path.dirname(stride_private.__file__),
-                                             'plotting/cmaps/' + cmap_name + '.txt')
-                cmap_ = np.genfromtxt(cmap_filename, delimiter=',', dtype=np.float32)
+                    lut = plane_widget.module_manager.scalar_lut_manager.lut
+                    lut.number_of_colors = cmap_.shape[0]
+                    lut.build()
 
-                lut = plane_widget.module_manager.scalar_lut_manager.lut
-                lut.number_of_colors = cmap_.shape[0]
-                lut.build()
-
-                for i, v in enumerate(np.linspace(0, 1, cmap_.shape[0])):
-                    lut.set_table_value(i, cmap_[i, 0], cmap_[i, 1], cmap_[i, 2])
-            except ImportError:
-                pass
+                    for i, v in enumerate(np.linspace(0, 1, cmap_.shape[0])):
+                        lut.set_table_value(i, cmap_[i, 0], cmap_[i, 1], cmap_[i, 2])
+                except ImportError:
+                    pass
 
             # Synchronize positions between the corresponding image plane
             # widgets on different views.

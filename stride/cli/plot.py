@@ -41,15 +41,19 @@ def _intantiate(filename):
 @click.argument('filenames', required=True, nargs=-1)
 @click.option('--range', nargs=2, type=int,
               help='range of values to use for plotting')
+@click.option('--cmap', type=str,
+              help='colourmap to use for plotting')
 @click.version_option()
 def go(filenames=None, **kwargs):
     axis = None
-    data_range = kwargs.pop('range', None)
+    data_range = kwargs.pop('range') or (None, None)
+    colourmap = kwargs.pop('cmap') or 'viridis'
     for filename in filenames:
         field = _intantiate(filename)
         field.load(filename=filename)
 
-        axis = field.plot(data_range=data_range, axis=axis, plot=False)
+        axis = field.plot(data_range=data_range, palette=colourmap,
+                          axis=axis, plot=False)
 
     plotting.show(axis)
 
