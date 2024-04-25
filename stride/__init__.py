@@ -150,7 +150,7 @@ async def forward(problem, pde, *args, **kwargs):
         # save data
         shot = problem.acquisitions.get(shot_id)
         shot.observed.data[:] = traces.data
-        if np.isnan(shot.observed.data) or np.isinf(shot.observed.data):
+        if np.any(np.isnan(shot.observed.data)) or np.any(np.isinf(shot.observed.data)):
             raise ValueError('Nan or inf detected in shot %d' % shot_id)
 
         if dump is True:
