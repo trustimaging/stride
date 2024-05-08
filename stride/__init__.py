@@ -446,7 +446,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                  runtime=worker, **_kwargs).result()
 
                 # clear up
-                await pde.deallocate_wavefield(deallocate=True, runtime=worker, **_kwargs)
+                # await pde.deallocate_wavefield(deallocate=True, runtime=worker, **_kwargs)
                 fun.clear_graph()
 
                 iteration.add_loss(fun)
