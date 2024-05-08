@@ -161,10 +161,14 @@ class Problem(Gridded):
         kwargs['project_name'] = kwargs.get('project_name', self.name)
         kwargs['path'] = kwargs.get('path', self.output_folder)
 
-        self.medium.dump(*args, **kwargs)
-        self.transducers.dump(*args, **kwargs)
-        self.geometry.dump(*args, **kwargs)
-        self.acquisitions.dump(*args, **kwargs)
+        if kwargs.pop('dump_medium', True):
+            self.medium.dump(*args, **kwargs)
+        if kwargs.pop('dump_transducers', True):
+            self.transducers.dump(*args, **kwargs)
+        if kwargs.pop('dump_geometry', True):
+            self.geometry.dump(*args, **kwargs)
+        if kwargs.pop('dump_acquisitions', True):
+            self.acquisitions.dump(*args, **kwargs)
 
     def plot(self, **kwargs):
         """
