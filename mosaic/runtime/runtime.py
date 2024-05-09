@@ -1,6 +1,5 @@
 
 import os
-import gc
 import zmq
 import zmq.asyncio
 import psutil

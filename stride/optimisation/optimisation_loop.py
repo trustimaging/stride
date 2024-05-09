@@ -1,6 +1,4 @@
 
-from collections import defaultdict
-
 from ..problem.base import Saved
 from .loss.functional import FunctionalValue
 
