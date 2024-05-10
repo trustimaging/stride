@@ -163,7 +163,7 @@ Once the installation is done, add the following lines to your ``~/.bashrc``:
 
 ```sh
 export HPCSDK_HOME=/opt/nvidia/hpc_sdk/Linux_x86_64/22.11
-export CUDA_HOME=$HPCSDK_HOME/cuda
+export NVHPC_CUDA_HOME=$HPCSDK_HOME/cuda
 export CUDA_ROOT=$HPCSDK_HOME/cuda/bin
 export PATH=$HPCSDK_HOME/compilers/bin/:$PATH
 export LD_LIBRARY_PATH=$HPCSDK_HOME/compilers/lib/:$LD_LIBRARY_PATH
