@@ -5,7 +5,7 @@ from .utils import name_from_op_name
 from ....core import Operator
 
 
-class Mask(Operator):
+class MaskField(Operator):
     """
     Mask a StructuredData object to remove values outside inner domain.
 
@@ -20,14 +20,14 @@ class Mask(Operator):
         self._mask = kwargs.pop('mask', None)
 
     def forward(self, field, **kwargs):
-        if self._mask is None:
-            self._mask = np.zeros(field.extended_shape)
-            self._mask[field.inner] = 1
-        mask = self._mask
+        mask = kwargs.pop('mask', self._mask)
+        if mask is None:
+            mask = np.zeros(field.extended_shape)
+            mask[field.inner] = 1
 
         out_field = field.alike(name=name_from_op_name(self, field))
         out_field.extended_data[:] = field.extended_data
-        out_field *= mask
+        out_field.extended_data[:] *= mask
 
         return out_field
 

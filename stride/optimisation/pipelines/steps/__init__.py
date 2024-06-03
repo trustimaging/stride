@@ -4,11 +4,12 @@ from .norm_traces import NormPerShot, NormPerTrace
 from .scale_traces import ScalePerShot, ScalePerTrace
 from .norm_field import NormField
 from .smooth_field import SmoothField
-from .mask import Mask
+from .mask_field import MaskField
 from .mute_traces import MuteTraces
 from .clip import Clip
 from .check_traces import CheckTraces
 from .dump import Dump
+from .shift_traces import ShiftTraces
 
 
 steps_registry = {
@@ -19,9 +20,10 @@ steps_registry = {
     'scale_per_trace': ScalePerTrace,
     'norm_field': NormField,
     'smooth_field': SmoothField,
-    'mask': Mask,
+    'mask_field': MaskField,
     'mute_traces': MuteTraces,
     'clip': Clip,
     'check_traces': CheckTraces,
     'dump': Dump,
+    'shift_traces': ShiftTraces,
 }

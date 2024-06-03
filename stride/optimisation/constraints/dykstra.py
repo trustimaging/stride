@@ -31,6 +31,7 @@ class Dykstra:
         self.min_iter = max(1, kwargs.pop('min_iter', 1))
         self.max_iter = kwargs.pop('max_iter', 1000)
         self.tol = kwargs.pop('tol', 1e-6)
+        self.max_tol = kwargs.pop('max_tol', 1e6)
 
     def step(self, variable, **kwargs):
         """

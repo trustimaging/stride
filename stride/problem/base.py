@@ -146,7 +146,7 @@ class Saved:
         """
         kwargs['parameter'] = self.name
         with h5.HDF5(*args, **kwargs, mode='r') as file:
-            description = file.load(filter=kwargs.pop('filter', None))
+            description = file.load(filter=kwargs.pop('filter', None), only=kwargs.pop('only', None))
 
             self.__set_desc__(description)
 
@@ -241,7 +241,7 @@ class GriddedSaved(Saved, Gridded):
         """
         kwargs['parameter'] = self.name
         with h5.HDF5(*args, **kwargs, mode='r') as file:
-            description = file.load(filter=kwargs.pop('filter', None))
+            description = file.load(filter=kwargs.pop('filter', None), only=kwargs.pop('only', None))
 
             # TODO If there's already a grid and they don't match, resample instead
             if 'space' in description and self._grid.space is None:

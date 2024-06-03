@@ -1,6 +1,5 @@
 
 import os
-import gc
 import zmq
 import zmq.asyncio
 import psutil
@@ -216,9 +215,6 @@ class Runtime(BaseRPC):
         else:
             self._local_warehouse = self._remote_warehouse
 
-        # Start maintenance loop
-        self._loop.interval(self.maintenance, interval=0.5)
-
         # Connect to monitor
         monitor_address = kwargs.get('monitor_address', None)
         monitor_port = kwargs.get('monitor_port', None)
@@ -234,6 +230,13 @@ class Runtime(BaseRPC):
         profile = kwargs.get('profile', False)
         if profile:
             self.set_profiler()
+
+        # Start maintenance loop
+        if self.uid == 'head' or 'worker' in self.uid:
+            maintenance_interval = max(0.5, min(len(self._workers)*0.5, 60))
+        else:
+            maintenance_interval = 0.5
+        self._loop.interval(self.maintenance, interval=maintenance_interval)
 
     async def init_warehouse(self, **kwargs):
         """
@@ -1025,7 +1028,8 @@ class Runtime(BaseRPC):
         else:
             warehouse = self._local_warehouse
             warehouse_obj = WarehouseObject(obj)
-            self._warehouse_cache[warehouse_obj.uid] = obj
+            if self.uid != 'head':
+                self._warehouse_cache[warehouse_obj.uid] = obj
 
             await warehouse.put_remote(obj=obj, uid=warehouse_obj.uid,
                                        publish=publish, reply=reply or publish)
@@ -1045,7 +1049,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        if not cache:
+        if self.uid == 'head' or not cache:
             return await self._local_warehouse.get_remote(uid=uid, reply=True)
 
         obj_uid = uid.uid if hasattr(uid, 'uid') else uid
@@ -1198,7 +1202,6 @@ class Runtime(BaseRPC):
             self._maintenance_msgs = {}
 
         await asyncio.gather(*tasks)
-        gc.collect()
 
     def maintenance_queue(self, fun):
         """

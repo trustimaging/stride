@@ -184,7 +184,7 @@ class Task(RemoteBase):
         if not isinstance(result, (tuple, dict)):
             result = (result,)
 
-        min_size = 1024**2
+        min_size = 1024**1
         if isinstance(result, tuple):
             async def store(_value):
                 return await self.runtime.put(_value, reply=True)
@@ -271,91 +271,6 @@ class Task(RemoteBase):
     def add_profile(self, profile, **kwargs):
         kwargs['tessera_id'] = self.tessera_id
         return super().add_profile(profile, **kwargs)
-
-    async def __prepare_args(self):
-        """
-        Prepare the arguments of the task for execution.
-
-        Returns
-        -------
-        Future
-
-        """
-
-        awaitable_args = []
-
-        for index in range(len(self.args)):
-            arg = self.args[index]
-
-            if type(arg) in types.awaitable_types:
-                self._args_state[index] = arg.state
-
-                if arg.state != 'done':
-                    if not isinstance(arg, TaskDone):
-                        self._args_value[index] = None
-                    self._args_pending.add(arg)
-
-                    def callback(_index, _arg):
-                        def _callback(fut):
-                            self.loop.run(self._set_arg_done, fut, _index, _arg)
-
-                        return _callback
-
-                    arg.add_done_callback(callback(index, arg))
-
-                else:
-                    async def _await_arg(_index, _arg):
-                        _result = await _arg.result()
-                        _attr = self._args_value if not isinstance(_arg, TaskDone) else None
-                        return _attr, _index, _result
-
-                    awaitable_args.append(
-                        _await_arg(index, arg)
-                    )
-
-            else:
-                self._args_state[index] = 'ready'
-                self._args_value[index] = arg
-
-        for key, value in self.kwargs.items():
-            if type(value) in types.awaitable_types:
-                self._kwargs_state[key] = value.state
-
-                if value.state != 'done':
-                    if not isinstance(value, TaskDone):
-                        self._kwargs_value[key] = None
-                    self._kwargs_pending.add(value)
-
-                    def callback(_key, _arg):
-                        def _callback(fut):
-                            self.loop.run(self._set_kwarg_done, fut, _key, _arg)
-
-                        return _callback
-
-                    value.add_done_callback(callback(key, value))
-
-                else:
-                    async def _await_kwarg(_key, _arg):
-                        _result = await _arg.result()
-                        _attr = self._kwargs_value if not isinstance(_arg, TaskDone) else None
-                        return _attr, _key, _result
-
-                    awaitable_args.append(
-                        _await_kwarg(key, value)
-                    )
-
-            else:
-                self._kwargs_state[key] = 'ready'
-                self._kwargs_value[key] = value
-
-        for task in asyncio.as_completed(awaitable_args):
-            attr, key, result = await task
-            if attr is not None:
-                attr[key] = result
-
-        await self._check_ready()
-
-        return self._ready_future
 
     async def prepare_args(self):
         """
@@ -973,7 +888,6 @@ class TaskProxy(ProxyBase):
             if instance.state == 'done':
                 instance.set_done()
 
-        # TODO Unsure about the need for this
         # Synchronise the task state, in case something has happened between
         # the moment when it was pickled until it has been re-registered on
         # this side

@@ -1187,7 +1187,11 @@ class Acquisitions(ProblemBase):
         return description
 
     def __set_desc__(self, description):
-        for shot_desc in description.shots:
+        if 'shots' in description:
+            shots = description.shots
+        else:
+            shots = description.values()
+        for shot_desc in shots:
             if shot_desc.id not in self._shots:
                 shot = Shot(shot_desc.id,
                             geometry=self._geometry,
