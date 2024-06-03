@@ -92,7 +92,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             Type of source/receiver interpolation (``linear`` for bi-/tri-linear or ``hicks`` for sinc
             interpolation), defaults to ``linear``.
         attenuation_power : int, optional
-            Power of the attenuation law if attenuation is given (``0`` or ``2``),
+            Power of the attenuation law if attenuation is given (``0``, ``2``, or None),
             defaults to ``0``.
         drp : bool, optional
             Whether or not to use dispersion-relation preserving coefficients (only
@@ -272,7 +272,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             Type of source/receiver interpolation (``linear`` for bi-/tri-linear or ``hicks`` for sinc
             interpolation), defaults to ``linear``.
         attenuation_power : int, optional
-            Power of the attenuation law if attenuation is given (``0`` or ``2``),
+            Power of the attenuation law if attenuation is given (``0``, ``2``, or None),
             defaults to ``0``.
         drp : bool, optional
             Whether or not to use dispersion-relation preserving coefficients (only
@@ -456,9 +456,13 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.buoy.data_with_halo[:] = 1/rho_with_halo
 
         if alpha is not None:
-            self.logger.perf('(ShotID %d) Using attenuation with power %d' % (problem.shot_id, self.attenuation_power))
+            att_pwr = str(self.attenuation_power) if self.attenuation_power is not None else 'None'
+            self.logger.perf('(ShotID %d) Using attenuation with power %s' % (problem.shot_id, att_pwr))
 
-            db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
+            if self.attenuation_power is not None:
+                db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
+            else:
+                db_to_neper = 1
 
             alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_to_neper
             self.dev_grid.vars.alpha.data_with_halo[:] = alpha_with_halo
@@ -812,7 +816,10 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.buoy.data_with_halo[:] = 1/rho_with_halo
 
         if alpha is not None:
-            db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
+            if self.attenuation_power is not None:
+                db_to_neper = 100 * (1e-6 / (2*np.pi))**self.attenuation_power / (20 * np.log10(np.exp(1)))
+            else:
+                db_to_neper = 1
 
             alpha_with_halo = self.dev_grid.with_halo(alpha.extended_data)*db_to_neper
             self.dev_grid.vars.alpha.data_with_halo[:] = alpha_with_halo
@@ -1385,7 +1392,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             subs = None
 
         # Get the attenuation term
-        if alpha_fun is not None:
+        if alpha_fun is not None and self.attenuation_power is not None:
             if self.attenuation_power == 0:
                 u = field
             elif self.attenuation_power == 2:
@@ -1457,6 +1464,12 @@ class IsoAcousticDevito(ProblemTypeBase):
                                           subdomain=dom,
                                           coefficients=subs) for dom in boundary]
         stencils += stencil_boundary
+
+        # Forced attenuation update
+        if alpha_fun is not None and self.attenuation_power is None:
+            stencils += [devito.Eq(u_next, alpha_fun*u_next,
+                                   subdomain=None,
+                                   coefficients=subs)]
 
         return sub_befores + eq_before + stencils + eq_after + sub_afters
 
