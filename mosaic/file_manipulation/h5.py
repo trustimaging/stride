@@ -123,7 +123,7 @@ def _write_dataset(name, obj, group):
         dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
 
 
-def read(obj, lazy=True, filter=None):
+def read(obj, lazy=True, filter=None, only=None):
     if isinstance(obj, h5py.Group):
         if filter is None:
             filter = {}
@@ -137,6 +137,8 @@ def read(obj, lazy=True, filter=None):
         if obj.attrs.get('is_array'):
             data = []
             for key in sorted(obj.keys()):
+                if only is not None and key not in only:
+                    continue
                 try:
                     value = read(obj[key], lazy=lazy, filter=filter)
                 except FilterException:
@@ -145,6 +147,8 @@ def read(obj, lazy=True, filter=None):
         else:
             data = {}
             for key in obj.keys():
+                if only is not None and key not in only:
+                    continue
                 try:
                     value = read(obj[key], lazy=lazy, filter=filter)
                 except FilterException:
@@ -301,9 +305,9 @@ class HDF5:
     def close(self):
         self._file.close()
 
-    def load(self, lazy=True, filter=None):
+    def load(self, lazy=True, filter=None, only=None):
         group = self._file['/']
-        description = read(group, lazy=lazy, filter=filter)
+        description = read(group, lazy=lazy, filter=filter, only=only)
         return Struct(description)
 
     def dump(self, description):
