@@ -77,13 +77,14 @@ class LocalOptimiser(ABC):
         logger = mosaic.logger()
         logger.perf('Updating variable %s,' % self.variable.name)
 
+        problem = kwargs.pop('problem', None)
+        iteration = kwargs.pop('iteration', None)
+
         if processed_grad is None:
             if grad is None:
                 if hasattr(self.variable, 'is_proxy') and self.variable.is_proxy:
                     await self.variable.pull(attr='grad')
 
-                problem = kwargs.pop('problem', None)
-                iteration = kwargs.pop('iteration', None)
                 dump_grad = kwargs.pop('dump_grad', self.dump_grad)
                 dump_prec = kwargs.pop('dump_prec', self.dump_prec)
                 if dump_grad and problem is not None:
@@ -111,6 +112,13 @@ class LocalOptimiser(ABC):
                         (min_dir, max_dir))
 
             processed_grad = await self._process_grad(grad, variable=self.variable, **kwargs)
+
+            dump_processed_grad = kwargs.pop('dump_processed_grad', self.dump_grad)
+            if dump_processed_grad and problem is not None:
+                processed_grad.dump(path=problem.output_folder,
+                                    project_name=problem.name,
+                                    parameter='processed_%s' % self.variable.grad.name,
+                                    version=iteration.abs_id + 1)
 
         test_step_size = kwargs.pop('test_step_size', self.test_step_size)
         processed_grad.data[:] *= test_step_size

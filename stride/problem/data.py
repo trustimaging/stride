@@ -365,7 +365,7 @@ class StructuredData(Data):
             self.grad.apply_prec(**kwargs)
         return self.grad
 
-    def apply_prec(self, prec_scale=0.25, prec_op=None, prec=None, **kwargs):
+    def apply_prec(self, prec_scale=4.0, prec_smooth=1.5, prec_op=None, prec=None, **kwargs):
         """
         Apply a pre-conditioner to the current field.
 
@@ -375,6 +375,8 @@ class StructuredData(Data):
             Condition scaling for the preconditioner.
         prec_op : callable, optional
             Additional operation to apply to the preconditioner.
+        prec_smooth : float, optional
+            Smoothing to apply to the preconditioner.
         prec : StructuredData, optional
             Pre-conditioner to apply. Defaults to self.prec.
 
@@ -382,9 +384,18 @@ class StructuredData(Data):
         -------
 
         """
+        # tmpnrm = sum(abs(a))
+        # sumall(j) = tmpnrm/nn
+        # eps(j) = sumall(j) * precstabfactor
+        # val(:) = 1.0/eps(:)
+        # u(:,ix,iy,iz) = u(:,ix,iy,iz)/(a(:,ix,iy,iz)*val(:)+1.0)
+
         prec = self.prec if prec is None else prec
 
         if prec is not None:
+            if prec_smooth is not None:
+                prec.data[:] = scipy.ndimage.gaussian_filter(prec.data, prec_smooth)
+
             prec_factor = np.sum(np.abs(prec.data))
 
             if prec_factor > 1e-31:
@@ -395,7 +406,8 @@ class StructuredData(Data):
                     prec.data[:] = prec_op(prec.data)
 
                 non_zero = np.abs(prec.data) > 0.
-                self.data[non_zero] /= prec.data[non_zero]
+                prec.data[non_zero] = 1/prec.data[non_zero]
+                self.data[non_zero] *= prec.data[non_zero]
 
         return self
 

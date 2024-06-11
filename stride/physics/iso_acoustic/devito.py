@@ -719,7 +719,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             if not fw3d_mode:
                 rec_term = rec.inject(field=p_a.backward, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
             else:
-                rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step ** 2 * vp2)
+                rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
             if wavelets.needs_grad:
                 src_term = src.interpolate(expr=p_a)
@@ -911,7 +911,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             Tuple with the gradients of the variables that need them
 
         """
-        problem = kwargs.pop('problem')
+        problem = kwargs.get('problem')
         shot = problem.shot
 
         dump_adjoint_wavefield = kwargs.pop('dump_adjoint_wavefield', False)
@@ -1033,7 +1033,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
 
         variable_grad *= -2 / vp.data**3
-        variable_prec *= +4 / vp.data**6 * self.time.step**2
+        # variable_prec *= +4 / vp.data**6 * self.time.step**2
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:
@@ -1048,6 +1048,22 @@ class IsoAcousticDevito(ProblemTypeBase):
                              shape=variable_prec.shape,
                              extended_shape=variable_prec.shape,
                              inner=None)
+
+        problem = kwargs.pop('problem', None)
+        iteration = kwargs.pop('iteration', None)
+        dump_local_grad = kwargs.pop('dump_local_grad', False)
+        dump_local_prec = kwargs.pop('dump_local_prec', False)
+        if dump_local_grad and problem is not None:
+            grad.dump(path=problem.output_folder,
+                      project_name=problem.name,
+                      parameter='vp_local_grad-Shot%05d' % problem.shot_id,
+                      version=iteration.abs_id + 1)
+
+        if dump_local_prec and problem is not None:
+            grad.prec.dump(path=problem.output_folder,
+                           project_name=problem.name,
+                           parameter='vp_local_src_prec-Shot%05d' % problem.shot_id,
+                           version=iteration.abs_id + 1)
 
         return grad
 
