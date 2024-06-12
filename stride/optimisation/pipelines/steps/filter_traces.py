@@ -92,7 +92,9 @@ class FilterTraces(Operator):
         filter_type = kwargs.pop('filter_type', self.filter_type or default_filter_type)
 
         method_name = '%s_filter_%s' % (pass_type, filter_type)
-        method = getattr(filters, method_name)
+        method = getattr(filters, method_name, None)
+        if method is None:
+            raise Exception('Requested filter does not exist. Implemented filters are butterworth, fir & cos.')
 
         filtered = method(traces.extended_data, *args, zero_phase=False, **kwargs)
 
