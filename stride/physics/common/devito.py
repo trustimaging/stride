@@ -588,7 +588,7 @@ class GridDevito(Gridded):
             Spatial coordinates of the sparse points (num points, dimensions), only
             needed when interpolation is not linear.
         interpolation_type : str, optional
-            Type of interpolation to perform (``linear`` or ``hicks``), defaults
+            Type of interpolation to perform (``linear``, ``sinc``, or ``hicks``), defaults
             to ``linear``, computationally more efficient but less accurate.
         kwargs
             Additional arguments for the Devito constructor.
@@ -619,6 +619,12 @@ class GridDevito(Gridded):
 
         if interpolation_type == 'linear':
             fun = devito.SparseTimeFunction(**sparse_kwargs)
+
+        elif interpolation_type == 'sinc':
+            r = sparse_kwargs.pop('r', 7)
+            fun = devito.SparseTimeFunction(interpolation='sinc', r=r,
+                                            coordinates=coordinates,
+                                            **sparse_kwargs)
 
         elif interpolation_type == 'hicks':
             r = sparse_kwargs.pop('r', 7)

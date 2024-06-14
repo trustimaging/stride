@@ -365,7 +365,7 @@ class StructuredData(Data):
             self.grad.apply_prec(**kwargs)
         return self.grad
 
-    def apply_prec(self, prec_scale=4.0, prec_smooth=1.5, prec_op=None, prec=None, **kwargs):
+    def apply_prec(self, prec_scale=4.0, prec_smooth=1.0, prec_op=None, prec=None, **kwargs):
         """
         Apply a pre-conditioner to the current field.
 
@@ -384,12 +384,6 @@ class StructuredData(Data):
         -------
 
         """
-        # tmpnrm = sum(abs(a))
-        # sumall(j) = tmpnrm/nn
-        # eps(j) = sumall(j) * precstabfactor
-        # val(:) = 1.0/eps(:)
-        # u(:,ix,iy,iz) = u(:,ix,iy,iz)/(a(:,ix,iy,iz)*val(:)+1.0)
-
         prec = self.prec if prec is None else prec
 
         if prec is not None:

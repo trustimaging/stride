@@ -28,7 +28,7 @@ class NormField(Operator):
 
         out_field = field.alike(name=name_from_op_name(self, field))
         out_field.extended_data[:] = field.extended_data
-        out_field.extended_data[:] /= self.norm_value
+        out_field.extended_data[:] *= 1. / self.norm_value
 
         return out_field
 
