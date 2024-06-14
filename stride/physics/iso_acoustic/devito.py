@@ -1033,7 +1033,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
 
         variable_grad *= -2 / vp.data**3
-        # variable_prec *= +4 / vp.data**6 * self.time.step**2
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:

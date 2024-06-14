@@ -439,7 +439,6 @@ class CMDBase(Base):
     async def deregister(self):
         try:
             self.logger.debug('Garbage collected object %s' % self)
-            self.state_changed('collected')
         except AttributeError:
             pass
 
