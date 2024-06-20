@@ -470,8 +470,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set geometry and wavelet
         wavelets = wavelets.data
 
-        if fw3d_mode:
-            wavelets[:, 1:] = wavelets[:, :-1]
+        # if fw3d_mode:
+        #     wavelets[:, 1:] = wavelets[:, :-1]
 
         if diff_source:
             wavelets = np.gradient(wavelets, self.time.step, axis=-1)
@@ -827,8 +827,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set geometry and adjoint source
         adjoint_source = adjoint_source.data
 
-        if fw3d_mode:
-            adjoint_source[:, 1:] = adjoint_source[:, :-1]
+        # if fw3d_mode:
+        #     adjoint_source[:, 1:] = adjoint_source[:, :-1]
 
         window = scipy.signal.get_window(('tukey', 0.001), time_bounds[1]-time_bounds[0], False)
         window = np.pad(window, ((time_bounds[0], self.time.num-time_bounds[1]),), mode='constant', constant_values=0.)
