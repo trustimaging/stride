@@ -108,7 +108,7 @@ async def forward(problem, pde, *args, **kwargs):
     published_args = await asyncio.gather(*published_args)
 
     platform = kwargs.get('platform', 'cpu')
-    using_gpu = platform in ['nvidia-acc', 'gpu']
+    using_gpu = 'nvidia' in platform or 'gpu' in platform
     if using_gpu:
         devices = kwargs.pop('devices', None)
         num_gpus = gpu_count() if devices is None else len(devices)
@@ -251,7 +251,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     keep_residual = isinstance(step_size, LineSearch)
 
     platform = kwargs.get('platform', 'cpu')
-    using_gpu = platform in ['nvidia-acc', 'gpu']
+    using_gpu = 'nvidia' in platform or 'gpu' in platform
     if using_gpu:
         devices = kwargs.pop('devices', None)
         num_gpus = gpu_count() if devices is None else len(devices)

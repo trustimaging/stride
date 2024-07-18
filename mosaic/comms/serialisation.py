@@ -35,7 +35,7 @@ def serialise(data):
     """
     try:
         return pickle5_dumps(data)
-    except pickle.PicklingError:
+    except (pickle.PicklingError, AttributeError):
         return cloudpickle.dumps(data), []
 
 

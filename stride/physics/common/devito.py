@@ -906,14 +906,14 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
             }
 
         elif platform == 'cpu-icc':
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'icc',
             }
 
@@ -921,7 +921,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'nvc',
             }
 
@@ -929,7 +929,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'autotuning': 'off',
                 'compiler': 'nvc',
                 'language': 'openacc',
@@ -940,7 +940,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'cuda',
                 'language': 'cuda',
                 'platform': 'nvidiaX',
@@ -950,7 +950,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'hip',
                 'language': 'hip',
                 'platform': 'amdgpuX',
@@ -964,7 +964,7 @@ class OperatorDevito:
         context = {'log-level': 'DEBUG' if log_level in ['perf', 'debug'] else 'INFO'}
         compiler_config = {}
         for key, value in default_config.items():
-            if key in devito.configuration:
+            if key in devito.configuration and key != 'opt':
                 context[key] = value
             else:
                 compiler_config[key] = value

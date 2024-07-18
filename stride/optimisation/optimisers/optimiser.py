@@ -96,6 +96,7 @@ class LocalOptimiser(ABC):
                 if dump_prec and self.variable.grad.prec is not None and problem is not None:
                     self.variable.grad.prec.dump(path=problem.output_folder,
                                                  project_name=problem.name,
+                                                 parameter='raw_%s' % self.variable.grad.prec.name,
                                                  version=iteration.abs_id+1)
 
                 grad = self.variable.process_grad(**kwargs)
@@ -104,6 +105,11 @@ class LocalOptimiser(ABC):
                     grad.dump(path=problem.output_folder,
                               project_name=problem.name,
                               version=iteration.abs_id+1)
+
+                if dump_prec and self.variable.grad.prec is not None and problem is not None:
+                    self.variable.grad.prec.dump(path=problem.output_folder,
+                                                 project_name=problem.name,
+                                                 version=iteration.abs_id+1)
 
             min_dir = np.min(grad.data)
             max_dir = np.max(grad.data)
@@ -171,7 +177,7 @@ class LocalOptimiser(ABC):
         step_size = self.step_size if step_size is None else step_size
         step_loop = kwargs.pop('step_loop', None)
         if isinstance(step_size, LineSearch):
-            await step_size.init_search(
+            step_size.init_search(
                 variable=self.variable,
                 direction=direction,
                 **kwargs
@@ -185,7 +191,7 @@ class LocalOptimiser(ABC):
                     next_step = 1.
                     done_search = True
                 else:
-                    next_step, done_search = await step_size.next_step(
+                    next_step, done_search = step_size.next_step(
                         variable=self.variable,
                         direction=direction,
                         **kwargs
@@ -216,7 +222,14 @@ class LocalOptimiser(ABC):
             self.variable.data[:] = variable_before.data.copy()
 
             # update variable
-            await self.update_variable(next_step, direction)
+            if self.variable.transform is not None:
+                variable = self.variable.transform(self.variable)
+            else:
+                variable = self.variable
+            upd_variable = self.update_variable(next_step, variable, direction)
+            if self.variable.transform is not None:
+                upd_variable = self.variable.transform(upd_variable)
+            self.variable.data[:] = upd_variable.data.copy()
 
             # post-process variable after update
             await self.post_process(**kwargs)
@@ -262,13 +275,15 @@ class LocalOptimiser(ABC):
         self.variable.release_grad()
 
     @abstractmethod
-    async def update_variable(self, step_size, direction):
+    def update_variable(self, step_size, variable, direction):
         """
 
         Parameters
         ----------
         step_size : float
             Step size to use for updating the variable.
+        variable : Data
+            Variable to update.
         direction : Data
             Direction in which to update the variable.
 

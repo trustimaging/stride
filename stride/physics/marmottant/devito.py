@@ -101,7 +101,7 @@ class MarmottantDevito(ProblemTypeBase):
 
     # forward
 
-    async def before_forward(self, r_0, x_0=None,
+    def before_forward(self, r_0, x_0=None,
                              vp=1540., rho=997, sigma=0.073, mu=0.002,
                              p_0=101325, p=0., kappa=1.07, kappa_s=5E-9, chi=0.4,
                              r_buckle=None, r_break=None, **kwargs):
@@ -159,7 +159,7 @@ class MarmottantDevito(ProblemTypeBase):
         self.state_operator.set_operator(init_terms + stencil, **kwargs)
         self.state_operator.compile()
 
-    async def run_forward(self, *args, **kwargs):
+    def run_forward(self, *args, **kwargs):
         """
         Run the state or forward problem.
 
@@ -178,7 +178,7 @@ class MarmottantDevito(ProblemTypeBase):
                                 **functions,
                                 **kwargs.pop('devito_args', {}))
 
-    async def after_forward(self, *args, **kwargs):
+    def after_forward(self, *args, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 

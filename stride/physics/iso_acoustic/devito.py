@@ -220,7 +220,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
     # forward
 
-    async def before_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def before_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
 
@@ -318,6 +318,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 save_wavefield |= alpha.needs_grad
 
         platform = kwargs.get('platform', 'cpu')
+        stream_wavefield = kwargs.pop('stream_wavefield', True)
         is_nvidia = platform is not None and 'nvidia' in platform
         is_nvc = platform is not None and (is_nvidia or 'nvc' in platform)
 
@@ -365,7 +366,10 @@ class IsoAcousticDevito(ProblemTypeBase):
             # Define the saving of the wavefield
             if save_wavefield is True:
                 space_order = None if self._needs_grad(rho, alpha) else 0
-                layers = devito.HostDevice if is_nvidia else devito.NoLayers
+                if stream_wavefield:
+                    layers = devito.HostDevice if is_nvidia else devito.NoLayers
+                else:
+                    layers = devito.Device if is_nvidia else devito.NoLayers
                 p_saved = self.dev_grid.undersampled_time_function('p_saved',
                                                                    time_bounds=time_bounds,
                                                                    factor=self.undersampling_factor,
@@ -470,9 +474,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set geometry and wavelet
         wavelets = wavelets.data
 
-        # if fw3d_mode:
-        #     wavelets[:, 1:] = wavelets[:, :-1]
-
         if diff_source:
             wavelets = np.gradient(wavelets, self.time.step, axis=-1)
 
@@ -486,7 +487,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def run_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Run the state or forward problem.
 
@@ -554,7 +555,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                **functions,
                **devito_args)
 
-    async def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def after_forward(self, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 
@@ -660,7 +661,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
     # adjoint
 
-    async def before_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def before_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Prepare the problem type to run the adjoint problem.
 
@@ -727,7 +728,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 src_term = []
 
             # Define gradient
-            gradient_update = await self.prepare_grad(wavelets, vp, rho, alpha, **kwargs)
+            gradient_update = self.prepare_grad(wavelets, vp, rho, alpha, **kwargs)
 
             # Maybe save wavefield
             dump_adjoint_wavefield = kwargs.pop('dump_adjoint_wavefield', False)
@@ -780,7 +781,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.p_a.data_with_halo.fill(0.)
         self.boundary.clear()
-        await self.init_grad(wavelets, vp, rho, alpha, **kwargs)
+        self.init_grad(wavelets, vp, rho, alpha, **kwargs)
 
         # Set wavefield if necessary
         cache_forward = kwargs.pop('cache_forward', False)
@@ -827,9 +828,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Set geometry and adjoint source
         adjoint_source = adjoint_source.data
 
-        # if fw3d_mode:
-        #     adjoint_source[:, 1:] = adjoint_source[:, :-1]
-
         window = scipy.signal.get_window(('tukey', 0.001), time_bounds[1]-time_bounds[0], False)
         window = np.pad(window, ((time_bounds[0], self.time.num-time_bounds[1]),), mode='constant', constant_values=0.)
         window = window.reshape((self.time.num, 1))
@@ -840,7 +838,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Run the adjoint problem.
 
@@ -886,7 +884,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                   **functions,
                                   **devito_args)
 
-    async def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def after_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Clean up after the adjoint run and retrieve the time gradients (if needed).
 
@@ -922,7 +920,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         if dump_adjoint_wavefield and dump_wavefield_id == shot.id:
             self.logger.perf('(ShotID %d) Dumping adjoint wavefield' % problem.shot_id)
 
-            iteration = kwargs.pop('iteration', None)
+            iteration = kwargs.get('iteration', None)
             version = iteration.abs_id+1 if iteration is not None else 0
             p_dump_data = np.asarray(self.dev_grid.vars.p_a_dump.data, dtype=np.float32)
             p_dump = StructuredData(name='adjoint_wavefield-Shot%05d' % shot.id,
@@ -945,11 +943,11 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.deallocate('buoy')
             self.dev_grid.deallocate('alpha', collect=True)
 
-        return await self.get_grad(wavelets, vp, rho, alpha, **kwargs)
+        return self.get_grad(wavelets, vp, rho, alpha, **kwargs)
 
     # gradients
 
-    async def prepare_grad_vp(self, vp, **kwargs):
+    def prepare_grad_vp(self, vp, **kwargs):
         """
         Prepare the problem type to calculate the gradients wrt Vp.
 
@@ -990,7 +988,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         return p_dt_update + (grad_update, prec_update)
 
-    async def init_grad_vp(self, vp, **kwargs):
+    def init_grad_vp(self, vp, **kwargs):
         """
         Initialise buffers in the problem type to calculate the gradients wrt Vp.
 
@@ -1009,7 +1007,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         prec = self.dev_grid.function('prec_vp')
         prec.data_with_halo.fill(0.)
 
-    async def get_grad_vp(self, vp, **kwargs):
+    def get_grad_vp(self, vp, **kwargs):
         """
         Retrieve the gradients calculated wrt to the input.
 
@@ -1032,7 +1030,20 @@ class IsoAcousticDevito(ProblemTypeBase):
         variable_prec = self.dev_grid.vars.prec_vp
         variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
 
-        variable_grad *= -2 / vp.data**3
+        is_slowness = False
+        if vp.transform is not None:
+            # try to figure out if the user wants slowness by testing the provided transform
+            try:
+                is_slowness = 1/vp.transform(10) == 10
+            except Exception:
+                pass
+
+        if is_slowness:
+            variable_grad *= +1 / vp.data
+            variable_prec *= (1 / vp.data)**2
+        else:
+            variable_grad *= -2 / vp.data**3
+            variable_prec *= (2 / vp.data)**3**2
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:
@@ -1066,7 +1077,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         return grad
 
-    async def prepare_grad_rho(self, rho, **kwargs):
+    def prepare_grad_rho(self, rho, **kwargs):
         """
         Prepare the problem type to calculate the gradients wrt rho.
 
@@ -1103,7 +1114,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         return grad_term_update + (grad_update, prec_update)
 
-    async def init_grad_rho(self, rho, **kwargs):
+    def init_grad_rho(self, rho, **kwargs):
         """
         Initialise buffers in the problem type to calculate the gradients wrt rho.
 
@@ -1122,7 +1133,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         prec = self.dev_grid.function('prec_rho')
         prec.data_with_halo.fill(0.)
 
-    async def get_grad_rho(self, rho, **kwargs):
+    def get_grad_rho(self, rho, **kwargs):
         """
         Retrieve the gradients calculated wrt to rho.
 
@@ -1365,8 +1376,14 @@ class IsoAcousticDevito(ProblemTypeBase):
 
     def _stencil(self, field, wavelets, vp, rho=None, alpha=None, direction='forward',
                  save_wavefield=False, **kwargs):
+        stencils = []
+
         # Prepare medium functions
         vp_fun, vp2_fun, inv_vp2_fun, rho_fun, buoy_fun, alpha_fun = self._medium_functions(vp, rho, alpha, **kwargs)
+        if rho is not None:
+            rho_constant = np.isclose(np.min(rho.extended_data), np.max(rho.extended_data))
+        else:
+            rho_constant = False
 
         # Forward or backward
         forward = direction == 'forward'
@@ -1381,30 +1398,51 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                           **kwargs)
 
         # Get the spatial FD
-        laplacian = self.dev_grid.function('laplacian',
-                                           coefficients='symbolic' if self.drp else 'standard')
-        laplacian_update = self._laplacian(field, laplacian, vp_fun, vp2_fun, inv_vp2_fun,
-                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
-                                           **kwargs)
-
         if self.kernel == 'OT2':
-            laplacian_term = self._diff_op(laplacian_update,
-                                           vp_fun, vp2_fun, inv_vp2_fun,
-                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
-                                           **kwargs)
-        else:
-            laplacian_term = self._diff_op(laplacian,
-                                           vp_fun, vp2_fun, inv_vp2_fun,
-                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
-                                           **kwargs)
+            # get the subs
+            if self.drp:
+                extra_functions = ()
+                subs = self._symbolic_coefficients(field, *extra_functions)
+            else:
+                subs = None
 
-        # Get the subs
-        if self.drp:
-            extra_functions = ()
-            subs = self._symbolic_coefficients(field, laplacian,
-                                               *extra_functions)
+            laplacian_term = self._diff_op(field,
+                                           vp_fun, vp2_fun, inv_vp2_fun,
+                                           rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
+                                           rho_constant=rho_constant,
+                                           **kwargs)
         else:
-            subs = None
+            laplacian_2 = self.dev_grid.function('laplacian',
+                                                 coefficients='symbolic' if self.drp else 'standard')
+
+            # get the subs
+            if self.drp:
+                extra_functions = ()
+                subs = self._symbolic_coefficients(field, laplacian_2, *extra_functions)
+            else:
+                subs = None
+
+            # first laplacian application - L2
+            laplacian_term_2 = self._diff_op(field,
+                                             vp_fun, vp2_fun, inv_vp2_fun,
+                                             rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
+                                             rho_constant=rho_constant,
+                                             **kwargs)
+
+            stencil_laplacian = devito.Eq(laplacian_2, laplacian_term_2,
+                                          subdomain=abox,
+                                          coefficients=subs)
+            stencils.append(stencil_laplacian)
+
+            # second laplacian application - L4
+            laplacian_term_4 = self._diff_op(laplacian_2,
+                                             vp_fun, vp2_fun, inv_vp2_fun,
+                                             rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
+                                             rho_constant=rho_constant,
+                                             **kwargs)
+
+            # final term
+            laplacian_term = self._laplacian(laplacian_2, laplacian_term_4)
 
         # Get the attenuation term
         if alpha_fun is not None and self.attenuation_power is not None:
@@ -1421,7 +1459,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             attenuation_term = 0
 
         # Set up the boundary
-        boundary_field = laplacian if self.kernel != 'OT2' and 'PML' in self.boundary_type else field
+        boundary_field = laplacian_2 if self.kernel != 'OT2' and 'PML' in self.boundary_type else field
         boundary_term, eq_before, eq_after = self.boundary.apply(boundary_field, vp.extended_data,
                                                                  velocity_fun=vp_fun,
                                                                  direction=direction, subs=subs,
@@ -1454,14 +1492,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                                    - vp2_fun*sub_exprs, u_next)
 
         # Time-stepping stencil
-        stencils = []
-
-        if self.kernel != 'OT2':
-            stencil_laplacian = devito.Eq(laplacian, laplacian_update,
-                                          subdomain=abox,
-                                          coefficients=subs)
-            stencils.append(stencil_laplacian)
-
         if 'hybrid' in self.boundary_type:
             domain = abox
         else:
@@ -1510,7 +1540,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         return vp_fun, vp2_fun, inv_vp2_fun, rho_fun, buoy_fun, alpha_fun
 
-    def _laplacian(self, field, laplacian, vp, vp2, inv_vp2, **kwargs):
+    def _laplacian(self, laplacian_2, laplacian_4, **kwargs):
         if self.kernel not in ['OT2', 'OT4']:
             raise ValueError("Unrecognized kernel")
 
@@ -1518,22 +1548,33 @@ class IsoAcousticDevito(ProblemTypeBase):
             bi_harmonic = 0
 
         else:
-            bi_harmonic = self.time.step**2/12 * self._diff_op(field,
-                                                               vp, vp2, inv_vp2,
-                                                               **kwargs)
+            bi_harmonic = self.time.step**2/12 * laplacian_4
 
-        laplacian_update = field + bi_harmonic
+        laplacian_update = laplacian_2 + bi_harmonic
 
         return laplacian_update
 
     def _diff_op(self, field, vp, vp2, inv_vp2, **kwargs):
         rho = kwargs.pop('rho', None)
         buoy = kwargs.pop('buoy', None)
+        rho_constant = kwargs.pop('rho_constant', False)
 
         if buoy is None:
             return vp2 * field.laplace
         else:
-            return vp2 * rho * devito.div(buoy * devito.grad(field, shift=+0.5), shift=-0.5)
+            if rho_constant:
+                return vp2 * self._div_op(self._grad_op(field, shift=+1), shift=-1)
+            else:
+                return vp2 * rho * self._div_op(self._mul_buoy(buoy, self._grad_op(field, shift=+1)), shift=-1)
+
+    def _grad_op(self, f, shift=+1):
+        return devito.grad(f, shift=shift * 0.5)
+
+    def _div_op(self, fs, shift=-1):
+        return devito.div(fs, shift=shift * 0.5)
+
+    def _mul_buoy(self, buoy, fs):
+        return buoy * fs
 
     def _subdomains(self, *args, **kwargs):
         problem = kwargs.get('problem')

@@ -120,6 +120,10 @@ class StructuredData(Data):
     """
 
     def __init__(self, **kwargs):
+        # hacky, but does the trick for now
+        name = kwargs.get('name', None)
+        if name is not None and 'vp' in name:
+            kwargs['transform'] = kwargs.pop('transform', lambda x: 1 / x)
         super().__init__(**kwargs)
 
         shape = kwargs.pop('shape', None)
@@ -365,7 +369,7 @@ class StructuredData(Data):
             self.grad.apply_prec(**kwargs)
         return self.grad
 
-    def apply_prec(self, prec_scale=4.0, prec_smooth=1.0, prec_op=None, prec=None, **kwargs):
+    def apply_prec(self, prec_scale=4.0, prec_smooth=None, prec_op=None, prec=None, **kwargs):
         """
         Apply a pre-conditioner to the current field.
 
@@ -400,8 +404,7 @@ class StructuredData(Data):
                     prec.data[:] = prec_op(prec.data)
 
                 non_zero = np.abs(prec.data) > 0.
-                prec.data[non_zero] = 1/prec.data[non_zero]
-                self.data[non_zero] *= prec.data[non_zero]
+                self.data[non_zero] *= 1/prec.data[non_zero]
 
         return self
 
@@ -593,12 +596,30 @@ class StructuredData(Data):
 
         return res
 
+    def __rtruediv__(self, other):
+        res, other_data = self._prepare_op(other)
+        res.extended_data[:] = res.extended_data.__rtruediv__(other_data)
+
+        self._op_grad(res, other, '__rtruediv__')
+        self._op_prec(res, other, '__rtruediv__')
+
+        return res
+
     def __floordiv__(self, other):
         res, other_data = self._prepare_op(other)
         res.extended_data[:] = res.extended_data.__floordiv__(other_data)
 
         self._op_grad(res, other, '__floordiv__')
         self._op_prec(res, other, '__floordiv__')
+
+        return res
+
+    def __rfloordiv__(self, other):
+        res, other_data = self._prepare_op(other)
+        res.extended_data[:] = res.extended_data.__rfloordiv__(other_data)
+
+        self._op_grad(res, other, '__rfloordiv__')
+        self._op_prec(res, other, '__rfloordiv__')
 
         return res
 
@@ -661,8 +682,6 @@ class StructuredData(Data):
     __radd__ = __add__
     __rsub__ = __sub__
     __rmul__ = __mul__
-    __rtruediv__ = __truediv__
-    __rfloordiv__ = __floordiv__
 
     def __get_desc__(self, **kwargs):
         if self._data is None:

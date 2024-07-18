@@ -24,7 +24,7 @@ class L2DistanceLoss(Operator):
 
         self.residual = None
 
-    async def forward(self, modelled, observed, **kwargs):
+    def forward(self, modelled, observed, **kwargs):
         problem = kwargs.pop('problem', None)
         shot_id = problem.shot_id if problem is not None \
             else kwargs.pop('shot_id', 0)
@@ -38,7 +38,7 @@ class L2DistanceLoss(Operator):
 
         return fun
 
-    async def adjoint(self, d_fun, modelled, observed, **kwargs):
+    def adjoint(self, d_fun, modelled, observed, **kwargs):
         grad_modelled = None
         if modelled.needs_grad:
             grad_modelled = +np.asarray(d_fun) * self.residual.copy(name='modelledresidual')
