@@ -81,19 +81,19 @@ docker build --network=host --file docker/Dockerfile.stride --tag stride .
 And to build the GPU image with `openacc` offloading and the `nvc` compiler, simply run:
 
 ```bash
-docker build --build-arg base=devitocodes/base:nvidia-nvc --network=host --file docker/Dockerfile.stride --tag stride .
+docker build --build-arg base=devitocodes/bases:nvidia-nvc --network=host --file docker/Dockerfile.stride --tag stride .
 ```
 
 or if you wish to use the `llvm-15` (clang) compiler with `openmp` offlaoding:
 
 ```bash
-docker build --build-arg base=devitocodes/base:nvidia-clang --network=host --file docker/Dockerfile.stride --tag stride .
+docker build --build-arg base=devitocodes/bases:nvidia-clang --network=host --file docker/Dockerfile.stride --tag stride .
 ```
 
 and finally for AMD architectures:
 
 ```bash
-docker build --build-arg base=devitocodes/base:amd --network=host --file docker/Dockerfile.stride --tag stride .
+docker build --build-arg base=devitocodes/bases:amd --network=host --file docker/Dockerfile.stride --tag stride .
 ```
 
 

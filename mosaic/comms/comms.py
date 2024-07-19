@@ -771,19 +771,20 @@ class OutboundConnection(Connection):
             'cmd': cmd,
         }
 
+        msg = serialise(msg)
+        msg_size = sizeof(msg)
+
         if not method.startswith('log') and not method.startswith('update_monitored_node'):
             if method == 'cmd':
                 method = '%s:%s.%s' % (method, cmd['type'], cmd['method'])
 
-                self.logger.debug('Sending cmd %s %s to %s (%s) from %s' % (method, cmd['method'],
-                                                                            self.uid, cmd['uid'],
-                                                                            self._runtime.uid))
+                self.logger.debug('Sending cmd %s %s to %s (%s) from %s '
+                                  '(size %.2f MB)' % (method, cmd['method'], self.uid, cmd['uid'],
+                                                   self._runtime.uid, msg_size/1024**2))
             else:
-                self.logger.debug('Sending msg %s to %s from %s' % (method, self.uid,
-                                                                    self._runtime.uid))
-
-        msg = serialise(msg)
-        msg_size = sizeof(msg)
+                self.logger.debug('Sending msg %s to %s from %s '
+                                  '(size %.2f MB)' % (method, self.uid, self._runtime.uid,
+                                                      msg_size/1024**2))
 
         compression = []
         compressed_msg = []

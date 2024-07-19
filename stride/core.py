@@ -288,6 +288,7 @@ class Variable:
 
         self.grad = None
         self.prec = None
+        self.transform = kwargs.pop('transform', None)
 
         self.graph = Graph()
         self.prev_op = None
@@ -384,6 +385,7 @@ class Variable:
         """
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+        kwargs['transform'] = kwargs.pop('transform', self.transform)
 
         if hasattr(self, 'has_tessera') and self.has_tessera:
             cpy = self.__class__.parameter(*args, **kwargs)
@@ -411,6 +413,7 @@ class Variable:
         """
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+        kwargs['transform'] = kwargs.pop('transform', self.transform)
 
         cpy = self.__class__.parameter(*args, **kwargs)
 
@@ -437,6 +440,7 @@ class Variable:
         """
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+        kwargs['transform'] = kwargs.pop('transform', self.transform)
 
         propagate_tessera = kwargs.pop('propagate_tessera', True)
 

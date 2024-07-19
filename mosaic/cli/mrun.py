@@ -146,7 +146,7 @@ def go(cmd=None, **kwargs):
     _runtime.init_file(runtime_config)
 
     def run_head():
-        process = cmd_subprocess.run(cmd,
+        process = cmd_subprocess.run(' '.join(cmd), shell=True,
                                      stdout=_stdout,
                                      stderr=_stderr)
 

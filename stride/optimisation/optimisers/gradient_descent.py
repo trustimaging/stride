@@ -30,6 +30,6 @@ class GradientDescent(LocalOptimiser):
                                                    **kwargs)
         return processed_grad
 
-    async def update_variable(self, step_size, direction):
-        self.variable.data[:] -= step_size * direction.data
-        return self.variable
+    def update_variable(self, step_size, variable, direction):
+        variable.data[:] -= step_size * direction.data
+        return variable

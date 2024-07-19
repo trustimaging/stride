@@ -62,7 +62,8 @@ class ShiftTraces(Operator):
         out_data = traces.extended_data.copy()
         out_traces = traces.alike(name=name_from_op_name(self, traces))
 
-        out_data[:, :-shift] = out_data[:, shift:]
+        if shift > 0:
+            out_data[:, :-shift] = out_data[:, shift:]
 
         out_traces.extended_data[:] = out_data
 

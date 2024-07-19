@@ -588,7 +588,7 @@ class GridDevito(Gridded):
             Spatial coordinates of the sparse points (num points, dimensions), only
             needed when interpolation is not linear.
         interpolation_type : str, optional
-            Type of interpolation to perform (``linear`` or ``hicks``), defaults
+            Type of interpolation to perform (``linear``, ``sinc``, or ``hicks``), defaults
             to ``linear``, computationally more efficient but less accurate.
         kwargs
             Additional arguments for the Devito constructor.
@@ -619,6 +619,12 @@ class GridDevito(Gridded):
 
         if interpolation_type == 'linear':
             fun = devito.SparseTimeFunction(**sparse_kwargs)
+
+        elif interpolation_type == 'sinc':
+            r = sparse_kwargs.pop('r', 7)
+            fun = devito.SparseTimeFunction(interpolation='sinc', r=r,
+                                            coordinates=coordinates,
+                                            **sparse_kwargs)
 
         elif interpolation_type == 'hicks':
             r = sparse_kwargs.pop('r', 7)
@@ -900,14 +906,14 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
             }
 
         elif platform == 'cpu-icc':
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'icc',
             }
 
@@ -915,7 +921,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'nvc',
             }
 
@@ -923,7 +929,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'autotuning': 'off',
                 'compiler': 'nvc',
                 'language': 'openacc',
@@ -934,7 +940,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'cuda',
                 'language': 'cuda',
                 'platform': 'nvidiaX',
@@ -944,7 +950,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'hip',
                 'language': 'hip',
                 'platform': 'amdgpuX',
@@ -958,7 +964,7 @@ class OperatorDevito:
         context = {'log-level': 'DEBUG' if log_level in ['perf', 'debug'] else 'INFO'}
         compiler_config = {}
         for key, value in default_config.items():
-            if key in devito.configuration:
+            if key in devito.configuration and key != 'opt':
                 context[key] = value
             else:
                 compiler_config[key] = value

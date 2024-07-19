@@ -7,7 +7,7 @@ try:
     from devitopro import *  # noqa: F401
     from devitopro.types.enriched import (DiskHostDevice, DiskHost, DiskDevice,  # noqa: F401
                                           HostDevice, Host, Device, NoLayers)
-    from devitopro.types.dynamic import CompressedTimeFunction
+    from devitopro.types.compressed import CompressedTimeFunction
     pro_available = True
 
 except ImportError:

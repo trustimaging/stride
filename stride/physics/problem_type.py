@@ -1,11 +1,9 @@
-
 from abc import ABC
 
 import mosaic
 
 from ..core import Operator
 from ..problem.base import Gridded
-
 
 __all__ = ['ProblemTypeBase']
 
@@ -56,7 +54,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         Gridded.__init__(self, **kwargs)
         Operator.__init__(self, **kwargs)
 
-    async def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """
         Run the state or forward problem.
 
@@ -73,18 +71,18 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             pre_str = '(ShotID %d) ' % problem.shot_id
 
         self.logger.perf('%sPreparing to run state for shot' % pre_str)
-        await self.before_forward(*args, **kwargs)
+        self.before_forward(*args, **kwargs)
 
         self.logger.perf('%sRunning state equation for shot' % pre_str)
-        await self.run_forward(*args, **kwargs)
+        self.run_forward(*args, **kwargs)
 
         self.logger.perf('%sCompleting state equation run for shot' % pre_str)
-        output = await self.after_forward(*args, **kwargs)
+        output = self.after_forward(*args, **kwargs)
         self.logger.perf('%sCompleted state equation run for shot' % pre_str)
 
         return output
 
-    async def adjoint(self, *args, **kwargs):
+    def adjoint(self, *args, **kwargs):
         """
         Run the adjoint problem.
 
@@ -101,18 +99,18 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             pre_str = '(ShotID %d) ' % problem.shot_id
 
         self.logger.perf('%sPreparing to run adjoint for shot' % pre_str)
-        await self.before_adjoint(*args, **kwargs)
+        self.before_adjoint(*args, **kwargs)
 
         self.logger.perf('%sRunning adjoint equation for shot' % pre_str)
-        await self.run_adjoint(*args, **kwargs)
+        self.run_adjoint(*args, **kwargs)
 
         self.logger.perf('%sCompleting adjoint equation run for shot' % pre_str)
-        output = await self.after_adjoint(*args, **kwargs)
+        output = self.after_adjoint(*args, **kwargs)
         self.logger.perf('%sCompleted adjoint equation run for shot' % pre_str)
 
         return output
 
-    async def before_forward(self, *args, **kwargs):
+    def before_forward(self, *args, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
 
@@ -126,7 +124,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         raise NotImplementedError('before_forward has not been implemented '
                                   'for objects of type %s' % self.__class__.__name__)
 
-    async def run_forward(self, *args, **kwargs):
+    def run_forward(self, *args, **kwargs):
         """
         Run the state or forward problem.
 
@@ -140,7 +138,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         raise NotImplementedError('run_forward has not been implemented '
                                   'for objects of type %s' % self.__class__.__name__)
 
-    async def after_forward(self, *args, **kwargs):
+    def after_forward(self, *args, **kwargs):
         """
         Clean up after the state run and retrieve the outputs.
 
@@ -156,7 +154,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         raise NotImplementedError('after_forward has not been implemented '
                                   'for objects of type %s' % self.__class__.__name__)
 
-    async def before_adjoint(self, *args, **kwargs):
+    def before_adjoint(self, *args, **kwargs):
         """
         Prepare the problem type to run the adjoint problem.
 
@@ -170,7 +168,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         raise NotImplementedError('before_adjoint has not been implemented '
                                   'for objects of type %s' % self.__class__.__name__)
 
-    async def run_adjoint(self, *args, **kwargs):
+    def run_adjoint(self, *args, **kwargs):
         """
         Run the adjoint problem.
 
@@ -184,7 +182,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         raise NotImplementedError('run_adjoint has not been implemented '
                                   'for objects of type %s' % self.__class__.__name__)
 
-    async def after_adjoint(self, *args, **kwargs):
+    def after_adjoint(self, *args, **kwargs):
         """
         Clean up after the adjoint run and retrieve the gradients (if needed).
 
@@ -200,7 +198,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         raise NotImplementedError('after_adjoint has not been implemented '
                                   'for objects of type %s' % self.__class__.__name__)
 
-    async def prepare_grad(self, *wrt, **kwargs):
+    def prepare_grad(self, *wrt, **kwargs):
         """
         Prepare the problem type to calculate the gradients wrt the inputs.
 
@@ -229,7 +227,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            update = await method(variable, wrt=wrt, **kwargs)
+            update = method(variable, wrt=wrt, **kwargs)
 
             if not isinstance(update, tuple):
                 update = (update,)
@@ -238,7 +236,7 @@ class ProblemTypeBase(ABC, Gridded, Operator):
 
         return gradient_update
 
-    async def init_grad(self, *wrt, **kwargs):
+    def init_grad(self, *wrt, **kwargs):
         """
         Initialise buffers in the problem type to calculate the gradients wrt the inputs.
 
@@ -263,9 +261,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            await method(variable, wrt=wrt, **kwargs)
+            method(variable, wrt=wrt, **kwargs)
 
-    async def get_grad(self, *wrt, **kwargs):
+    def get_grad(self, *wrt, **kwargs):
         """
         Retrieve the gradients calculated wrt to the inputs.
 
@@ -294,6 +292,6 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            grads.append(await method(variable, wrt=wrt, **kwargs))
+            grads.append(method(variable, wrt=wrt, **kwargs))
 
         return tuple(grads)

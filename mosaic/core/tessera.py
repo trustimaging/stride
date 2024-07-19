@@ -262,6 +262,8 @@ class Tessera(RemoteBase):
         if self._state != 'init':
             return
 
+        self.state_changed('listening')
+
         while True:
             sender_id, task = await self._task_queue.get()
             # Make sure that the loop does not keep implicit references to the task until the
@@ -288,12 +290,10 @@ class Tessera(RemoteBase):
         -------
 
         """
-        if self._state != 'init':
+        if self._state != 'listening':
             return
 
         while True:
-            self.state_changed('listening')
-
             sender_id, task, future = await self._run_queue.get()
             # Make sure that the loop does not keep implicit references to the task until the
             # next task arrives in the queue
@@ -319,8 +319,6 @@ class Tessera(RemoteBase):
                                                                                 self.obj.__class__.__name__))
 
             await asyncio.sleep(0)
-            self.state_changed('running')
-            task.state_changed('running')
             await self.logger.send()
             await self.call_safe(sender_id, method, task)
 

@@ -81,7 +81,7 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # forward
 
-    async def before_forward(self, wavelets, vp, vs, rho, **kwargs):
+    def before_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
 
@@ -204,7 +204,7 @@ class IsoElasticDevito(ProblemTypeBase):
             self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
             self.dev_grid.vars.rec_tau.coordinates.data[:] = shot.receiver_coordinates
 
-    async def run_forward(self, wavelets, vp, vs, rho, **kwargs):
+    def run_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Run the state or forward problem.
 
@@ -234,7 +234,7 @@ class IsoElasticDevito(ProblemTypeBase):
                                 **functions,
                                 **kwargs.pop('devito_args', {}))
 
-    async def after_forward(self, wavelets, vp, vs, rho, **kwargs):
+    def after_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 
@@ -277,19 +277,19 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # adjoint
 
-    async def before_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def before_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def after_adjoint(self, **kwargs):
+    def after_adjoint(self, **kwargs):
         """
         Not implemented
         """
@@ -297,19 +297,19 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # gradients
 
-    async def prepare_grad_vp(self, **kwargs):
+    def prepare_grad_vp(self, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def init_grad_vp(self, **kwargs):
+    def init_grad_vp(self, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def get_grad_vp(self, **kwargs):
+    def get_grad_vp(self, **kwargs):
         """
         Not implemented
         """
