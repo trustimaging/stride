@@ -9,6 +9,8 @@ def _rampoff_mask(shape, ramp_size):
     mask = np.ones(shape, dtype=np.float32)
 
     for dim_i in range(len(shape)):
+        if 2*ramp_size > shape[dim_i]:
+            continue
         for index in range(ramp_size):
             pos = np.abs((ramp_size - index - 1) / float(ramp_size - 1))
             val = 1 - np.cos(np.pi / 2 * (1 - pos))
