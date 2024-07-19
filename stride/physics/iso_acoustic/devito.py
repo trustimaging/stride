@@ -3,7 +3,6 @@ import os
 import glob
 import shutil
 import tempfile
-import warnings
 import numpy as np
 import scipy.signal
 
@@ -19,9 +18,6 @@ from ..problem_type import ProblemTypeBase
 
 
 __all__ = ['IsoAcousticDevito']
-
-
-warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 
 
 @mosaic.tessera
@@ -1034,7 +1030,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         if vp.transform is not None:
             # try to figure out if the user wants slowness by testing the provided transform
             try:
-                is_slowness = 1/vp.transform(10) == 10
+                is_slowness = np.isclose(1/vp.transform(10), 10)
             except Exception:
                 pass
 
