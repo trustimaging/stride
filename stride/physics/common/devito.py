@@ -238,7 +238,7 @@ class GridDevito(Gridded):
 
         if space is None:
             origin = (0,)
-            extended_shape = (1,)
+            extended_shape = (2,)
             extended_extent = (1,)
         else:
             extra = space.absorbing
@@ -286,7 +286,7 @@ class GridDevito(Gridded):
         if parent_grid is not None:
             dimensions = parent_grid.dimensions
             time_dimension = devito.TimeDimension(name='time_inner',
-                                                  spacing=devito.types.Scalar(name='dt_inner', is_const=True))
+                                                  spacing=devito.Scalar(name='dt_inner', is_const=True))
             self.num_inner = kwargs.pop('num_inner', 1)
         else:
             self.num_inner = None
@@ -691,7 +691,7 @@ class GridDevito(Gridded):
 
             reference_gridpoints, coefficients = self._calculate_hicks(coordinates)
 
-            fun = devito.PrecomputedSparseFunction(r=r,
+            fun = devito.PrecomputedSparseFunction(r=r+1,
                                                    gridpoints=reference_gridpoints,
                                                    interpolation_coeffs=coefficients,
                                                    **sparse_kwargs)

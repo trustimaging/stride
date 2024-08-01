@@ -174,7 +174,10 @@ class MarmottantDevito(ProblemTypeBase):
         """
         functions = dict()
 
+        time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
         self.state_operator.run(dt=self.time.step,
+                                time_m=1,
+                                time_M=time_bounds[1]-1,
                                 **functions,
                                 **kwargs.pop('devito_args', {}))
 
@@ -286,7 +289,7 @@ class MarmottantDevito(ProblemTypeBase):
             rho = parent_grid.vars.rho
         except AttributeError:
             rho = self.dev_grid.vars.rho_sparse
-        vp2 = parent_grid.vars.vp2
+        vp2 = parent_grid.vars.vp**2
 
         inject_term = v_inject.inject(field=p_out.forward, expr=vp2 * self.time.step**2 * rho * inject_scale * v_inject)
 
@@ -481,6 +484,7 @@ class MarmottantDevito(ProblemTypeBase):
                                            shape=(self.time.num, num),
                                            space_order=self.space_order,
                                            time_order=self.time_order,
+                                           layers=devito.NoLayers,
                                            **kwargs)
 
     def _make_interp_function(self, name, value, x_0, num, **kwargs):
@@ -519,7 +523,7 @@ class MarmottantDevito(ProblemTypeBase):
         return fun, dense_fun, interp_term
 
     def _make_interp_time_function(self, name, value, x_0, num, **kwargs):
-        if not isinstance(value, devito.TimeFunction):
+        if not isinstance(value, devito.TimeFunctionOSS):
             fun = self._make_saved_time_function(name, num=num, save=self.time.num)
             fun.data[:] = value.data.T
 
@@ -541,7 +545,7 @@ class MarmottantDevito(ProblemTypeBase):
 
             dense_fun = value
 
-            interp_term = fun.interpolate(expr=dense_fun.forward)
+            interp_term = fun.interpolate(expr=dense_fun)
 
             if x_0 is None:
                 raise ValueError('Bubble location x_0 needs to be provided when'

@@ -381,7 +381,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                     # ValueError: Cannot access `shape_allocated` as unfinalized - so no size estimate
                     pass
 
-                if self._needs_grad(wavelets, rho, alpha):
+                if self._needs_grad(wavelets, rho, alpha, **kwargs):
                     p_saved_expr = p
                 else:
                     p_saved_expr = self._forward_save(p)
@@ -1595,8 +1595,9 @@ class IsoAcousticDevito(ProblemTypeBase):
     def _dt_max(self, k, h, vp_max):
         return k * h / vp_max * 1 / np.sqrt(self.space.dim)
 
-    def _needs_grad(self, *wrt):
-        return any(v is not None and v.needs_grad for v in wrt)
+    def _needs_grad(self, *wrt, **kwargs):
+        force_raw_wavefield = kwargs.pop('force_raw_wavefield', False)
+        return any(v is not None and v.needs_grad for v in wrt) or force_raw_wavefield
 
     def _forward_save(self, field):
         return field.dt2
