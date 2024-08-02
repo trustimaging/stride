@@ -212,6 +212,20 @@ class Iteration:
         """
         self.curr_run.losses[fun.shot_id] = fun
 
+    def add_step_length(self, val):
+        """
+        Add a step size to the iteration.
+
+        Parameters
+        ----------
+        val : Step Length value
+
+        Returns
+        -------
+
+        """
+        self.step_size = val
+
     def add_submitted(self, shot):
         """
         Add a submitted shot.
