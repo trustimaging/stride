@@ -464,7 +464,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                              filter_relaxation=min(filter_wavelets_relaxation, filter_traces_relaxation),
                              step_loop=step_loop,
                              **kwargs)
-        iteration.add_step_length(optimiser.applied_step_size)
+        iteration.add_step_size(optimiser.applied_step_size)
 
         if dump:
             optimiser.dump(path=problem.output_folder,
