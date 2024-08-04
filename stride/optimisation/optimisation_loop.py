@@ -138,14 +138,6 @@ class Iteration:
         return self._optimisation_loop
 
     @property
-    def step_size(self):
-        """
-        Functional value for this iteration across all shots.
-
-        """
-        return self.curr_run.step_size
-
-    @property
     def total_loss(self):
         """
         Functional value for this iteration across all shots.
@@ -219,20 +211,6 @@ class Iteration:
 
         """
         self.curr_run.losses[fun.shot_id] = fun
-
-    def add_step_size(self, val):
-        """
-        Add a step size to the iteration.
-
-        Parameters
-        ----------
-        val : Step Length value
-
-        Returns
-        -------
-
-        """
-        self.curr_run.step_size = val
 
     def add_submitted(self, shot):
         """
