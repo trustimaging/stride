@@ -132,7 +132,7 @@ async def forward(problem, pde, *args, **kwargs):
         if using_gpu:
             deviceid = devices[worker.indices[1] % num_gpus]
             if platform in ['nvidia-acc', 'nvidia-cuda']:
-                devito_args = _kwargs.get('devito_args', {})
+                devito_args = _kwargs.get('devito_args', {}).copy()
                 devito_args['deviceid'] = deviceid
                 _kwargs['devito_args'] = devito_args
             elif platform == 'gpu':
@@ -313,7 +313,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             if using_gpu:
                 deviceid = devices[worker.indices[1] % num_gpus]
                 if platform in ['nvidia-acc', 'nvidia-cuda']:
-                    devito_args = _kwargs.get('devito_args', {})
+                    devito_args = _kwargs.get('devito_args', {}).copy()
                     devito_args['deviceid'] = deviceid
                     _kwargs['devito_args'] = devito_args
                 elif platform == 'gpu':
@@ -399,8 +399,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
                 if using_gpu:
                     deviceid = devices[worker.indices[1] % num_gpus]
-                    if platform == 'nvidia-acc':
-                        devito_args = _kwargs.get('devito_args', {})
+                    if platform in ['nvidia-acc', 'nvidia-cuda']:
+                        devito_args = _kwargs.get('devito_args', {}).copy()
                         devito_args['deviceid'] = deviceid
                         _kwargs['devito_args'] = devito_args
                     elif platform == 'gpu':
