@@ -201,18 +201,18 @@ class LocalOptimiser(ABC):
                 done_search = True
 
             if done_search:
-                # cap the step if needed
-                max_step = kwargs.pop('max_step', None)
-                max_step = np.inf if not isinstance(max_step, (int, float)) else max_step
+                # # cap the step if needed
+                # max_step = kwargs.pop('max_step', None)
+                # max_step = np.inf if not isinstance(max_step, (int, float)) else max_step
 
                 unclipped_step = next_step
 
-                if next_step > -0.2:  # if bit -ve, still assume grad is right dirn
-                    next_step = max(0.1, min(next_step, max_step))
-                elif max_step < np.inf and next_step < -max_step * 0.75:  # in general, prevent -ve steps
-                    next_step = -max_step * 0.75
-                elif next_step < -0.2:
-                    next_step = next_step * 0.25
+                # if next_step > -0.2:  # if bit -ve, still assume grad is right dirn
+                #     next_step = max(0.1, min(next_step, max_step))
+                # elif max_step < np.inf and next_step < -max_step * 0.75:  # in general, prevent -ve steps
+                #     next_step = -max_step * 0.75
+                # elif next_step < -0.2:
+                #     next_step = next_step * 0.25
 
                 logger.perf('\t taking final update step of %e [unclipped step of %e]' % (next_step, unclipped_step))
             else:
@@ -226,6 +226,8 @@ class LocalOptimiser(ABC):
                 variable = self.variable.transform(self.variable)
             else:
                 variable = self.variable
+            print('val: {} | internal grad: {}'.format(variable.data, direction.data))
+            print('=================================')
             upd_variable = self.update_variable(next_step, variable, direction)
             if self.variable.transform is not None:
                 upd_variable = self.variable.transform(upd_variable)
