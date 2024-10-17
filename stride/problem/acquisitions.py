@@ -1199,6 +1199,8 @@ class Acquisitions(ProblemBase):
             }
 
             for shot in self.shots:
+                if shot_ids is not None and shot.id not in shot_ids:
+                    continue
                 description['shots'][str(shot.id)] = shot.__get_desc__()
 
             for sequence in self.sequences:
