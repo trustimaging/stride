@@ -1614,6 +1614,10 @@ class Traces(StructuredData):
 
         if self.allocated:
             data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
+            if data.shape[-1] < new_num:
+                data = np.pad(data, ((0, 0), (0, new_num-data.shape[-1])), mode='constant', constant_values=0)
+            elif data.shape[-1] > new_num:
+                data = data[:, :new_num]
             new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=data)
         else:
             new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)

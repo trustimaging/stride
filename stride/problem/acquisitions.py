@@ -4,6 +4,7 @@ import numpy as np
 from collections import OrderedDict
 from cached_property import cached_property
 
+import mosaic.types
 from mosaic.file_manipulation import h5
 
 from .data import Traces
@@ -392,7 +393,7 @@ class Shot(ProblemBase):
         if h5.file_exists(*args, **kwargs):
             description = {
                 'shots': {
-                    'shots_%08d' % self.id: self.__get_desc__(**kwargs)
+                    str(self.id): self.__get_desc__(**kwargs)
                 }
             }
 
@@ -400,7 +401,7 @@ class Shot(ProblemBase):
                 file.append(description)
 
         else:
-            self._acquisitions.dump(*args, **kwargs)
+            self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
     def __get_desc__(self, **kwargs):
         description = {
@@ -1172,17 +1173,40 @@ class Acquisitions(ProblemBase):
         return sub_acquisitions
 
     def __get_desc__(self, **kwargs):
-        description = {
-            'num_shots': self.num_shots,
-            'shots': [],
-            'sequences': [],
-        }
+        legacy = kwargs.pop('legacy', False)
+        shot_ids = kwargs.pop('shot_ids', None)
 
-        for shot in self.shots:
-            description['shots'].append(shot.__get_desc__())
+        if legacy:
+            mosaic.logger().warn('Loading legacy Acquisitions file...')
 
-        for sequence in self.sequences:
-            description['sequences'].append(sequence.__get_desc__())
+            description = {
+                'num_shots': self.num_shots,
+                'shots': [],
+                'sequences': [],
+            }
+
+            for shot in self.shots:
+                if shot_ids is not None and shot.id not in shot_ids:
+                    continue
+                description['shots'].append(shot.__get_desc__())
+
+            for sequence in self.sequences:
+                description['sequences'].append(sequence.__get_desc__())
+
+        else:
+            description = {
+                'num_shots': self.num_shots,
+                'shots': {},
+                'sequences': {},
+            }
+
+            for shot in self.shots:
+                if shot_ids is not None and shot.id not in shot_ids:
+                    continue
+                description['shots'][str(shot.id)] = shot.__get_desc__()
+
+            for sequence in self.sequences:
+                description['sequences'][str(sequence.id)] = sequence.__get_desc__()
 
         return description
 
@@ -1191,6 +1215,9 @@ class Acquisitions(ProblemBase):
             shots = description.shots
         else:
             shots = description.values()
+        if isinstance(shots, mosaic.types.Struct):
+            shots = shots.values()
+
         for shot_desc in shots:
             if shot_desc.id not in self._shots:
                 shot = Shot(shot_desc.id,
@@ -1202,7 +1229,11 @@ class Acquisitions(ProblemBase):
             shot.__set_desc__(shot_desc)
 
         if 'sequences' in description:
-            for seq_desc in description.sequences:
+            sequences = description.sequences
+            if isinstance(sequences, mosaic.types.Struct):
+                sequences = sequences.values()
+
+            for seq_desc in sequences:
                 if seq_desc.id not in self._sequences:
                     sequence = Sequence(seq_desc.id,
                                         geometry=self._geometry,

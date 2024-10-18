@@ -1,6 +1,7 @@
 import numpy as np
 from collections import OrderedDict
 
+import mosaic.types
 from .base import GriddedSaved, ProblemBase
 from .. import plotting
 from ..utils import geometries
@@ -91,10 +92,16 @@ class TransducerLocation(GriddedSaved):
     def __set_desc__(self, description, transducers=None):
         self.id = description.id
         self.transducer = transducers.get(description.transducer_id)
-        self.coordinates = description.coordinates.load()
+        if hasattr(description.coordinates, 'load'):
+            self.coordinates = description.coordinates.load()
+        else:
+            self.coordinates = description.coordinates
 
         if 'orientation' in description:
-            self.orientation = description.orientation.load()
+            if hasattr(description.orientation, 'load'):
+                self.orientation = description.orientation.load()
+            else:
+                self.orientation = description.orientation
 
 
 class Geometry(ProblemBase):
@@ -393,18 +400,69 @@ class Geometry(ProblemBase):
         return sub_geometry
 
     def __get_desc__(self, **kwargs):
-        description = {
-            'num_locations': self.num_locations,
-            'locations': [],
-        }
+        legacy = kwargs.pop('legacy', False)
 
-        for location_id, location in self._locations.items():
-            description['locations'].append(location.__get_desc__())
+        if legacy:
+            mosaic.logger().warn('Loading legacy Geometry file...')
+
+            description = {
+                'num_locations': self.num_locations,
+                'locations': [],
+            }
+
+            for location_id, location in self._locations.items():
+                description['locations'].append(location.__get_desc__())
+
+        else:
+            description = {
+                'num_locations': self.num_locations,
+                'locations': {},
+            }
+
+            coordinates = None
+            orientation = None
+
+            index = 0
+            for location_id, location in self._locations.items():
+                location_desc = location.__get_desc__()
+                if 'coordinates' in location_desc:
+                    if coordinates is None:
+                        coordinates = np.zeros((self.num_locations, self.space.dim), dtype=np.float32)
+                    coordinates[index, :] = location_desc['coordinates']
+                    location_desc['coordinates'] = index
+                if 'orientation' in location_desc:
+                    if orientation is None:
+                        orientation = np.zeros((self.num_locations, self.space.dim), dtype=np.float32)
+                    orientation[index, :] = location_desc['orientation']
+                    location_desc['orientation'] = index
+
+                description['locations'][str(location_id)] = location_desc
+                index += 1
+
+            if coordinates is not None:
+                description['coordinates'] = coordinates
+
+            if orientation is not None:
+                description['orientation'] = orientation
 
         return description
 
     def __set_desc__(self, description):
-        for location_desc in description.locations:
+        locations = description.locations
+        if isinstance(locations, mosaic.types.Struct):
+            locations = locations.values()
+
+        if 'coordinates' in description:
+            for location_desc in locations:
+                idx = location_desc.coordinates
+                location_desc.coordinates = description.coordinates[idx, :]
+
+        if 'orientation' in description:
+            for location_desc in locations:
+                idx = location_desc.orientation
+                location_desc.orientation = description.orientation[idx, :]
+
+        for location_desc in locations:
             if location_desc.id not in self.location_ids:
                 instance = TransducerLocation(location_desc.id)
                 self.add_location(instance)
