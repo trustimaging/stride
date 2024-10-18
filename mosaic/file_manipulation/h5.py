@@ -92,7 +92,8 @@ def append(name, obj, group):
             append(sub_group_name, obj[index], sub_group)
 
     else:
-        _write_dataset(name, obj, group)
+        if name not in group:
+            _write_dataset(name, obj, group)
 
 
 def _write_dataset(name, obj, group):
