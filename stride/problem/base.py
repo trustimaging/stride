@@ -148,7 +148,7 @@ class Saved:
         with h5.HDF5(*args, **kwargs, mode='r') as file:
             description = file.load(filter=kwargs.pop('filter', None), only=kwargs.pop('only', None))
 
-            self.__set_desc__(description)
+            self.__set_desc__(description, **kwargs)
 
     def rm(self, *args, **kwargs):
         """
@@ -166,7 +166,7 @@ class Saved:
     def __get_desc__(self, **kwargs):
         return {}
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         pass
 
 
@@ -270,7 +270,7 @@ class GriddedSaved(Saved, Gridded):
 
                 self._grid.slow_time = slow_time
 
-            self.__set_desc__(description)
+            self.__set_desc__(description, **kwargs)
 
     def grid_description(self):
         """

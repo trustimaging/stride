@@ -89,7 +89,7 @@ class TransducerLocation(GriddedSaved):
 
         return description
 
-    def __set_desc__(self, description, transducers=None):
+    def __set_desc__(self, description, transducers=None, **kwargs):
         self.id = description.id
         self.transducer = transducers.get(description.transducer_id)
         if hasattr(description.coordinates, 'load'):
@@ -447,7 +447,7 @@ class Geometry(ProblemBase):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         locations = description.locations
         if isinstance(locations, mosaic.types.Struct):
             locations = locations.values()
@@ -468,4 +468,4 @@ class Geometry(ProblemBase):
                 self.add_location(instance)
 
             instance = self.get(location_desc.id)
-            instance.__set_desc__(location_desc, self._transducers)
+            instance.__set_desc__(location_desc, self._transducers, **kwargs)

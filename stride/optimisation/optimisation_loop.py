@@ -65,7 +65,7 @@ class IterationRun:
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self.submitted_shots = description.submitted_shots
         self.completed_shots = description.completed_shots
@@ -252,7 +252,7 @@ class Iteration:
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self.abs_id = description.abs_id
 
@@ -260,7 +260,7 @@ class Iteration:
         for run_desc in description.runs:
             self._curr_run_idx += 1
             run = IterationRun(self._curr_run_idx, self)
-            run.__set_desc__(run_desc)
+            run.__set_desc__(run_desc, **kwargs)
             self._runs[self._curr_run_idx] = run
 
     _serialisation_attrs = ['id', 'abs_id']
@@ -453,14 +453,14 @@ class Block:
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self._num_iterations = description.num_iterations
 
         for iter_desc in description.iterations:
             iteration = Iteration(iter_desc.id, iter_desc.abs_id,
                                   self, self._optimisation_loop)
-            iteration.__set_desc__(iter_desc)
+            iteration.__set_desc__(iter_desc, **kwargs)
             self._iterations[iteration.id] = iteration
 
         self._current_iteration = self._iterations[description.current_iteration.id]
@@ -671,13 +671,13 @@ class OptimisationLoop(Saved):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.running_id = description.running_id
         self._num_blocks = description.num_blocks
 
         for block_desc in description.blocks:
             block = Block(block_desc.id, self)
-            block.__set_desc__(block_desc)
+            block.__set_desc__(block_desc, **kwargs)
             self._blocks[block.id] = block
 
         self._current_block = self._blocks[description.current_block.id]

@@ -711,7 +711,7 @@ class StructuredData(Data):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._extended_shape = description.extended_shape
         self._dtype = np.dtype(description.dtype)
@@ -1183,7 +1183,7 @@ class ScalarField(StructuredData):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
@@ -1375,7 +1375,7 @@ class VectorField(ScalarField):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
@@ -1631,8 +1631,8 @@ class Traces(StructuredData):
 
         return description
 
-    def __set_desc__(self, description):
-        super().__set_desc__(description)
+    def __set_desc__(self, description, **kwargs):
+        super().__set_desc__(description, **kwargs)
 
         self._transducer_ids = description.transducer_ids
 
@@ -1814,7 +1814,7 @@ class SparseField(StructuredData):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._num = description.num
