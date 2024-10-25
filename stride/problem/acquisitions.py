@@ -1236,7 +1236,8 @@ class Acquisitions(ProblemBase):
             kwargs_.update(kwargs)
             kwargs = kwargs_
 
-        super().load(*args, filter={'shots': shot_ids} if shot_ids is not None else None, **kwargs)
+        filter = kwargs.pop('filter', {'shots': shot_ids} if shot_ids is not None else None)
+        super().load(*args, filter=filter, **kwargs)
 
         self._prev_load = args, kwargs
 
