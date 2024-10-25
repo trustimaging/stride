@@ -187,6 +187,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     select_shots : dict, optional
         Rules for selecting available shots per iteration, defaults to taking all shots. For
         details on this see :func:`~stride.problem.acquisitions.Acquisitions.select_shot_ids`.
+    lazy_loading : bool, optional
+        Whether to load shot data every iteration to save memory.
     dump : bool, optional
         Whether or not to save to disk the updated variable after every iteration.
     f_min : float, optional
@@ -216,6 +218,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     restart = kwargs.pop('restart', None)
     restart_id = kwargs.pop('restart_id', -1)
 
+    lazy_loading = kwargs.pop('lazy_loading', False)
     dump = kwargs.pop('dump', True)
     safe = kwargs.pop('safe', True)
 
@@ -289,6 +292,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
+
+        if lazy_loading:
+            problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
@@ -481,5 +487,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                     (iteration.id, block.num_iterations, block.id,
                      optimisation_loop.num_blocks, iteration.total_loss, prev_loss))
         logger.perf('====================================================================')
+
+        if lazy_loading:
+            problem.acquisitions.deallocate(shot_ids=shot_ids)
 
         iteration.clear_run()

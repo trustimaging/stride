@@ -206,11 +206,11 @@ class Transducers(ProblemBase):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         for transducer_desc in description.transducers:
             transducer_type = getattr(transducer_types, camel_case(transducer_desc.type))
             transducer = transducer_type(transducer_desc.id, grid=self.grid)
 
-            transducer.__set_desc__(transducer_desc)
+            transducer.__set_desc__(transducer_desc, **kwargs)
 
             self.add(transducer)

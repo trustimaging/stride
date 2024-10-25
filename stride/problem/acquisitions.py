@@ -316,6 +316,23 @@ class Shot(ProblemBase):
 
         return shot
 
+    def deallocate(self):
+        """
+        Deallocate memory associated with shot.
+
+        Returns
+        -------
+
+        """
+        if self.wavelets is not None:
+            self.wavelets.deallocate()
+
+        if self.observed is not None:
+            self.observed.deallocate()
+
+        if self.delays is not None:
+            self.delays.deallocate()
+
     def plot(self, **kwargs):
         """
         Plot wavelets and observed for this shot if they are allocated.
@@ -423,7 +440,7 @@ class Shot(ProblemBase):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
 
         for source_id in description.source_ids:
@@ -440,17 +457,19 @@ class Shot(ProblemBase):
                 receiver = None
             self._receivers[receiver_id] = receiver
 
+        lazy_loading = kwargs.pop('lazy_loading', False)
+
         self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
-        if 'wavelets' in description:
-            self.wavelets.__set_desc__(description.wavelets)
+        if 'wavelets' in description and not lazy_loading:
+            self.wavelets.__set_desc__(description.wavelets, **kwargs)
 
         self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
-        if 'observed' in description:
-            self.observed.__set_desc__(description.observed)
+        if 'observed' in description and not lazy_loading:
+            self.observed.__set_desc__(description.observed, **kwargs)
 
         self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
-        if 'delays' in description:
-            self.delays.__set_desc__(description.delays)
+        if 'delays' in description and not lazy_loading:
+            self.delays.__set_desc__(description.delays, **kwargs)
 
 
 class Sequence(ProblemBase):
@@ -657,7 +676,7 @@ class Sequence(ProblemBase):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self.acq = description.acq
 
@@ -707,6 +726,7 @@ class Acquisitions(ProblemBase):
         self._sequences = OrderedDict()
         self._shot_selection = []
         self._sequence_selection = []
+        self._prev_load = None, None
 
     @property
     def shots(self):
@@ -1026,6 +1046,25 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
+    def deallocate(self, shot_ids=None):
+        """
+        Deallocate memory associated with shots.
+
+        Parameters
+        ----------
+        shot_ids : list, optional
+            Set of shot IDs to deallocate.
+
+        Returns
+        -------
+
+        """
+        if shot_ids is None:
+            shot_ids = self.shot_ids
+
+        for shot_id in shot_ids:
+            self._shots[shot_id].deallocate()
+
     def plot(self, **kwargs):
         """
         Plot wavelets and observed for for all shots if they are allocated.
@@ -1172,6 +1211,35 @@ class Acquisitions(ProblemBase):
 
         return sub_acquisitions
 
+    def load(self, *args, **kwargs):
+        """
+        Load the object using ``__set_desc__`` to digest the description.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Parameters
+        ----------
+        shot_ids : list, optional
+            List of shot IDs to load.
+
+        Returns
+        -------
+
+        """
+        shot_ids = kwargs.pop('shot_ids', None)
+
+        prev_args, prev_kwargs = self._prev_load
+        if prev_args is not None:
+            args = args + prev_args[len(args):] if len(args) < len(prev_args) else args
+        if prev_kwargs is not None:
+            kwargs_ = prev_kwargs.copy()
+            kwargs_.update(kwargs)
+            kwargs = kwargs_
+
+        super().load(*args, filter={'shots': shot_ids} if shot_ids is not None else None, **kwargs)
+
+        self._prev_load = args, kwargs
+
     def __get_desc__(self, **kwargs):
         legacy = kwargs.pop('legacy', False)
         shot_ids = kwargs.pop('shot_ids', None)
@@ -1210,7 +1278,7 @@ class Acquisitions(ProblemBase):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         if 'shots' in description:
             shots = description.shots
         else:
@@ -1226,7 +1294,7 @@ class Acquisitions(ProblemBase):
                 self.add(shot)
 
             shot = self.get(shot_desc.id)
-            shot.__set_desc__(shot_desc)
+            shot.__set_desc__(shot_desc, **kwargs)
 
         if 'sequences' in description:
             sequences = description.sequences
@@ -1241,4 +1309,4 @@ class Acquisitions(ProblemBase):
                     self.add_sequence(sequence)
 
                 sequence = self.get_sequence(seq_desc.id)
-                sequence.__set_desc__(seq_desc)
+                sequence.__set_desc__(seq_desc, **kwargs)
