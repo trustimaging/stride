@@ -1404,6 +1404,24 @@ class Runtime(BaseRPC):
         task.state_changed('pending')
         self.inc_pending_tasks()
 
+    async def init_tasks(self, sender_id, tasks):
+        """
+        Create new set of tasks for tesseras in this worker.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        tasks : list
+            Tasks configuration.
+
+        Returns
+        -------
+
+        """
+        for uid, task in tasks:
+            await self.init_task(sender_id, task, uid)
+
     def inc_pending_tasks(self):
         self._pending_tasks += 1
 

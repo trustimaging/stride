@@ -13,7 +13,7 @@ from cached_property import cached_property
 
 import mosaic
 from .. import types
-from .task import TaskProxy
+from .task import TaskProxy, TaskOutput, TaskDone
 from .base import Base, CMDBase, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
@@ -793,8 +793,6 @@ class TesseraProxy(ProxyBase):
         return self._set_remote_attr(item, value)
 
     async def _init_task(self, task_proxy, *args, **kwargs):
-        kwargs.pop('runtime', None)
-
         await self._init_future
 
         for arg in args:
@@ -809,16 +807,42 @@ class TesseraProxy(ProxyBase):
 
     def _get_remote_method(self, item):
         def remote_method(*args, **kwargs):
+            kwargs.pop('runtime', None)
+
+            dependencies = []
+            for arg in args:
+                if isinstance(arg, TaskProxy):
+                    proxy = arg
+                elif isinstance(arg, (TaskOutput, TaskDone)):
+                    proxy = arg._task_proxy
+                else:
+                    continue
+                dependencies += proxy._dependencies
+                dependencies.append(proxy)
+
+            for arg in kwargs.values():
+                if isinstance(arg, TaskProxy):
+                    proxy = arg
+                elif isinstance(arg, (TaskOutput, TaskDone)):
+                    proxy = arg._task_proxy
+                else:
+                    continue
+                dependencies += proxy._dependencies
+                dependencies.append(proxy)
+
+            dependencies = weakref.WeakSet(dependencies)
+
             eager = kwargs.pop('eager', False)
-            task_proxy = TaskProxy(self, item, *args, **kwargs)
+            task_proxy = TaskProxy(self, item,
+                                   eager=eager, dependencies=dependencies if not eager else None,
+                                   *args, **kwargs)
 
             if eager:
-                return self._init_task(task_proxy, *args, **kwargs)
-            else:
                 loop = mosaic.get_event_loop()
                 loop.run(self._init_task, task_proxy, *args, **kwargs)
+                # return self._init_task(task_proxy, *args, **kwargs)
 
-                return task_proxy
+            return task_proxy
 
         return remote_method
 

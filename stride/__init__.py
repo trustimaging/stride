@@ -331,15 +331,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             wavelets = process_wavelets(wavelets,
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
-            await wavelets.init_future
             observed = process_observed(observed,
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
-            await observed.init_future
             processed = process_wavelets_observed(wavelets, observed,
                                                   iteration=iteration, problem=sub_problem,
                                                   runtime=worker, **_kwargs)
-            await processed.init_future
             wavelets = processed.outputs[0]
             observed = processed.outputs[1]
 
@@ -347,14 +344,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             modelled = pde(wavelets, *published_args,
                            iteration=iteration, problem=sub_problem,
                            runtime=worker, **_kwargs)
-            await modelled.init_future
 
             # post-process modelled and observed traces
             traces = process_traces(modelled, observed,
                                     scale_to=sub_problem.shot.observed,
                                     iteration=iteration, problem=sub_problem,
                                     runtime=worker, **_kwargs)
-            await traces.init_future
             modelled = traces.outputs[0]
             observed = traces.outputs[1]
 
@@ -418,15 +413,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 wavelets = process_wavelets(wavelets,
                                             iteration=iteration, problem=sub_problem,
                                             runtime=worker, **_kwargs)
-                await wavelets.init_future
                 observed = process_observed(observed,
                                             iteration=iteration, problem=sub_problem,
                                             runtime=worker, **_kwargs)
-                await observed.init_future
                 processed = process_wavelets_observed(wavelets, observed,
                                                       iteration=iteration, problem=sub_problem,
                                                       runtime=worker, **_kwargs)
-                await processed.init_future
                 wavelets = processed.outputs[0]
                 observed = processed.outputs[1]
 
@@ -434,14 +426,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 modelled = pde(wavelets, *published_args,
                                iteration=iteration, problem=sub_problem,
                                runtime=worker, **_kwargs)
-                await modelled.init_future
 
                 # post-process modelled and observed traces
                 traces = process_traces(modelled, observed,
                                         scale_to=sub_problem.shot.observed,
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
-                await traces.init_future
                 modelled = traces.outputs[0]
                 observed = traces.outputs[1]
 

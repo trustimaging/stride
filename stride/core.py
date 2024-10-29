@@ -368,7 +368,18 @@ class Variable:
                 else:
                     prev[nxt.name_idx] = input_grad
 
-        await asyncio.gather(*returns)
+        eager = not len(returns) or returns[-1]._eager
+        if eager:
+            await asyncio.gather(*returns)
+        else:
+            summ_returns = []
+            summ_dependencies = []
+            for ret in reversed(returns):
+                if ret not in summ_dependencies:
+                    summ_returns.append(ret)
+                    summ_dependencies += ret._dependencies
+
+            await asyncio.gather(*summ_returns)
 
         self.clear_graph()
 

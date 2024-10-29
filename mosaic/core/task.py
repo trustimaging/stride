@@ -7,6 +7,7 @@ import weakref
 import operator
 from cached_property import cached_property
 
+import mosaic
 from .. import types
 from .base import Base, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
@@ -537,6 +538,8 @@ class TaskProxy(ProxyBase):
         self._tessera_proxy = proxy
 
         self._fill_config(**kwargs)
+        self._eager = kwargs.pop('eager', False)
+        self._dependencies = kwargs.pop('dependencies', [])
 
         self.method = method
         self.args = args
@@ -557,20 +560,66 @@ class TaskProxy(ProxyBase):
         -------
 
         """
-        self.runtime.register(self)
+        if self._eager:
+            self.runtime.register(self)
 
-        task = {
-            'tessera_id': self._tessera_proxy.uid,
-            'method': self.method,
-            'args': self.args,
-            'kwargs': self.kwargs,
-        }
+            task = {
+                'tessera_id': self._tessera_proxy.uid,
+                'method': self.method,
+                'args': self.args,
+                'kwargs': self.kwargs,
+            }
 
-        await self.remote_runtime.init_task(task=task, uid=self._uid,
-                                            reply=True)
+            await self.remote_runtime.init_task(task=task, uid=self._uid,
+                                                reply=True)
 
-        if self._state == 'pending':
-            self.state_changed('queued')
+            if self._state == 'pending':
+                self.state_changed('queued')
+
+        else:
+            proxies = list(self._dependencies) + [self]
+
+            runtime_proxies = {}
+            for proxy in proxies:
+                if proxy.runtime_id not in runtime_proxies:
+                    runtime_proxies[proxy.runtime_id] = []
+                runtime_proxies[proxy.runtime_id].append(proxy)
+
+            for runtime_id, proxies_ in runtime_proxies.items():
+                tasks = []
+                tessera_inits = []
+                for proxy in proxies_:
+                    tessera_inits.append(proxy._tessera_proxy.init_future)
+
+                    self.runtime.register(proxy)
+
+                    task = {
+                        'tessera_id': proxy._tessera_proxy.uid,
+                        'method': proxy.method,
+                        'args': proxy.args,
+                        'kwargs': proxy.kwargs,
+                    }
+
+                    tasks.append((proxy._uid, task))
+                    proxy._eager = True
+                    proxy._dependencies = None
+
+                await asyncio.gather(*tessera_inits)
+                await proxies_[0].remote_runtime.init_tasks(tasks=tasks, reply=True)
+
+                for proxy in proxies_:
+                    if proxy._state == 'pending':
+                        proxy.state_changed('queued')
+
+                    if proxy.uid == self.uid:
+                        continue
+
+                    if proxy.init_future.done():
+                        exc = proxy.init_future.exception()
+                        if exc is not None:
+                            raise exc
+
+                    proxy.init_future.set_result(True)
 
     def deregister_runtime(self, uid):
         if uid != self.runtime_id:
@@ -869,6 +918,10 @@ class TaskProxy(ProxyBase):
                 self.set_exception(result)
 
     def __await__(self):
+        if not self._eager:
+            loop = mosaic.get_event_loop()
+            loop.run(self.__init_async__)
+
         yield from self._done_future.__await__()
         return self
 
@@ -877,6 +930,7 @@ class TaskProxy(ProxyBase):
     @classmethod
     def _deserialisation_helper(cls, state):
         instance = super()._deserialisation_helper(state)
+        instance._eager = True
 
         if not hasattr(instance, 'args'):
             instance.args = None
