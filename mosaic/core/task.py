@@ -446,6 +446,11 @@ class Task(RemoteBase):
         wait = 1
         while not self.runtime.fits_in_memory(self._arg_size):
             if self.runtime._running_tasks <= 0:
+                await asyncio.sleep(wait)
+                await self.runtime.maintenance()
+                if self.runtime.fits_in_memory(self._arg_size):
+                    break
+
                 try:
                     raise MemoryOverflowError('Not enough memory to allocate %d bytes '
                                               'for task %s' % (self._arg_size, self))
