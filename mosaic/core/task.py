@@ -11,7 +11,7 @@ import mosaic
 from .. import types
 from .base import Base, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
-from ..utils import Future, MultiError, sizeof, remote_sizeof
+from ..utils import Future, MultiError, sizeof, remote_sizeof, memory_used
 
 
 __all__ = ['Task', 'TaskProxy', 'TaskOutputGenerator', 'TaskOutput', 'TaskDone']
@@ -453,7 +453,9 @@ class Task(RemoteBase):
 
                 try:
                     raise MemoryOverflowError('Not enough memory to allocate %d bytes '
-                                              'for task %s' % (self._arg_size, self))
+                                              'for task %s. Runtime mem limit: %d bytes, '
+                                              'mem used: %d' % (self._arg_size, self,
+                                                                self.runtime.memory_limit(), memory_used()))
                 except MemoryOverflowError:
                     et, ev, tb = sys.exc_info()
                     tb = tblib.Traceback(tb)
