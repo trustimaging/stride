@@ -294,7 +294,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         num_shots = len(shot_ids)
 
         if lazy_loading:
-            problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False)
+            problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False, fast=True)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):

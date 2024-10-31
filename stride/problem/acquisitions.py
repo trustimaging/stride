@@ -1227,6 +1227,7 @@ class Acquisitions(ProblemBase):
 
         """
         shot_ids = kwargs.pop('shot_ids', None)
+        fast = kwargs.pop('fast', False)
 
         prev_args, prev_kwargs = self._prev_load
         if prev_args is not None:
@@ -1237,7 +1238,35 @@ class Acquisitions(ProblemBase):
             kwargs = kwargs_
 
         filter = kwargs.pop('filter', {'shots': shot_ids} if shot_ids is not None else None)
-        super().load(*args, filter=filter, **kwargs)
+
+        if not fast:
+            super().load(*args, filter=filter, **kwargs)
+        else:
+            kwargs['parameter'] = self.name
+
+            if filter is not None:
+                shot_ids = filter['shots']
+            else:
+                shot_ids = self.shot_ids
+            shots = self._shots
+
+            with h5.HDF5(*args, **kwargs, mode='r') as file:
+                file = file.file
+                for shot_id in shot_ids:
+                    shot = shots[shot_id]
+                    shot_desc = file['/shots/%d' % shot_id]
+                    try:
+                        shot.wavelets.data[:] = shot_desc['wavelets/data']
+                    except KeyError:
+                        pass
+                    try:
+                        shot.observed.data[:] = shot_desc['observed/data']
+                    except KeyError:
+                        pass
+                    try:
+                        shot.delays.data[:] = shot_desc['delays/data']
+                    except KeyError:
+                        pass
 
         self._prev_load = args, kwargs
 
