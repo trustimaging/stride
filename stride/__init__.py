@@ -228,6 +228,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     filter_traces = kwargs.pop('filter_traces', True)
     filter_wavelets = kwargs.pop('filter_wavelets', filter_traces)
 
+    # TODO
+    test_adjoint = kwargs.pop('test_adjoint', False)
+
     fw3d_mode = kwargs.get('fw3d_mode', False)
     filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation',
                                             0.75 if not fw3d_mode else 0.725)
@@ -249,6 +252,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                           filter_traces=filter_traces,
                                           filter_relaxation=filter_traces_relaxation,
                                           len=runtime.num_workers, **kwargs)
+    adjoint = Adjoint.remote(len=runtime.num_workers)
 
     step_size = kwargs.pop('step_size', optimiser.step_size)
     keep_residual = isinstance(step_size, LineSearch)
@@ -353,22 +357,41 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             modelled = traces.outputs[0]
             observed = traces.outputs[1]
 
-            # calculate loss
-            fun = await loss(modelled, observed,
-                             keep_residual=keep_residual,
-                             iteration=iteration, problem=sub_problem,
-                             runtime=worker, **_kwargs).result()
+            if not test_adjoint:
+                # calculate loss
+                fun = await loss(modelled, observed,
+                                 keep_residual=keep_residual,
+                                 iteration=iteration, problem=sub_problem,
+                                 runtime=worker, **_kwargs).result()
 
-            iteration.add_loss(fun)
-            logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
+                iteration.add_loss(fun)
+                logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
 
-            # run adjoint
-            await fun.adjoint(**_kwargs)
-            iteration.add_completed(sub_problem.shot)
+                # run adjoint
+                await fun.adjoint(**_kwargs)
+                iteration.add_completed(sub_problem.shot)
 
-            logger.perf('Retrieved gradient for shot %d (%d out of %d)'
-                        % (sub_problem.shot_id,
-                           iteration.num_completed, num_shots))
+                logger.perf('Retrieved gradient for shot %d (%d out of %d)'
+                            % (sub_problem.shot_id,
+                               iteration.num_completed, num_shots))
+
+            else:
+                # calculate loss
+                fun = loss(modelled, observed,
+                           keep_residual=keep_residual,
+                           iteration=iteration, problem=sub_problem,
+                           runtime=worker, **_kwargs)
+
+                # run adjoint
+                fun = await adjoint(fun, runtime=worker, **_kwargs).result()
+
+                iteration.add_loss(fun)
+                logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
+
+                iteration.add_completed(sub_problem.shot)
+                logger.perf('Retrieved gradient for shot %d (%d out of %d)'
+                            % (sub_problem.shot_id,
+                               iteration.num_completed, num_shots))
 
         await loop
 

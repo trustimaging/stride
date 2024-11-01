@@ -12,7 +12,7 @@ from mosaic.core.base import CMDBase
 from mosaic.core import TaskProxy
 
 
-__all__ = ['Variable', 'Operator']
+__all__ = ['Variable', 'Operator', 'Adjoint']
 
 
 async def _maybe_sum(a, b):
@@ -331,7 +331,10 @@ class Variable:
             output_grads = [prev[each] for each in output_names]
 
             # call adjoint method
-            method = getattr(node.op, node.method)
+            try:
+                method = getattr(node.op, node.method)
+            except AttributeError:
+                method = getattr(node.op.obj, node.method)
             ret = method(*output_grads, **kwargs)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
@@ -660,16 +663,16 @@ class Operator:
                 else:
                     next_ops.append(Node(arg, '__noop__', 0))
 
-        for arg in kwargs.values():
-            if hasattr(arg, 'needs_grad') and not isinstance(arg, CMDBase):
-                needs_grad |= arg.needs_grad
-
-                if arg.needs_grad and arg.prev_op is None:
-                    next_ops.append(Node(arg, '__call_adjoint__', 0))
-                elif arg.needs_grad:
-                    next_ops.append(arg.prev_op)
-                else:
-                    next_ops.append(Node(arg, '__noop__', 0))
+        # for arg in kwargs.values():
+        #     if hasattr(arg, 'needs_grad') and not isinstance(arg, CMDBase):
+        #         needs_grad |= arg.needs_grad
+        #
+        #         if arg.needs_grad and arg.prev_op is None:
+        #             next_ops.append(Node(arg, '__call_adjoint__', 0))
+        #         elif arg.needs_grad:
+        #             next_ops.append(arg.prev_op)
+        #         else:
+        #             next_ops.append(Node(arg, '__noop__', 0))
 
         self.inputs = (args, kwargs)
 
@@ -757,3 +760,11 @@ class Operator:
 
     def __repr__(self):
         return self.name
+
+
+@mosaic.tessera
+class Adjoint:
+
+    async def __call__(self, fun, **kwargs):
+        await fun.adjoint(**kwargs)
+        return fun

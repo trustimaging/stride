@@ -36,7 +36,10 @@ class WarehouseObject:
             node_id = runtime.uid
 
         self._node_id = node_id
-        self._warehouse_id = runtime._local_warehouse.uid
+        try:
+            self._warehouse_id = runtime._local_warehouse.uid
+        except AttributeError:
+            self._warehouse_id = runtime.uid
         self._tessera = None
         self._size = sizeof(obj) if size is None else size
 
