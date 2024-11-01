@@ -1401,7 +1401,6 @@ class Runtime(BaseRPC):
                     task['method'], *task['args'], **task['kwargs'])
 
         tessera.queue_task((sender_id, task))
-        task.state_changed('pending')
         self.inc_pending_tasks()
 
     async def init_tasks(self, sender_id, tasks):

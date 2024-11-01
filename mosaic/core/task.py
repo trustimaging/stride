@@ -601,13 +601,13 @@ class TaskProxy(ProxyBase):
                     self.runtime.register(proxy)
 
                     task = {
-                        'tessera_id': proxy._tessera_proxy.uid,
+                        'tessera_id': proxy.tessera_id,
                         'method': proxy.method,
                         'args': proxy.args,
                         'kwargs': proxy.kwargs,
                     }
 
-                    tasks.append((proxy._uid, task))
+                    tasks.append((proxy.uid, task))
                     proxy._eager = True
                     proxy._dependencies = None
 
@@ -615,7 +615,7 @@ class TaskProxy(ProxyBase):
                 await proxies_[0].remote_runtime.init_tasks(tasks=tasks, reply=True)
 
                 for proxy in proxies_:
-                    if proxy._state == 'pending':
+                    if proxy.state == 'pending':
                         proxy.state_changed('queued')
 
                     if proxy.uid == self.uid:

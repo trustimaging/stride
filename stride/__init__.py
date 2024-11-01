@@ -347,7 +347,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             # post-process modelled and observed traces
             traces = process_traces(modelled, observed,
-                                    scale_to=sub_problem.shot.observed,
+                                    scale_to=sub_problem.shot.observed.copy(compressed=False),
                                     iteration=iteration, problem=sub_problem,
                                     runtime=worker, **_kwargs)
             modelled = traces.outputs[0]
@@ -429,7 +429,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
                 # post-process modelled and observed traces
                 traces = process_traces(modelled, observed,
-                                        scale_to=sub_problem.shot.observed,
+                                        scale_to=sub_problem.shot.observed.copy(compressed=False),
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
                 modelled = traces.outputs[0]

@@ -114,6 +114,7 @@ class Shot(ProblemBase):
         sources = kwargs.pop('sources', None)
         receivers = kwargs.pop('receivers', None)
         delays = kwargs.pop('delays', None)
+        compressed = kwargs.pop('compressed', False)
 
         if sources is not None and receivers is not None:
             for source in sources:
@@ -122,9 +123,13 @@ class Shot(ProblemBase):
             for receiver in receivers:
                 self._receivers[receiver.id] = receiver
 
-            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
-            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
-            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1), grid=self.grid)
+            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids,
+                                   grid=self.grid)
+            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids,
+                                   compressed=compressed,
+                                   grid=self.grid)
+            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1),
+                                 grid=self.grid)
 
             if delays is not None:
                 self.delays.data[:, 0] = delays
@@ -305,7 +310,7 @@ class Shot(ProblemBase):
             shot.wavelets = self.wavelets
 
         if self.observed is not None:
-            shot.observed = self.observed
+            shot.observed = self.observed.copy(compressed=False)
 
         if self.delays is not None:
             shot.delays = self.delays
@@ -441,6 +446,8 @@ class Shot(ProblemBase):
         return description
 
     def __set_desc__(self, description, **kwargs):
+        compressed = kwargs.pop('compressed', False)
+
         self.id = description.id
 
         for source_id in description.source_ids:
@@ -463,7 +470,7 @@ class Shot(ProblemBase):
         if 'wavelets' in description and not lazy_loading:
             self.wavelets.__set_desc__(description.wavelets, **kwargs)
 
-        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
+        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, compressed=compressed, grid=self.grid)
         if 'observed' in description and not lazy_loading:
             self.observed.__set_desc__(description.observed, **kwargs)
 
@@ -1256,15 +1263,15 @@ class Acquisitions(ProblemBase):
                     shot = shots[shot_id]
                     shot_desc = file['/shots/%d' % shot_id]
                     try:
-                        shot.wavelets.data[:] = shot_desc['wavelets/data']
+                        shot.wavelets._set_data(shot_desc['wavelets/data'])
                     except KeyError:
                         pass
                     try:
-                        shot.observed.data[:] = shot_desc['observed/data']
+                        shot.observed._set_data(shot_desc['observed/data'])
                     except KeyError:
                         pass
                     try:
-                        shot.delays.data[:] = shot_desc['delays/data']
+                        shot.delays._set_data(shot_desc['delays/data'])
                     except KeyError:
                         pass
 
@@ -1309,6 +1316,8 @@ class Acquisitions(ProblemBase):
         return description
 
     def __set_desc__(self, description, **kwargs):
+        compressed = kwargs.pop('compressed', False)
+
         if 'shots' in description:
             shots = description.shots
         else:
@@ -1319,12 +1328,13 @@ class Acquisitions(ProblemBase):
         for shot_desc in shots:
             if shot_desc.id not in self._shots:
                 shot = Shot(shot_desc.id,
+                            compressed=compressed,
                             geometry=self._geometry,
                             problem=self.problem, grid=self.grid)
                 self.add(shot)
 
             shot = self.get(shot_desc.id)
-            shot.__set_desc__(shot_desc, **kwargs)
+            shot.__set_desc__(shot_desc, compressed=compressed, **kwargs)
 
         if 'sequences' in description:
             sequences = description.sequences
