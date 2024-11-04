@@ -4,6 +4,7 @@ import zmq
 import zmq.asyncio
 import psutil
 import asyncio
+import inspect
 import contextlib
 import weakref
 from zict import LRU
@@ -237,6 +238,17 @@ class Runtime(BaseRPC):
         else:
             maintenance_interval = 0.5
         self._loop.interval(self.maintenance, interval=maintenance_interval)
+
+        # Initialise anon tessera
+        @mosaic.tessera
+        class AnonTess:
+            async def run(self, f, *args, **kwargs):
+                if inspect.iscoroutine(f) or inspect.iscoroutinefunction(f):
+                    return await f(*args, **kwargs)
+                else:
+                    return f(*args, **kwargs)
+
+        await self.init_tessera(self.uid, AnonTess, 'tess-anon', ())
 
     async def init_warehouse(self, **kwargs):
         """

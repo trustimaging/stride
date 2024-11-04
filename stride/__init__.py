@@ -252,7 +252,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                           filter_traces=filter_traces,
                                           filter_relaxation=filter_traces_relaxation,
                                           len=runtime.num_workers, **kwargs)
-    adjoint = Adjoint.remote(len=runtime.num_workers)
 
     step_size = kwargs.pop('step_size', optimiser.step_size)
     keep_residual = isinstance(step_size, LineSearch)
@@ -383,7 +382,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                            runtime=worker, **_kwargs)
 
                 # run adjoint
-                fun = await adjoint(fun, runtime=worker, **_kwargs).result()
+                fun = await fun.remote.adjoint(**_kwargs).result()
 
                 iteration.add_loss(fun)
                 logger.perf('Functional value for shot %d: %s' % (shot_id, fun))

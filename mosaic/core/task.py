@@ -2,6 +2,7 @@
 import sys
 import uuid
 import tblib
+import inspect
 import asyncio
 import weakref
 import operator
@@ -556,6 +557,7 @@ class TaskProxy(ProxyBase):
         self._result = None
         self._done_future = Future()
         self._outputs = None
+        self._remote = None
 
         self.state_changed('pending')
 
@@ -571,7 +573,7 @@ class TaskProxy(ProxyBase):
             self.runtime.register(self)
 
             task = {
-                'tessera_id': self._tessera_proxy.uid,
+                'tessera_id': self.tessera_id,
                 'method': self.method,
                 'args': self.args,
                 'kwargs': self.kwargs,
@@ -721,6 +723,20 @@ class TaskProxy(ProxyBase):
             outputs = self._outputs()
 
         return outputs
+
+    @property
+    def remote(self):
+        """
+        Execute remote operations on the task.
+
+        """
+        if self._remote is None or self._remote() is None:
+            remote = TaskRemote(self)
+            self._remote = weakref.ref(remote)
+        else:
+            remote = self._remote()
+
+        return remote
 
     @property
     def collectable(self):
@@ -955,6 +971,105 @@ class TaskProxy(ProxyBase):
         instance.loop.run(instance.check_result)
 
         return instance
+
+
+class AnonTaskProxy(TaskProxy):
+
+    @cached_property
+    def tessera_id(self):
+        """
+        Tessera UID.
+
+        """
+        try:
+            return 'tess-anon'
+        except ReferenceError:
+            return None
+
+
+class TaskRemote:
+    """
+    Class that enables executing methods on remote task outputs,
+
+    """
+
+    def __init__(self, task_proxy):
+        self._task_proxy = task_proxy
+
+    async def _init_task(self, task_proxy, *args, **kwargs):
+        await self._task_proxy.init_future
+
+        for arg in args:
+            if hasattr(arg, 'init_future'):
+                await arg.init_future
+
+        for arg in kwargs.values():
+            if hasattr(arg, 'init_future'):
+                await arg.init_future
+
+        return await task_proxy.__init_async__()
+
+    def _get_remote_method(self, item):
+        def remote_method(*args, **kwargs):
+            kwargs.pop('runtime', None)
+
+            async def run(*_args, **_kwargs):
+                output = _args[0]
+                _args = _args[1:]
+                f = getattr(output, item)
+                if inspect.iscoroutine(f) or inspect.iscoroutinefunction(f):
+                    return await f(*_args, **_kwargs)
+                else:
+                    return f(*args, **kwargs)
+
+            args = (run, self._task_proxy,) + args
+
+            dependencies = []
+            for arg in args:
+                if isinstance(arg, TaskProxy):
+                    proxy = arg
+                elif isinstance(arg, (TaskOutput, TaskDone)):
+                    proxy = arg._task_proxy
+                else:
+                    continue
+                dependencies += proxy._dependencies
+                dependencies.append(proxy)
+
+            for arg in kwargs.values():
+                if isinstance(arg, TaskProxy):
+                    proxy = arg
+                elif isinstance(arg, (TaskOutput, TaskDone)):
+                    proxy = arg._task_proxy
+                else:
+                    continue
+                dependencies += proxy._dependencies
+                dependencies.append(proxy)
+
+            dependencies = weakref.WeakSet(dependencies)
+
+            eager = kwargs.pop('eager', False)
+            task_proxy = AnonTaskProxy(self._task_proxy._tessera_proxy, 'run',
+                                       eager=eager, dependencies=dependencies if not eager else None,
+                                       *args, **kwargs)
+
+            if eager:
+                loop = mosaic.get_event_loop()
+                loop.run(self._init_task, task_proxy, *args, **kwargs)
+                # return self._init_task(task_proxy, *args, **kwargs)
+
+            return task_proxy
+
+        return remote_method
+
+    def __getattribute__(self, item):
+        try:
+            return super().__getattribute__(item)
+
+        except AttributeError:
+            return self._get_remote_method(item)
+
+    def __getitem__(self, item):
+        return self.__getattribute__(item)
 
 
 class TaskOutputGenerator:

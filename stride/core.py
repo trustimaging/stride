@@ -12,7 +12,7 @@ from mosaic.core.base import CMDBase
 from mosaic.core import TaskProxy
 
 
-__all__ = ['Variable', 'Operator', 'Adjoint']
+__all__ = ['Variable', 'Operator']
 
 
 async def _maybe_sum(a, b):
@@ -385,6 +385,8 @@ class Variable:
             await asyncio.gather(*summ_returns)
 
         self.clear_graph()
+
+        return self
 
     def detach(self, *args, **kwargs):
         """
@@ -760,11 +762,3 @@ class Operator:
 
     def __repr__(self):
         return self.name
-
-
-@mosaic.tessera
-class Adjoint:
-
-    async def __call__(self, fun, **kwargs):
-        await fun.adjoint(**kwargs)
-        return fun
