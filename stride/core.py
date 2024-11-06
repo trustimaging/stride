@@ -321,6 +321,7 @@ class Variable:
         prev = dict()
         prev[self.prev_op.name_idx] = grad
         returns = []
+        parallel_returns = []
         for node in self.graph.toposort(self.prev_op):
             if node.method == '__noop__':
                 continue
@@ -335,14 +336,20 @@ class Variable:
                 method = getattr(node.op, node.method)
             except AttributeError:
                 method = getattr(node.op.obj, node.method)
-            ret = method(*output_grads, **kwargs)
+            if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
+                ret = method(*output_grads, **{**kwargs, **{'eager': True}})
+            else:
+                ret = method(*output_grads, **kwargs)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
                 ret = await ret
 
             if isinstance(ret, TaskProxy):
-                if not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy:
+                if (not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy) and \
+                        (not hasattr(node.op, 'is_parameter') or not node.op.is_parameter):
                     returns.append(ret)
+                else:
+                    parallel_returns.append(ret)
 
                 input_grads = ret.outputs
             else:
@@ -383,6 +390,9 @@ class Variable:
                     summ_dependencies += ret._dependencies
 
             await asyncio.gather(*summ_returns)
+
+        # loop = mosaic.get_event_loop()
+        # loop.run(asyncio.gather, *parallel_returns)
 
         self.clear_graph()
 

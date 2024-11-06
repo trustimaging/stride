@@ -382,10 +382,10 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                            runtime=worker, **_kwargs)
 
                 # run adjoint
-                fun = await fun.remote.adjoint(**_kwargs).result()
+                fun_value = await fun.remote.adjoint(**_kwargs).result()
 
-                iteration.add_loss(fun)
-                logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
+                iteration.add_loss(fun_value)
+                logger.perf('Functional value for shot %d: %s' % (shot_id, fun_value))
 
                 iteration.add_completed(sub_problem.shot)
                 logger.perf('Retrieved gradient for shot %d (%d out of %d)'

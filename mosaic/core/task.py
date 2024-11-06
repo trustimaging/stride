@@ -560,6 +560,7 @@ class TaskProxy(ProxyBase):
         self._remote = None
 
         self.state_changed('pending')
+        self.remote_runtime
 
     async def init(self):
         """
@@ -590,6 +591,8 @@ class TaskProxy(ProxyBase):
 
             runtime_proxies = {}
             for proxy in proxies:
+                if proxy.state in ['failed', 'done']:
+                    continue
                 if proxy.runtime_id not in runtime_proxies:
                     runtime_proxies[proxy.runtime_id] = []
                 runtime_proxies[proxy.runtime_id].append(proxy)
@@ -611,7 +614,7 @@ class TaskProxy(ProxyBase):
 
                     tasks.append((proxy.uid, task))
                     proxy._eager = True
-                    proxy._dependencies = None
+                    proxy._dependencies = []
 
                 await asyncio.gather(*tessera_inits)
                 await proxies_[0].remote_runtime.init_tasks(tasks=tasks, reply=True)
@@ -981,10 +984,7 @@ class AnonTaskProxy(TaskProxy):
         Tessera UID.
 
         """
-        try:
-            return 'tess-anon'
-        except ReferenceError:
-            return None
+        return 'tess-anon'
 
 
 class TaskRemote:
@@ -1020,7 +1020,7 @@ class TaskRemote:
                 if inspect.iscoroutine(f) or inspect.iscoroutinefunction(f):
                     return await f(*_args, **_kwargs)
                 else:
-                    return f(*args, **kwargs)
+                    return f(*_args, **_kwargs)
 
             args = (run, self._task_proxy,) + args
 

@@ -806,6 +806,8 @@ class TesseraProxy(ProxyBase):
         return await task_proxy.__init_async__()
 
     def _get_remote_method(self, item):
+        self_ref = weakref.ref(self)
+
         def remote_method(*args, **kwargs):
             kwargs.pop('runtime', None)
 
@@ -833,13 +835,13 @@ class TesseraProxy(ProxyBase):
             dependencies = weakref.WeakSet(dependencies)
 
             eager = kwargs.pop('eager', False)
-            task_proxy = TaskProxy(self, item,
+            task_proxy = TaskProxy(self_ref(), item,
                                    eager=eager, dependencies=dependencies if not eager else None,
                                    *args, **kwargs)
 
             if eager:
                 loop = mosaic.get_event_loop()
-                loop.run(self._init_task, task_proxy, *args, **kwargs)
+                loop.run(self_ref()._init_task, task_proxy, *args, **kwargs)
                 # return self._init_task(task_proxy, *args, **kwargs)
 
             return task_proxy
@@ -847,31 +849,39 @@ class TesseraProxy(ProxyBase):
         return remote_method
 
     def _get_remote_attr(self, item):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
-            attr = await self.cmd_recv_async(method='get_attr', item=item)
+            await self_ref()._init_future
+            attr = await self_ref().cmd_recv_async(method='get_attr', item=item)
 
             return attr
 
         return AwaitableOnly(remote_attr)
 
     def _set_remote_attr(self, item, value):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
-            await self.cmd_recv_async(method='set_attr', item=item, value=value)
+            await self_ref()._init_future
+            await self_ref().cmd_recv_async(method='set_attr', item=item, value=value)
 
         loop = mosaic.get_event_loop()
         return loop.run(remote_attr)
 
     def _get_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(*args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
     def _get_magic_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(_self, *args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
@@ -904,6 +914,13 @@ class TesseraProxy(ProxyBase):
         instance._set_cls()
 
         return instance
+
+    def __reduce__(self):
+        state = self._serialisation_helper()
+        if self.__class__.__name__ == '_TesseraProxy':
+            return self.__class__.__base__._deserialisation_helper, (state,)
+        else:
+            return self._deserialisation_helper, (state,)
 
 
 class ArrayProxy(CMDBase):
@@ -1092,6 +1109,8 @@ class ArrayProxy(CMDBase):
         return self._set_remote_attr(item, value)
 
     def _get_remote_method(self, item):
+        self_ref = weakref.ref(self)
+
         # TODO There should be an equivalent Task array proxy
         def remote_method(*args, **kwargs):
             runtime = kwargs.pop('runtime', None)
@@ -1099,14 +1118,14 @@ class ArrayProxy(CMDBase):
 
             if runtime is None:
                 task_proxies = []
-                for proxy in self._proxies:
+                for proxy in self_ref()._proxies:
                     task_proxies.append(proxy[item](*args, **kwargs))
 
                 task_proxies = asyncio.gather(*task_proxies)
 
             else:
                 task_proxies = None
-                for proxy in self._proxies:
+                for proxy in self_ref()._proxies:
                     if proxy.runtime_id == runtime:
                         task_proxies = proxy[item](*args, **kwargs)
                         break
@@ -1119,36 +1138,44 @@ class ArrayProxy(CMDBase):
         return remote_method
 
     def _get_remote_attr(self, item):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
+            await self_ref()._init_future
 
             attrs = [each.cmd_recv_async(method='get_attr', item=item)
-                     for each in self._proxies]
+                     for each in self_ref()._proxies]
 
             return await asyncio.gather(*attrs)
 
         return AwaitableOnly(remote_attr)
 
     def _set_remote_attr(self, item, value):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
+            await self_ref()._init_future
 
             attrs = [each.cmd_recv_async(method='set_attr', item=item, value=value)
-                     for each in self._proxies]
+                     for each in self_ref()._proxies]
 
             return await asyncio.gather(*attrs)
 
         return remote_attr()
 
     def _get_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(*args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
     def _get_magic_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(_self, *args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
@@ -1182,6 +1209,13 @@ class ArrayProxy(CMDBase):
                                                            '_runtime_id',
                                                            '_cls_attr_names',
                                                            '_len']
+
+    def __reduce__(self):
+        state = self._serialisation_helper()
+        if self.__class__.__name__ == '_ArrayProxy':
+            return self.__class__.__base__._deserialisation_helper, (state,)
+        else:
+            return self._deserialisation_helper, (state,)
 
 
 class PickleClass:
