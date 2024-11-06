@@ -318,6 +318,8 @@ class Variable:
             self.clear_graph()
             return
 
+        runtime = mosaic.runtime()
+
         prev = dict()
         prev[self.prev_op.name_idx] = grad
         returns = []
@@ -374,9 +376,12 @@ class Variable:
                     continue
 
                 if nxt.name_idx in prev:
-                    prev[nxt.name_idx] = await _maybe_sum(prev[nxt.name_idx], input_grad)
-                else:
-                    prev[nxt.name_idx] = input_grad
+                    input_grad = await _maybe_sum(prev[nxt.name_idx], input_grad)
+
+                if nxt.op.runtime_id != runtime.uid:
+                    input_grad = await runtime.put(input_grad)
+
+                prev[nxt.name_idx] = input_grad
 
         eager = not len(returns) or returns[-1]._eager
         if eager:
