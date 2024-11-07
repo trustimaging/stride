@@ -325,6 +325,8 @@ class Variable:
         returns = []
         parallel_returns = []
         for node in self.graph.toposort(self.prev_op):
+            kwargs_ = kwargs.copy()
+
             if node.method == '__noop__':
                 continue
 
@@ -339,9 +341,9 @@ class Variable:
             except AttributeError:
                 method = getattr(node.op.obj, node.method)
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
-                ret = method(*output_grads, **{**kwargs, **{'eager': True}})
+                ret = method(*output_grads, **{**kwargs_, **{'eager': True}})
             else:
-                ret = method(*output_grads, **kwargs)
+                ret = method(*output_grads, **kwargs_)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
                 ret = await ret

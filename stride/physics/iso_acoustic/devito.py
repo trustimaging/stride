@@ -408,7 +408,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 devicecreate = (self.dev_grid.vars.p,)
 
             # Compile the operator
-            kwargs['devito_config'] = kwargs.get('devito_config', {})
+            kwargs['devito_config'] = kwargs.get('devito_config', {}).copy()
             kwargs['devito_config']['devicecreate'] = devicecreate
 
             if self.attenuation_power == 2:
@@ -747,7 +747,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 update_saved = []
 
             # Compile the operator
-            kwargs['devito_config'] = kwargs.get('devito_config', {})
+            kwargs['devito_config'] = kwargs.get('devito_config', {}).copy()
             kwargs['devito_config']['devicecreate'] = devicecreate
 
             if self.attenuation_power == 2:
