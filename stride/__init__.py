@@ -279,7 +279,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
-                    (iteration.id, block.num_iterations, block.id,
+                    (iteration.id+1, block.num_iterations, block.id+1,
                      optimisation_loop.num_blocks))
 
         if dump and block.restart and not optimisation_loop.started:
@@ -496,7 +496,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         logger.perf('Done iteration %d (out of %d), '
                     'block %d (out of %d) - Total loss %e%s' %
-                    (iteration.id, block.num_iterations, block.id,
+                    (iteration.id+1, block.num_iterations, block.id+1,
                      optimisation_loop.num_blocks, iteration.total_loss, prev_loss))
         logger.perf('====================================================================')
 

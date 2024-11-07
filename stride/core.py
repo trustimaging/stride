@@ -320,10 +320,18 @@ class Variable:
 
         runtime = mosaic.runtime()
 
+        def dealloc(objs):
+            def _dealloc(*args):
+                loop = mosaic.get_event_loop()
+                for obj in objs:
+                    loop.run(obj.drop)
+            return _dealloc
+
         prev = dict()
         prev[self.prev_op.name_idx] = grad
         returns = []
         parallel_returns = []
+        deallocs = []
         for node in self.graph.toposort(self.prev_op):
             kwargs_ = kwargs.copy()
 
@@ -349,6 +357,9 @@ class Variable:
                 ret = await ret
 
             if isinstance(ret, TaskProxy):
+                if len(deallocs):
+                    ret.add_done_callback(dealloc(deallocs))
+
                 if (not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy) and \
                         (not hasattr(node.op, 'is_parameter') or not node.op.is_parameter):
                     returns.append(ret)
@@ -370,6 +381,7 @@ class Variable:
                 pass
 
             # store gradients for future use
+            deallocs = []
             for nxt_index in range(len(node.next)):
                 nxt = node.next[nxt_index]
                 input_grad = input_grads[nxt_index]
@@ -381,7 +393,8 @@ class Variable:
                     input_grad = await _maybe_sum(prev[nxt.name_idx], input_grad)
 
                 if not isinstance(input_grad, types.awaitable_types) and nxt.op.runtime_id != runtime.uid:
-                    input_grad = await runtime.put(input_grad, reply=True)
+                    input_grad = await runtime.put(input_grad)
+                    deallocs.append(input_grad)
 
                 prev[nxt.name_idx] = input_grad
 

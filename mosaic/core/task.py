@@ -951,6 +951,20 @@ class TaskProxy(ProxyBase):
         yield from self._done_future.__await__()
         return self
 
+    def __del__(self):
+        result = self._result
+        if isinstance(result, tuple):
+            for value in result:
+                if isinstance(value, WarehouseObject):
+                    self.loop.run(self.runtime.drop, value.uid)
+
+        elif isinstance(result, dict):
+            for value in result.values():
+                if isinstance(value, WarehouseObject):
+                    self.loop.run(self.runtime.drop, value.uid)
+
+        super().__del__()
+
     _serialisation_attrs = ProxyBase._serialisation_attrs + ['_tessera_proxy', 'method']
 
     @classmethod
