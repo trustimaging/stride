@@ -381,7 +381,7 @@ class Variable:
                     input_grad = await _maybe_sum(prev[nxt.name_idx], input_grad)
 
                 if not isinstance(input_grad, types.awaitable_types) and nxt.op.runtime_id != runtime.uid:
-                    input_grad = await runtime.put(input_grad)
+                    input_grad = await runtime.put(input_grad, reply=True)
 
                 prev[nxt.name_idx] = input_grad
 
@@ -398,8 +398,8 @@ class Variable:
 
             await asyncio.gather(*summ_returns)
 
-        loop = mosaic.get_event_loop()
-        loop.run(asyncio.gather, *parallel_returns)
+        # loop = mosaic.get_event_loop()
+        # loop.run(asyncio.gather, *parallel_returns)
 
         self.clear_graph()
 
