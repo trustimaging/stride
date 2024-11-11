@@ -13,7 +13,7 @@ from cached_property import cached_property
 
 import mosaic
 from .. import types
-from .task import TaskProxy, TaskOutput, TaskDone
+from .task import TaskProxy, TaskArrayProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
@@ -811,38 +811,15 @@ class TesseraProxy(ProxyBase):
         def remote_method(*args, **kwargs):
             kwargs.pop('runtime', None)
 
-            dependencies = []
-            for arg in args:
-                if isinstance(arg, TaskProxy):
-                    proxy = arg
-                elif isinstance(arg, (TaskOutput, TaskDone)):
-                    proxy = arg._task_proxy
-                else:
-                    continue
-                dependencies += proxy._dependencies
-                dependencies.append(proxy)
-
-            for arg in kwargs.values():
-                if isinstance(arg, TaskProxy):
-                    proxy = arg
-                elif isinstance(arg, (TaskOutput, TaskDone)):
-                    proxy = arg._task_proxy
-                else:
-                    continue
-                dependencies += proxy._dependencies
-                dependencies.append(proxy)
-
-            dependencies = weakref.WeakSet(dependencies)
-
             eager = kwargs.pop('eager', False)
-            task_proxy = TaskProxy(self_ref(), item,
-                                   eager=eager, dependencies=dependencies if not eager else None,
-                                   *args, **kwargs)
-
             if eager:
+                task_proxy = TaskProxy(self_ref(), item, *args, **kwargs)
+
                 loop = mosaic.get_event_loop()
                 loop.run(self_ref()._init_task, task_proxy, *args, **kwargs)
                 # return self._init_task(task_proxy, *args, **kwargs)
+            else:
+                task_proxy = TaskArrayProxy(self_ref(), item, *args, **kwargs)
 
             return task_proxy
 

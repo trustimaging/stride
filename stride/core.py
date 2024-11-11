@@ -407,7 +407,8 @@ class Variable:
             for ret in reversed(returns):
                 if ret not in summ_dependencies:
                     summ_returns.append(ret)
-                    summ_dependencies += ret._dependencies
+                    for runtime_deps in ret._dependencies.values():
+                        summ_dependencies += list(runtime_deps.values())
 
             await asyncio.gather(*summ_returns)
 

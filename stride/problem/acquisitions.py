@@ -1263,15 +1263,15 @@ class Acquisitions(ProblemBase):
                     shot = shots[shot_id]
                     shot_desc = file['/shots/%d' % shot_id]
                     try:
-                        shot.wavelets._set_data(shot_desc['wavelets/data'])
+                        shot.wavelets._set_data(shot_desc['wavelets/data'][()])
                     except KeyError:
                         pass
                     try:
-                        shot.observed._set_data(shot_desc['observed/data'])
+                        shot.observed._set_data(shot_desc['observed/data'][()])
                     except KeyError:
                         pass
                     try:
-                        shot.delays._set_data(shot_desc['delays/data'])
+                        shot.delays._set_data(shot_desc['delays/data'][()])
                     except KeyError:
                         pass
 

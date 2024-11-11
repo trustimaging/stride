@@ -15,7 +15,7 @@ from ..types import WarehouseObject
 from ..utils import subprocess, memory_limit, memory_used, sizeof
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
-from ..core import Task, RuntimeDisconnectedError
+from ..core import Task, TaskArray, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
 from ..utils.utils import cpu_count
 
@@ -1415,7 +1415,7 @@ class Runtime(BaseRPC):
         tessera.queue_task((sender_id, task))
         self.inc_pending_tasks()
 
-    async def init_tasks(self, sender_id, tasks):
+    async def init_task_array(self, sender_id, uid, tasks):
         """
         Create new set of tasks for tesseras in this worker.
 
@@ -1423,15 +1423,34 @@ class Runtime(BaseRPC):
         ----------
         sender_id : str
             Caller UID.
-        tasks : list
+        uid : str
+            UID of the new task.
+        tasks : dict
             Tasks configuration.
 
         Returns
         -------
 
         """
-        for uid, task in tasks:
-            await self.init_task(sender_id, task, uid)
+        processed_tasks = {}
+        for t_uid, task in tasks.items():
+            obj_uid = task['tessera_id']
+            obj_store = self._tessera
+            tessera = obj_store[obj_uid]
+
+            processed_tasks[t_uid] = {
+                'tessera': tessera,
+                'method': task['method'],
+                'args': task['args'],
+                'kwargs': task['kwargs'],
+            }
+
+            self.inc_pending_tasks()
+
+        task = TaskArray(uid, sender_id, processed_tasks)
+
+        for tessera, task in zip(task.tesseras, task.tasks):
+            tessera.queue_task((sender_id, task))
 
     def inc_pending_tasks(self):
         self._pending_tasks += 1
