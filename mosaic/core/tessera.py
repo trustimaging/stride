@@ -19,7 +19,7 @@ from ..types import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
 
 
-__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'ParameterMixin', 'tessera']
+__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'ParameterMixin', 'PickleClass', 'tessera']
 
 
 def _extract_methods(cls, exclude):
@@ -582,12 +582,24 @@ class ParameterMixin:
 
         return instance
 
+    @staticmethod
+    def _param_deserialisation_helper(name, bases, state):
+        cls = type(name, bases, {})
+        instance = cls.__new__(cls)
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+
+        return instance
+
     def __reduce__(self):
         if self.is_proxy and self.cached:
             state = self._serialisation_helper()
             return self._deserialisation_helper, (state,)
         else:
-            return super().__reduce__()
+            _, _, state = super().__reduce__()
+            name = self.__class__.__name__
+            bases = self.__class__.__bases__
+            return self._param_deserialisation_helper, (name, bases, state)
 
 
 class TesseraProxy(ProxyBase):

@@ -1300,7 +1300,7 @@ class TaskRemote:
                 else:
                     return f(*_args, **_kwargs)
 
-            args = (run, self._task_proxy,) + args
+            args = (mosaic.core.PickleClass(run), self._task_proxy,) + args
 
             eager = kwargs.pop('eager', False)
             if eager:

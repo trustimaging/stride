@@ -16,6 +16,7 @@ except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
 import mosaic
+from mosaic.core.tessera import PickleClass
 from mosaic.comms.compression import maybe_compress, decompress
 
 from .base import GriddedSaved
@@ -25,6 +26,10 @@ from .. import plotting
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
            'SparseField', 'SparseCoordinates']
+
+
+def inv_transform(x):
+    return 1 / x
 
 
 @mosaic.tessera
@@ -123,7 +128,7 @@ class StructuredData(Data):
         # hacky, but does the trick for now
         name = kwargs.get('name', None)
         if name is not None and 'vp' in name:
-            kwargs['transform'] = kwargs.pop('transform', lambda x: 1 / x)
+            kwargs['transform'] = kwargs.pop('transform', PickleClass(inv_transform))
         super().__init__(**kwargs)
 
         shape = kwargs.pop('shape', None)
