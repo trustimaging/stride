@@ -535,13 +535,7 @@ class InboundConnection(Connection):
                                                                              sender_id, self._runtime.uid,
                                                                              msg.cmd.uid))
             else:
-                if self._runtime.uid == 'warehouse' and msg.method == 'init_task':
-                    msg_size = sizeof(msg)
-                    self.logger.debug('Received msg %s from %s at %s '
-                                      '(size %.2f MB)' % (msg.method, sender_id, self._runtime.uid,
-                                                          msg_size/1024**2))
-                else:
-                    self.logger.debug('Received msg %s from %s at %s' % (msg.method, sender_id, self._runtime.uid))
+                self.logger.debug('Received msg %s from %s at %s' % (msg.method, sender_id, self._runtime.uid))
 
         return sender_id, msg
 
@@ -786,7 +780,7 @@ class OutboundConnection(Connection):
 
                 self.logger.debug('Sending cmd %s %s to %s (%s) from %s '
                                   '(size %.2f MB)' % (method, cmd['method'], self.uid, cmd['uid'],
-                                                   self._runtime.uid, msg_size/1024**2))
+                                                      self._runtime.uid, msg_size/1024**2))
             else:
                 self.logger.debug('Sending msg %s to %s from %s '
                                   '(size %.2f MB)' % (method, self.uid, self._runtime.uid,

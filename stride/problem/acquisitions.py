@@ -310,7 +310,10 @@ class Shot(ProblemBase):
             shot.wavelets = self.wavelets
 
         if self.observed is not None:
-            shot.observed = self.observed.copy(compressed=False)
+            if self.observed.compressed:
+                shot.observed = self.observed.copy(compressed=False)
+            else:
+                shot.observed = self.observed
 
         if self.delays is not None:
             shot.delays = self.delays

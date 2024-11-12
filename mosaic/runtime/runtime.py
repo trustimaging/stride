@@ -161,7 +161,7 @@ class Runtime(BaseRPC):
         self._local_warehouse = None
 
         cache_fraction = float(os.environ.get('MOSAIC_RUNTIME_CACHE_MEM', 0.01))
-        cache_size = min(cache_fraction*memory_limit(), 10*1024**3)
+        cache_size = min(cache_fraction*memory_limit(), 1*1024**3)
         self._warehouse_cache = LRU(cache_size, {}, weight=lambda k, v: sizeof(v))
         self._warehouse_pending = set()
 
@@ -1080,19 +1080,27 @@ class Runtime(BaseRPC):
 
         return obj
 
-    async def drop(self, uid):
+    async def drop(self, uid, cache_only=False):
         """
         Delete an object from the warehouse.
 
         Parameters
         ----------
         uid
+        cache_only
 
         Returns
         -------
 
         """
-        await self._local_warehouse.drop_remote(uid=uid)
+        if not cache_only:
+            await self._local_warehouse.drop_remote(uid=uid)
+
+        obj_uid = uid.uid if hasattr(uid, 'uid') else uid
+        try:
+            del self._warehouse_cache[obj_uid]
+        except KeyError:
+            pass
 
     # Command and task management methods
 

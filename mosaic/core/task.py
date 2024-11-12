@@ -558,17 +558,22 @@ class Task(RemoteBase):
         if not self._ready_future.done():
             self._ready_future.set_result(True)
 
-    def __del__(self):
+    async def deregister(self):
+        await super().deregister()
+
+        drops = []
         result = self._result
         if isinstance(result, tuple):
             for value in result:
                 if isinstance(value, WarehouseObject):
-                    self.loop.run(self.runtime.drop, value.uid)
+                    drops.append(value.drop())
 
         elif isinstance(result, dict):
             for value in result.values():
                 if isinstance(value, WarehouseObject):
-                    self.loop.run(self.runtime.drop, value.uid)
+                    drops.append(value.drop())
+
+        await asyncio.gather(*drops)
 
 
 class TaskArray(Task):
@@ -1001,7 +1006,6 @@ class TaskProxy(ProxyBase):
         else:
             assert False
 
-        self._result = None
         setattr(self, '_retrieved', retrieved)
 
         return retrieved
@@ -1031,20 +1035,6 @@ class TaskProxy(ProxyBase):
         yield from self._done_future.__await__()
         return self
 
-    def __del__(self):
-        result = self._result
-        if isinstance(result, tuple):
-            for value in result:
-                if isinstance(value, WarehouseObject):
-                    self.loop.run(self.runtime.drop, value.uid)
-
-        elif isinstance(result, dict):
-            for value in result.values():
-                if isinstance(value, WarehouseObject):
-                    self.loop.run(self.runtime.drop, value.uid)
-
-        super().__del__()
-
     _serialisation_attrs = ProxyBase._serialisation_attrs + ['_eager', '_tessera_proxy', 'method']
 
     @classmethod
@@ -1067,6 +1057,23 @@ class TaskProxy(ProxyBase):
         instance.loop.run(instance.check_result)
 
         return instance
+
+    async def deregister(self):
+        await super().deregister()
+
+        drops = []
+        result = self._result
+        if isinstance(result, tuple):
+            for value in result:
+                if isinstance(value, WarehouseObject):
+                    drops.append(value.drop())
+
+        elif isinstance(result, dict):
+            for value in result.values():
+                if isinstance(value, WarehouseObject):
+                    drops.append(value.drop())
+
+        await asyncio.gather(*drops)
 
 
 class AnonTaskProxy(TaskProxy):
@@ -1118,9 +1125,6 @@ class TaskArrayProxy(TaskProxy):
         proxies += _add_dependencies(kwargs.values(), deps=self._dependencies)
         _add_sub_dependencies(proxies, self._dependencies)
         self._dependencies[self.runtime_id][self.uid] = self
-
-        # for runtime_id, proxies in self._dependencies.items():
-        #     self._dependencies[runtime_id] = dict(reversed(list(proxies.items())))
 
         self._eager = False
 
