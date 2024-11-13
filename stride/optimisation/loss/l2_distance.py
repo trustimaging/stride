@@ -17,6 +17,12 @@ class L2DistanceLoss(Operator):
 
     f = 1/2 ||modelled - observed||^2
 
+    Parameters
+    ----------
+    d_sample : int, optional
+        Factor by which the time dimension of the traces are downsampled prior to calculating
+        optimal assignments. Defaults to 4.
+
     """
 
     def __init__(self, **kwargs):
@@ -24,13 +30,16 @@ class L2DistanceLoss(Operator):
 
         self.residual = None
 
+        # undersampling
+        self.d_sample = kwargs.get('d_sample', 4)
+
     def forward(self, modelled, observed, **kwargs):
         problem = kwargs.pop('problem', None)
         shot_id = problem.shot_id if problem is not None \
             else kwargs.pop('shot_id', 0)
 
         residual_data = modelled.data-observed.data
-        residual = observed.alike(name='residual', data=residual_data)
+        residual = observed.alike(name='residual', data=residual_data[:, ::self.d_sample])
         self.residual = residual
 
         fun_data = 0.5 * np.sum(residual.data ** 2)
