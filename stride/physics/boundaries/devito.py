@@ -6,11 +6,11 @@ from .boundary import Boundary
 
 
 class SpongeBoundary1(Boundary):
+    """
+    Sponge boundary for elastic codes
+    """
 
     def __init__(self, grid):
-        """
-        Sponge boundary for elastic codes
-        """
         super().__init__(grid)
 
         self.damp = None
@@ -23,7 +23,7 @@ class SpongeBoundary1(Boundary):
         reflection_coefficient = kwargs.pop('reflection_coefficient', reflection_coefficient)
 
         if np.max(space.extra) > 0:
-            damp = self._grid.function('damp')
+            damp = self._grid.function('damp', grid=kwargs.pop('grid', self._grid.devito_grid))
             damp.data[:] = self.damping(velocity=velocity,
                                         reflection_coefficient=reflection_coefficient,
                                         mask=True, **kwargs) * time.step
@@ -54,7 +54,7 @@ class SpongeBoundary2(Boundary):
         reflection_coefficient = kwargs.pop('reflection_coefficient', reflection_coefficient)
 
         if np.max(space.extra) > 0:
-            damp = self._grid.function('damp')
+            damp = self._grid.function('damp', grid=kwargs.pop('grid', self._grid.devito_grid))
             damp.data[:] = 7 * self.damping(velocity=velocity,
                                             reflection_coefficient=reflection_coefficient, **kwargs) * time.step
         else:
@@ -101,12 +101,16 @@ class ComplexFrequencyShiftPML2(Boundary):
 
             # Create damping functions
             sigma_i = self._grid.function('sigma_%d' % dim_i, space_order=2,
+                                          grid=kwargs.get('grid', self._grid.devito_grid),
                                           dimensions=(dim,), shape=(shape[dim_i],))
             alpha_i = self._grid.function('alpha_%d' % dim_i, space_order=2,
+                                          grid=kwargs.get('grid', self._grid.devito_grid),
                                           dimensions=(dim,), shape=(shape[dim_i],))
             sigma_di = self._grid.function('sigma_d%d' % dim_i, space_order=2,
+                                           grid=kwargs.get('grid', self._grid.devito_grid),
                                            dimensions=(dim,), shape=(shape[dim_i],))
             alpha_di = self._grid.function('alpha_d%d' % dim_i, space_order=2,
+                                           grid=kwargs.get('grid', self._grid.devito_grid),
                                            dimensions=(dim,), shape=(shape[dim_i],))
 
             # Fill functions
@@ -127,9 +131,12 @@ class ComplexFrequencyShiftPML2(Boundary):
             eq_alpha_di = devito.Eq(alpha_di, devito.Derivative(alpha_i, (dim, 1)))
 
             # Create the auxiliary fields
-            u_3 = self._grid.time_function('u_3_%d' % dim_i, time_order=1, space_order=2)
-            u_2 = self._grid.time_function('u_2_%d' % dim_i, time_order=1, space_order=2)
-            u_1 = self._grid.time_function('u_1_%d' % dim_i, time_order=1, space_order=2)
+            u_3 = self._grid.time_function('u_3_%d' % dim_i, time_order=1, space_order=2,
+                                           grid=kwargs.get('grid', self._grid.devito_grid))
+            u_2 = self._grid.time_function('u_2_%d' % dim_i, time_order=1, space_order=2,
+                                           grid=kwargs.get('grid', self._grid.devito_grid))
+            u_1 = self._grid.time_function('u_1_%d' % dim_i, time_order=1, space_order=2,
+                                           grid=kwargs.get('grid', self._grid.devito_grid))
 
             # Prepare the various derivatives depending on whether we are going
             # forward or backward

@@ -45,7 +45,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            Compressional speed of sound for the medium, in [m/s].
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
@@ -225,7 +225,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            Compressional speed of sound for the medium, in [m/s].
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
@@ -492,7 +492,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            Compressional speed of sound for the medium, in [m/s].
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
@@ -560,7 +560,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            Compressional speed of sound for the medium, in [m/s].
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
@@ -668,7 +668,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            Compressional speed of sound for the medium, in [m/s].
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
@@ -845,7 +845,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            Compressional speed of sound for the medium, in [m/s].
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
@@ -891,7 +891,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         wavelets : Traces
             Source wavelets.
         vp : ScalarField
-            Compressional speed of sound fo the medium, in [m/s].
+            Compressional speed of sound for the medium, in [m/s].
         rho : ScalarField, optional
             Density of the medium, defaults to homogeneous, in [kg/m^3].
         alpha : ScalarField, optional
