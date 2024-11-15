@@ -693,7 +693,11 @@ class TaskProxy(ProxyBase):
         self._remote = None
 
         self.state_changed('pending')
-        self.remote_runtime
+
+        try:
+            self.remote_runtime
+        except ValueError:
+            pass
 
     async def init(self):
         """

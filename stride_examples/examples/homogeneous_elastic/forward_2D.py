@@ -96,7 +96,7 @@ async def main(runtime):
         sub_problem = problem.sub_problem(shot.id)
         shot_wavelets = sub_problem.shot.wavelets
 
-        pde.clear_operators()
+        await pde.clear_operators()
         traces = await pde(shot_wavelets, vp, vs, rho, problem=sub_problem, **config)
 
         data_stride = traces.data.copy()
