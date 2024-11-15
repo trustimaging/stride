@@ -756,6 +756,7 @@ class StructuredData(Data):
 
         inner = []
         for each in description.inner:
+            each = [e.decode() if isinstance(e, bytes) else e for e in each]
             inner.append(slice(
                 int(each[0]) if each[0] != 'None' else None,
                 int(each[1]) if each[1] != 'None' else None,

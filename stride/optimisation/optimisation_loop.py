@@ -664,11 +664,7 @@ class OptimisationLoop(Saved):
         self._current_block = None
         self.running_id = 0
 
-        load_kwargs = dict(path=self.problem.output_folder,
-                           project_name=self.problem.name, version=0)
-        load_kwargs.update(kwargs)
-
-        self.remove_file(**load_kwargs)
+        self.remove_file(**kwargs)
 
     def blocks(self, num, *iters, restart=False, restart_id=-1, **kwargs):
         """

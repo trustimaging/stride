@@ -392,7 +392,8 @@ class Variable:
                 if nxt.name_idx in prev:
                     input_grad = await _maybe_sum(prev[nxt.name_idx], input_grad)
 
-                if not isinstance(input_grad, types.awaitable_types) and nxt.op.runtime_id != runtime.uid:
+                if not isinstance(input_grad, types.awaitable_types) \
+                        and hasattr(nxt.op, 'runtime_id') and nxt.op.runtime_id != runtime.uid:
                     input_grad = await runtime.put(input_grad)
                     deallocs.append(input_grad)
 
