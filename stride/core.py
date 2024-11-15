@@ -412,9 +412,6 @@ class Variable:
 
             await asyncio.gather(*summ_returns)
 
-        # loop = mosaic.get_event_loop()
-        # loop.run(asyncio.gather, *parallel_returns)
-
         self.clear_graph()
 
         return self

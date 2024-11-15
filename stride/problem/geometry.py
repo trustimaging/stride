@@ -403,8 +403,6 @@ class Geometry(ProblemBase):
         legacy = kwargs.pop('legacy', False)
 
         if legacy:
-            mosaic.logger().warn('Loading legacy Geometry file...')
-
             description = {
                 'num_locations': self.num_locations,
                 'locations': [],

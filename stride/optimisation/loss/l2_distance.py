@@ -39,11 +39,16 @@ class L2DistanceLoss(Operator):
             else kwargs.pop('shot_id', 0)
 
         residual_data = modelled.data-observed.data
-        residual = observed.alike(name='residual', data=residual_data[:, ::self.d_sample])
+        residual_data_sampled = residual_data[:, ::self.d_sample]
+
+        residual = observed.alike(name='residual', data=residual_data)
+        residual_sampled = observed.alike(name='residual', data=residual_data_sampled,
+                                          shape=residual_data_sampled.shape,
+                                          extended_shape=residual_data_sampled.shape)
         self.residual = residual
 
         fun_data = 0.5 * np.sum(residual.data ** 2)
-        fun = FunctionalValue(fun_data, shot_id, residual, **kwargs)
+        fun = FunctionalValue(fun_data, shot_id, residual_sampled, **kwargs)
 
         return fun
 

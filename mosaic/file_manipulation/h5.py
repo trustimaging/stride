@@ -92,14 +92,10 @@ def append(name, obj, group):
             append(sub_group_name, obj[index], sub_group)
 
     else:
-        if name not in group:
-            _write_dataset(name, obj, group)
+        _write_dataset(name, obj, group)
 
 
 def _write_dataset(name, obj, group):
-    if name in group:
-        return
-
     is_bytes = False
     if isinstance(obj, bytes):
         is_bytes = True
@@ -110,17 +106,21 @@ def _write_dataset(name, obj, group):
         is_none = True
         obj = 'None'
 
-    dataset = group.create_dataset(name, data=obj)
-    dataset.attrs['is_ndarray'] = isinstance(obj, np.ndarray)
-    dataset.attrs['is_list'] = isinstance(obj, list)
-    dataset.attrs['is_tuple'] = isinstance(obj, tuple)
-    dataset.attrs['is_str'] = isinstance(obj, str)
-    dataset.attrs['is_bytes'] = is_bytes
-    dataset.attrs['is_none'] = is_none
+    if name not in group:
+        dataset = group.create_dataset(name, data=obj)
+        dataset.attrs['is_ndarray'] = isinstance(obj, np.ndarray)
+        dataset.attrs['is_list'] = isinstance(obj, list)
+        dataset.attrs['is_tuple'] = isinstance(obj, tuple)
+        dataset.attrs['is_str'] = isinstance(obj, str)
+        dataset.attrs['is_bytes'] = is_bytes
+        dataset.attrs['is_none'] = is_none
 
-    if isinstance(obj, list) and len(obj):
         flat_obj = np.asarray(obj).flatten().tolist()
-        dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
+        if name not in group:
+            dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
+
+    else:
+        group[name][...] = obj
 
 
 def read(obj, lazy=True, filter=None, only=None):

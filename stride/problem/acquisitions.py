@@ -1285,8 +1285,6 @@ class Acquisitions(ProblemBase):
         shot_ids = kwargs.pop('shot_ids', None)
 
         if legacy:
-            mosaic.logger().warn('Loading legacy Acquisitions file...')
-
             description = {
                 'num_shots': self.num_shots,
                 'shots': [],
