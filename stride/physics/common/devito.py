@@ -607,9 +607,10 @@ class GridDevito(Gridded):
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
+        grid = kwargs.pop('grid', self.devito_grid)
         sparse_kwargs = dict(name=name,
-                             grid=kwargs.pop('grid', self.devito_grid),
-                             dimensions=kwargs.get('dimensions', (self.devito_grid.time_dim, p_dim)),
+                             grid=grid,
+                             dimensions=kwargs.get('dimensions', (grid.time_dim, p_dim)),
                              npoint=num,
                              nt=time_bounds[1]-0,
                              space_order=space_order,

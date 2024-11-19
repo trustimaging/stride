@@ -143,6 +143,18 @@ class Warehouse(Runtime):
             return self._local_warehouse[obj_id]
 
         if warehouse_id == self.uid or (node_id is None and warehouse_id is None):
+            retries = 0
+            wait = 1
+            while obj_id not in self._local_warehouse:
+                await asyncio.sleep(wait)
+                wait *= 1.2
+                retries += 1
+                if retries > 20:
+                    break
+
+            if obj_id in self._local_warehouse:
+                return self._local_warehouse[obj_id]
+
             raise KeyError('%s is not available in %s' % (obj_id, self.uid))
 
         if node_id not in self._warehouses:
