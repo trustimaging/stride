@@ -1105,30 +1105,21 @@ class TaskArrayProxy(TaskProxy):
                     proxy = dep._task_proxy
                 else:
                     continue
-                if proxy.runtime_id not in deps:
-                    deps[proxy.runtime_id] = {}
-                deps[proxy.runtime_id][proxy.uid] = proxy
+                deps[proxy.uid] = proxy
                 proxies.append(proxy)
 
             return proxies
 
         def _add_sub_dependencies(proxies, deps):
-            proxy_deps = []
             for proxy in proxies:
                 for runtime_deps in proxy._dependencies.values():
                     for proxy_dep in runtime_deps.values():
-                        proxy_deps.append(proxy_dep)
+                        deps[proxy_dep.uid] = proxy_dep
 
-            for proxy in proxy_deps:
-                if proxy.runtime_id not in deps:
-                    deps[proxy.runtime_id] = {}
-                deps[proxy.runtime_id][proxy.uid] = proxy
-
-        self._dependencies = {self.runtime_id: {}}
-        proxies = _add_dependencies(args, deps=self._dependencies)
-        proxies += _add_dependencies(kwargs.values(), deps=self._dependencies)
-        _add_sub_dependencies(proxies, self._dependencies)
-        self._dependencies[self.runtime_id][self.uid] = self
+        self._dependencies = {'_': {}}
+        proxies = _add_dependencies(self.args, self._dependencies['_'])
+        proxies += _add_dependencies(self.kwargs.values(), self._dependencies['_'])
+        _add_sub_dependencies(proxies, self._dependencies['_'])
 
         self._eager = False
 
@@ -1140,13 +1131,29 @@ class TaskArrayProxy(TaskProxy):
         -------
 
         """
+        def _sort_dependencies(proxies, deps):
+            for proxy in proxies:
+                if proxy.runtime_id not in deps:
+                    deps[proxy.runtime_id] = {}
+                deps[proxy.runtime_id][proxy.uid] = proxy
+
+        proxies = self._dependencies['_'].values()
+        tessera_inits = []
+        for proxy in proxies:
+            tessera_inits.append(proxy._tessera_proxy.init_future)
+
+        await asyncio.gather(*tessera_inits)
+
+        self._dependencies = {self.runtime_id: {}}
+        _sort_dependencies(proxies, self._dependencies)
+        self._dependencies[self.runtime_id][self.uid] = self
+        self._dependencies = dict(reversed(list(self._dependencies.items())))
+
         for runtime_id, proxies in self._dependencies.items():
             proxies = list(proxies.values())
 
             tasks = {}
-            tessera_inits = []
             for proxy in proxies:
-                tessera_inits.append(proxy._tessera_proxy.init_future)
 
                 self.runtime.register(proxy)
 
@@ -1159,7 +1166,6 @@ class TaskArrayProxy(TaskProxy):
 
                 tasks[proxy.uid] = task
 
-            await asyncio.gather(*tessera_inits)
             await proxies[0].remote_runtime.init_task_array(uid=self.uid, tasks=tasks, reply=True)
 
             for proxy in proxies:
@@ -1214,8 +1220,11 @@ class TaskArrayProxy(TaskProxy):
             proxies = list(proxies.values())
 
             for proxy in proxies:
-                proxy._result = result[proxy.uid]
-                proxy.set_done()
+                try:
+                    proxy._result = result[proxy.uid]
+                    proxy.set_done()
+                except KeyError:
+                    pass
 
     def set_exception(self, exc):
         """
