@@ -1139,7 +1139,7 @@ class TaskArrayProxy(TaskProxy):
 
         proxies = self._dependencies['_'].values()
         tessera_inits = []
-        for proxy in proxies:
+        for proxy in list(proxies) + [self]:
             tessera_inits.append(proxy._tessera_proxy.init_future)
 
         await asyncio.gather(*tessera_inits)
