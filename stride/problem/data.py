@@ -16,6 +16,7 @@ except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
 import mosaic
+from mosaic.core.tessera import PickleClass
 from mosaic.comms.compression import maybe_compress, decompress
 
 from .base import GriddedSaved
@@ -25,6 +26,10 @@ from .. import plotting
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
            'SparseField', 'SparseCoordinates']
+
+
+def inv_transform(x):
+    return 1 / x
 
 
 @mosaic.tessera
@@ -123,13 +128,15 @@ class StructuredData(Data):
         # hacky, but does the trick for now
         name = kwargs.get('name', None)
         if name is not None and 'vp' in name:
-            kwargs['transform'] = kwargs.pop('transform', lambda x: 1 / x)
+            kwargs['transform'] = kwargs.pop('transform', PickleClass(inv_transform))
         super().__init__(**kwargs)
 
         shape = kwargs.pop('shape', None)
         extended_shape = kwargs.pop('extended_shape', None)
         inner = kwargs.pop('inner', None)
         dtype = kwargs.pop('dtype', np.float32)
+        compressed = kwargs.pop('compressed', False)
+        compression = kwargs.pop('compression', None)
 
         data = kwargs.pop('data', None)
         if data is not None:
@@ -148,11 +155,12 @@ class StructuredData(Data):
         self._extended_shape = extended_shape
         self._inner = inner
         self._dtype = dtype
+        self._compressed = compressed
+        self._compression = compression
 
         self._data = None
-
         if data is not None:
-            self._data = self.pad_data(data)
+            self._set_data(self.pad_data(data))
 
         self.grad = None
         self.prec = None
@@ -175,6 +183,8 @@ class StructuredData(Data):
         kwargs['inner'] = kwargs.pop('inner', self.inner)
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['compressed'] = kwargs.pop('compressed', self.compressed)
+        kwargs['compression'] = kwargs.pop('compression', self._compression)
         kwargs['propagate_tessera'] = False
 
         return super().copy(*args, **kwargs)
@@ -195,6 +205,8 @@ class StructuredData(Data):
         kwargs['inner'] = kwargs.pop('inner', self.inner)
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['compressed'] = kwargs.pop('compressed', self.compressed)
+        kwargs['compression'] = kwargs.pop('compression', self._compression)
         kwargs['data'] = kwargs.pop('data', self._data)
 
         return super().detach(*args, **kwargs)
@@ -215,6 +227,8 @@ class StructuredData(Data):
         kwargs['inner'] = kwargs.pop('inner', self.inner)
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['compressed'] = kwargs.pop('compressed', self.compressed)
+        kwargs['compression'] = kwargs.pop('compression', self._compression)
         kwargs['data'] = kwargs.pop('data', self._data)
 
         return super().as_parameter(*args, **kwargs)
@@ -230,8 +244,8 @@ class StructuredData(Data):
 
         """
         cpy = self.alike(name=kwargs.pop('name', self._init_name), **kwargs)
-        cpy.extended_data[:] = self.extended_data
         cpy.needs_grad = self.needs_grad
+        cpy._set_data(self.extended_data.copy())
 
         if self.grad is not None:
             cpy.grad = self.grad.copy()
@@ -240,6 +254,20 @@ class StructuredData(Data):
             cpy.prec = self.prec.copy()
 
         return cpy
+
+    def _set_data(self, data):
+        if self.compressed:
+            compression, data = maybe_compress(data)
+            self._compression = compression
+
+        self._data = data
+
+    def _get_data(self):
+        if self.compressed:
+            data = decompress(self._compression, self._data)
+            return np.frombuffer(data, self.dtype).reshape(self.shape)
+
+        return self._data
 
     @property
     def data(self):
@@ -250,7 +278,7 @@ class StructuredData(Data):
         if self._data is None:
             self.allocate()
 
-        return self._data[self._inner]
+        return self._get_data()[self._inner]
 
     @property
     def extended_data(self):
@@ -261,7 +289,7 @@ class StructuredData(Data):
         if self._data is None:
             self.allocate()
 
-        return self._data
+        return self._get_data()
 
     @property
     def shape(self):
@@ -311,6 +339,14 @@ class StructuredData(Data):
 
         """
         return self._dtype
+
+    @property
+    def compressed(self):
+        """
+        Whether the data is compressed.
+
+        """
+        return self._compressed
 
     def clear_grad(self):
         """
@@ -417,7 +453,7 @@ class StructuredData(Data):
 
         """
         if self._data is None:
-            self._data = np.empty(self._extended_shape, dtype=self._dtype)
+            self._set_data(np.empty(self._extended_shape, dtype=self._dtype))
 
     def deallocate(self, collect=False):
         """
@@ -454,7 +490,9 @@ class StructuredData(Data):
         if self._data is None:
             self.allocate()
 
-        self._data.fill(value)
+        data = self.extended_data
+        data.fill(value)
+        self._set_data(data)
 
     def pad(self, smooth=False):
         """
@@ -469,7 +507,7 @@ class StructuredData(Data):
         -------
 
         """
-        self.extended_data[:] = self.pad_data(self.data, smooth=smooth)
+        self._set_data(self.pad_data(self.data, smooth=smooth))
 
     def pad_data(self, data, smooth=False):
         """
@@ -718,6 +756,7 @@ class StructuredData(Data):
 
         inner = []
         for each in description.inner:
+            each = [e.decode() if isinstance(e, bytes) else e for e in each]
             inner.append(slice(
                 int(each[0]) if each[0] != 'None' else None,
                 int(each[1]) if each[1] != 'None' else None,
@@ -735,7 +774,7 @@ class StructuredData(Data):
             data = decompress(compression, data)
             data = np.frombuffer(data, self.dtype).reshape(self.shape)
 
-        self.extended_data[:] = self.pad_data(data)
+        self._set_data(self.pad_data(data))
 
 
 @mosaic.tessera

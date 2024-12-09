@@ -4,6 +4,7 @@ import zmq
 import zmq.asyncio
 import psutil
 import asyncio
+import inspect
 import contextlib
 import weakref
 from zict import LRU
@@ -14,7 +15,7 @@ from ..types import WarehouseObject
 from ..utils import subprocess, memory_limit, memory_used, sizeof
 from ..utils.event_loop import EventLoop
 from ..comms import CommsManager
-from ..core import Task, RuntimeDisconnectedError
+from ..core import Task, TaskArray, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
 from ..utils.utils import cpu_count
 
@@ -160,7 +161,7 @@ class Runtime(BaseRPC):
         self._local_warehouse = None
 
         cache_fraction = float(os.environ.get('MOSAIC_RUNTIME_CACHE_MEM', 0.01))
-        cache_size = min(cache_fraction*memory_limit(), 10*1024**3)
+        cache_size = min(cache_fraction*memory_limit(), 1*1024**3)
         self._warehouse_cache = LRU(cache_size, {}, weight=lambda k, v: sizeof(v))
         self._warehouse_pending = set()
 
@@ -237,6 +238,17 @@ class Runtime(BaseRPC):
         else:
             maintenance_interval = 0.5
         self._loop.interval(self.maintenance, interval=maintenance_interval)
+
+        # Initialise anon tessera
+        @mosaic.tessera
+        class AnonTess:
+            async def run(self, f, *args, **kwargs):
+                if inspect.iscoroutine(f) or inspect.iscoroutinefunction(f):
+                    return await f(*args, **kwargs)
+                else:
+                    return f(*args, **kwargs)
+
+        await self.init_tessera(self.uid, AnonTess, 'tess-anon', ())
 
     async def init_warehouse(self, **kwargs):
         """
@@ -1068,19 +1080,27 @@ class Runtime(BaseRPC):
 
         return obj
 
-    async def drop(self, uid):
+    async def drop(self, uid, cache_only=False):
         """
         Delete an object from the warehouse.
 
         Parameters
         ----------
         uid
+        cache_only
 
         Returns
         -------
 
         """
-        await self._local_warehouse.drop_remote(uid=uid)
+        if not cache_only:
+            await self._local_warehouse.drop_remote(uid=uid)
+
+        obj_uid = uid.uid if hasattr(uid, 'uid') else uid
+        try:
+            del self._warehouse_cache[obj_uid]
+        except KeyError:
+            pass
 
     # Command and task management methods
 
@@ -1401,8 +1421,44 @@ class Runtime(BaseRPC):
                     task['method'], *task['args'], **task['kwargs'])
 
         tessera.queue_task((sender_id, task))
-        task.state_changed('pending')
         self.inc_pending_tasks()
+
+    async def init_task_array(self, sender_id, uid, tasks):
+        """
+        Create new set of tasks for tesseras in this worker.
+
+        Parameters
+        ----------
+        sender_id : str
+            Caller UID.
+        uid : str
+            UID of the new task.
+        tasks : dict
+            Tasks configuration.
+
+        Returns
+        -------
+
+        """
+        processed_tasks = {}
+        for t_uid, task in tasks.items():
+            obj_uid = task['tessera_id']
+            obj_store = self._tessera
+            tessera = obj_store[obj_uid]
+
+            processed_tasks[t_uid] = {
+                'tessera': tessera,
+                'method': task['method'],
+                'args': task['args'],
+                'kwargs': task['kwargs'],
+            }
+
+            self.inc_pending_tasks()
+
+        task = TaskArray(uid, sender_id, processed_tasks)
+
+        for tessera, task in zip(task.tesseras, task.tasks):
+            tessera.queue_task((sender_id, task))
 
     def inc_pending_tasks(self):
         self._pending_tasks += 1

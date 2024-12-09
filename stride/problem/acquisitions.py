@@ -114,6 +114,7 @@ class Shot(ProblemBase):
         sources = kwargs.pop('sources', None)
         receivers = kwargs.pop('receivers', None)
         delays = kwargs.pop('delays', None)
+        compressed = kwargs.pop('compressed', False)
 
         if sources is not None and receivers is not None:
             for source in sources:
@@ -122,9 +123,13 @@ class Shot(ProblemBase):
             for receiver in receivers:
                 self._receivers[receiver.id] = receiver
 
-            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
-            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
-            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1), grid=self.grid)
+            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids,
+                                   grid=self.grid)
+            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids,
+                                   compressed=compressed,
+                                   grid=self.grid)
+            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1),
+                                 grid=self.grid)
 
             if delays is not None:
                 self.delays.data[:, 0] = delays
@@ -305,7 +310,10 @@ class Shot(ProblemBase):
             shot.wavelets = self.wavelets
 
         if self.observed is not None:
-            shot.observed = self.observed
+            if self.observed.compressed:
+                shot.observed = self.observed.copy(compressed=False)
+            else:
+                shot.observed = self.observed
 
         if self.delays is not None:
             shot.delays = self.delays
@@ -441,6 +449,8 @@ class Shot(ProblemBase):
         return description
 
     def __set_desc__(self, description, **kwargs):
+        compressed = kwargs.pop('compressed', False)
+
         self.id = description.id
 
         for source_id in description.source_ids:
@@ -463,7 +473,7 @@ class Shot(ProblemBase):
         if 'wavelets' in description and not lazy_loading:
             self.wavelets.__set_desc__(description.wavelets, **kwargs)
 
-        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
+        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, compressed=compressed, grid=self.grid)
         if 'observed' in description and not lazy_loading:
             self.observed.__set_desc__(description.observed, **kwargs)
 
@@ -1227,6 +1237,7 @@ class Acquisitions(ProblemBase):
 
         """
         shot_ids = kwargs.pop('shot_ids', None)
+        fast = kwargs.pop('fast', False)
 
         prev_args, prev_kwargs = self._prev_load
         if prev_args is not None:
@@ -1237,7 +1248,35 @@ class Acquisitions(ProblemBase):
             kwargs = kwargs_
 
         filter = kwargs.pop('filter', {'shots': shot_ids} if shot_ids is not None else None)
-        super().load(*args, filter=filter, **kwargs)
+
+        if not fast:
+            super().load(*args, filter=filter, **kwargs)
+        else:
+            kwargs['parameter'] = self.name
+
+            if filter is not None:
+                shot_ids = filter['shots']
+            else:
+                shot_ids = self.shot_ids
+            shots = self._shots
+
+            with h5.HDF5(*args, **kwargs, mode='r') as file:
+                file = file.file
+                for shot_id in shot_ids:
+                    shot = shots[shot_id]
+                    shot_desc = file['/shots/%d' % shot_id]
+                    try:
+                        shot.wavelets._set_data(shot_desc['wavelets/data'][()])
+                    except KeyError:
+                        pass
+                    try:
+                        shot.observed._set_data(shot_desc['observed/data'][()])
+                    except KeyError:
+                        pass
+                    try:
+                        shot.delays._set_data(shot_desc['delays/data'][()])
+                    except KeyError:
+                        pass
 
         self._prev_load = args, kwargs
 
@@ -1246,8 +1285,6 @@ class Acquisitions(ProblemBase):
         shot_ids = kwargs.pop('shot_ids', None)
 
         if legacy:
-            mosaic.logger().warn('Loading legacy Acquisitions file...')
-
             description = {
                 'num_shots': self.num_shots,
                 'shots': [],
@@ -1280,6 +1317,8 @@ class Acquisitions(ProblemBase):
         return description
 
     def __set_desc__(self, description, **kwargs):
+        compressed = kwargs.pop('compressed', False)
+
         if 'shots' in description:
             shots = description.shots
         else:
@@ -1290,12 +1329,13 @@ class Acquisitions(ProblemBase):
         for shot_desc in shots:
             if shot_desc.id not in self._shots:
                 shot = Shot(shot_desc.id,
+                            compressed=compressed,
                             geometry=self._geometry,
                             problem=self.problem, grid=self.grid)
                 self.add(shot)
 
             shot = self.get(shot_desc.id)
-            shot.__set_desc__(shot_desc, **kwargs)
+            shot.__set_desc__(shot_desc, compressed=compressed, **kwargs)
 
         if 'sequences' in description:
             sequences = description.sequences
