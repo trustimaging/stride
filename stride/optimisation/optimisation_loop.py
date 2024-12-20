@@ -1,4 +1,9 @@
 
+import numpy as np
+
+import mosaic.types
+from mosaic.file_manipulation import h5
+
 from ..problem.base import Saved
 from .loss.functional import FunctionalValue
 
@@ -50,29 +55,54 @@ class IterationRun:
             self.losses[shot_id] = FunctionalValue(loss.value, shot_id)
 
     def __get_desc__(self, **kwargs):
-        description = {
-            'id': self.id,
-            'submitted_shots': self.submitted_shots,
-            'completed_shots': self.completed_shots,
-            'losses': [],
-        }
+        legacy = kwargs.get('legacy', False)
 
-        for loss in self.losses.values():
-            description['losses'].append({
-                'shot_id': loss.shot_id,
-                'value': loss.value,
-            })
+        if legacy:
+            description = {
+                'id': self.id,
+                'submitted_shots': self.submitted_shots,
+                'completed_shots': self.completed_shots,
+                'losses': [],
+            }
+
+            for loss in self.losses.values():
+                description['losses'].append({
+                    'shot_id': loss.shot_id,
+                    'value': loss.value,
+                })
+
+        else:
+            shot_ids = []
+            values = []
+            for loss in self.losses.values():
+                shot_ids.append(loss.shot_id)
+                values.append(loss.value)
+
+            description = {
+                'id': self.id,
+                'submitted_shots': np.asarray(self.submitted_shots, dtype=np.int32),
+                'completed_shots': np.asarray(self.completed_shots, dtype=np.int32),
+                'losses': {
+                    'shot_id': np.asarray(shot_ids, dtype=np.int32),
+                    'value': np.asarray(values, dtype=np.float32),
+                },
+            }
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
-        self.submitted_shots = description.submitted_shots
-        self.completed_shots = description.completed_shots
+        self.submitted_shots = description.submitted_shots.load().tolist()
+        self.completed_shots = description.completed_shots.load().tolist()
 
-        for loss_desc in description.losses:
-            loss = FunctionalValue(loss_desc.value, loss_desc.shot_id)
-            self.losses[loss.shot_id] = loss
+        if isinstance(description.losses, mosaic.types.Struct):
+            for idx in range(len(description.losses.shot_id)):
+                loss = FunctionalValue(description.losses.value[idx], description.losses.shot_id[idx])
+                self.losses[loss.shot_id] = loss
+        else:
+            for loss_desc in description.losses:
+                loss = FunctionalValue(loss_desc.value, loss_desc.shot_id)
+                self.losses[loss.shot_id] = loss
 
 
 class Iteration:
@@ -240,27 +270,91 @@ class Iteration:
         """
         self.curr_run.completed_shots.append(shot.id)
 
-    def __get_desc__(self, **kwargs):
-        description = {
-            'id': self.id,
-            'abs_id': self.abs_id,
-            'runs': [],
-        }
+    def append_iteration(self, *args, **kwargs):
+        """
+        Append the iteration to the corresponding OptimisationLoop file.
 
-        for run in self._runs.values():
-            description['runs'].append(run.__get_desc__(**kwargs))
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Returns
+        -------
+
+        """
+        loop = self._optimisation_loop
+        block = self._block
+
+        try:
+            dump_kwargs = dict(parameter='optimisation_loop',
+                               path=loop.problem.output_folder,
+                               project_name=loop.problem.name, version=0)
+            dump_kwargs.update(loop._file_kwargs)
+            dump_kwargs.update(kwargs)
+        except AttributeError:
+            return
+
+        self_desc = self.__get_desc__(**kwargs)
+
+        if h5.file_exists(*args, **dump_kwargs):
+            description = {
+                'running_id': loop.running_id,
+                'num_blocks': loop.num_blocks,
+                'current_block_id': block.id,
+                'blocks': {
+                    str(block.id): {
+                        'id': block.id,
+                        'num_iterations': block.num_iterations,
+                        'current_iteration_id': self.id,
+                        'iterations': {
+                            str(self.id): self_desc,
+                        },
+                    }
+                },
+            }
+
+            with h5.HDF5(*args, **dump_kwargs, mode='a') as file:
+                file.append(description)
+
+        else:
+            loop.dump(*args, **dump_kwargs)
+
+    def __get_desc__(self, **kwargs):
+        legacy = kwargs.get('legacy', False)
+
+        if legacy:
+            description = {
+                'id': self.id,
+                'abs_id': self.abs_id,
+                'runs': [],
+            }
+
+            for run in self._runs.values():
+                description['runs'].append(run.__get_desc__(**kwargs))
+
+        else:
+            description = {
+                'id': self.id,
+                'abs_id': self.abs_id,
+                'runs': {},
+            }
+
+            for run in self._runs.values():
+                description['runs'][str(run.id)] = run.__get_desc__(**kwargs)
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self.abs_id = description.abs_id
 
+        runs = description.runs
+        if isinstance(runs, mosaic.types.Struct):
+            runs = runs.values()
+
         self._curr_run_idx = -1
-        for run_desc in description.runs:
+        for run_desc in runs:
             self._curr_run_idx += 1
             run = IterationRun(self._curr_run_idx, self)
-            run.__set_desc__(run_desc)
+            run.__set_desc__(run_desc, **kwargs)
             self._runs[self._curr_run_idx] = run
 
     _serialisation_attrs = ['id', 'abs_id']
@@ -438,32 +532,50 @@ class Block:
                 yield self._iterations[index]
 
             self._optimisation_loop.started = True
-            self._optimisation_loop.dump()
+            self._iterations[index].append_iteration()
 
     def __get_desc__(self, **kwargs):
-        description = {
-            'id': self.id,
-            'num_iterations': self._num_iterations,
-            'current_iteration': self._current_iteration.__get_desc__(),
-            'iterations': [],
-        }
+        legacy = kwargs.get('legacy', False)
 
-        for iteration in self._iterations.values():
-            description['iterations'].append(iteration.__get_desc__())
+        if legacy:
+            description = {
+                'id': self.id,
+                'num_iterations': self._num_iterations,
+                'current_iteration_id': self._current_iteration.id,
+                'iterations': [],
+            }
+
+            for iteration in self._iterations.values():
+                description['iterations'].append(iteration.__get_desc__(**kwargs))
+
+        else:
+            description = {
+                'id': self.id,
+                'num_iterations': self._num_iterations,
+                'current_iteration_id': self._current_iteration.id,
+                'iterations': {},
+            }
+
+            for iteration in self._iterations.values():
+                description['iterations'][str(iteration.id)] = iteration.__get_desc__(**kwargs)
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self._num_iterations = description.num_iterations
 
-        for iter_desc in description.iterations:
+        iterations = description.iterations
+        if isinstance(iterations, mosaic.types.Struct):
+            iterations = iterations.values()
+
+        for iter_desc in iterations:
             iteration = Iteration(iter_desc.id, iter_desc.abs_id,
                                   self, self._optimisation_loop)
-            iteration.__set_desc__(iter_desc)
+            iteration.__set_desc__(iter_desc, **kwargs)
             self._iterations[iteration.id] = iteration
 
-        self._current_iteration = self._iterations[description.current_iteration.id]
+        self._current_iteration = self._iterations[description.current_iteration_id]
 
 
 class OptimisationLoop(Saved):
@@ -539,7 +651,7 @@ class OptimisationLoop(Saved):
         """
         return self._problem
 
-    def clear(self):
+    def clear(self, **kwargs):
         """
         Clear the loop.
 
@@ -551,6 +663,8 @@ class OptimisationLoop(Saved):
         self._blocks = dict()
         self._current_block = None
         self.running_id = 0
+
+        self.remove_file(**kwargs)
 
     def blocks(self, num, *iters, restart=False, restart_id=-1, **kwargs):
         """
@@ -658,26 +772,58 @@ class OptimisationLoop(Saved):
         except AttributeError:
             pass
 
-    def __get_desc__(self, **kwargs):
-        description = {
-            'running_id': self.running_id,
-            'num_blocks': self._num_blocks,
-            'current_block': self._current_block.__get_desc__(),
-            'blocks': [],
-        }
+    def remove_file(self, *args, **kwargs):
+        try:
+            load_kwargs = dict(parameter='optimisation_loop',
+                               path=self.problem.output_folder,
+                               project_name=self.problem.name, version=0)
+            load_kwargs.update(kwargs)
+        except AttributeError:
+            return
 
-        for block in self._blocks.values():
-            description['blocks'].append(block.__get_desc__())
+        try:
+            h5.rm(*args, **load_kwargs)
+        except FileNotFoundError:
+            pass
+
+    def __get_desc__(self, **kwargs):
+        legacy = kwargs.get('legacy', False)
+
+        if legacy:
+            description = {
+                'running_id': self.running_id,
+                'num_blocks': self._num_blocks,
+                'current_block_id': self._current_block.id,
+                'blocks': [],
+            }
+
+            for block in self._blocks.values():
+                description['blocks'].append(block.__get_desc__(**kwargs))
+
+        else:
+            description = {
+                'running_id': self.running_id,
+                'num_blocks': self._num_blocks,
+                'current_block_id': self._current_block.id,
+                'blocks': {},
+            }
+
+            for block in self._blocks.values():
+                description['blocks'][str(block.id)] = block.__get_desc__(**kwargs)
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.running_id = description.running_id
         self._num_blocks = description.num_blocks
 
-        for block_desc in description.blocks:
+        blocks = description.blocks
+        if isinstance(blocks, mosaic.types.Struct):
+            blocks = blocks.values()
+
+        for block_desc in blocks:
             block = Block(block_desc.id, self)
-            block.__set_desc__(block_desc)
+            block.__set_desc__(block_desc, **kwargs)
             self._blocks[block.id] = block
 
-        self._current_block = self._blocks[description.current_block.id]
+        self._current_block = self._blocks[description.current_block_id]

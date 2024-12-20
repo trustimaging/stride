@@ -82,5 +82,5 @@ class Transducer(ABC, GriddedSaved):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id

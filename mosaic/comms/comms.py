@@ -780,7 +780,7 @@ class OutboundConnection(Connection):
 
                 self.logger.debug('Sending cmd %s %s to %s (%s) from %s '
                                   '(size %.2f MB)' % (method, cmd['method'], self.uid, cmd['uid'],
-                                                   self._runtime.uid, msg_size/1024**2))
+                                                      self._runtime.uid, msg_size/1024**2))
             else:
                 self.logger.debug('Sending msg %s to %s from %s '
                                   '(size %.2f MB)' % (method, self.uid, self._runtime.uid,

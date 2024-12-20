@@ -132,7 +132,7 @@ async def forward(problem, pde, *args, **kwargs):
         if using_gpu:
             deviceid = devices[worker.indices[1] % num_gpus]
             if platform in ['nvidia-acc', 'nvidia-cuda']:
-                devito_args = _kwargs.get('devito_args', {})
+                devito_args = _kwargs.get('devito_args', {}).copy()
                 devito_args['deviceid'] = deviceid
                 _kwargs['devito_args'] = devito_args
             elif platform == 'gpu':
@@ -187,6 +187,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     select_shots : dict, optional
         Rules for selecting available shots per iteration, defaults to taking all shots. For
         details on this see :func:`~stride.problem.acquisitions.Acquisitions.select_shot_ids`.
+    lazy_loading : bool, optional
+        Whether to load shot data every iteration to save memory.
     dump : bool, optional
         Whether or not to save to disk the updated variable after every iteration.
     f_min : float, optional
@@ -216,6 +218,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     restart = kwargs.pop('restart', None)
     restart_id = kwargs.pop('restart_id', -1)
 
+    lazy_loading = kwargs.pop('lazy_loading', False)
     dump = kwargs.pop('dump', True)
     safe = kwargs.pop('safe', True)
 
@@ -273,7 +276,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
-                    (iteration.id, block.num_iterations, block.id,
+                    (iteration.id+1, block.num_iterations, block.id+1,
                      optimisation_loop.num_blocks))
 
         if dump and block.restart and not optimisation_loop.started:
@@ -289,6 +292,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
+
+        if lazy_loading:
+            problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False, fast=True)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
@@ -313,7 +319,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             if using_gpu:
                 deviceid = devices[worker.indices[1] % num_gpus]
                 if platform in ['nvidia-acc', 'nvidia-cuda']:
-                    devito_args = _kwargs.get('devito_args', {})
+                    devito_args = _kwargs.get('devito_args', {}).copy()
                     devito_args['deviceid'] = deviceid
                     _kwargs['devito_args'] = devito_args
                 elif platform == 'gpu':
@@ -325,15 +331,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             wavelets = process_wavelets(wavelets,
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
-            await wavelets.init_future
             observed = process_observed(observed,
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
-            await observed.init_future
             processed = process_wavelets_observed(wavelets, observed,
                                                   iteration=iteration, problem=sub_problem,
                                                   runtime=worker, **_kwargs)
-            await processed.init_future
             wavelets = processed.outputs[0]
             observed = processed.outputs[1]
 
@@ -341,30 +344,30 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             modelled = pde(wavelets, *published_args,
                            iteration=iteration, problem=sub_problem,
                            runtime=worker, **_kwargs)
-            await modelled.init_future
 
             # post-process modelled and observed traces
+            scale_to = sub_problem.shot.observed.copy(compressed=False) \
+                if sub_problem.shot.observed.compressed else sub_problem.shot.observed
             traces = process_traces(modelled, observed,
-                                    scale_to=sub_problem.shot.observed,
+                                    scale_to=scale_to,
                                     iteration=iteration, problem=sub_problem,
                                     runtime=worker, **_kwargs)
-            await traces.init_future
             modelled = traces.outputs[0]
             observed = traces.outputs[1]
 
             # calculate loss
-            fun = await loss(modelled, observed,
-                             keep_residual=keep_residual,
-                             iteration=iteration, problem=sub_problem,
-                             runtime=worker, **_kwargs).result()
-
-            iteration.add_loss(fun)
-            logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
+            fun = loss(modelled, observed,
+                       keep_residual=keep_residual,
+                       iteration=iteration, problem=sub_problem,
+                       runtime=worker, **_kwargs)
 
             # run adjoint
-            await fun.adjoint(**_kwargs)
-            iteration.add_completed(sub_problem.shot)
+            fun_value = await fun.remote.adjoint(**_kwargs).result()
 
+            iteration.add_loss(fun_value)
+            logger.perf('Functional value for shot %d: %s' % (shot_id, fun_value))
+
+            iteration.add_completed(sub_problem.shot)
             logger.perf('Retrieved gradient for shot %d (%d out of %d)'
                         % (sub_problem.shot_id,
                            iteration.num_completed, num_shots))
@@ -399,8 +402,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
                 if using_gpu:
                     deviceid = devices[worker.indices[1] % num_gpus]
-                    if platform == 'nvidia-acc':
-                        devito_args = _kwargs.get('devito_args', {})
+                    if platform in ['nvidia-acc', 'nvidia-cuda']:
+                        devito_args = _kwargs.get('devito_args', {}).copy()
                         devito_args['deviceid'] = deviceid
                         _kwargs['devito_args'] = devito_args
                     elif platform == 'gpu':
@@ -412,15 +415,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 wavelets = process_wavelets(wavelets,
                                             iteration=iteration, problem=sub_problem,
                                             runtime=worker, **_kwargs)
-                await wavelets.init_future
                 observed = process_observed(observed,
                                             iteration=iteration, problem=sub_problem,
                                             runtime=worker, **_kwargs)
-                await observed.init_future
                 processed = process_wavelets_observed(wavelets, observed,
                                                       iteration=iteration, problem=sub_problem,
                                                       runtime=worker, **_kwargs)
-                await processed.init_future
                 wavelets = processed.outputs[0]
                 observed = processed.outputs[1]
 
@@ -428,14 +428,14 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 modelled = pde(wavelets, *published_args,
                                iteration=iteration, problem=sub_problem,
                                runtime=worker, **_kwargs)
-                await modelled.init_future
 
                 # post-process modelled and observed traces
+                scale_to = sub_problem.shot.observed.copy(compressed=False) \
+                    if sub_problem.shot.observed.compressed else sub_problem.shot.observed
                 traces = process_traces(modelled, observed,
-                                        scale_to=sub_problem.shot.observed,
+                                        scale_to=scale_to,
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
-                await traces.init_future
                 modelled = traces.outputs[0]
                 observed = traces.outputs[1]
 
@@ -478,8 +478,11 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         logger.perf('Done iteration %d (out of %d), '
                     'block %d (out of %d) - Total loss %e%s' %
-                    (iteration.id, block.num_iterations, block.id,
+                    (iteration.id+1, block.num_iterations, block.id+1,
                      optimisation_loop.num_blocks, iteration.total_loss, prev_loss))
         logger.perf('====================================================================')
+
+        if lazy_loading:
+            problem.acquisitions.deallocate(shot_ids=shot_ids)
 
         iteration.clear_run()
