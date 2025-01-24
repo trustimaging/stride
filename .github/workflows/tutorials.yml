@@ -39,7 +39,7 @@ jobs:
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
-        mamba-version: "*"
+        miniforge-version: latest
         channels: conda-forge,defaults
         channel-priority: true
         activate-environment: stride
