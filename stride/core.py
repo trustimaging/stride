@@ -290,6 +290,8 @@ class Variable:
         self.prec = None
         self.transform = kwargs.pop('transform', None)
 
+        self.step_size = None
+
         self.graph = Graph()
         self.prev_op = None
         self.needs_grad = kwargs.pop('needs_grad', False)
