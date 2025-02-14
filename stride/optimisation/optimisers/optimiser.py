@@ -229,8 +229,6 @@ class LocalOptimiser(ABC):
                 variable = self.variable.transform(self.variable)
             else:
                 variable = self.variable
-            print('val: {} | internal grad: {}'.format(variable.data, direction.data))
-            print('=================================')
             upd_variable = self.update_variable(next_step, variable, direction)
             if self.variable.transform is not None:
                 upd_variable = self.variable.transform(upd_variable)
