@@ -744,7 +744,8 @@ class StructuredData(Data):
             'inner': inner,
             'dtype': str(np.dtype(self._dtype)),
             'data': data,
-            'compression': compression if compression is not None else False
+            'compression': compression if compression is not None else False,
+            'step_size': self.step_size
         }
 
         return description
@@ -1219,7 +1220,6 @@ class ScalarField(StructuredData):
         description = super().__get_desc__(**kwargs)
         description['time_dependent'] = self._time_dependent
         description['slow_time_dependent'] = self._slow_time_dependent
-
         return description
 
     def __set_desc__(self, description, **kwargs):
