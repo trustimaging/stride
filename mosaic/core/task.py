@@ -559,7 +559,7 @@ class Task(RemoteBase):
             self._ready_future.set_result(True)
 
     async def deregister(self):
-        await super().deregister()
+        dereg_args = await super().deregister()
 
         drops = []
         result = self._result
@@ -574,6 +574,8 @@ class Task(RemoteBase):
                     drops.append(value.drop())
 
         await asyncio.gather(*drops)
+
+        return dereg_args
 
 
 class TaskArray(Task):
@@ -1063,7 +1065,7 @@ class TaskProxy(ProxyBase):
         return instance
 
     async def deregister(self):
-        await super().deregister()
+        dereg_args = await super().deregister()
 
         drops = []
         result = self._result
@@ -1078,6 +1080,8 @@ class TaskProxy(ProxyBase):
                     drops.append(value.drop())
 
         await asyncio.gather(*drops)
+
+        return dereg_args
 
 
 class AnonTaskProxy(TaskProxy):
@@ -1154,8 +1158,11 @@ class TaskArrayProxy(TaskProxy):
 
             tasks = {}
             for proxy in proxies:
-
                 self.runtime.register(proxy)
+                try:
+                    proxy.remote_runtime
+                except ValueError:
+                    pass
 
                 task = {
                     'tessera_id': proxy.tessera_id,

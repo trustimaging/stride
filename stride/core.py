@@ -318,7 +318,7 @@ class Variable:
         if self.prev_op is None:
             await self.__call_adjoint__(grad, **kwargs)
             self.clear_graph()
-            return
+            return self
 
         runtime = mosaic.runtime()
 
