@@ -1604,13 +1604,22 @@ class Traces(StructuredData):
         """
         title = kwargs.pop('title', self.name)
         plot = kwargs.pop('plot', True)
+        plot_type = kwargs.pop('plot_type', 'gather')
         if self.time.num == self.shape[1]:
             time_axis = self.time.grid / 1e-6
         else:
             time_axis = np.arange(self.shape[1])
 
-        axis = plotting.plot_gather(self.transducer_ids, time_axis, self.data,
-                                    title=title, **kwargs)
+        if plot_type == 'gather':
+            print(kwargs)
+            axis = plotting.plot_gather(self.transducer_ids, time_axis, self.data,
+                                        title=title, **kwargs)
+        elif plot_type == 'spectrum':
+            sampling_rate = 1/self.time.step
+            axis = plotting.plot_magnitude_spectrum(sampling_rate, self.data,
+                                                    title=title, **kwargs)
+        else:
+            raise ValueError("Invalid plot_type. Use 'gather' or 'spectrum'.")
 
         if plot is True:
             plotting.show(axis)
