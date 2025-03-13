@@ -1611,7 +1611,6 @@ class Traces(StructuredData):
             time_axis = np.arange(self.shape[1])
 
         if plot_type == 'gather':
-            print(kwargs)
             axis = plotting.plot_gather(self.transducer_ids, time_axis, self.data,
                                         title=title, **kwargs)
         elif plot_type == 'spectrum':
