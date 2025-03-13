@@ -760,7 +760,7 @@ class Acquisitions(ProblemBase):
         Get all IDs of shots in the Acquisitions as a list.
 
         """
-        return list(self._shots.keys())
+        return sorted(list(self._shots.keys()))
 
     @property
     def sequence_ids(self):
@@ -931,6 +931,8 @@ class Acquisitions(ProblemBase):
             raise ValueError('Shot with ID "%d" does not exist in the Acquisitions' % item.id)
 
         self._shots[item.id] = item
+        # self._shots[item.id] = item
+        # item._acquisitions = self
 
     def set_sequence(self, item):
         """
@@ -1118,6 +1120,8 @@ class Acquisitions(ProblemBase):
         else:
             shot_step = 1
         shot_range = kwargs.pop('shot_range', (self.shot_ids[0], self.shot_ids[-1]))
+        # shot_range = kwargs.pop('shot_range', (min(self.shot_ids), max(self.shot_ids)))
+        # print(self.shot_ids)
         shot_step = kwargs.pop('shot_step', shot_step)
         slider = Slider(ax_shot, 'shot ID',
                         shot_range[0], shot_range[1],
