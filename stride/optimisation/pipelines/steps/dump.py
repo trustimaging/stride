@@ -44,10 +44,14 @@ class Dump(Operator):
     def _apply(self, data, prefix=None, **kwargs):
         problem = kwargs.pop('problem', None)
         iteration = kwargs.pop('iteration', None)
+        dump_shot_id = kwargs.pop('dump_shot_id', None)
         if problem is None or iteration is None:
             return
 
         shot_id = problem.shot_id if hasattr(problem, 'shot_id') else None
+        if shot_id is not None and dump_shot_id is not None and dump_shot_id != shot_id:
+            return
+
         prev_step = kwargs.pop('prev_step', None)
         parameter = data.name.split('_')[-1].strip('_')
         info = 'parameter %s' % parameter
