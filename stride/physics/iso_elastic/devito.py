@@ -109,15 +109,19 @@ class IsoElasticDevito(ProblemTypeBase):
         num_sources = shot.num_points_sources
         num_receivers = shot.num_points_receivers
 
+        eps_coords = 1e-3 * np.array(self.space.spacing).reshape((1, -1))
+        source_coordinates = shot.source_coordinates + eps_coords
+        receiver_coordinates = shot.receiver_coordinates + eps_coords
+
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
 
             # Define variables
             src = self.dev_grid.sparse_time_function('src', num=num_sources,
-                                                     coordinates=shot.source_coordinates,
+                                                     coordinates=source_coordinates,
                                                      interpolation_type=self.interpolation_type)
             rec_tau = self.dev_grid.sparse_time_function('rec_tau', num=num_receivers,
-                                                         coordinates=shot.receiver_coordinates,
+                                                         coordinates=receiver_coordinates,
                                                          interpolation_type=self.interpolation_type)
 
             step = self.time.step
@@ -201,8 +205,8 @@ class IsoElasticDevito(ProblemTypeBase):
         self.dev_grid.vars.src.data[:] = wavelets.T * window
 
         if self.interpolation_type == 'linear':
-            self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
-            self.dev_grid.vars.rec_tau.coordinates.data[:] = shot.receiver_coordinates
+            self.dev_grid.vars.src.coordinates.data[:] = source_coordinates
+            self.dev_grid.vars.rec_tau.coordinates.data[:] = receiver_coordinates
 
     def run_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
