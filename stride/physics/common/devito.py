@@ -552,7 +552,7 @@ class GridDevito(Gridded):
 
         time_dim = self.devito_grid.time_dim
 
-        condition = sympy.And(devito.symbolics.CondEq(time_dim % factor, 0),
+        condition = sympy.And(devito.CondEq(time_dim % factor, 0),
                               devito.Ge(time_dim, time_bounds[0] + offset[0]),
                               devito.Le(time_dim, time_bounds[1] - offset[1]), )
 
