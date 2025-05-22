@@ -82,6 +82,9 @@ class Pipeline(Operator):
         items.insert(pos, (key, step))
         self._steps = dict(items)
 
+    def append(self, key, step):
+        self._steps[key] = step
+
     def forward(self, *args, **kwargs):
         """
         Apply all steps in the pipeline in order.
