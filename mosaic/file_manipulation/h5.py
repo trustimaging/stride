@@ -115,9 +115,10 @@ def _write_dataset(name, obj, group):
         dataset.attrs['is_bytes'] = is_bytes
         dataset.attrs['is_none'] = is_none
 
-        flat_obj = np.asarray(obj).flatten().tolist()
-        if name not in group:
-            dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
+        if not isinstance(obj, np.ndarray):
+            flat_obj = np.asarray(obj).flatten().tolist()
+            if name not in group:
+                dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
 
     else:
         group[name][...] = obj

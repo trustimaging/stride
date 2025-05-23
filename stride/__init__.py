@@ -149,7 +149,11 @@ async def forward(problem, pde, *args, **kwargs):
 
         # save data
         shot = problem.acquisitions.get(shot_id)
-        shot.observed.data[:] = traces.data
+        try:
+            shot.observed.data[:] = traces.data
+        except ValueError as err:
+            logger.warning('Shot %d data assignment error: %s' % (shot_id, str(err)))
+
         if np.any(np.isnan(shot.observed.data)) or np.any(np.isinf(shot.observed.data)):
             raise ValueError('Nan or inf detected in shot %d' % shot_id)
 
@@ -167,7 +171,7 @@ async def forward(problem, pde, *args, **kwargs):
 
 async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwargs):
     """
-    Use a ``problem`` forward using a given ``pde``. The given ``args`` and ``kwargs``
+    Use a ``problem`` in adjoint mode using a given ``pde``. The given ``args`` and ``kwargs``
     will be passed on to the PDE.
 
     Parameters
