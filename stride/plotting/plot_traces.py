@@ -265,7 +265,7 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
     trace_axis = [str(each) for each in trace_axis]
 
     axis.set_xticks(shift.flatten()[::2])
-    axis.set_xticklabels(trace_axis[::2])
+    axis.set_xticklabels(trace_axis[::2], rotation='vertical')
 
     if title is not None:
         axis.set_title(title)
