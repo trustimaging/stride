@@ -1615,10 +1615,14 @@ class Traces(StructuredData):
                                         title=title, **kwargs)
         elif plot_type == 'spectrum':
             sampling_rate = 1/self.time.step
-            axis = plotting.plot_magnitude_spectrum(sampling_rate, self.data,
+            axis = plotting.plot_magnitude_spectrum(sampling_rate, self.transducer_ids, time_axis, self.data,
                                                     title=title, **kwargs)
+        elif plot_type == 'spectrum_per_trace':
+            sampling_rate = 1/self.time.step
+            axis = plotting.plot_magnitude_spectrum(sampling_rate, self.transducer_ids, time_axis, self.data,
+                                                    title=title, per_trace=True, **kwargs)
         else:
-            raise ValueError("Invalid plot_type. Use 'gather' or 'spectrum'.")
+            raise ValueError("Invalid plot_type. Use 'gather', 'spectrum' or 'spectrum_by_trace'.")
 
         if plot is True:
             plotting.show(axis)
