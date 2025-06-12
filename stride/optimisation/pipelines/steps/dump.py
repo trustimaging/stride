@@ -1,4 +1,6 @@
 
+import numpy as np
+
 import mosaic
 from mosaic.utils import snake_case
 
@@ -44,10 +46,17 @@ class Dump(Operator):
     def _apply(self, data, prefix=None, **kwargs):
         problem = kwargs.pop('problem', None)
         iteration = kwargs.pop('iteration', None)
+        dump_shot_id = kwargs.pop('dump_shot_id', None)
         if problem is None or iteration is None:
             return
 
         shot_id = problem.shot_id if hasattr(problem, 'shot_id') else None
+        if shot_id is not None and dump_shot_id is not None:
+            if isinstance(dump_shot_id, int) and shot_id != dump_shot_id:
+                return
+            elif isinstance(dump_shot_id, (list, tuple, np.ndarray)) and shot_id not in dump_shot_id:
+                return
+
         prev_step = kwargs.pop('prev_step', None)
         parameter = data.name.split('_')[-1].strip('_')
         info = 'parameter %s' % parameter

@@ -531,9 +531,7 @@ class GridDevito(Gridded):
                                  compression=compression,
                                  **kwargs)
 
-        space_dims = fun.dimensions[1:]
-
-        return fun.func(time_under - int(time_bounds[0] // factor), *space_dims)
+        return fun
 
     def undersampled_time_derivative(self, fun, factor, time_bounds=None, offset=None,
                                      deriv_order=1, fd_order=1):
@@ -562,9 +560,7 @@ class GridDevito(Gridded):
                                                  condition=condition)
         self._time_under_count += 1
 
-        # buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
-        # TODO Force larger buffer size to prevent devito issue
-        buffer_size = (self.time.extended_num - 1 - 0 + factor) // factor + 1
+        buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
 
         return time_under, buffer_size
 

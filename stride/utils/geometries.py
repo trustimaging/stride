@@ -3,7 +3,109 @@ import numpy as np
 import scipy.linalg
 
 
-__all__ = ['elliptical', 'ellipsoidal', 'disk']
+__all__ = ['elliptical', 'ellipsoidal', 'disk',
+           'angle_between_vectors', 'norm_vector', 'axis_rotate_vectors']
+
+
+def angle_between_vectors(a, b):
+    """
+    Angle in radians between two vectors.
+
+    Parameters
+    ----------
+    a : 1d-array
+        1st vector.
+    b : 1d-array
+        2nd vector.
+
+    Returns
+    -------
+    float
+        Angle in radians between the two vectors.
+
+    """
+    return np.arccos(np.dot(a, b) / (np.linalg.norm(a)*np.linalg.norm(b)))
+
+
+def norm_vector(a):
+    """
+    Normalise (i.e. calculate unit) vector.
+
+    Parameters
+    ----------
+    a : 1d-array
+        Vector to be normalised.
+
+    Returns
+    -------
+    1-d array
+        Normalised vector.
+
+    """
+    return a/np.linalg.norm(a)
+
+
+def axis_rotate_vectors(a, b):
+    """
+    Axis of rotation between two vectors.
+
+    Parameters
+    ----------
+    a : 1d-array
+        1st vector.
+    b: 1d-array
+        2nd vector.
+
+    Returns
+    -------
+    1d-array
+        Axis of rotation between the two vectors.
+
+    """
+    return np.cross(a, b)
+
+
+def solid_angle(src_coords, src_normal, rcv_coords, return_deg=False):
+    """
+    Compute the solid angles between source, centre and receivers.
+    Currently for transmission only.
+
+    Parameters
+    ----------
+    src_coords : np.ndarray of shape (1, 3)
+        X, Y, Z coordinates of the source
+    src_normal : np.ndarray of shape (1, 3)
+        X, Y, Z components of normal vector of the source
+    rcv_coords : np.ndarray of shape (M, 3)
+        X, Y, Z coordinates of the M receivers
+    return_deg : bool
+        Whether to return angle in degrees. Defaults to False.
+
+    Returns
+    -------
+    angles : np.ndarray of shape (M,)
+        Angles in radians or degrees between each receiver and the source.
+
+    """
+    if src_coords.ndim == 1:
+        src_coords = src_coords.reshape(1, -1)
+
+    if src_normal.ndim == 1:
+        src_normal = src_normal.reshape(1, -1)
+
+    # vector connecting the source to each of the receiver coordinates
+    sr = src_coords - rcv_coords  # M x 3
+
+    # vector connecting source to centre (i.e. the normal for the source but pointing away from the centre.)
+    sc = -src_normal  # 1 x 3
+
+    angles = np.arccos(np.dot(sr, sc.T).squeeze() / (np.linalg.norm(sr, axis=-1) * np.linalg.norm(sc) + 1e-31))
+
+    if return_deg:
+        # convert from radians to degrees
+        return angles * 180 / np.pi
+
+    return angles
 
 
 def _rot_matrix(axis, theta):
@@ -40,7 +142,7 @@ def elliptical(num, radius, centre):
     return geometry
 
 
-def ellipsoidal(num, radius, centre, theta=0., axis=None, threshold=0., angle_range=np.pi):
+def ellipsoidal(num, radius, centre, theta=0., axis=None, threshold=0., flip=False, angle_range=np.pi):
     """
     Generate a 3D ellipsoidal geometry for a number of points ``num``, centred
     on ``centre`` and with radius ``radius``. The geometry can be rotated by
@@ -88,7 +190,9 @@ def ellipsoidal(num, radius, centre, theta=0., axis=None, threshold=0., angle_ra
         y = np.cos(phi) * r
         x = np.sin(phi) * r
 
-        if z + 1 < threshold*2:
+        if not flip and z + 1 < threshold*2:
+            continue
+        elif flip and z + 1 > (1-threshold)*2:
             continue
 
         x *= radius[0]

@@ -47,13 +47,18 @@ def plot_points_2d(coordinates, axis=None, colour='red', size=15, title=None,
     if len(coordinates.shape) == 1:
         coordinates = coordinates.reshape((1, coordinates.shape[0]))
 
+    undersample = kwargs.pop('undersample', 1)
+    coordinates = coordinates[::undersample]
+
     space_scale = 1e-3
 
     default_kwargs = dict(s=size, c=colour)
     default_kwargs.update(kwargs)
 
-    im = axis.scatter(coordinates[:, 0]/space_scale, coordinates[:, 1]/space_scale,
+    im = axis.scatter(*[coordinates[:, d]/space_scale for d in range(coordinates.shape[-1])],
                       **default_kwargs)
+    if not isinstance(colour, str):
+        plt.colorbar(im, ax=axis)
 
     if origin is not None and limit is not None:
         axis.set_xlim([origin[0]/space_scale, limit[0]/space_scale])
