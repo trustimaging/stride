@@ -51,7 +51,7 @@ def plot_trace(*args, axis=None, colour='black', line_style='solid', title=None,
 
 
 def plot_magnitude_spectrum(*args, sampling_rate=1, skip=1, time_range=None, norm=True, norm_trace=True,
-                            colour='black', line_style='solid', title=None, axis=None, per_trace=False, **kwargs):
+                            colour='black', line_style='solid', title=None, axis=None, spectrum_gather=False, **kwargs):
     """
     Plot the magnitude spectrum of wavelet traces in dB scale.
 
@@ -75,8 +75,8 @@ def plot_magnitude_spectrum(*args, sampling_rate=1, skip=1, time_range=None, nor
         Line style for the plot, defaults to solid.
     title : str, optional
         Plot title, defaults to None.
-    per_trace : bool, optional
-        If True, normalize each trace individually.
+    spectrum_gather : bool, optional
+        If True, each spectrum will be associated with its unique trace.
     axis : matplotlib axis, optional
         Axis on which to plot, defaults to a new figure.
 
@@ -106,18 +106,6 @@ def plot_magnitude_spectrum(*args, sampling_rate=1, skip=1, time_range=None, nor
         trace_ids = None
         signal_data = args[0]
 
-    # Normalize signal data if required
-    if norm_trace:
-        signal_data = signal_data / (np.max(np.abs(signal_data), axis=-1, keepdims=True)+1e-30)
-    elif norm:
-        signal_data = signal_data / (np.max(np.abs(signal_data))+1e-30)
-
-    # Apply time range if specified
-    if time_range:
-        start, end = time_range
-        start_idx, end_idx = int(start * sampling_rate), int(end * sampling_rate)
-        signal_data = signal_data[:, start_idx:end_idx]
-
     signal_data = signal_data[::skip]
     if trace_ids is not None:
         trace_ids = trace_ids[::skip]
@@ -140,8 +128,8 @@ def plot_magnitude_spectrum(*args, sampling_rate=1, skip=1, time_range=None, nor
         max_db = np.max(magnitude_spectrum_db)
         magnitude_spectrum_db -= max_db  # This ensures that the maximum value becomes 0 dB
 
-    # Normalize magnitude spectra if per_trace mode
-    if per_trace:
+    # Normalize magnitude spectra if spectrum_gather mode
+    if spectrum_gather:
         magnitude_spectrum_db = (magnitude_spectrum_db - np.min(magnitude_spectrum_db, axis=-1, keepdims=True)) / \
                                  (np.max(magnitude_spectrum_db, axis=-1, keepdims=True)
                                     - np.min(magnitude_spectrum_db, axis=-1, keepdims=True)) - 1
