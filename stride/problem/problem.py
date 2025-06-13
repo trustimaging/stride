@@ -1,7 +1,6 @@
 
 import os
 import numpy as np
-from fnmatch import fnmatch
 
 from .base import Gridded
 from . import Medium, Transducers, Geometry, Acquisitions
@@ -146,7 +145,6 @@ class Problem(Gridded):
 
         for field in self.medium.fields:
             if 'vp' in field:
-            # if fnmatch(field, '*vp*'):
                 self.medium.fields[field]._resample(old_spacing, new_spacing, slowness=True, **kwargs)
             else:
                 self.medium.fields[field]._resample(old_spacing, new_spacing, **kwargs)
