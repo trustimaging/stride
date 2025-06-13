@@ -50,24 +50,25 @@ def plot_trace(*args, axis=None, colour='black', line_style='solid', title=None,
     return axis
 
 
-def plot_magnitude_spectrum(sampling_rate, *args, skip=1, time_range=None, norm=True,
-                            colour='black', line_style='solid', title=None, axis=None,
-                            per_trace=False, **kwargs):
+def plot_magnitude_spectrum(*args, sampling_rate=1, skip=1, time_range=None, norm=True, norm_trace=True,
+                            colour='black', line_style='solid', title=None, axis=None, per_trace=False, **kwargs):
     """
     Plot the magnitude spectrum of wavelet traces in dB scale.
 
     Parameters
     ----------
-    sampling_rate : float
-        Sampling rate of the wavelet signal in Hz.
     args : arrays
         Optional trace ID grid, frequency grid, and signal data.
+    sampling_rate : float
+        Sampling rate of the wavelet signal in Hz.
     skip : int, optional
         Traces to skip, defaults to 1.
     time_range : tuple, optional
         Time range to plot, defaults to all.
     norm : bool, optional
-        Normalize the whole gather, defaults to True.
+        Whether or not to normalise the gather, defaults to True.
+    norm_trace : bool, optional
+        Whether or not to normalise trace by trace, defaults to True.
     colour : str, optional
         Colour for the traces, defaults to black.
     line_style : str, optional
@@ -105,9 +106,11 @@ def plot_magnitude_spectrum(sampling_rate, *args, skip=1, time_range=None, norm=
         trace_ids = None
         signal_data = args[0]
 
-    signal_data = signal_data[::skip]
-    if trace_ids is not None:
-        trace_ids = trace_ids[::skip]
+    # Normalize signal data if required
+    if norm_trace:
+        signal_data = signal_data / (np.max(np.abs(signal_data), axis=-1, keepdims=True)+1e-30)
+    elif norm:
+        signal_data = signal_data / (np.max(np.abs(signal_data))+1e-30)
 
     # Apply time range if specified
     if time_range:
@@ -115,9 +118,9 @@ def plot_magnitude_spectrum(sampling_rate, *args, skip=1, time_range=None, norm=
         start_idx, end_idx = int(start * sampling_rate), int(end * sampling_rate)
         signal_data = signal_data[:, start_idx:end_idx]
 
-    # Normalize signal data if required
-    if norm:
-        signal_data = signal_data / np.max(np.abs(signal_data), axis=-1, keepdims=True)
+    signal_data = signal_data[::skip]
+    if trace_ids is not None:
+        trace_ids = trace_ids[::skip]
 
     # Perform FFT
     fft_values = np.fft.fft(signal_data, axis=-1)
@@ -127,6 +130,15 @@ def plot_magnitude_spectrum(sampling_rate, *args, skip=1, time_range=None, norm=
     # Keep positive frequencies only
     positive_freqs = frequencies[frequencies >= 0]
     magnitude_spectrum_db = magnitude_spectrum_db[:, frequencies >= 0]
+
+    if norm_trace:
+        # Normalize the magnitude spectrum so the peak is 0 dB
+        max_db = np.max(magnitude_spectrum_db, axis=-1, keepdims=True)
+        magnitude_spectrum_db -= max_db  # This ensures that the maximum value becomes 0 dB
+    elif norm:
+        # Normalize the magnitude spectrum so the peak is 0 dB
+        max_db = np.max(magnitude_spectrum_db)
+        magnitude_spectrum_db -= max_db  # This ensures that the maximum value becomes 0 dB
 
     # Normalize magnitude spectra if per_trace mode
     if per_trace:
@@ -144,7 +156,7 @@ def plot_magnitude_spectrum(sampling_rate, *args, skip=1, time_range=None, norm=
         axis.set_xlabel('Trace ID')
         axis.set_xticks(np.arange(magnitude_spectrum_db.shape[0]))
         axis.set_xticklabels([str(tid) for tid in trace_ids] if trace_ids is not None
-            else np.arange(magnitude_spectrum_db.shape[0]))
+            else np.arange(magnitude_spectrum_db.shape[0]), rotation='vertical')
     else:
         axis.plot(positive_freqs, magnitude_spectrum_db.T, colour, linestyle=line_style, **kwargs)
         axis.set_xlabel('Frequency (Hz)')
@@ -242,8 +254,6 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
     default_kwargs = dict(c=colour, linestyle=line_style)
     default_kwargs.update(kwargs)
 
-    print('gather shape ', signal_shifted.shape)
-    print('time axis shape ', time_axis.shape)
     axis.plot(signal_shifted, time_axis, **default_kwargs)
     axis.set_ylim(time_axis[-1, 0], time_axis[0, 0])
 
