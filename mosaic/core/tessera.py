@@ -13,13 +13,13 @@ from cached_property import cached_property
 
 import mosaic
 from .. import types
-from .task import TaskProxy
+from .task import TaskProxy, TaskArrayProxy
 from .base import Base, CMDBase, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
 from ..utils.event_loop import AwaitableOnly
 
 
-__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'ParameterMixin', 'tessera']
+__all__ = ['Tessera', 'TesseraProxy', 'ArrayProxy', 'ParameterMixin', 'PickleClass', 'tessera']
 
 
 def _extract_methods(cls, exclude):
@@ -262,6 +262,8 @@ class Tessera(RemoteBase):
         if self._state != 'init':
             return
 
+        self.state_changed('listening')
+
         while True:
             sender_id, task = await self._task_queue.get()
             # Make sure that the loop does not keep implicit references to the task until the
@@ -288,12 +290,10 @@ class Tessera(RemoteBase):
         -------
 
         """
-        if self._state != 'init':
+        if self._state != 'listening':
             return
 
         while True:
-            self.state_changed('listening')
-
             sender_id, task, future = await self._run_queue.get()
             # Make sure that the loop does not keep implicit references to the task until the
             # next task arrives in the queue
@@ -319,8 +319,6 @@ class Tessera(RemoteBase):
                                                                                 self.obj.__class__.__name__))
 
             await asyncio.sleep(0)
-            self.state_changed('running')
-            task.state_changed('running')
             await self.logger.send()
             await self.call_safe(sender_id, method, task)
 
@@ -584,12 +582,24 @@ class ParameterMixin:
 
         return instance
 
+    @staticmethod
+    def _param_deserialisation_helper(name, bases, state):
+        cls = type(name, bases, {})
+        instance = cls.__new__(cls)
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+
+        return instance
+
     def __reduce__(self):
         if self.is_proxy and self.cached:
             state = self._serialisation_helper()
             return self._deserialisation_helper, (state,)
         else:
-            return super().__reduce__()
+            _, _, state = super().__reduce__()
+            name = self.__class__.__name__
+            bases = self.__class__.__bases__
+            return self._param_deserialisation_helper, (name, bases, state)
 
 
 class TesseraProxy(ProxyBase):
@@ -795,8 +805,6 @@ class TesseraProxy(ProxyBase):
         return self._set_remote_attr(item, value)
 
     async def _init_task(self, task_proxy, *args, **kwargs):
-        kwargs.pop('runtime', None)
-
         await self._init_future
 
         for arg in args:
@@ -810,46 +818,59 @@ class TesseraProxy(ProxyBase):
         return await task_proxy.__init_async__()
 
     def _get_remote_method(self, item):
+        self_ref = weakref.ref(self)
+
         def remote_method(*args, **kwargs):
+            kwargs.pop('runtime', None)
+
             eager = kwargs.pop('eager', False)
-            task_proxy = TaskProxy(self, item, *args, **kwargs)
-
             if eager:
-                return self._init_task(task_proxy, *args, **kwargs)
-            else:
-                loop = mosaic.get_event_loop()
-                loop.run(self._init_task, task_proxy, *args, **kwargs)
+                task_proxy = TaskProxy(self_ref(), item, *args, **kwargs)
 
-                return task_proxy
+                loop = mosaic.get_event_loop()
+                loop.run(self_ref()._init_task, task_proxy, *args, **kwargs)
+                # return self._init_task(task_proxy, *args, **kwargs)
+            else:
+                task_proxy = TaskArrayProxy(self_ref(), item, *args, **kwargs)
+
+            return task_proxy
 
         return remote_method
 
     def _get_remote_attr(self, item):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
-            attr = await self.cmd_recv_async(method='get_attr', item=item)
+            await self_ref()._init_future
+            attr = await self_ref().cmd_recv_async(method='get_attr', item=item)
 
             return attr
 
         return AwaitableOnly(remote_attr)
 
     def _set_remote_attr(self, item, value):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
-            await self.cmd_recv_async(method='set_attr', item=item, value=value)
+            await self_ref()._init_future
+            await self_ref().cmd_recv_async(method='set_attr', item=item, value=value)
 
         loop = mosaic.get_event_loop()
         return loop.run(remote_attr)
 
     def _get_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(*args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
     def _get_magic_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(_self, *args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
@@ -882,6 +903,13 @@ class TesseraProxy(ProxyBase):
         instance._set_cls()
 
         return instance
+
+    def __reduce__(self):
+        state = self._serialisation_helper()
+        if self.__class__.__name__ == '_TesseraProxy':
+            return self.__class__.__base__._deserialisation_helper, (state,)
+        else:
+            return self._deserialisation_helper, (state,)
 
 
 class ArrayProxy(CMDBase):
@@ -1070,6 +1098,8 @@ class ArrayProxy(CMDBase):
         return self._set_remote_attr(item, value)
 
     def _get_remote_method(self, item):
+        self_ref = weakref.ref(self)
+
         # TODO There should be an equivalent Task array proxy
         def remote_method(*args, **kwargs):
             runtime = kwargs.pop('runtime', None)
@@ -1077,14 +1107,14 @@ class ArrayProxy(CMDBase):
 
             if runtime is None:
                 task_proxies = []
-                for proxy in self._proxies:
+                for proxy in self_ref()._proxies:
                     task_proxies.append(proxy[item](*args, **kwargs))
 
                 task_proxies = asyncio.gather(*task_proxies)
 
             else:
                 task_proxies = None
-                for proxy in self._proxies:
+                for proxy in self_ref()._proxies:
                     if proxy.runtime_id == runtime:
                         task_proxies = proxy[item](*args, **kwargs)
                         break
@@ -1097,36 +1127,44 @@ class ArrayProxy(CMDBase):
         return remote_method
 
     def _get_remote_attr(self, item):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
+            await self_ref()._init_future
 
             attrs = [each.cmd_recv_async(method='get_attr', item=item)
-                     for each in self._proxies]
+                     for each in self_ref()._proxies]
 
             return await asyncio.gather(*attrs)
 
         return AwaitableOnly(remote_attr)
 
     def _set_remote_attr(self, item, value):
+        self_ref = weakref.ref(self)
+
         async def remote_attr():
-            await self._init_future
+            await self_ref()._init_future
 
             attrs = [each.cmd_recv_async(method='set_attr', item=item, value=value)
-                     for each in self._proxies]
+                     for each in self_ref()._proxies]
 
             return await asyncio.gather(*attrs)
 
         return remote_attr()
 
     def _get_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(*args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
     def _get_magic_method_getter(self, method):
+        self_ref = weakref.ref(self)
+
         def method_getter(_self, *args, **kwargs):
-            return self._get_remote_method(method)(*args, **kwargs)
+            return self_ref()._get_remote_method(method)(*args, **kwargs)
 
         return method_getter
 
@@ -1160,6 +1198,13 @@ class ArrayProxy(CMDBase):
                                                            '_runtime_id',
                                                            '_cls_attr_names',
                                                            '_len']
+
+    def __reduce__(self):
+        state = self._serialisation_helper()
+        if self.__class__.__name__ == '_ArrayProxy':
+            return self.__class__.__base__._deserialisation_helper, (state,)
+        else:
+            return self._deserialisation_helper, (state,)
 
 
 class PickleClass:

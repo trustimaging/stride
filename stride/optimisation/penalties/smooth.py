@@ -22,14 +22,14 @@ class Smooth(Operator):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    async def forward(self, variable, **kwargs):
+    def forward(self, variable, **kwargs):
         fun_data = 0.5 * np.sum(variable.extended_data ** 2)
         fun = Scalar()
         fun.data[:] = fun_data
 
         return fun
 
-    async def adjoint(self, d_fun, variable, **kwargs):
+    def adjoint(self, d_fun, variable, **kwargs):
         grad_variable = np.asarray(d_fun) * variable
 
         return grad_variable

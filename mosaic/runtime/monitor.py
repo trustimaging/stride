@@ -145,7 +145,7 @@ class Monitor(Runtime):
 
         self._comms.start_heartbeat(node_proxy.uid)
 
-        self.logger.info('Listening at <NODE:0 | WORKER:0:0-0:%d>' % num_workers)
+        self.logger.info('Listening at <NODE:0 | WORKER:0-%d>' % num_workers)
 
     async def init_cluster(self, **kwargs):
         """
@@ -233,8 +233,8 @@ class Monitor(Runtime):
             self.logger.debug('Started heartbeat with node %s' % node_uid)
 
         self.logger.info('Listening at <NODE:%d-%d | '
-                         'WORKER:0:0-%d:%d address=%s>' % (0, num_nodes, num_nodes, num_workers,
-                                                           ', '.join(node_list)))
+                         'WORKER:0-%d address=%s>' % (0, num_nodes, num_workers,
+                                                      ', '.join(node_list)))
 
     def init_file(self, runtime_config):
         runtime_id = self.uid

@@ -84,7 +84,7 @@ class ChambolleTV1(Constraint):
         norm_before = np.sqrt(np.sum(variable_data**2)) + 1e-31
 
         variable_data = denoise_tv_chambolle(variable_data, weight,
-                                             eps=tol, n_iter_max=max_iter)
+                                             eps=tol, max_num_iter=max_iter)
 
         norm_after = np.sqrt(np.sum(variable_data ** 2)) + 1e-31
 

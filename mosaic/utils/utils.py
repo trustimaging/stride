@@ -32,7 +32,7 @@ def sizeof(obj, seen=None):
         return 0
     try:
         if hasattr(obj, 'nbytes') and isinstance(obj.nbytes, int):
-            size = obj.nbytes
+            return obj.nbytes
         else:
             size = sys.getsizeof(obj)
     except Exception:
@@ -84,18 +84,17 @@ async def remote_sizeof(obj, seen=None, pending=False):
     if isinstance(obj, asyncio.Future):
         return 0
     if isinstance(obj, mosaic.types.awaitable_types):
-        size = await obj.size(pending=pending)
+        return await obj.size(pending=pending)
     else:
+        try:
+            if hasattr(obj, 'nbytes') and isinstance(obj.nbytes, int):
+                return obj.nbytes if not pending else 0
+            else:
+                size = sys.getsizeof(obj)
+        except Exception:
+            size = sys.getsizeof(obj)
         if pending:
             size = 0
-        else:
-            try:
-                if hasattr(obj, 'nbytes') and isinstance(obj.nbytes, int):
-                    size = obj.nbytes
-                else:
-                    size = sys.getsizeof(obj)
-            except Exception:
-                size = sys.getsizeof(obj)
     if seen is None:
         seen = set()
     obj_id = id(obj)

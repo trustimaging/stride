@@ -25,11 +25,11 @@ app = dash.Dash(__name__, title='Mosaic Profiling',)
 # EVENTS
 #
 # * Tessera
-#   Remote:  init --> (listening --> running) --> collected
+#   Remote:  init --> listening --> collected
 #   Proxy:   pending --> init --> listening --> collected
 #
 # * Task
-#   Remote:  init --> pending --> ready --> running --> done --> collected
+#   Remote:  init --> pending --> done/failed --> collected
 #   Proxy:   pending --> init --> queued --> (done --> result) --> collected
 
 

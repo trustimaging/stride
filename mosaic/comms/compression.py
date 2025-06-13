@@ -216,7 +216,6 @@ def maybe_compress(payload, min_size=1e4, sample_size=1e4, nsamples=5):
     4.  We return the compressed result
 
     """
-
     if isinstance(payload, pickle.PickleBuffer):
         payload = memoryview(payload)
 

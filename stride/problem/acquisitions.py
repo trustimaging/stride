@@ -4,6 +4,7 @@ import numpy as np
 from collections import OrderedDict
 from cached_property import cached_property
 
+import mosaic.types
 from mosaic.file_manipulation import h5
 
 from .data import Traces
@@ -113,6 +114,7 @@ class Shot(ProblemBase):
         sources = kwargs.pop('sources', None)
         receivers = kwargs.pop('receivers', None)
         delays = kwargs.pop('delays', None)
+        compressed = kwargs.pop('compressed', False)
 
         if sources is not None and receivers is not None:
             for source in sources:
@@ -121,9 +123,13 @@ class Shot(ProblemBase):
             for receiver in receivers:
                 self._receivers[receiver.id] = receiver
 
-            self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
-            self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
-            self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1), grid=self.grid)
+            self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids,
+                                         grid=self.grid)
+            self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids,
+                                         compressed=compressed,
+                                         grid=self.grid)
+            self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1),
+                                       grid=self.grid)
 
             if delays is not None:
                 self.delays.data[:, 0] = delays
@@ -304,7 +310,10 @@ class Shot(ProblemBase):
             shot.wavelets = self.wavelets
 
         if self.observed is not None:
-            shot.observed = self.observed
+            if self.observed.compressed:
+                shot.observed = self.observed.copy(compressed=False)
+            else:
+                shot.observed = self.observed
 
         if self.delays is not None:
             shot.delays = self.delays
@@ -314,6 +323,23 @@ class Shot(ProblemBase):
         shot.sequence_id = self.sequence_id
 
         return shot
+
+    def deallocate(self):
+        """
+        Deallocate memory associated with shot.
+
+        Returns
+        -------
+
+        """
+        if self.wavelets is not None:
+            self.wavelets.deallocate()
+
+        if self.observed is not None:
+            self.observed.deallocate()
+
+        if self.delays is not None:
+            self.delays.deallocate()
 
     def plot(self, **kwargs):
         """
@@ -392,7 +418,7 @@ class Shot(ProblemBase):
         if h5.file_exists(*args, **kwargs):
             description = {
                 'shots': {
-                    'shots_%08d' % self.id: self.__get_desc__(**kwargs)
+                    str(self.id): self.__get_desc__(**kwargs)
                 }
             }
 
@@ -400,7 +426,7 @@ class Shot(ProblemBase):
                 file.append(description)
 
         else:
-            self._acquisitions.dump(*args, **kwargs)
+            self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
     @staticmethod
     def _traces(*args, **kwargs):
@@ -426,7 +452,9 @@ class Shot(ProblemBase):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
+        compressed = kwargs.pop('compressed', False)
+
         self.id = description.id
 
         for source_id in description.source_ids:
@@ -443,17 +471,19 @@ class Shot(ProblemBase):
                 receiver = None
             self._receivers[receiver_id] = receiver
 
-        self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
-        if 'wavelets' in description:
-            self.wavelets.__set_desc__(description.wavelets)
+        lazy_loading = kwargs.pop('lazy_loading', False)
 
-        self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids, grid=self.grid)
-        if 'observed' in description:
-            self.observed.__set_desc__(description.observed)
+        self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
+        if 'wavelets' in description and not lazy_loading:
+            self.wavelets.__set_desc__(description.wavelets, **kwargs)
+
+        self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids, compressed=compressed, grid=self.grid)
+        if 'observed' in description and not lazy_loading:
+            self.observed.__set_desc__(description.observed, **kwargs)
 
         self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
-        if 'delays' in description:
-            self.delays.__set_desc__(description.delays)
+        if 'delays' in description and not lazy_loading:
+            self.delays.__set_desc__(description.delays, **kwargs)
 
 
 class Sequence(ProblemBase):
@@ -660,7 +690,7 @@ class Sequence(ProblemBase):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self.acq = description.acq
 
@@ -710,6 +740,7 @@ class Acquisitions(ProblemBase):
         self._sequences = OrderedDict()
         self._shot_selection = []
         self._sequence_selection = []
+        self._prev_load = None, None
 
     @property
     def shots(self):
@@ -1029,6 +1060,25 @@ class Acquisitions(ProblemBase):
                           sources=[source], receivers=receivers,
                           geometry=self._geometry, problem=self.problem))
 
+    def deallocate(self, shot_ids=None):
+        """
+        Deallocate memory associated with shots.
+
+        Parameters
+        ----------
+        shot_ids : list, optional
+            Set of shot IDs to deallocate.
+
+        Returns
+        -------
+
+        """
+        if shot_ids is None:
+            shot_ids = self.shot_ids
+
+        for shot_id in shot_ids:
+            self._shots[shot_id].deallocate()
+
     def plot(self, **kwargs):
         """
         Plot wavelets and observed for for all shots if they are allocated.
@@ -1175,34 +1225,128 @@ class Acquisitions(ProblemBase):
 
         return sub_acquisitions
 
+    def load(self, *args, **kwargs):
+        """
+        Load the object using ``__set_desc__`` to digest the description.
+
+        See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
+
+        Parameters
+        ----------
+        shot_ids : list, optional
+            List of shot IDs to load.
+
+        Returns
+        -------
+
+        """
+        shot_ids = kwargs.pop('shot_ids', None)
+        fast = kwargs.pop('fast', False)
+
+        prev_args, prev_kwargs = self._prev_load
+        if prev_args is not None:
+            args = args + prev_args[len(args):] if len(args) < len(prev_args) else args
+        if prev_kwargs is not None:
+            kwargs_ = prev_kwargs.copy()
+            kwargs_.update(kwargs)
+            kwargs = kwargs_
+
+        filter = kwargs.pop('filter', {'shots': shot_ids} if shot_ids is not None else None)
+
+        if not fast:
+            super().load(*args, filter=filter, **kwargs)
+        else:
+            kwargs['parameter'] = self.name
+
+            if filter is not None:
+                shot_ids = filter['shots']
+            else:
+                shot_ids = self.shot_ids
+            shots = self._shots
+
+            with h5.HDF5(*args, **kwargs, mode='r') as file:
+                file = file.file
+                for shot_id in shot_ids:
+                    shot = shots[shot_id]
+                    shot_desc = file['/shots/%d' % shot_id]
+                    try:
+                        shot.wavelets._set_data(shot_desc['wavelets/data'][()])
+                    except KeyError:
+                        pass
+                    try:
+                        shot.observed._set_data(shot_desc['observed/data'][()])
+                    except KeyError:
+                        pass
+                    try:
+                        shot.delays._set_data(shot_desc['delays/data'][()])
+                    except KeyError:
+                        pass
+
+        self._prev_load = args, kwargs
+
     def __get_desc__(self, **kwargs):
-        description = {
-            'num_shots': self.num_shots,
-            'shots': [],
-            'sequences': [],
-        }
+        legacy = kwargs.pop('legacy', False)
+        shot_ids = kwargs.pop('shot_ids', None)
 
-        for shot in self.shots:
-            description['shots'].append(shot.__get_desc__())
+        if legacy:
+            description = {
+                'num_shots': self.num_shots,
+                'shots': [],
+                'sequences': [],
+            }
 
-        for sequence in self.sequences:
-            description['sequences'].append(sequence.__get_desc__())
+            for shot in self.shots:
+                if shot_ids is not None and shot.id not in shot_ids:
+                    continue
+                description['shots'].append(shot.__get_desc__())
+
+            for sequence in self.sequences:
+                description['sequences'].append(sequence.__get_desc__())
+
+        else:
+            description = {
+                'num_shots': self.num_shots,
+                'shots': {},
+                'sequences': {},
+            }
+
+            for shot in self.shots:
+                if shot_ids is not None and shot.id not in shot_ids:
+                    continue
+                description['shots'][str(shot.id)] = shot.__get_desc__()
+
+            for sequence in self.sequences:
+                description['sequences'][str(sequence.id)] = sequence.__get_desc__()
 
         return description
 
-    def __set_desc__(self, description):
-        for shot_desc in description.shots:
+    def __set_desc__(self, description, **kwargs):
+        compressed = kwargs.pop('compressed', False)
+
+        if 'shots' in description:
+            shots = description.shots
+        else:
+            shots = description.values()
+        if isinstance(shots, mosaic.types.Struct):
+            shots = shots.values()
+
+        for shot_desc in shots:
             if shot_desc.id not in self._shots:
                 shot = Shot(shot_desc.id,
+                            compressed=compressed,
                             geometry=self._geometry,
                             problem=self.problem, grid=self.grid)
                 self.add(shot)
 
             shot = self.get(shot_desc.id)
-            shot.__set_desc__(shot_desc)
+            shot.__set_desc__(shot_desc, compressed=compressed, **kwargs)
 
         if 'sequences' in description:
-            for seq_desc in description.sequences:
+            sequences = description.sequences
+            if isinstance(sequences, mosaic.types.Struct):
+                sequences = sequences.values()
+
+            for seq_desc in sequences:
                 if seq_desc.id not in self._sequences:
                     sequence = Sequence(seq_desc.id,
                                         geometry=self._geometry,
@@ -1210,4 +1354,4 @@ class Acquisitions(ProblemBase):
                     self.add_sequence(sequence)
 
                 sequence = self.get_sequence(seq_desc.id)
-                sequence.__set_desc__(seq_desc)
+                sequence.__set_desc__(seq_desc, **kwargs)

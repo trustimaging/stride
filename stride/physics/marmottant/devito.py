@@ -34,7 +34,7 @@ class MarmottantDevito(ProblemTypeBase):
 
     For forward execution of the PDE, the following parameters can be used:
 
-        x_0 : ParticleField
+        x_0 : SparseCoordinates
             Spatial location of the bubble population, in [m].
         r_0 : SparseField
             Initial radius of the bubble population, in [m].
@@ -101,7 +101,7 @@ class MarmottantDevito(ProblemTypeBase):
 
     # forward
 
-    async def before_forward(self, r_0, x_0=None,
+    def before_forward(self, r_0, x_0=None,
                              vp=1540., rho=997, sigma=0.073, mu=0.002,
                              p_0=101325, p=0., kappa=1.07, kappa_s=5E-9, chi=0.4,
                              r_buckle=None, r_break=None, **kwargs):
@@ -110,7 +110,7 @@ class MarmottantDevito(ProblemTypeBase):
 
         Parameters
         ----------
-        x_0 : ParticleField
+        x_0 : SparseCoordinates
             Spatial location of the bubble population, in [m].
         r_0 : SparseField
             Initial radius of the bubble population, in [m].
@@ -159,7 +159,7 @@ class MarmottantDevito(ProblemTypeBase):
         self.state_operator.set_operator(init_terms + stencil, **kwargs)
         self.state_operator.compile()
 
-    async def run_forward(self, *args, **kwargs):
+    def run_forward(self, *args, **kwargs):
         """
         Run the state or forward problem.
 
@@ -174,11 +174,14 @@ class MarmottantDevito(ProblemTypeBase):
         """
         functions = dict()
 
+        time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
         self.state_operator.run(dt=self.time.step,
+                                time_m=1,
+                                time_M=time_bounds[1]-1,
                                 **functions,
                                 **kwargs.pop('devito_args', {}))
 
-    async def after_forward(self, *args, **kwargs):
+    def after_forward(self, *args, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 
@@ -286,7 +289,7 @@ class MarmottantDevito(ProblemTypeBase):
             rho = parent_grid.vars.rho
         except AttributeError:
             rho = self.dev_grid.vars.rho_sparse
-        vp2 = parent_grid.vars.vp2
+        vp2 = parent_grid.vars.vp**2
 
         inject_term = v_inject.inject(field=p_out.forward, expr=vp2 * self.time.step**2 * rho * inject_scale * v_inject)
 
@@ -481,6 +484,7 @@ class MarmottantDevito(ProblemTypeBase):
                                            shape=(self.time.num, num),
                                            space_order=self.space_order,
                                            time_order=self.time_order,
+                                           layers=devito.NoLayers,
                                            **kwargs)
 
     def _make_interp_function(self, name, value, x_0, num, **kwargs):
@@ -519,7 +523,7 @@ class MarmottantDevito(ProblemTypeBase):
         return fun, dense_fun, interp_term
 
     def _make_interp_time_function(self, name, value, x_0, num, **kwargs):
-        if not isinstance(value, devito.TimeFunction):
+        if not isinstance(value, devito.TimeFunctionOSS):
             fun = self._make_saved_time_function(name, num=num, save=self.time.num)
             fun.data[:] = value.data.T
 
@@ -541,7 +545,7 @@ class MarmottantDevito(ProblemTypeBase):
 
             dense_fun = value
 
-            interp_term = fun.interpolate(expr=dense_fun.forward)
+            interp_term = fun.interpolate(expr=dense_fun)
 
             if x_0 is None:
                 raise ValueError('Bubble location x_0 needs to be provided when'

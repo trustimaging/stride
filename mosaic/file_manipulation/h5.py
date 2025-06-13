@@ -92,14 +92,10 @@ def append(name, obj, group):
             append(sub_group_name, obj[index], sub_group)
 
     else:
-        if name not in group:
-            _write_dataset(name, obj, group)
+        _write_dataset(name, obj, group)
 
 
 def _write_dataset(name, obj, group):
-    if name in group:
-        return
-
     is_bytes = False
     if isinstance(obj, bytes):
         is_bytes = True
@@ -110,45 +106,66 @@ def _write_dataset(name, obj, group):
         is_none = True
         obj = 'None'
 
-    dataset = group.create_dataset(name, data=obj)
-    dataset.attrs['is_ndarray'] = isinstance(obj, np.ndarray)
-    dataset.attrs['is_list'] = isinstance(obj, list)
-    dataset.attrs['is_tuple'] = isinstance(obj, tuple)
-    dataset.attrs['is_str'] = isinstance(obj, str)
-    dataset.attrs['is_bytes'] = is_bytes
-    dataset.attrs['is_none'] = is_none
+    if name not in group:
+        dataset = group.create_dataset(name, data=obj)
+        dataset.attrs['is_ndarray'] = isinstance(obj, np.ndarray)
+        dataset.attrs['is_list'] = isinstance(obj, list)
+        dataset.attrs['is_tuple'] = isinstance(obj, tuple)
+        dataset.attrs['is_str'] = isinstance(obj, str)
+        dataset.attrs['is_bytes'] = is_bytes
+        dataset.attrs['is_none'] = is_none
 
-    if isinstance(obj, list) and len(obj):
-        flat_obj = np.asarray(obj).flatten().tolist()
-        dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
+        if not isinstance(obj, np.ndarray):
+            flat_obj = np.asarray(obj).flatten().tolist()
+            if name not in group:
+                dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
+
+    else:
+        group[name][...] = obj
 
 
-def read(obj, lazy=True, filter=None):
+def read(obj, lazy=True, filter=None, only=None):
     if isinstance(obj, h5py.Group):
         if filter is None:
             filter = {}
 
-        for key, filter_list in filter.items():
-            if key in obj:
-                value = _read_dataset(obj[key], lazy=False)
-                if value not in filter_list:
-                    raise FilterException
+        # for key, filter_list in filter.items():
+        #     if key in obj:
+        #         value = _read_dataset(obj[key], lazy=False)
+        #         if value not in filter_list:
+        #             raise FilterException
 
         if obj.attrs.get('is_array'):
             data = []
             for key in sorted(obj.keys()):
-                try:
-                    value = read(obj[key], lazy=lazy, filter=filter)
-                except FilterException:
+                if only is not None and key not in only:
                     continue
+                if filter is not None and key in filter:
+                    try:
+                        value = read(obj[key], lazy=lazy, filter=filter, only=filter[key])
+                    except FilterException:
+                        continue
+                else:
+                    try:
+                        value = read(obj[key], lazy=lazy, filter=filter)
+                    except FilterException:
+                        continue
                 data.append(value)
         else:
             data = {}
             for key in obj.keys():
-                try:
-                    value = read(obj[key], lazy=lazy, filter=filter)
-                except FilterException:
+                if only is not None and key not in only:
                     continue
+                if filter is not None and key in filter:
+                    try:
+                        value = read(obj[key], lazy=lazy, filter=filter, only=filter[key])
+                    except FilterException:
+                        continue
+                else:
+                    try:
+                        value = read(obj[key], lazy=lazy, filter=filter)
+                    except FilterException:
+                        continue
                 data[key] = value
 
         return data
@@ -212,7 +229,7 @@ class HDF5:
     or as a context manager,
 
     >>> with HDF5(...) as file:
-    >>>     file.write(...)
+    >>>     file.dump(...)
 
     If a particular version is given, the filename will be generated without checks. If no version is given,
     the ``path`` will be checked for the latest available version of the file.
@@ -258,11 +275,15 @@ class HDF5:
 
             file_parameter = camel_case(parameter)
             version = kwargs.pop('version', None)
+            version_start = kwargs.pop('version_start', 0)
             extension = kwargs.pop('extension', '.h5')
 
             if version is None or version < 0:
-                version = 0
-                filename = _abs_filename('%s-%s%s' % (project_name, file_parameter, extension), path)
+                version = version_start
+                if version > 0:
+                    filename = _abs_filename('%s-%s-%05d%s' % (project_name, file_parameter, version, extension), path)
+                else:
+                    filename = _abs_filename('%s-%s%s' % (project_name, file_parameter, extension), path)
                 while os.path.exists(filename):
                     version += 1
                     filename = _abs_filename('%s-%s-%05d%s' % (project_name, file_parameter, version, extension), path)
@@ -297,9 +318,15 @@ class HDF5:
     def close(self):
         self._file.close()
 
-    def load(self, lazy=True, filter=None):
+    def load(self, lazy=True, filter=None, only=None):
+        if filter is not None:
+            for k, v in filter.items():
+                if not isinstance(v, list):
+                    v = [v]
+                v = [str(v_) if not isinstance(v_, str) else v_ for v_ in v]
+                filter[k] = v
         group = self._file['/']
-        description = read(group, lazy=lazy, filter=filter)
+        description = read(group, lazy=lazy, filter=filter, only=only)
         return Struct(description)
 
     def dump(self, description):

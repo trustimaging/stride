@@ -228,11 +228,17 @@ class CMDBase(Base):
 
         """
         wait = kwargs.pop('wait', False)
+        silence = kwargs.pop('silence', None)
+        restrict = kwargs.pop('restrict', None)
 
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
 
         result = []
         for remote in remotes:
+            if silence is not None and remote.uid in silence:
+                continue
+            if restrict is not None and remote.uid not in restrict:
+                continue
             result.append(remote.cmd(**cmd, wait=wait, as_async=False))
 
         if len(result) == 1:
@@ -259,11 +265,17 @@ class CMDBase(Base):
 
         """
         wait = kwargs.pop('wait', False)
+        silence = kwargs.pop('silence', None)
+        restrict = kwargs.pop('restrict', None)
 
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
 
         result = []
         for remote in remotes:
+            if silence is not None and remote.uid in silence:
+                continue
+            if restrict is not None and remote.uid not in restrict:
+                continue
             result.append(remote.cmd(**cmd, wait=wait, reply=True, as_async=False))
 
         if len(result) == 1:
@@ -289,10 +301,17 @@ class CMDBase(Base):
         asyncio.Future
 
         """
+        silence = kwargs.pop('silence', None)
+        restrict = kwargs.pop('restrict', None)
+
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
 
         result = []
         for remote in remotes:
+            if silence is not None and remote.uid in silence:
+                continue
+            if restrict is not None and remote.uid not in restrict:
+                continue
             result.append(await remote.cmd(**cmd))
 
         if len(result) == 1:
@@ -318,10 +337,17 @@ class CMDBase(Base):
         asyncio.Future
 
         """
+        silence = kwargs.pop('silence', None)
+        restrict = kwargs.pop('restrict', None)
+
         remotes, cmd = self._prepare_cmd(method, *args, **kwargs)
 
         result = []
         for remote in remotes:
+            if silence is not None and remote.uid in silence:
+                continue
+            if restrict is not None and remote.uid not in restrict:
+                continue
             result.append(await remote.cmd(**cmd, reply=True))
 
         if len(result) == 1:
@@ -439,7 +465,6 @@ class CMDBase(Base):
     async def deregister(self):
         try:
             self.logger.debug('Garbage collected object %s' % self)
-            self.state_changed('collected')
         except AttributeError:
             pass
 

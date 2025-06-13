@@ -16,6 +16,7 @@ except ModuleNotFoundError:
     ENABLED_2D_PLOTTING = False
 
 import mosaic
+from mosaic.core.tessera import PickleClass
 from mosaic.comms.compression import maybe_compress, decompress
 
 from .base import GriddedSaved
@@ -24,7 +25,11 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'SparseField', 'ParticleField']
+           'SparseField', 'SparseCoordinates']
+
+
+def inv_transform(x):
+    return 1 / x
 
 
 @mosaic.tessera
@@ -120,12 +125,18 @@ class StructuredData(Data):
     """
 
     def __init__(self, **kwargs):
+        # hacky, but does the trick for now
+        name = kwargs.get('name', None)
+        if name is not None and 'vp' in name:
+            kwargs['transform'] = kwargs.pop('transform', PickleClass(inv_transform))
         super().__init__(**kwargs)
 
         shape = kwargs.pop('shape', None)
         extended_shape = kwargs.pop('extended_shape', None)
         inner = kwargs.pop('inner', None)
         dtype = kwargs.pop('dtype', np.float32)
+        compressed = kwargs.pop('compressed', False)
+        compression = kwargs.pop('compression', None)
 
         data = kwargs.pop('data', None)
         if data is not None:
@@ -144,11 +155,12 @@ class StructuredData(Data):
         self._extended_shape = extended_shape
         self._inner = inner
         self._dtype = dtype
+        self._compressed = compressed
+        self._compression = compression
 
         self._data = None
-
         if data is not None:
-            self._data = self.pad_data(data)
+            self._set_data(self.pad_data(data))
 
         self.grad = None
         self.prec = None
@@ -171,6 +183,8 @@ class StructuredData(Data):
         kwargs['inner'] = kwargs.pop('inner', self.inner)
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['compressed'] = kwargs.pop('compressed', self.compressed)
+        kwargs['compression'] = kwargs.pop('compression', self._compression)
         kwargs['propagate_tessera'] = False
 
         return super().copy(*args, **kwargs)
@@ -191,6 +205,8 @@ class StructuredData(Data):
         kwargs['inner'] = kwargs.pop('inner', self.inner)
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['compressed'] = kwargs.pop('compressed', self.compressed)
+        kwargs['compression'] = kwargs.pop('compression', self._compression)
         kwargs['data'] = kwargs.pop('data', self._data)
 
         return super().detach(*args, **kwargs)
@@ -211,6 +227,8 @@ class StructuredData(Data):
         kwargs['inner'] = kwargs.pop('inner', self.inner)
         kwargs['dtype'] = kwargs.pop('dtype', self.dtype)
         kwargs['grid'] = kwargs.pop('grid', self.grid)
+        kwargs['compressed'] = kwargs.pop('compressed', self.compressed)
+        kwargs['compression'] = kwargs.pop('compression', self._compression)
         kwargs['data'] = kwargs.pop('data', self._data)
 
         return super().as_parameter(*args, **kwargs)
@@ -226,8 +244,8 @@ class StructuredData(Data):
 
         """
         cpy = self.alike(name=kwargs.pop('name', self._init_name), **kwargs)
-        cpy.extended_data[:] = self.extended_data
         cpy.needs_grad = self.needs_grad
+        cpy._set_data(self.extended_data.copy())
 
         if self.grad is not None:
             cpy.grad = self.grad.copy()
@@ -236,6 +254,20 @@ class StructuredData(Data):
             cpy.prec = self.prec.copy()
 
         return cpy
+
+    def _set_data(self, data):
+        if self.compressed:
+            compression, data = maybe_compress(data)
+            self._compression = compression
+
+        self._data = data
+
+    def _get_data(self):
+        if self.compressed:
+            data = decompress(self._compression, self._data)
+            return np.frombuffer(data, self.dtype).reshape(self.shape)
+
+        return self._data
 
     @property
     def data(self):
@@ -246,7 +278,7 @@ class StructuredData(Data):
         if self._data is None:
             self.allocate()
 
-        return self._data[self._inner]
+        return self._get_data()[self._inner]
 
     @property
     def extended_data(self):
@@ -257,7 +289,7 @@ class StructuredData(Data):
         if self._data is None:
             self.allocate()
 
-        return self._data
+        return self._get_data()
 
     @property
     def shape(self):
@@ -308,6 +340,14 @@ class StructuredData(Data):
         """
         return self._dtype
 
+    @property
+    def compressed(self):
+        """
+        Whether the data is compressed.
+
+        """
+        return self._compressed
+
     def clear_grad(self):
         """
         Initialise and clear the internal buffers for the gradient and preconditioner.
@@ -343,12 +383,14 @@ class StructuredData(Data):
         """
         self.grad = None
 
-    def process_grad(self, **kwargs):
+    def process_grad(self, global_prec=True, **kwargs):
         """
         Process the gradient by applying the pre-conditioner to it.
 
         Parameters
         ----------
+        global_prec : bool, optional
+            Whether to apply preconditioner. Defaults to True.
         prec_scale : float, optional
             Condition scaling for the preconditioner.
 
@@ -359,10 +401,11 @@ class StructuredData(Data):
         if not self.needs_grad:
             return
 
-        self.grad.apply_prec(**kwargs)
+        if global_prec:
+            self.grad.apply_prec(**kwargs)
         return self.grad
 
-    def apply_prec(self, prec_scale=0.25, prec_op=None, prec=None, **kwargs):
+    def apply_prec(self, prec_scale=4.0, prec_smooth=None, prec_op=None, prec=None, **kwargs):
         """
         Apply a pre-conditioner to the current field.
 
@@ -372,6 +415,8 @@ class StructuredData(Data):
             Condition scaling for the preconditioner.
         prec_op : callable, optional
             Additional operation to apply to the preconditioner.
+        prec_smooth : float, optional
+            Smoothing to apply to the preconditioner.
         prec : StructuredData, optional
             Pre-conditioner to apply. Defaults to self.prec.
 
@@ -382,6 +427,9 @@ class StructuredData(Data):
         prec = self.prec if prec is None else prec
 
         if prec is not None:
+            if prec_smooth is not None:
+                prec.data[:] = scipy.ndimage.gaussian_filter(prec.data, prec_smooth)
+
             prec_factor = np.sum(np.abs(prec.data))
 
             if prec_factor > 1e-31:
@@ -392,7 +440,7 @@ class StructuredData(Data):
                     prec.data[:] = prec_op(prec.data)
 
                 non_zero = np.abs(prec.data) > 0.
-                self.data[non_zero] /= prec.data[non_zero]
+                self.data[non_zero] *= 1/prec.data[non_zero]
 
         return self
 
@@ -405,7 +453,7 @@ class StructuredData(Data):
 
         """
         if self._data is None:
-            self._data = np.empty(self._extended_shape, dtype=self._dtype)
+            self._set_data(np.empty(self._extended_shape, dtype=self._dtype))
 
     def deallocate(self, collect=False):
         """
@@ -442,7 +490,9 @@ class StructuredData(Data):
         if self._data is None:
             self.allocate()
 
-        self._data.fill(value)
+        data = self.extended_data
+        data.fill(value)
+        self._set_data(data)
 
     def pad(self, smooth=False):
         """
@@ -457,7 +507,7 @@ class StructuredData(Data):
         -------
 
         """
-        self.extended_data[:] = self.pad_data(self.data, smooth=smooth)
+        self._set_data(self.pad_data(self.data, smooth=smooth))
 
     def pad_data(self, data, smooth=False):
         """
@@ -584,12 +634,30 @@ class StructuredData(Data):
 
         return res
 
+    def __rtruediv__(self, other):
+        res, other_data = self._prepare_op(other)
+        res.extended_data[:] = res.extended_data.__rtruediv__(other_data)
+
+        self._op_grad(res, other, '__rtruediv__')
+        self._op_prec(res, other, '__rtruediv__')
+
+        return res
+
     def __floordiv__(self, other):
         res, other_data = self._prepare_op(other)
         res.extended_data[:] = res.extended_data.__floordiv__(other_data)
 
         self._op_grad(res, other, '__floordiv__')
         self._op_prec(res, other, '__floordiv__')
+
+        return res
+
+    def __rfloordiv__(self, other):
+        res, other_data = self._prepare_op(other)
+        res.extended_data[:] = res.extended_data.__rfloordiv__(other_data)
+
+        self._op_grad(res, other, '__rfloordiv__')
+        self._op_prec(res, other, '__rfloordiv__')
 
         return res
 
@@ -652,8 +720,6 @@ class StructuredData(Data):
     __radd__ = __add__
     __rsub__ = __sub__
     __rmul__ = __mul__
-    __rtruediv__ = __truediv__
-    __rfloordiv__ = __floordiv__
 
     def __get_desc__(self, **kwargs):
         if self._data is None:
@@ -678,18 +744,20 @@ class StructuredData(Data):
             'inner': inner,
             'dtype': str(np.dtype(self._dtype)),
             'data': data,
-            'compression': compression if compression is not None else False
+            'compression': compression if compression is not None else False,
+            'step_size': self.step_size
         }
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._extended_shape = description.extended_shape
         self._dtype = np.dtype(description.dtype)
 
         inner = []
         for each in description.inner:
+            each = [e.decode() if isinstance(e, bytes) else e for e in each]
             inner.append(slice(
                 int(each[0]) if each[0] != 'None' else None,
                 int(each[1]) if each[1] != 'None' else None,
@@ -707,7 +775,7 @@ class StructuredData(Data):
             data = decompress(compression, data)
             data = np.frombuffer(data, self.dtype).reshape(self.shape)
 
-        self.extended_data[:] = self.pad_data(data)
+        self._set_data(self.pad_data(data))
 
 
 @mosaic.tessera
@@ -1095,10 +1163,9 @@ class ScalarField(StructuredData):
         description = super().__get_desc__(**kwargs)
         description['time_dependent'] = self._time_dependent
         description['slow_time_dependent'] = self._slow_time_dependent
-
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
@@ -1290,7 +1357,7 @@ class VectorField(ScalarField):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._time_dependent = description.time_dependent
@@ -1549,6 +1616,12 @@ class Traces(StructuredData):
             # Fill object
             new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=processed_data)
 
+            # data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
+            # if data.shape[-1] < new_num:
+            #     data = np.pad(data, ((0, 0), (0, new_num-data.shape[-1])), mode='constant', constant_values=0)
+            # elif data.shape[-1] > new_num:
+            #     data = data[:, :new_num]
+            # new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=data)
         else:
             new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)
 
@@ -1561,8 +1634,8 @@ class Traces(StructuredData):
 
         return description
 
-    def __set_desc__(self, description):
-        super().__set_desc__(description)
+    def __set_desc__(self, description, **kwargs):
+        super().__set_desc__(description, **kwargs)
 
         self._transducer_ids = description.transducer_ids
 
@@ -1653,7 +1726,7 @@ class SparseField(StructuredData):
 
         Returns
         -------
-        ParticleField
+        SparseCoordinates
             Newly created ScalarField.
 
         """
@@ -1671,7 +1744,7 @@ class SparseField(StructuredData):
 
         Returns
         -------
-        ParticleField
+        SparseCoordinates
             Detached variable.
 
         """
@@ -1744,7 +1817,7 @@ class SparseField(StructuredData):
 
         return description
 
-    def __set_desc__(self, description):
+    def __set_desc__(self, description, **kwargs):
         self._shape = description.shape
         self._dtype = np.dtype(description.dtype)
         self._num = description.num
@@ -1762,9 +1835,9 @@ class SparseField(StructuredData):
 
 
 @mosaic.tessera
-class ParticleField(SparseField):
+class SparseCoordinates(SparseField):
     """
-    Objects of this type describe a sparse particle field defined over the spatial grid. Particle fields
+    Objects of this type describe a sparse set of coordinates defined over the spatial grid. Coordinates
     can also be time-dependent.
 
     Parameters
@@ -1818,20 +1891,23 @@ class ParticleField(SparseField):
         """
         plot = kwargs.pop('plot', True)
 
-        if self.slow_time_dependent and self.space.dim == 2:
-            def update(figure, axis, step):
-                axis.clear()
+        if self.slow_time_dependent:
+            if self.space.dim == 2:
+                def update(figure, axis, step):
+                    axis.clear()
 
-                self._plot(self.data[int(step)], axis=axis, **kwargs)
-                axis.set_title(axis.get_title() + ' - slow time step %d' % step)
+                    self._plot(self.data[int(step)], axis=axis, **kwargs)
+                    axis.set_title(axis.get_title() + ' - slow time step %d' % step)
 
-                figure.canvas.draw_idle()
+                    figure.canvas.draw_idle()
 
-            axis = self._plot_time(update)
+                axis = self._plot_time(update)
 
+            else:
+                slow_t = kwargs.pop('slow_t', 0)
+                axis = self._plot(self.data[slow_t], **kwargs)
         else:
-            slow_t = kwargs.pop('slow_t', 0)
-            axis = self._plot(self.data[slow_t]/np.array(self.space.spacing), **kwargs)
+            axis = self._plot(self.data, **kwargs)
 
         if plot is True:
             plotting.show(axis)

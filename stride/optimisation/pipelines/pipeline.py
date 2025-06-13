@@ -60,7 +60,7 @@ class Pipeline(Operator):
                 else:
                     steps.insert(idx+1, 'dump')
 
-        self._steps = []
+        self._steps = {}
         for step in steps:
             do_raise = True
             if isinstance(step, tuple):
@@ -72,28 +72,43 @@ class Pipeline(Operator):
                     raise ValueError('Pipeline step %s does not exist in the registry' % step)
 
                 if step_cls is not None:
-                    self._steps.append(step_cls(**kwargs))
+                    self._steps[step] = step_cls(**kwargs)
             else:
-                self._steps.append(step)
+                self._steps[str(step)] = step
 
-    async def forward(self, *args, **kwargs):
+    def insert(self, loc, key, step):
+        pos = list(self._steps.keys()).index(loc)
+        items = list(self._steps.items())
+        items.insert(pos, (key, step))
+        self._steps = dict(items)
+
+    def append(self, key, step):
+        self._steps[key] = step
+
+    def forward(self, *args, **kwargs):
         """
         Apply all steps in the pipeline in order.
 
         """
+        if self.inputs is None:
+            self.inputs = (args, kwargs)
+
         next_args = args
 
         prev_step = None
-        for step in self._steps:
+        for step in self._steps.values():
             if self._no_grad:
                 with no_grad(*next_args, **kwargs):
-                    next_args = await step(*next_args, **{**self._kwargs, **kwargs},
-                                           prev_step=prev_step)
+                    next_args = step.forward(*next_args, **{**self._kwargs, **kwargs},
+                                             prev_step=prev_step)
             else:
-                next_args = await step(*next_args, **{**self._kwargs, **kwargs},
-                                       prev_step=prev_step)
+                next_args = step(*next_args, **{**self._kwargs, **kwargs},
+                                 prev_step=prev_step)
             next_args = (next_args,) if len(args) == 1 else next_args
             prev_step = None if isinstance(step, Dump) else step
+
+        if self.num_outputs is None:
+            self.num_outputs = len(next_args)
 
         if len(args) == 1:
             return next_args[0]
@@ -101,13 +116,13 @@ class Pipeline(Operator):
         else:
             return next_args
 
-    async def adjoint(self, *args, **kwargs):
+    def adjoint(self, *args, **kwargs):
         input_args, input_kwargs = self.inputs
 
         outputs = args[:self.num_outputs]
 
         prev_step = None
-        for step in reversed(self._steps):
+        for step in reversed(self._steps.values()):
             outputs = step.adjoint(*outputs, *input_args, **{**self._kwargs, **kwargs},
                                    prev_step=prev_step)
             prev_step = None if isinstance(step, Dump) else step

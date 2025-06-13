@@ -238,7 +238,7 @@ class GridDevito(Gridded):
 
         if space is None:
             origin = (0,)
-            extended_shape = (1,)
+            extended_shape = (2,)
             extended_extent = (1,)
         else:
             extra = space.absorbing
@@ -286,7 +286,7 @@ class GridDevito(Gridded):
         if parent_grid is not None:
             dimensions = parent_grid.dimensions
             time_dimension = devito.TimeDimension(name='time_inner',
-                                                  spacing=devito.types.Scalar(name='dt_inner', is_const=True))
+                                                  spacing=devito.Scalar(name='dt_inner', is_const=True))
             self.num_inner = kwargs.pop('num_inner', 1)
         else:
             self.num_inner = None
@@ -531,9 +531,7 @@ class GridDevito(Gridded):
                                  compression=compression,
                                  **kwargs)
 
-        space_dims = fun.dimensions[1:]
-
-        return fun.func(time_under - int(time_bounds[0] // factor), *space_dims)
+        return fun
 
     def undersampled_time_derivative(self, fun, factor, time_bounds=None, offset=None,
                                      deriv_order=1, fd_order=1):
@@ -552,7 +550,7 @@ class GridDevito(Gridded):
 
         time_dim = self.devito_grid.time_dim
 
-        condition = sympy.And(devito.symbolics.CondEq(time_dim % factor, 0),
+        condition = sympy.And(devito.CondEq(time_dim % factor, 0),
                               devito.Ge(time_dim, time_bounds[0] + offset[0]),
                               devito.Le(time_dim, time_bounds[1] - offset[1]), )
 
@@ -562,9 +560,7 @@ class GridDevito(Gridded):
                                                  condition=condition)
         self._time_under_count += 1
 
-        # buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
-        # TODO Force larger buffer size to prevent devito issue
-        buffer_size = (self.time.extended_num - 1 - 0 + factor) // factor + 1
+        buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
 
         return time_under, buffer_size
 
@@ -588,7 +584,7 @@ class GridDevito(Gridded):
             Spatial coordinates of the sparse points (num points, dimensions), only
             needed when interpolation is not linear.
         interpolation_type : str, optional
-            Type of interpolation to perform (``linear`` or ``hicks``), defaults
+            Type of interpolation to perform (``linear``, ``sinc``, or ``hicks``), defaults
             to ``linear``, computationally more efficient but less accurate.
         kwargs
             Additional arguments for the Devito constructor.
@@ -607,9 +603,10 @@ class GridDevito(Gridded):
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
 
+        grid = kwargs.pop('grid', self.devito_grid)
         sparse_kwargs = dict(name=name,
-                             grid=kwargs.pop('grid', self.devito_grid),
-                             dimensions=kwargs.get('dimensions', (self.devito_grid.time_dim, p_dim)),
+                             grid=grid,
+                             dimensions=kwargs.get('dimensions', (grid.time_dim, p_dim)),
                              npoint=num,
                              nt=time_bounds[1]-0,
                              space_order=space_order,
@@ -619,6 +616,12 @@ class GridDevito(Gridded):
 
         if interpolation_type == 'linear':
             fun = devito.SparseTimeFunction(**sparse_kwargs)
+
+        elif interpolation_type == 'sinc':
+            r = sparse_kwargs.pop('r', 7)
+            fun = devito.SparseTimeFunction(interpolation='sinc', r=r,
+                                            coordinates=coordinates,
+                                            **sparse_kwargs)
 
         elif interpolation_type == 'hicks':
             r = sparse_kwargs.pop('r', 7)
@@ -685,7 +688,7 @@ class GridDevito(Gridded):
 
             reference_gridpoints, coefficients = self._calculate_hicks(coordinates)
 
-            fun = devito.PrecomputedSparseFunction(r=r,
+            fun = devito.PrecomputedSparseFunction(r=r+1,
                                                    gridpoints=reference_gridpoints,
                                                    interpolation_coeffs=coefficients,
                                                    **sparse_kwargs)
@@ -900,14 +903,14 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
             }
 
         elif platform == 'cpu-icc':
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'icc',
             }
 
@@ -915,7 +918,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'nvc',
             }
 
@@ -923,7 +926,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'autotuning': 'off',
                 'compiler': 'nvc',
                 'language': 'openacc',
@@ -934,7 +937,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'cuda',
                 'language': 'cuda',
                 'platform': 'nvidiaX',
@@ -944,7 +947,7 @@ class OperatorDevito:
             default_config = {
                 'name': self.name,
                 'subs': subs,
-                'opt': 'advanced-fsg',
+                'opt': 'advanced',
                 'compiler': 'hip',
                 'language': 'hip',
                 'platform': 'amdgpuX',
@@ -958,7 +961,7 @@ class OperatorDevito:
         context = {'log-level': 'DEBUG' if log_level in ['perf', 'debug'] else 'INFO'}
         compiler_config = {}
         for key, value in default_config.items():
-            if key in devito.configuration:
+            if key in devito.configuration and key != 'opt':
                 context[key] = value
             else:
                 compiler_config[key] = value

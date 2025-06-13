@@ -58,7 +58,7 @@ class Boundary(ABC):
 
     def damping(self, dimensions=None, damping_coefficient=None, mask=False,
                 damping_type='sine', velocity=1.0, power_degree=2, reflection_coefficient=1e-3,
-                assign=False):
+                assign=False, **kwargs):
         """
         Create a damping field based on the dimensions of the grid.
 
@@ -120,21 +120,21 @@ class Boundary(ABC):
                 if damping_type == 'sine':
                     pos = pos - np.sin(2 * np.pi * pos) / (2 * np.pi)
                     if mask:
-                        pos = 1 - pos
+                        pos = - pos
 
                     val = dimension_coefficient * pos
 
                 elif damping_type == 'cosine':
                     pos = np.cos(np.pi / 2 * (1 - pos))
                     if mask:
-                        pos = 1 - pos
+                        pos = - pos
 
                     val = pos
 
                 elif damping_type == 'power':
                     pos = pos**power_degree
                     if mask:
-                        pos = 1 - pos
+                        pos = - pos
 
                     val = dimension_coefficient * pos
 

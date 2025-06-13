@@ -14,7 +14,7 @@ class GradientDescent(LocalOptimiser):
     ----------
     variable : Variable
         Variable to which the optimiser refers.
-    step : float, optional
+    step_size : float, optional
         Step size for the update, defaults to 1.
     kwargs
         Extra parameters to be used by the class.
@@ -24,53 +24,12 @@ class GradientDescent(LocalOptimiser):
     def __init__(self, variable, **kwargs):
         super().__init__(variable, **kwargs)
 
-        self.step_size = kwargs.pop('step_size', 1.)
+    async def pre_process(self, grad=None, processed_grad=None, **kwargs):
+        processed_grad = await super().pre_process(grad=grad,
+                                                   processed_grad=processed_grad,
+                                                   **kwargs)
+        return processed_grad
 
-    async def step(self, step_size=None, grad=None, processed_grad=None, **kwargs):
-        """
-        Apply the optimiser.
-
-        Parameters
-        ----------
-        step_size : float, optional
-            Step size to use for this application, defaults to instance step.
-        grad : Data, optional
-            Gradient to use for the step, defaults to variable gradient.
-        processed_grad : Data, optional
-            Processed gradient to use for the step, defaults to processed variable gradient.
-        kwargs
-            Extra parameters to be used by the method.
-
-        Returns
-        -------
-        Variable
-            Updated variable.
-
-        """
-        step_size = self.step_size if step_size is None else step_size
-
-        processed_grad = await self.pre_process(grad=grad,
-                                                processed_grad=processed_grad,
-                                                **kwargs)
-        direction = processed_grad
-
-        self.variable.data[:] -= step_size*direction.data
-
-        await self.post_process(**kwargs)
-
-        return self.variable
-
-    def reset(self, **kwargs):
-        """
-        Reset optimiser state along with any stored buffers.
-
-        Parameters
-        ----------
-        kwargs
-            Extra parameters to be used by the method.
-
-        Returns
-        -------
-
-        """
-        pass
+    def update_variable(self, step_size, variable, direction):
+        variable.data[:] -= step_size * direction.data
+        return variable

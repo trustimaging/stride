@@ -48,7 +48,7 @@ class IsoElasticDevito(ProblemTypeBase):
     """
 
     space_order = 10
-    time_order = 2
+    time_order = 1
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -81,7 +81,7 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # forward
 
-    async def before_forward(self, wavelets, vp, vs, rho, **kwargs):
+    def before_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Prepare the problem type to run the state or forward problem.
 
@@ -109,15 +109,19 @@ class IsoElasticDevito(ProblemTypeBase):
         num_sources = shot.num_points_sources
         num_receivers = shot.num_points_receivers
 
+        eps_coords = 1e-3 * np.array(self.space.spacing).reshape((1, -1))
+        source_coordinates = shot.source_coordinates + eps_coords
+        receiver_coordinates = shot.receiver_coordinates + eps_coords
+
         # If there's no previous operator, generate one
         if self.state_operator.devito_operator is None:
 
             # Define variables
             src = self.dev_grid.sparse_time_function('src', num=num_sources,
-                                                     coordinates=shot.source_coordinates,
+                                                     coordinates=source_coordinates,
                                                      interpolation_type=self.interpolation_type)
             rec_tau = self.dev_grid.sparse_time_function('rec_tau', num=num_receivers,
-                                                         coordinates=shot.receiver_coordinates,
+                                                         coordinates=receiver_coordinates,
                                                          interpolation_type=self.interpolation_type)
 
             step = self.time.step
@@ -130,15 +134,13 @@ class IsoElasticDevito(ProblemTypeBase):
 
             # Absorbing boundaries
             self.boundary = boundaries_registry[self.boundary_type](self.dev_grid)
-            _, _, _ = self.boundary.apply(vel, vp.extended_data)
+            _, _, _ = self.boundary.apply(vel, vp.extended_data, damping_coefficient=1/step)
 
             # Define the source injection function using a pressure disturbance
-            src_xx = src.inject(field=tau.forward[0, 0], expr=step * src)
-            src_zz = src.inject(field=tau.forward[1, 1], expr=step * src)
+            src_term = src.inject(field=tau.forward.diagonal(), expr=step * src)
 
             rec_term = rec_tau.interpolate(expr=tau[0, 0] + tau[1, 1])
-            # rec_term += rec_v1.interpolate(expr=v[1])  # Placeholder for vel_x receiver
-            # rec_term += rec_v2.interpolate(expr=v[0])  # Placeholder for vel_y receiver
+            # rec_term += rec_vel.interpolate(expr=devito.div(vel))  # Placeholder for vel receiver
 
             # Set up parameters as functions
             lam_fun = self.dev_grid.function('lam_fun')
@@ -152,12 +154,13 @@ class IsoElasticDevito(ProblemTypeBase):
 
             # stress (first derivative tau w.r.t. time, first order euler method)
             u_tau = devito.Eq(tau.forward,
-                              self.boundary.damp *
-                              (tau + step * (lam_fun * devito.diag(devito.div(vel.forward))
-                              + mu_fun * (devito.grad(vel.forward) + devito.grad(vel.forward).T))
-                              ))
+                              self.boundary.damp * (
+                                      tau + step * (lam_fun * devito.diag(devito.div(vel.forward))
+                                                    + mu_fun * (devito.grad(vel.forward) +
+                                                                devito.grad(vel.forward).transpose(inner=False))))
+                              )
 
-            self.state_operator.set_operator([u_v] + [u_tau] + src_xx + src_zz + rec_term,
+            self.state_operator.set_operator([u_v] + [u_tau] + src_term + rec_term,
                                              **kwargs)
             self.state_operator.compile()
 
@@ -196,19 +199,16 @@ class IsoElasticDevito(ProblemTypeBase):
         # Set geometry and wavelet
         wavelets = wavelets.data
 
-        self._src_scale = 1000
-        self._max_wavelet = np.max(np.abs(wavelets)) + 1e-31
-
         window = scipy.signal.get_window(('tukey', 0.01), self.time.num, False)
         window = window.reshape((self.time.num, 1))
 
-        self.dev_grid.vars.src.data[:] = wavelets.T * self._src_scale / self._max_wavelet * window
+        self.dev_grid.vars.src.data[:] = wavelets.T * window
 
         if self.interpolation_type == 'linear':
-            self.dev_grid.vars.src.coordinates.data[:] = shot.source_coordinates
-            self.dev_grid.vars.rec_tau.coordinates.data[:] = shot.receiver_coordinates
+            self.dev_grid.vars.src.coordinates.data[:] = source_coordinates
+            self.dev_grid.vars.rec_tau.coordinates.data[:] = receiver_coordinates
 
-    async def run_forward(self, wavelets, vp, vs, rho, **kwargs):
+    def run_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Run the state or forward problem.
 
@@ -238,7 +238,7 @@ class IsoElasticDevito(ProblemTypeBase):
                                 **functions,
                                 **kwargs.pop('devito_args', {}))
 
-    async def after_forward(self, wavelets, vp, vs, rho, **kwargs):
+    def after_forward(self, wavelets, vp, vs, rho, **kwargs):
         """
         Clean up after the state run and retrieve the time traces.
 
@@ -267,7 +267,6 @@ class IsoElasticDevito(ProblemTypeBase):
         self.wavefield = None
 
         traces_data = np.asarray(self.dev_grid.vars.rec_tau.data, dtype=np.float32).T
-        traces_data *= self._max_wavelet / self._src_scale
         traces = shot.observed.alike(name='modelled', data=traces_data)
 
         self.dev_grid.deallocate('p')
@@ -282,19 +281,19 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # adjoint
 
-    async def before_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def before_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
+    def run_adjoint(self, adjoint_source, wavelets, vp, rho=None, alpha=None, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def after_adjoint(self, **kwargs):
+    def after_adjoint(self, **kwargs):
         """
         Not implemented
         """
@@ -302,19 +301,19 @@ class IsoElasticDevito(ProblemTypeBase):
 
     # gradients
 
-    async def prepare_grad_vp(self, **kwargs):
+    def prepare_grad_vp(self, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def init_grad_vp(self, **kwargs):
+    def init_grad_vp(self, **kwargs):
         """
         Not implemented
         """
         pass
 
-    async def get_grad_vp(self, **kwargs):
+    def get_grad_vp(self, **kwargs):
         """
         Not implemented
         """

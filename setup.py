@@ -58,6 +58,7 @@ setup(
             'mscript=mosaic.cli.mscript:go',
             'mprof=mosaic.cli.mprof:go',
             'findomp=mosaic.cli.findomp:go',
+            'plot=stride.cli.plot:go',
         ]
     },
     zip_safe=False,

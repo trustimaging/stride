@@ -18,7 +18,7 @@ jobs:
     env:
       DEVITO_COMPILER: gcc
       DEVITO_LANGUAGE: openmp
-      PYTHON_VERSION: 3.11.4
+      PYTHON_VERSION: 3.11.12
 
     strategy:
       # Prevent all build to stop if a single one fails
@@ -39,12 +39,12 @@ jobs:
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
-        mamba-version: "*"
+        miniforge-version: latest
         channels: conda-forge,defaults
         channel-priority: true
         activate-environment: stride
         environment-file: stride/environment.yml
-        python-version: 3.11.4
+        python-version: 3.11.12
         auto-activate-base: false
 
     - name: Install dependencies

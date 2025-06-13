@@ -2,6 +2,7 @@
 import uuid
 import asyncio
 import inspect
+import numpy as np
 from abc import abstractmethod
 from collections import OrderedDict
 
@@ -287,6 +288,9 @@ class Variable:
 
         self.grad = None
         self.prec = None
+        self.transform = kwargs.pop('transform', None)
+
+        self.step_size = None
 
         self.graph = Graph()
         self.prev_op = None
@@ -314,12 +318,25 @@ class Variable:
         if self.prev_op is None:
             await self.__call_adjoint__(grad, **kwargs)
             self.clear_graph()
-            return
+            return self
+
+        runtime = mosaic.runtime()
+
+        def dealloc(objs):
+            def _dealloc(*args):
+                loop = mosaic.get_event_loop()
+                for obj in objs:
+                    loop.run(obj.drop)
+            return _dealloc
 
         prev = dict()
         prev[self.prev_op.name_idx] = grad
         returns = []
+        parallel_returns = []
+        deallocs = []
         for node in self.graph.toposort(self.prev_op):
+            kwargs_ = kwargs.copy()
+
             if node.method == '__noop__':
                 continue
 
@@ -329,15 +346,27 @@ class Variable:
             output_grads = [prev[each] for each in output_names]
 
             # call adjoint method
-            method = getattr(node.op, node.method)
-            ret = method(*output_grads, **kwargs)
+            try:
+                method = getattr(node.op, node.method)
+            except AttributeError:
+                method = getattr(node.op.obj, node.method)
+            if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
+                ret = method(*output_grads, **{**kwargs_, **{'eager': True}})
+            else:
+                ret = method(*output_grads, **kwargs_)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
                 ret = await ret
 
             if isinstance(ret, TaskProxy):
-                if not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy:
+                if len(deallocs):
+                    ret.add_done_callback(dealloc(deallocs))
+
+                if (not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy) and \
+                        (not hasattr(node.op, 'is_parameter') or not node.op.is_parameter):
                     returns.append(ret)
+                else:
+                    parallel_returns.append(ret)
 
                 input_grads = ret.outputs
             else:
@@ -354,6 +383,7 @@ class Variable:
                 pass
 
             # store gradients for future use
+            deallocs = []
             for nxt_index in range(len(node.next)):
                 nxt = node.next[nxt_index]
                 input_grad = input_grads[nxt_index]
@@ -362,13 +392,32 @@ class Variable:
                     continue
 
                 if nxt.name_idx in prev:
-                    prev[nxt.name_idx] = await _maybe_sum(prev[nxt.name_idx], input_grad)
-                else:
-                    prev[nxt.name_idx] = input_grad
+                    input_grad = await _maybe_sum(prev[nxt.name_idx], input_grad)
 
-        await asyncio.gather(*returns)
+                if not isinstance(input_grad, types.awaitable_types) \
+                        and hasattr(nxt.op, 'runtime_id') and nxt.op.runtime_id != runtime.uid:
+                    input_grad = await runtime.put(input_grad)
+                    deallocs.append(input_grad)
+
+                prev[nxt.name_idx] = input_grad
+
+        eager = not len(returns) or returns[-1]._eager
+        if eager:
+            await asyncio.gather(*returns)
+        else:
+            summ_returns = []
+            summ_dependencies = []
+            for ret in reversed(returns):
+                if ret not in summ_dependencies:
+                    summ_returns.append(ret)
+                    for runtime_deps in ret._dependencies.values():
+                        summ_dependencies += list(runtime_deps.values())
+
+            await asyncio.gather(*summ_returns)
 
         self.clear_graph()
+
+        return self
 
     def detach(self, *args, **kwargs):
         """
@@ -383,6 +432,7 @@ class Variable:
         """
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+        kwargs['transform'] = kwargs.pop('transform', self.transform)
 
         if hasattr(self, 'has_tessera') and self.has_tessera:
             cpy = self.__class__.parameter(*args, **kwargs)
@@ -410,6 +460,7 @@ class Variable:
         """
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+        kwargs['transform'] = kwargs.pop('transform', self.transform)
 
         cpy = self.__class__.parameter(*args, **kwargs)
 
@@ -436,6 +487,7 @@ class Variable:
         """
         kwargs['name'] = kwargs.pop('name', self._init_name)
         kwargs['needs_grad'] = kwargs.pop('needs_grad', self.needs_grad)
+        kwargs['transform'] = kwargs.pop('transform', self.transform)
 
         propagate_tessera = kwargs.pop('propagate_tessera', True)
 
@@ -500,6 +552,21 @@ class Variable:
 
         """
         if grad is None or not self.needs_grad or self.grad is None:
+            return
+
+        grad_data = grad.data if hasattr(grad, 'data') else grad
+        is_nan = np.any(np.isnan(grad_data))
+        is_inf = np.any(np.isinf(grad_data))
+
+        if is_nan or is_inf:
+            msg = 'Nan or inf detected in %s' % self.name
+
+            problem = kwargs.pop('problem', None)
+            shot_id = problem.shot.id if problem is not None else kwargs.pop('shot_id', None)
+            if shot_id is not None:
+                msg = '(ShotID %d) ' % shot_id + msg
+
+            mosaic.logger().warn(msg)
             return
 
         self.grad += grad
@@ -629,16 +696,16 @@ class Operator:
                 else:
                     next_ops.append(Node(arg, '__noop__', 0))
 
-        for arg in kwargs.values():
-            if hasattr(arg, 'needs_grad') and not isinstance(arg, CMDBase):
-                needs_grad |= arg.needs_grad
-
-                if arg.needs_grad and arg.prev_op is None:
-                    next_ops.append(Node(arg, '__call_adjoint__', 0))
-                elif arg.needs_grad:
-                    next_ops.append(arg.prev_op)
-                else:
-                    next_ops.append(Node(arg, '__noop__', 0))
+        # for arg in kwargs.values():
+        #     if hasattr(arg, 'needs_grad') and not isinstance(arg, CMDBase):
+        #         needs_grad |= arg.needs_grad
+        #
+        #         if arg.needs_grad and arg.prev_op is None:
+        #             next_ops.append(Node(arg, '__call_adjoint__', 0))
+        #         elif arg.needs_grad:
+        #             next_ops.append(arg.prev_op)
+        #         else:
+        #             next_ops.append(Node(arg, '__noop__', 0))
 
         self.inputs = (args, kwargs)
 
