@@ -123,13 +123,13 @@ class Shot(ProblemBase):
             for receiver in receivers:
                 self._receivers[receiver.id] = receiver
 
-            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids,
-                                   grid=self.grid)
-            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids,
-                                   compressed=compressed,
-                                   grid=self.grid)
-            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1),
-                                 grid=self.grid)
+            self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids,
+                                         grid=self.grid)
+            self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids,
+                                         compressed=compressed,
+                                         grid=self.grid)
+            self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1),
+                                       grid=self.grid)
 
             if delays is not None:
                 self.delays.data[:, 0] = delays
@@ -428,6 +428,10 @@ class Shot(ProblemBase):
         else:
             self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
+    @staticmethod
+    def _traces(*args, **kwargs):
+        return Traces(*args, **kwargs)
+
     def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
@@ -469,15 +473,15 @@ class Shot(ProblemBase):
 
         lazy_loading = kwargs.pop('lazy_loading', False)
 
-        self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
+        self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
         if 'wavelets' in description and not lazy_loading:
             self.wavelets.__set_desc__(description.wavelets, **kwargs)
 
-        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, compressed=compressed, grid=self.grid)
+        self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids, compressed=compressed, grid=self.grid)
         if 'observed' in description and not lazy_loading:
             self.observed.__set_desc__(description.observed, **kwargs)
 
-        self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
+        self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
         if 'delays' in description and not lazy_loading:
             self.delays.__set_desc__(description.delays, **kwargs)
 

@@ -71,7 +71,8 @@ class Gridded:
         return self._grid.slow_time
 
     def resample(self, grid=None, space=None, time=None, slow_time=None):
-        raise NotImplementedError('Resampling has not been implemented yet.')
+        raise NotImplementedError('Resampling has not been implemented in this class yet.' +
+                ' Alternatively, try to access space_resample or time_resample via problem.')
 
 
 class Saved:

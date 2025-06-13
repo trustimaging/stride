@@ -979,106 +979,49 @@ class ScalarField(StructuredData):
 
         return interp
 
-    def resample(self, space=None, **kwargs):
+    def _resample(self, old_spacing, new_spacing, **kwargs):
         """
-        Resample the internal (non-padded) data given some new space object.
+        An in-place operation to resample the internal (non-padded) data given a new spacing.
 
         Parameters
         ----------
-        space : Space
-            New space.
+        old_spacing : float or tuple(float)
+            The old spacing.
+        new_spacing: float or tuple(float)
+            The new spacing.
         order : int, optional
             Order of the interplation, default is 3.
-        prefilter : bool, optional
-            Determines if the input array is prefiltered
-            before interpolation. If downsampling, this defaults to ``False`` as an anti-aliasing filter
-            will be applied instead. If upsampling, this defaults to ``True``.
-        anti_alias : bool, optional
-            Whether a Gaussian filter is applied to smooth the data before interpolation.
-            The default is ``True``. This is only applied when downsampling.
-        anti_alias_sigma : float or tuple of floats, optional
-            Gaussian filter standard deviations used for the anti-aliasing filter.
-            The default is (d - 1) / 2 where d is the downsampling factor and d > 1. When upsampling,
-            d < 1, and no anti-aliasing filter is applied.
 
         Returns
         -------
 
         """
+
+        old_spacing = (old_spacing,)*self.space.dim if isinstance(old_spacing, float) else old_spacing
+        new_spacing = (new_spacing,)*self.space.dim if isinstance(new_spacing, float) else new_spacing
 
         if self.time_dependent or self.slow_time_dependent:
             data = self.data
 
             interp = []
             for t in range(data.shape[0]):
-                interp.append(self.resample_data(data[t], space, **kwargs))
+                interp.append(self._resample_data(data[t], old_spacing, new_spacing, **kwargs))
 
             interp = np.stack(interp, axis=0)
 
         else:
-            interp = self.resample_data(self.data, space, **kwargs)
+            interp = self._resample_data(self.data, old_spacing, new_spacing, **kwargs)
 
-        self.grid.space = space
         self._init_shape()
         self._data = self.pad_data(interp)
 
-    def resample_data(self, data, space, **kwargs):
-        """
-        Resample the data given some new space object.
+    def _resample_data(self, data, old_spacing, new_spacing, **kwargs):
 
-        Parameters
-        ----------
-        data : ndarray
-            Data to stagger.
-        space : Space
-            New space.
-        order : int, optional
-            Order of the interpolation, default is 3.
-        prefilter : bool, optional
-            Determines if the input array is prefiltered
-            before interpolation. If downsampling, this defaults to ``False`` as an anti-aliasing filter
-            will be applied instead. If upsampling, this defaults to ``True``.
-        anti_alias : bool, optional
-            Whether a Gaussian filter is applied to smooth the data before interpolation.
-            The default is ``True``. This is only applied when downsampling.
-        anti_alias_sigma : float or tuple of floats, optional
-            Gaussian filter standard deviations used for the anti-aliasing filter.
-            The default is (d - 1) / 2 where d is the downsampling factor and d > 1. When upsampling,
-            d < 1, and no anti-aliasing filter is applied.
-
-        Returns
-        -------
-        ndarray
-            Resampled data.
-
-        """
         order = kwargs.pop('order', 3)
         prefilter = kwargs.pop('prefilter', True)
 
         resampling_factors = np.array([dx_old/dx_new
-                             for dx_old, dx_new in zip(self.space.spacing, space.spacing)])
-
-        # Anti-aliasing is only required for down-sampling interpolation
-        if any(factor < 1 for factor in resampling_factors):
-            anti_alias = kwargs.pop('anti_alias', True)
-
-            if anti_alias:
-                anti_alias_sigma = kwargs.pop('anti_alias_sigma', None)
-
-                if anti_alias_sigma is not None:
-                    anti_alias_sigma = anti_alias_sigma * np.ones_like(resampling_factors)
-
-                    if np.any(anti_alias_sigma < 0):
-                        raise ValueError("Anti-alias standard dev. must be equal to or greater than zero")
-
-                # Estimate anti-alias standard deviations if none provided
-                else:
-                    anti_alias_sigma = np.maximum(0, (1/resampling_factors - 1) / 2)
-
-                data = scipy.ndimage.gaussian_filter(data, anti_alias_sigma)
-
-                # Prefiltering is not necessary if anti-alias filter used
-                prefilter = False
+                             for dx_old, dx_new in zip(old_spacing, new_spacing)])
 
         interp = scipy.ndimage.zoom(data, resampling_factors,
                                     order=order, prefilter=prefilter)
@@ -1474,13 +1417,16 @@ class Traces(StructuredData):
         self._transducer_ids = transducer_ids
 
         if self._transducer_ids is not None and self._shape is None:
-            shape = (len(self._transducer_ids), self.time.num)
-            extended_shape = (len(self._transducer_ids), self.time.extended_num)
-            inner = (slice(0, None), self.time.inner)
+            self._init_shape()
 
-            self._shape = shape
-            self._extended_shape = extended_shape
-            self._inner = inner
+    def _init_shape(self):
+        shape = (len(self._transducer_ids), self.time.num)
+        extended_shape = (len(self._transducer_ids), self.time.extended_num)
+        inner = (slice(0, None), self.time.inner)
+
+        self._shape = shape
+        self._extended_shape = extended_shape
+        self._inner = inner
 
     def alike(self, *args, **kwargs):
         """
@@ -1657,21 +1603,29 @@ class Traces(StructuredData):
 
         return axis
 
-    def _resample(self, factor, new_num, **kwargs):
+    def _resample(self, old_step, new_step, new_num, **kwargs):
+        '''
+        Resample the current trace to a new time-spacing.
+
+        Parameters
+        ----------
+        old_step: float
+            The original time step.
+        new_step: float
+            The new time step.
+        new_num
+            The length of the trace.
+        '''
+
+        factor = old_step/new_step
         sr_orig = 1
         sr_new = factor
 
         if self.allocated:
-            data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
-            if data.shape[-1] < new_num:
-                data = np.pad(data, ((0, 0), (0, new_num-data.shape[-1])), mode='constant', constant_values=0)
-            elif data.shape[-1] > new_num:
-                data = data[:, :new_num]
-            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=data)
-        else:
-            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)
+            processed_data = self.data
+            self._data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)  # Resample
 
-        return new_traces
+        self._init_shape()
 
     def __get_desc__(self, **kwargs):
         description = super().__get_desc__(**kwargs)

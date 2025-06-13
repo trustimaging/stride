@@ -123,18 +123,45 @@ class Problem(Gridded):
                 if getattr(problem_property, grid_property) is None:
                     setattr(problem_property._grid, grid_property, getattr(self, grid_property))
 
+    def space_resample(self, new_spacing, new_extra=None, new_absorbing=None, **kwargs):
+        '''
+        In-place operation to resample models onto a grid with new space-spacing.
+
+        Parameters
+        ----------
+        new_spacing: float or tuple(float)
+            The space spacing for the interpolated grid.
+        new_extra : int or tuple(int)
+            The extra grid-points for the interpolated grid. Defaults to rescaling existing extra.
+        new_absorbing : int or tuple(int)
+            The absorbing grid-points for the interpolated grid. Defaults to rescaling existing absorbing.
+
+        Returns
+        -------
+        '''
+        old_spacing = self.space.spacing
+        self.space.resample(new_spacing=new_spacing)
+        new_spacing = self.space.spacing
+
+        for field in self.medium.fields:
+            if 'vp' in field:
+                self.medium.fields[field]._resample(old_spacing, new_spacing, slowness=True, **kwargs)
+            else:
+                self.medium.fields[field]._resample(old_spacing, new_spacing, **kwargs)
+        return [self.medium.fields[field] for field in self.medium.fields]
+
     def time_resample(self, new_step, new_num=None, **kwargs):
         '''
-        In-place operatin to resample the wavelets and data into a grid with new
+        In-place operation to resample the wavelets and data into a grid with new
         time-spacing. Sinc interpolation is used.
 
         Parameters
         ----------
         new_step : float
-            The time spacing for the interpolated grid
+            The time spacing for the interpolated grid.
         new_num : int, optional
             The number of time-points, default is calculated to match input pulse
-            length in [s]
+            length in [s].
 
         Returns
         -------
@@ -142,11 +169,21 @@ class Problem(Gridded):
 
         old_step = self.time.step
         old_num = self.time.num
-        self.grid.time.resample(new_step=new_step, new_num=new_num)
+        self.time.resample(new_step=new_step, new_num=new_num)
 
         for shot in self.acquisitions.shots:
-            shot.wavelets = shot.wavelets._resample(factor=old_step/new_step, new_num=new_num)  # resample wavelet
-            shot.observed = shot.observed._resample(factor=old_step/new_step, new_num=new_num)  # resample observed
+
+            shot.wavelets._resample(  # resample wavelet
+                                old_step=old_step,
+                                new_step=new_step,
+                                new_num=new_num,
+                                **kwargs)
+
+            shot.observed._resample(  # resample observed
+                                old_step=old_step,
+                                new_step=new_step,
+                                new_num=new_num,
+                                **kwargs)
 
     def dump(self, *args, **kwargs):
         """
