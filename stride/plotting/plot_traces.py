@@ -106,6 +106,12 @@ def plot_magnitude_spectrum(*args, sampling_rate=1, skip=1, time_range=None, nor
         trace_ids = None
         signal_data = args[0]
 
+    # Apply time range if specified
+    if time_range:
+        start, end = time_range
+        start_idx, end_idx = int(start * sampling_rate), int(end * sampling_rate)
+        signal_data = signal_data[:, start_idx:end_idx]
+
     signal_data = signal_data[::skip]
     if trace_ids is not None:
         trace_ids = trace_ids[::skip]
