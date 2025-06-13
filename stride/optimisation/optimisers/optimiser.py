@@ -39,6 +39,7 @@ class LocalOptimiser(ABC):
         self.step_size = kwargs.pop('step_size', 1.)
         self.test_step_size = kwargs.pop('test_step_size', 1.)
         self.force_step = kwargs.pop('force_step', False)
+        self.max_step = kwargs.pop('max_step', None)
         self.dump_grad = kwargs.pop('dump_grad', False)
         self.dump_prec = kwargs.pop('dump_prec', False)
         self._process_grad = kwargs.pop('process_grad', ProcessGlobalGradient(**kwargs))
@@ -202,10 +203,9 @@ class LocalOptimiser(ABC):
                 done_search = True
 
             if done_search:
-                if not self.force_step:
-                    # cap the step if needed
-                    max_step = kwargs.pop('max_step', None)
-                    max_step = np.inf if not isinstance(max_step, (int, float)) else max_step
+                # cap the step if needed
+                max_step = self.max_step
+                max_step = np.inf if not isinstance(max_step, (int, float)) else max_step
 
                 unclipped_step = next_step
 
