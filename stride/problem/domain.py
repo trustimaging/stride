@@ -31,6 +31,18 @@ class Space:
     """
 
     def __init__(self, shape=None, spacing=None, extra=None, absorbing=None):
+        self.dim = None
+        self.shape = None
+        self.spacing = None
+        self.extra = None
+        self.absorbing = None
+
+        self.origin = None
+        self.pml_origin = None
+        self.extended_shape = None
+        self.limit = None
+        self.extended_limit = None
+
         self._set_properties(shape=shape, spacing=spacing, extra=extra, absorbing=absorbing)
 
     def _set_properties(self, shape, spacing, extra, absorbing):
@@ -271,6 +283,16 @@ class Time:
     """
 
     def __init__(self, start=None, step=None, num=None, stop=None):
+        self.start = None
+        self.stop = None
+        self.step = None
+        self.num = None
+
+        self.extra = None
+        self.extended_start = None
+        self.extended_stop = None
+        self.extended_num = None
+
         self._set_properties(start, step, num, stop)
 
     def _set_properties(self, start=None, step=None, num=None, stop=None):
@@ -341,15 +363,14 @@ class Time:
 
         self._set_properties(start=new_start, step=new_step, num=new_num)  # Update time
 
-        try:
-            del self.__dict__['grid']
-        except:
-            self._clear_cache('grid')
-
-        try:
-            del self.__dict__['extended_grid']
-        except:
-            self._clear_cache('extended_grid')
+        self._clear_cache('mesh_indices')
+        self._clear_cache('extended_mesh_indices')
+        self._clear_cache('mesh')
+        self._clear_cache('extended_mesh')
+        self._clear_cache('indices')
+        self._clear_cache('extended_indices')
+        self._clear_cache('grid')
+        self._clear_cache('extended_grid')
 
     def _clear_cache(self, cached_property):
         '''

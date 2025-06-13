@@ -145,7 +145,8 @@ class Problem(Gridded):
         new_spacing = self.space.spacing
 
         for field in self.medium.fields:
-            if fnmatch(field, '*vp*'):
+            if 'vp' in field:
+            # if fnmatch(field, '*vp*'):
                 self.medium.fields[field]._resample(old_spacing, new_spacing, slowness=True, **kwargs)
             else:
                 self.medium.fields[field]._resample(old_spacing, new_spacing, **kwargs)
