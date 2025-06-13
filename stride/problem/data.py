@@ -1610,18 +1610,11 @@ class Traces(StructuredData):
 
         if self.allocated:
             processed_data = self.data
-            # Resample
-            processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)
-
-            # Fill object
-            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=processed_data)
-
-            # data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
-            # if data.shape[-1] < new_num:
-            #     data = np.pad(data, ((0, 0), (0, new_num-data.shape[-1])), mode='constant', constant_values=0)
-            # elif data.shape[-1] > new_num:
-            #     data = data[:, :new_num]
-            # new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=data)
+            processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)  # Resample
+            new_traces = Traces(name=self.name,
+                grid=self.grid,
+                transducer_ids=self._transducer_ids,
+                data=processed_data)  # Fill object
         else:
             new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)
 
