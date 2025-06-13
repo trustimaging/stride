@@ -344,12 +344,12 @@ class Time:
         try:
             del self.__dict__['grid']
         except:
-            pass
+            self._clear_cache('grid')
 
         try:
             del self.__dict__['extended_grid']
         except:
-            pass
+            self._clear_cache('extended_grid')
 
     def _clear_cache(self, cached_property):
         '''
