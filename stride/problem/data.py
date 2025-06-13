@@ -1012,7 +1012,7 @@ class ScalarField(StructuredData):
         else:
             interp = self._resample_data(self.data, old_spacing, new_spacing, **kwargs)
 
-        self._init_shape()  # NOTE this is an in-place operation, unlike time resample
+        self._init_shape()
         self._data = self.pad_data(interp)
 
     def _resample_data(self, data, old_spacing, new_spacing, **kwargs):
@@ -1417,13 +1417,16 @@ class Traces(StructuredData):
         self._transducer_ids = transducer_ids
 
         if self._transducer_ids is not None and self._shape is None:
-            shape = (len(self._transducer_ids), self.time.num)
-            extended_shape = (len(self._transducer_ids), self.time.extended_num)
-            inner = (slice(0, None), self.time.inner)
+            self._init_shape()
 
-            self._shape = shape
-            self._extended_shape = extended_shape
-            self._inner = inner
+    def _init_shape(self):
+        shape = (len(self._transducer_ids), self.time.num)
+        extended_shape = (len(self._transducer_ids), self.time.extended_num)
+        inner = (slice(0, None), self.time.inner)
+
+        self._shape = shape
+        self._extended_shape = extended_shape
+        self._inner = inner
 
     def alike(self, *args, **kwargs):
         """
@@ -1610,15 +1613,9 @@ class Traces(StructuredData):
 
         if self.allocated:
             processed_data = self.data
-            processed_data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)  # Resample
-            new_traces = Traces(name=self.name,
-                grid=self.grid,
-                transducer_ids=self._transducer_ids,
-                data=processed_data)  # Fill object
-        else:
-            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)
+            self._data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)  # Resample
 
-        return new_traces
+        self._init_shape()
 
     def __get_desc__(self, **kwargs):
         description = super().__get_desc__(**kwargs)

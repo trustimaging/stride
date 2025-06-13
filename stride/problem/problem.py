@@ -173,13 +173,13 @@ class Problem(Gridded):
 
         for shot in self.acquisitions.shots:
 
-            shot.wavelets = shot.wavelets._resample(  # resample wavelet
+            shot.wavelets._resample(  # resample wavelet
                                 old_step=old_step,
                                 new_step=new_step,
                                 new_num=new_num,
                                 **kwargs)
 
-            shot.observed = shot.observed._resample(  # resample observed
+            shot.observed._resample(  # resample observed
                                 old_step=old_step,
                                 new_step=new_step,
                                 new_num=new_num,
