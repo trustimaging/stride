@@ -760,7 +760,7 @@ class Acquisitions(ProblemBase):
         Get all IDs of shots in the Acquisitions as a list.
 
         """
-        return list(self._shots.keys())
+        return sorted(list(self._shots.keys()))
 
     @property
     def sequence_ids(self):

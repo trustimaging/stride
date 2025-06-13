@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 
-__all__ = ['plot_trace', 'plot_gather']
+__all__ = ['plot_trace', 'plot_magnitude_spectrum', 'plot_gather']
 
 
 def plot_trace(*args, axis=None, colour='black', line_style='solid', title=None, **kwargs):
@@ -45,6 +45,119 @@ def plot_trace(*args, axis=None, colour='black', line_style='solid', title=None,
     im = axis.plot(*args, **default_kwargs)
 
     if title is not None:
+        axis.set_title(title)
+
+    return axis
+
+
+def plot_magnitude_spectrum(*args, sampling_rate=1, skip=1, time_range=None, norm=True, norm_trace=True,
+                            colour='black', line_style='solid', title=None, axis=None, spectrum_gather=False, **kwargs):
+    """
+    Plot the magnitude spectrum of wavelet traces in dB scale.
+
+    Parameters
+    ----------
+    args : arrays
+        Optional trace ID grid, frequency grid, and signal data.
+    sampling_rate : float
+        Sampling rate of the wavelet signal in Hz.
+    skip : int, optional
+        Traces to skip, defaults to 1.
+    time_range : tuple, optional
+        Time range to plot, defaults to all.
+    norm : bool, optional
+        Whether or not to normalise the gather, defaults to True.
+    norm_trace : bool, optional
+        Whether or not to normalise trace by trace, defaults to True.
+    colour : str, optional
+        Colour for the traces, defaults to black.
+    line_style : str, optional
+        Line style for the plot, defaults to solid.
+    title : str, optional
+        Plot title, defaults to None.
+    spectrum_gather : bool, optional
+        If True, each spectrum will be associated with its unique trace.
+    axis : matplotlib axis, optional
+        Axis on which to plot, defaults to a new figure.
+
+    Returns
+    -------
+    matplotlib axis
+        Axis with the plotted data.
+    """
+    try:
+        if not os.environ.get('DISPLAY', None):
+            raise ModuleNotFoundError
+        import matplotlib.pyplot as plt
+    except ModuleNotFoundError:
+        return None, None
+
+    # Set up axis
+    if axis is None:
+        figure, axis = plt.subplots(1, 1)
+
+    # Extract arguments
+    if len(args) > 2:
+        trace_ids, freq_grid, signal_data = args
+    elif len(args) > 1:
+        trace_ids = None
+        freq_grid, signal_data = args
+    else:
+        trace_ids = None
+        signal_data = args[0]
+
+    # Apply time range if specified
+    if time_range:
+        start, end = time_range
+        start_idx, end_idx = int(start * sampling_rate), int(end * sampling_rate)
+        signal_data = signal_data[:, start_idx:end_idx]
+
+    signal_data = signal_data[::skip]
+    if trace_ids is not None:
+        trace_ids = trace_ids[::skip]
+
+    # Perform FFT
+    fft_values = np.fft.fft(signal_data, axis=-1)
+    frequencies = np.fft.fftfreq(signal_data.shape[-1], 1 / sampling_rate) / 1e3  # in kHz
+    magnitude_spectrum_db = 20 * np.log10(np.abs(fft_values) + 1e-10)
+
+    # Keep positive frequencies only
+    positive_freqs = frequencies[frequencies >= 0]
+    magnitude_spectrum_db = magnitude_spectrum_db[:, frequencies >= 0]
+
+    if norm_trace:
+        # Normalize the magnitude spectrum so the peak is 0 dB
+        max_db = np.max(magnitude_spectrum_db, axis=-1, keepdims=True)
+        magnitude_spectrum_db -= max_db  # This ensures that the maximum value becomes 0 dB
+    elif norm:
+        # Normalize the magnitude spectrum so the peak is 0 dB
+        max_db = np.max(magnitude_spectrum_db)
+        magnitude_spectrum_db -= max_db  # This ensures that the maximum value becomes 0 dB
+
+    # Normalize magnitude spectra if spectrum_gather mode
+    if spectrum_gather:
+        magnitude_spectrum_db = (magnitude_spectrum_db - np.min(magnitude_spectrum_db, axis=-1, keepdims=True)) / \
+                                 (np.max(magnitude_spectrum_db, axis=-1, keepdims=True)
+                                    - np.min(magnitude_spectrum_db, axis=-1, keepdims=True)) - 1
+        offset_step = 1
+        offset_magnitude_db = magnitude_spectrum_db + np.arange(magnitude_spectrum_db.shape[0]).reshape(-1, 1) * offset_step
+
+        # Plot individual traces with vertical gray lines
+        axis.plot(offset_magnitude_db.T, positive_freqs, colour, linestyle=line_style, **kwargs)
+        for i in range(magnitude_spectrum_db.shape[0]):
+            axis.axvline(x=i, color='gray', linestyle='-', linewidth=0.5)
+        axis.set_ylabel('Frequency (Hz)')
+        axis.set_xlabel('Trace ID')
+        axis.set_xticks(np.arange(magnitude_spectrum_db.shape[0]))
+        axis.set_xticklabels([str(tid) for tid in trace_ids] if trace_ids is not None
+            else np.arange(magnitude_spectrum_db.shape[0]), rotation='vertical')
+    else:
+        axis.plot(positive_freqs, magnitude_spectrum_db.T, colour, linestyle=line_style, **kwargs)
+        axis.set_xlabel('Frequency (Hz)')
+        axis.set_ylabel('Magnitude (dB)')
+
+    # Set title if provided
+    if title:
         axis.set_title(title)
 
     return axis
@@ -149,7 +262,7 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
     trace_axis = [str(each) for each in trace_axis]
 
     axis.set_xticks(shift.flatten()[::2])
-    axis.set_xticklabels(trace_axis[::2])
+    axis.set_xticklabels(trace_axis[::2], rotation='vertical')
 
     if title is not None:
         axis.set_title(title)
