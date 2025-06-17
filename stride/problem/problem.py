@@ -140,7 +140,7 @@ class Problem(Gridded):
         -------
         '''
         old_spacing = self.space.spacing
-        self.space.resample(new_spacing=new_spacing)
+        self.space.resample(new_spacing=new_spacing, new_extra=new_extra, new_absorbing=new_absorbing)
         new_spacing = self.space.spacing
 
         for field in self.medium.fields:
