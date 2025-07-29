@@ -1769,7 +1769,7 @@ class SparseField(StructuredData):
         kwargs['num'] = kwargs.pop('num', self.num)
         kwargs['dim'] = kwargs.pop('dim', self.dim)
         kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
-        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().alike(*args, **kwargs)
 
@@ -1787,7 +1787,7 @@ class SparseField(StructuredData):
         kwargs['num'] = kwargs.pop('num', self.num)
         kwargs['dim'] = kwargs.pop('dim', self.dim)
         kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
-        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().detach(*args, **kwargs)
 
@@ -1805,7 +1805,7 @@ class SparseField(StructuredData):
         kwargs['num'] = kwargs.pop('num', self.num)
         kwargs['dim'] = kwargs.pop('dim', self.dim)
         kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
-        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().as_parameter(*args, **kwargs)
 

@@ -517,6 +517,7 @@ class GridDevito(Gridded):
 
         """
         time_bounds = time_bounds or (0, self.time.extended_num-1)
+        time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
 
         time_under, buffer_size = self._time_undersampled('time_under', factor, time_bounds)
 
@@ -546,6 +547,7 @@ class GridDevito(Gridded):
 
     def _time_undersampled(self, name, factor, time_bounds=None, offset=None):
         time_bounds = time_bounds or (0, self.time.extended_num - 1)
+        time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
         offset = offset or (0, 0)
 
         time_dim = self.devito_grid.time_dim
@@ -598,6 +600,7 @@ class GridDevito(Gridded):
         space_order = self.space_order if space_order is None else space_order
         time_order = self.time_order if time_order is None else time_order
         time_bounds = kwargs.pop('time_bounds', (0, self.time.extended_num))
+        time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
         smooth = kwargs.pop('smooth', False)
 
         # Define variables
@@ -938,6 +941,7 @@ class OperatorDevito:
                 'name': self.name,
                 'subs': subs,
                 'opt': 'advanced',
+                'autotuning': 'off',
                 'compiler': 'cuda',
                 'language': 'cuda',
                 'platform': 'nvidiaX',

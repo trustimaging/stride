@@ -233,8 +233,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     filter_wavelets = kwargs.pop('filter_wavelets', filter_traces)
 
     fw3d_mode = kwargs.get('fw3d_mode', False)
-    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation',
-                                            0.75 if not fw3d_mode else 0.725)
+    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.75)
     filter_traces_relaxation = kwargs.pop('filter_traces_relaxation',
                                           0.75 if filter_wavelets else 1.00)
 
