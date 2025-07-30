@@ -31,6 +31,21 @@ class Space:
     """
 
     def __init__(self, shape=None, spacing=None, extra=None, absorbing=None):
+        self.dim = None
+        self.shape = None
+        self.spacing = None
+        self.extra = None
+        self.absorbing = None
+
+        self.origin = None
+        self.pml_origin = None
+        self.extended_shape = None
+        self.limit = None
+        self.extended_limit = None
+
+        self._set_properties(shape=shape, spacing=spacing, extra=extra, absorbing=absorbing)
+
+    def _set_properties(self, shape, spacing, extra, absorbing):
         if isinstance(spacing, float):
             spacing = (spacing,)*len(shape)
 
@@ -74,21 +89,72 @@ class Space:
         """
         return self.extended_limit
 
-    def resample(self, spacing, extra=None, absorbing=None):
-        if isinstance(spacing, float):
-            spacing = (spacing,)*self.dim
+    def resample(self, new_spacing, new_extra=None, new_absorbing=None):
+        '''
+        Method updates Space to the properties of the domain after resampling.
 
-        shape = tuple((np.array(self.size) / np.array(spacing) + 1).astype(int))
+        Parameters
+        ----------
+        new_spacing: float or tuple(float)
+            The new grid spacing.
+        new_extra: tuple(int), optional
+            The shape of the boundary for the new grid. Defaults to rescaling existing extra.
+        new_absorbing: tuple(int), optional
+            The shape of the absorbing boundary for the new grid. Defaults to rescaling
+            existing absorbing.
 
-        if extra is None:
-            extra = tuple((np.array(self.spacing) * (np.array(self.extra) - 1) /
-                           np.array(spacing) + 1).astype(int))
+        Returns
+        -------
 
-        if absorbing is None:
-            absorbing = tuple((np.array(self.spacing) * (np.array(self.absorbing) - 1) /
-                               np.array(spacing) + 1).astype(int))
+        '''
 
-        return Space(shape=shape, spacing=spacing, extra=extra, absorbing=absorbing)
+        if isinstance(new_spacing, float):
+            new_spacing = (new_spacing,)*self.dim
+
+        # NOTE you must be careful with numerical errors calculating new_shape, using:
+        # new_shape = tuple((np.round(np.array(self.size) / np.array(new_spacing)) + 1).astype(int))
+        # ... is not compatible with the method in scipy.ndimage.zoom
+        old_spacing = self.spacing
+        old_shape = self.shape
+        resampling_factors = tuple([dx_old/dx_new
+                for dx_old, dx_new in zip(old_spacing, new_spacing)])
+        new_shape = tuple([int(round(n * m))
+                for n, m in zip(old_shape, resampling_factors)])  # method matches scipy zoom
+
+        if new_extra is None:
+            new_extra = tuple((np.round(np.array(self.spacing) * (np.array(self.extra) - 1) /
+                           np.array(new_spacing)) + 1).astype(int))
+
+        if new_absorbing is None:
+            new_absorbing = tuple((np.round(np.array(self.spacing) * (np.array(self.absorbing) - 1) /
+                               np.array(new_spacing)) + 1).astype(int))
+
+        self._set_properties(shape=new_shape, spacing=new_spacing, extra=new_extra, absorbing=new_absorbing)
+        self._clear_cache('mesh_indices')
+        self._clear_cache('extended_mesh_indices')
+        self._clear_cache('mesh')
+        self._clear_cache('extended_mesh')
+        self._clear_cache('indices')
+        self._clear_cache('extended_indices')
+        self._clear_cache('grid')
+        self._clear_cache('extended_grid')
+
+    def _clear_cache(self, cached_property):
+        '''
+        Clear a cached property
+
+        Parameters
+        ----------
+        cached_property: str
+            The name of the property to remove from the cache.
+
+        Returns
+        -------
+        '''
+        try:
+            del self.__dict__[cached_property]
+        except:
+            pass
 
     @property
     def inner(self):
@@ -217,6 +283,16 @@ class Time:
     """
 
     def __init__(self, start=None, step=None, num=None, stop=None):
+        self.start = None
+        self.stop = None
+        self.step = None
+        self.num = None
+
+        self.extra = None
+        self.extended_start = None
+        self.extended_stop = None
+        self.extended_num = None
+
         self._set_properties(start, step, num, stop)
 
     def _set_properties(self, start=None, step=None, num=None, stop=None):
@@ -286,9 +362,30 @@ class Time:
             new_stop = interp_stop
 
         self._set_properties(start=new_start, step=new_step, num=new_num)  # Update time
+
+        self._clear_cache('mesh_indices')
+        self._clear_cache('extended_mesh_indices')
+        self._clear_cache('mesh')
+        self._clear_cache('extended_mesh')
+        self._clear_cache('indices')
+        self._clear_cache('extended_indices')
+        self._clear_cache('grid')
+        self._clear_cache('extended_grid')
+
+    def _clear_cache(self, cached_property):
+        '''
+        Clear a cached property
+
+        Parameters
+        ----------
+        cached_property: str
+            The name of the property to remove from the cache.
+
+        Returns
+        -------
+        '''
         try:
-            del self.__dict__['grid']
-            del self.__dict__['extended_grid']
+            del self.__dict__[cached_property]
         except:
             pass
 
