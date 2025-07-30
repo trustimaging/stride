@@ -360,10 +360,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 src_scale /= self.time.step
 
             src_term = src.inject(field=p.forward, expr=src * src_scale)
-            if not fw3d_mode:
-                rec_term = rec.interpolate(expr=p)
-            else:
-                rec_term = rec.interpolate(expr=p.forward)
+            rec_term = rec.interpolate(expr=p.forward)
 
             # Define the saving of the wavefield
             if save_wavefield is True:
@@ -749,7 +746,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             t = rec.time_dim
             vp2 = self.dev_grid.vars.vp**2
             if not fw3d_mode:
-                rec_term = rec.inject(field=p_a.backward, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
+                rec_term = rec.inject(field=p_a, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
             else:
                 rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
@@ -788,8 +785,12 @@ class IsoAcousticDevito(ProblemTypeBase):
             if self.attenuation_power == 2:
                 kwargs['devito_config']['opt'] = 'noop'
 
-            self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update + update_saved,
-                                               **kwargs)
+            if not fw3d_mode:
+                self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update + update_saved,
+                                                   **kwargs)
+            else:
+                self.adjoint_operator.set_operator(rec_term + stencil + src_term + gradient_update + update_saved,
+                                                   **kwargs)
             self.adjoint_operator.compile()
 
         else:

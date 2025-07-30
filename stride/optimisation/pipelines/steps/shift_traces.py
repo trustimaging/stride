@@ -1,4 +1,6 @@
 
+import numpy as np
+
 from .utils import name_from_op_name
 from ....core import Operator
 
