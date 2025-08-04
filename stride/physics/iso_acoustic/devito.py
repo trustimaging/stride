@@ -186,6 +186,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.state_operator.devito_operator = None
         self.state_operator_save.devito_operator = None
         self.adjoint_operator.devito_operator = None
+        self.dev_grid.clear_cache()
 
     def deallocate_wavefield(self, platform='cpu', deallocate=False, **kwargs):
         if (platform and 'nvidia' in platform) \
@@ -785,7 +786,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             if self.attenuation_power == 2:
                 kwargs['devito_config']['opt'] = 'noop'
 
-            if not fw3d_mode:
+            if fw3d_mode:
                 self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update + update_saved,
                                                    **kwargs)
             else:

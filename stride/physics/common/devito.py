@@ -771,6 +771,26 @@ class GridDevito(Gridded):
             if collect:
                 devito.clear_cache(force=True)
 
+    def clear_cache(self, collect=False):
+        """
+        Remove all internal references to devito functions.
+
+        Parameters
+        ----------
+        collect : bool, optional
+            Whether to garbage collect after deallocate, defaults to ``False``.
+
+        Returns
+        -------
+
+        """
+        self.vars = Struct()
+        self.cached_args = Struct()
+        self.cached_funcs = Struct()
+
+        if collect:
+            devito.clear_cache(force=True)
+
     def with_halo(self, data, value=None, time_dependent=False, is_vector=False, **kwargs):
         """
         Pad ndarray with appropriate halo given the grid space order.
