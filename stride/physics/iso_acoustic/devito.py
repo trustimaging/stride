@@ -754,7 +754,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
             if wavelets.needs_grad:
-                src_term = src.interpolate(expr=p_a)
+                src_term = src.interpolate(expr=-p_a)
             else:
                 src_term = []
 
@@ -895,8 +895,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         functions = dict(
             vp=self.dev_grid.vars.vp,
             rec=self.dev_grid.vars.rec,
-            p_saved=self._wavefield,
         )
+        if self._wavefield is not None:
+            functions['p_saved'] = self._wavefield
 
         devito_args = kwargs.get('devito_args', {})
 
