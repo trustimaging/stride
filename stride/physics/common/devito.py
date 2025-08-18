@@ -558,6 +558,7 @@ class GridDevito(Gridded):
 
         time_under = devito.ConditionalDimension('%s%d' % (name, self._time_under_count),
                                                  parent=time_dim,
+                                                 factor=factor,
                                                  condition=condition)
         self._time_under_count += 1
 
