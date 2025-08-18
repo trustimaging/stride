@@ -405,7 +405,7 @@ class StructuredData(Data):
             self.grad.apply_prec(**kwargs)
         return self.grad
 
-    def apply_prec(self, prec_scale=4.0, prec_smooth=None, prec_op=None, prec=None, **kwargs):
+    def apply_prec(self, prec_scale=4.0, prec_smooth=1.0, prec_op=None, prec=None, **kwargs):
         """
         Apply a pre-conditioner to the current field.
 

@@ -505,5 +505,9 @@ class Monitor(Runtime):
                 if task.state in ['done', 'failed', 'collected']:
                     pending_tasks.remove(task)
 
+            for task in self._monitored_tasks.values():
+                if task.state not in ['done', 'failed', 'collected'] and task not in pending_tasks:
+                    pending_tasks.append(task)
+
             if timeout is not None and (time.time() - tic) > timeout:
                 break
