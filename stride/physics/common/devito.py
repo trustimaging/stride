@@ -562,8 +562,7 @@ class GridDevito(Gridded):
                                                  condition=condition)
         self._time_under_count += 1
 
-        buffer_size = (self.time.extended_num - time_bounds[0] + factor) // factor + 1
-        # buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
+        buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
 
         return time_under, buffer_size
 
