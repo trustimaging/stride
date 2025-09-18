@@ -79,8 +79,8 @@ class LocalOptimiser(ABC):
         logger = mosaic.logger()
         logger.perf('Updating variable %s,' % self.variable.name)
 
-        problem = kwargs.pop('problem', None)
-        iteration = kwargs.pop('iteration', None)
+        problem = kwargs.get('problem', None)
+        iteration = kwargs.get('iteration', None)
 
         if processed_grad is None:
             if grad is None:

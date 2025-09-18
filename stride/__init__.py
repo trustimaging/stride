@@ -232,7 +232,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     filter_traces = kwargs.pop('filter_traces', True)
     filter_wavelets = kwargs.pop('filter_wavelets', filter_traces)
 
-    fw3d_mode = kwargs.get('fw3d_mode', False)
     filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.75)
     filter_traces_relaxation = kwargs.pop('filter_traces_relaxation',
                                           0.75 if filter_wavelets else 1.00)
@@ -453,9 +452,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 fun.clear_graph()
 
                 iteration.add_loss(fun)
-                iteration.add_completed(sub_problem.shot)
                 logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
 
+                iteration.add_completed(sub_problem.shot)
                 logger.perf('Retrieved test step for shot %d (%d out of %d)'
                             % (sub_problem.shot_id,
                                iteration.num_completed, num_shots))
