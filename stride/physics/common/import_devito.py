@@ -2,6 +2,7 @@
 from devito import *  # noqa: F401
 from devito.types import Symbol, Scalar  # noqa: F401
 from devito.symbolics import INT, IntDiv, CondEq  # noqa: F401
+from devito.tools import frozendict  # noqa: F401
 from devito import TimeFunction as TimeFunctionOSS  # noqa: F401
 
 try:

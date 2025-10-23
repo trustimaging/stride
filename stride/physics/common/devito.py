@@ -1026,7 +1026,7 @@ class OperatorDevito:
             if arg.name in self.grid.vars:
                 default_kwargs[arg.name] = self.grid.vars[arg.name]
 
-        autotune = kwargs.pop('autotune', None)
+        autotune = kwargs.get('autotune', None)
         default_kwargs.update(kwargs)
 
         if self.grid.time_dim:
