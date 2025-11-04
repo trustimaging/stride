@@ -516,10 +516,13 @@ class GridDevito(Gridded):
             Generated function.
 
         """
+        layers = kwargs.pop('layers', devito.NoLayers)
+
         time_bounds = time_bounds or (0, self.time.extended_num-1)
         time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
 
-        time_under, buffer_size = self._time_undersampled('time_under', factor, time_bounds)
+        time_under, buffer_size = self._time_undersampled('time_under', factor, time_bounds,
+                                                          layers=layers)
 
         compression = kwargs.pop('compression', None)
 
@@ -530,6 +533,7 @@ class GridDevito(Gridded):
                                  save=buffer_size,
                                  dtype=kwargs.pop('dtype', self.dtype),
                                  compression=compression,
+                                 layers=layers,
                                  **kwargs)
 
         return fun
@@ -545,16 +549,20 @@ class GridDevito(Gridded):
 
         return deriv
 
-    def _time_undersampled(self, name, factor, time_bounds=None, offset=None):
+    def _time_undersampled(self, name, factor, time_bounds=None, offset=None, layers=devito.NoLayers):
         time_bounds = time_bounds or (0, self.time.extended_num - 1)
         time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
         offset = offset or (0, 0)
 
         time_dim = self.devito_grid.time_dim
 
-        condition = sympy.And(devito.CondEq(time_dim % factor, 0),
-                              devito.Ge(time_dim, time_bounds[0] + offset[0]),
-                              devito.Le(time_dim, time_bounds[1] - offset[1]), )
+        # TODO Current incompatibility between disk spilling and conditional dimensions
+        if layers in [devito.DiskHost, devito.DiskHostDevice, devito.DiskDevice]:
+            condition = None
+        else:
+            condition = sympy.And(devito.CondEq(time_dim % factor, 0),
+                                  devito.Ge(time_dim, time_bounds[0] + offset[0]),
+                                  devito.Le(time_dim, time_bounds[1] - offset[1]), )
 
         time_under = devito.ConditionalDimension('%s%d' % (name, self._time_under_count),
                                                  parent=time_dim,
@@ -562,7 +570,10 @@ class GridDevito(Gridded):
                                                  condition=condition)
         self._time_under_count += 1
 
-        buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
+        if layers in [devito.DiskHost, devito.DiskHostDevice, devito.DiskDevice]:
+            buffer_size = (self.time.extended_num - 1 + factor) // factor + 1
+        else:
+            buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
 
         return time_under, buffer_size
 
