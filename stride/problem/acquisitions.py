@@ -314,12 +314,10 @@ class Shot(ProblemBase):
                     grid=self.grid, geometry=sub_problem.geometry)
 
         for source_id in self.source_ids:
-            location = sub_problem.geometry.get(source_id)
-            shot._sources[location.id] = location
+            shot._source_ids.append(source_id)
 
         for receiver_id in self.receiver_ids:
-            location = sub_problem.geometry.get(receiver_id)
-            shot._receivers[location.id] = location
+            shot._receiver_ids.append(receiver_id)
 
         if self.wavelets is not None:
             shot.wavelets = self.wavelets
