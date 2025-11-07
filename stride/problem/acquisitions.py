@@ -6,7 +6,7 @@ from cached_property import cached_property
 import mosaic.types
 from mosaic.file_manipulation import h5
 
-from .data import Traces
+from .data import Traces, DiskTraces
 from .base import ProblemBase
 from .. import plotting
 
@@ -441,9 +441,12 @@ class Shot(ProblemBase):
         else:
             self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
-    @staticmethod
-    def _traces(*args, **kwargs):
-        return Traces(*args, **kwargs)
+    def _traces(self, *args, **kwargs):
+        if kwargs.pop('lazy_loading', False):
+            return DiskTraces(*args, **kwargs,
+                              path='/shots/%d/%s' % (self.id, kwargs.get('name')))
+        else:
+            return Traces(*args, **kwargs)
 
     def __get_desc__(self, **kwargs):
         description = {
@@ -487,15 +490,27 @@ class Shot(ProblemBase):
 
         lazy_loading = kwargs.pop('lazy_loading', False)
 
-        self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
+        self.wavelets = self._traces(
+            name='wavelets', transducer_ids=self.source_ids,
+            grid=self.grid,
+            lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+        )
         if not lazy_loading and 'wavelets' in description:
             self.wavelets.__set_desc__(description.wavelets, **kwargs)
 
-        self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids, compressed=compressed, grid=self.grid)
+        self.observed = self._traces(
+            name='observed', transducer_ids=self.receiver_ids,
+            compressed=compressed, grid=self.grid,
+            lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+        )
         if not lazy_loading and 'observed' in description:
             self.observed.__set_desc__(description.observed, **kwargs)
 
-        self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
+        self.delays = self._traces(
+            name='delays', transducer_ids=self.source_ids,
+            shape=(len(self.source_ids), 1), grid=self.grid,
+            lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+        )
         if not lazy_loading and 'delays' in description:
             self.delays.__set_desc__(description.delays, **kwargs)
 

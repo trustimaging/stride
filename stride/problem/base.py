@@ -271,7 +271,7 @@ class GriddedSaved(Saved, Gridded):
 
                 self._grid.slow_time = slow_time
 
-            self.__set_desc__(description, **kwargs)
+            self.__set_desc__(description, filename=file.filename, **kwargs)
 
     def grid_description(self):
         """

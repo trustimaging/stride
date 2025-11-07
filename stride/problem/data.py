@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 import mosaic
 from mosaic.core.tessera import PickleClass
 from mosaic.comms.compression import maybe_compress, decompress
+from mosaic.file_manipulation import h5
 
 from .base import GriddedSaved
 from ..core import Variable
@@ -25,7 +26,7 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'SparseField', 'SparseCoordinates']
+           'DiskTraces', 'SparseField', 'SparseCoordinates']
 
 
 def inv_transform(x):
@@ -1638,6 +1639,172 @@ class Traces(StructuredData):
         super().__set_desc__(description, **kwargs)
 
         self._transducer_ids = description.transducer_ids
+
+
+@mosaic.tessera
+class DiskTraces(Traces):
+    """
+    Objects of this type describe a set of time traces defined over the time grid,
+    which are lazily loaded from disk.
+
+    See ``Traces`` for definition of parameters.
+
+    """
+
+    def __init__(self, **kwargs):
+        self._filename = kwargs.pop('filename', None)
+        self._path = kwargs.pop('path', None)
+
+        data = kwargs.pop('data', None)
+        super().__init__(**kwargs)
+
+    @property
+    def _data(self):
+        return None
+
+    @_data.setter
+    def _data(self, value):
+        pass
+
+    def load(self, **kwargs):
+        with h5.HDF5(filename=self._filename, **kwargs, mode='r') as file:
+            file = file.file
+            data = file['%s/data' % self.path][()]
+
+        return Traces(
+            data=data,
+            transducer_ids=self.transducer_ids,
+            grid=self.grid,
+        )
+
+    def get(self, id):
+        """
+        Get one trace based on a transducer ID, selecting the inner domain.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+
+        Returns
+        -------
+        1d-array
+            Time trace.
+
+        """
+        return self.load().get(id)
+
+    def get_extended(self, id):
+        """
+        Get one trace based on a transducer ID, selecting the extended domain.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+
+        Returns
+        -------
+        1d-array
+            Time trace.
+
+        """
+        return self.load().get_extended(id)
+
+    def plot(self, **kwargs):
+        """
+        Plot the inner domain of the traces as a shot gather.
+
+        Parameters
+        ----------
+        kwargs
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        return self.load().plot(**kwargs)
+
+    def plot_one(self, id, **kwargs):
+        """
+        Plot the the inner domain of one of the traces.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+        kwargs
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        return self.load().plot_one(id, **kwargs)
+
+    def _resample(self, old_step, new_step, new_num, **kwargs):
+        '''
+        Resample the current trace to a new time-spacing.
+
+        Parameters
+        ----------
+        old_step: float
+            The original time step.
+        new_step: float
+            The new time step.
+        new_num
+            The length of the trace.
+        '''
+
+        # TODO Enable lazy resampling by marking Traces to be resampled on load
+        raise RuntimeError('DiskTraces cannot be resampled yet')
+
+    def __get_desc__(self, **kwargs):
+        return self.load().__get_desc__(**kwargs)
+
+    def __set_desc__(self, description, **kwargs):
+        del description.data
+        super().__set_desc__(description, **kwargs)
+
+    _serialisation_attrs = ['name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
+                            '_dtype', 'needs_grad', '_compressed', '_compression',
+                            'transform', 'grad', 'prec', '_transducer_ids',
+                            '_filename', '_path', '_grid']
+
+    def _serialisation_helper(self):
+        state = {}
+
+        for attr in self._serialisation_attrs:
+            state[attr] = getattr(self, attr)
+
+        return state
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        instance = Traces.__new__(Traces)
+
+        with h5.HDF5(filename=state.pop('_filename'), mode='r') as file:
+            file = file.file
+            try:
+                data = file['%s/data' % state.pop('_path')][()]
+            except KeyError:
+                data = None
+
+        instance._data = data
+
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+
+        return instance
+
+    def __reduce__(self):
+        state = self._serialisation_helper()
+        return self._deserialisation_helper, (state,)
 
 
 @mosaic.tessera
