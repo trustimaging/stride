@@ -72,7 +72,7 @@ class Gridded:
 
     def resample(self, grid=None, space=None, time=None, slow_time=None):
         raise NotImplementedError('Resampling has not been implemented in this class yet.' +
-                ' Alternatively, try to access space_resample or time_resample via problem.')
+                                  ' Alternatively, try to access space_resample or time_resample via problem.')
 
 
 class Saved:
@@ -149,6 +149,7 @@ class Saved:
         with h5.HDF5(*args, **kwargs, mode='r') as file:
             description = file.load(filter=kwargs.pop('filter', None), only=kwargs.pop('only', None))
 
+            kwargs['filename'] = kwargs.pop('filename', file.filename)
             self.__set_desc__(description, **kwargs)
 
     def rm(self, *args, **kwargs):
