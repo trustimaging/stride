@@ -573,8 +573,6 @@ class Variable:
 
         self.grad += grad
 
-        mosaic.logger().info('==> Done %s' % mosaic.runtime().uid)
-
     def __repr__(self):
         return self.name
 

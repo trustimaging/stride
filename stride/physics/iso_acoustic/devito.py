@@ -576,7 +576,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
         op.run(dt=self.time.step,
                time_m=1,
-               time_M=time_bounds[1]-1,
+               time_M=time_bounds[1]-2,
                **functions,
                **devito_args)
 
