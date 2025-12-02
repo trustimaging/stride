@@ -1,6 +1,6 @@
 
 import numpy as np
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import mosaic
 

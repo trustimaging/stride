@@ -421,7 +421,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 if dump_forward_wavefield:
                     if dump_wavefield_id == shot.id:
                         factor = dump_forward_wavefield \
-                            if type(dump_forward_wavefield) == int else self.undersampling_factor
+                            if type(dump_forward_wavefield) is int else self.undersampling_factor
                         layers = devito.Host if is_nvidia else devito.NoLayers
                         p_dump = self.dev_grid.undersampled_time_function('p_dump',
                                                                           time_bounds=time_bounds,
@@ -765,7 +765,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             dump_wavefield_id = kwargs.pop('dump_wavefield_id', shot.id)
             if dump_adjoint_wavefield and dump_wavefield_id == shot.id:
                 factor = dump_adjoint_wavefield \
-                    if type(dump_adjoint_wavefield) == int else self.undersampling_factor
+                    if type(dump_adjoint_wavefield) is int else self.undersampling_factor
                 layers = devito.Host if is_nvidia else devito.NoLayers
                 p_dump = self.dev_grid.undersampled_time_function('p_a_dump',
                                                                   time_bounds=time_bounds,

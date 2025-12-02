@@ -91,7 +91,7 @@ class Transducers(ProblemBase):
             Found transducers in the slice.
 
         """
-        section = OrderedDict()
+        section = dict()
         if start is None:
             _range = range(end)
         elif step is None:
