@@ -1,4 +1,6 @@
 
+import numpy as np
+
 from .utils import name_from_op_name
 from ....core import Operator
 
@@ -56,7 +58,7 @@ class ShiftTraces(Operator):
             return traces
 
         f_max_dim_less = 1/relaxation*f_max*time.step if f_max is not None else 0
-        period = int(1 / f_max_dim_less)
+        period = int(np.round(1 / f_max_dim_less))
         shift = period//4
 
         out_data = traces.extended_data.copy()

@@ -74,13 +74,13 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         self.before_forward(*args, **kwargs)
 
         self.logger.perf('%sRunning state equation for shot' % pre_str)
-        self.run_forward(*args, **kwargs)
+        fw_output = self.run_forward(*args, **kwargs)
 
         self.logger.perf('%sCompleting state equation run for shot' % pre_str)
         output = self.after_forward(*args, **kwargs)
         self.logger.perf('%sCompleted state equation run for shot' % pre_str)
 
-        return output
+        return output if output is not None else fw_output
 
     def adjoint(self, *args, **kwargs):
         """
@@ -102,13 +102,13 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         self.before_adjoint(*args, **kwargs)
 
         self.logger.perf('%sRunning adjoint equation for shot' % pre_str)
-        self.run_adjoint(*args, **kwargs)
+        ad_output = self.run_adjoint(*args, **kwargs)
 
         self.logger.perf('%sCompleting adjoint equation run for shot' % pre_str)
         output = self.after_adjoint(*args, **kwargs)
         self.logger.perf('%sCompleted adjoint equation run for shot' % pre_str)
 
-        return output
+        return output if output is not None else ad_output
 
     def before_forward(self, *args, **kwargs):
         """

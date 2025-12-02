@@ -1,6 +1,4 @@
 
-from collections import OrderedDict
-
 from .base import ProblemBase
 
 
@@ -34,7 +32,7 @@ class Medium(ProblemBase):
     def __init__(self, name='medium', problem=None, **kwargs):
         super().__init__(name=name, problem=problem, **kwargs)
 
-        self._fields = OrderedDict()
+        self._fields = dict()
 
     def _get(self, item):
         if item in super().__getattribute__('_fields').keys():

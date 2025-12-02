@@ -186,6 +186,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.state_operator.devito_operator = None
         self.state_operator_save.devito_operator = None
         self.adjoint_operator.devito_operator = None
+        self.dev_grid.clear_cache()
 
     def deallocate_wavefield(self, platform='cpu', deallocate=False, **kwargs):
         if (platform and 'nvidia' in platform) \
@@ -360,10 +361,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 src_scale /= self.time.step
 
             src_term = src.inject(field=p.forward, expr=src * src_scale)
-            if not fw3d_mode:
-                rec_term = rec.interpolate(expr=p)
-            else:
-                rec_term = rec.interpolate(expr=p.forward)
+            rec_term = rec.interpolate(expr=p.forward)
 
             # Define the saving of the wavefield
             if save_wavefield is True:
@@ -423,7 +421,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 if dump_forward_wavefield:
                     if dump_wavefield_id == shot.id:
                         factor = dump_forward_wavefield \
-                            if isinstance(dump_forward_wavefield, int) else self.undersampling_factor
+                            if type(dump_forward_wavefield) is int else self.undersampling_factor
                         layers = devito.Host if is_nvidia else devito.NoLayers
                         p_dump = self.dev_grid.undersampled_time_function('p_dump',
                                                                           time_bounds=time_bounds,
@@ -578,7 +576,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
         op.run(dt=self.time.step,
                time_m=1,
-               time_M=time_bounds[1]-1,
+               time_M=time_bounds[1]-2,
                **functions,
                **devito_args)
 
@@ -724,6 +722,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
 
         fw3d_mode = kwargs.pop('fw3d_mode', False)
+        fw3d_mode = True  # TODO Force fw3d_mode pending Devito-side fix
         platform = kwargs.get('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
 
@@ -749,7 +748,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             t = rec.time_dim
             vp2 = self.dev_grid.vars.vp**2
             if not fw3d_mode:
-                rec_term = rec.inject(field=p_a.backward, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
+                rec_term = rec.inject(field=p_a, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
             else:
                 rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
@@ -766,7 +765,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             dump_wavefield_id = kwargs.pop('dump_wavefield_id', shot.id)
             if dump_adjoint_wavefield and dump_wavefield_id == shot.id:
                 factor = dump_adjoint_wavefield \
-                    if isinstance(dump_adjoint_wavefield, int) else self.undersampling_factor
+                    if type(dump_adjoint_wavefield) is int else self.undersampling_factor
                 layers = devito.Host if is_nvidia else devito.NoLayers
                 p_dump = self.dev_grid.undersampled_time_function('p_a_dump',
                                                                   time_bounds=time_bounds,
@@ -788,8 +787,12 @@ class IsoAcousticDevito(ProblemTypeBase):
             if self.attenuation_power == 2:
                 kwargs['devito_config']['opt'] = 'noop'
 
-            self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update + update_saved,
-                                               **kwargs)
+            if fw3d_mode:
+                self.adjoint_operator.set_operator(stencil + rec_term + src_term + gradient_update + update_saved,
+                                                   **kwargs)
+            else:
+                self.adjoint_operator.set_operator(rec_term + stencil + src_term + gradient_update + update_saved,
+                                                   **kwargs)
             self.adjoint_operator.compile()
 
         else:

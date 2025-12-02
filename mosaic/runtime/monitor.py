@@ -5,6 +5,7 @@ import psutil
 import asyncio
 import datetime
 import subprocess as cmd_subprocess
+from collections import defaultdict
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
@@ -74,6 +75,9 @@ class Monitor(Runtime):
         self._monitored_nodes = dict()
         self._monitored_tessera = dict()
         self._monitored_tasks = dict()
+
+        self._runtime_tessera = defaultdict(list)
+        self._runtime_tasks = defaultdict(list)
 
         self._dirty_tessera = set()
         self._dirty_tasks = set()
@@ -329,6 +333,7 @@ class Monitor(Runtime):
     def _add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
+            self._runtime_tessera[runtime_id].append(uid)
 
         obj = self._monitored_tessera[uid]
         obj.add_event(sender_id, **kwargs)
@@ -338,6 +343,7 @@ class Monitor(Runtime):
     def _add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
+            self._runtime_tasks[runtime_id].append(uid)
 
         obj = self._monitored_tasks[uid]
         obj.add_event(sender_id, **kwargs)
@@ -347,6 +353,7 @@ class Monitor(Runtime):
     def _add_tessera_profile(self, sender_id, runtime_id, uid, profile):
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
+            self._runtime_tessera[runtime_id].append(uid)
 
         obj = self._monitored_tessera[uid]
         obj.add_profile(sender_id, profile)
@@ -355,6 +362,7 @@ class Monitor(Runtime):
     def _add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
+            self._runtime_tasks[runtime_id].append(uid)
 
         obj = self._monitored_tasks[uid]
         obj.add_profile(sender_id, profile)
@@ -457,6 +465,43 @@ class Monitor(Runtime):
 
         await super().stop(sender_id)
 
+    def disconnect(self, sender_id, uid):
+        """
+        Disconnect specific remote runtime.
+
+        Parameters
+        ----------
+        sender_id : str
+        uid : str
+
+        Returns
+        -------
+
+        """
+        super().disconnect(sender_id, uid)
+
+        # remove runtime from monitored nodes
+        try:
+            del self._monitored_nodes[uid]
+        except KeyError:
+            pass
+
+        # remove monitored tessera
+        for obj_uid in self._runtime_tessera[uid]:
+            try:
+                del self._monitored_tessera[obj_uid]
+            except KeyError:
+                pass
+        del self._runtime_tessera[uid]
+
+        # remove monitored tasks
+        for obj_uid in self._runtime_tasks[uid]:
+            try:
+                del self._monitored_tasks[obj_uid]
+            except KeyError:
+                pass
+        del self._runtime_tasks[uid]
+
     async def select_worker(self, sender_id):
         """
         Select appropriate worker to allocate a tessera.
@@ -505,5 +550,13 @@ class Monitor(Runtime):
                 if task.state in ['done', 'failed', 'collected']:
                     pending_tasks.remove(task)
 
+            for task in self._monitored_tasks.values():
+                if task.state not in ['done', 'failed', 'collected'] and task not in pending_tasks:
+                    pending_tasks.append(task)
+
             if timeout is not None and (time.time() - tic) > timeout:
                 break
+
+        self._monitored_tasks = dict()
+        self._runtime_tasks = defaultdict(list)
+        self._dirty_tasks = set()

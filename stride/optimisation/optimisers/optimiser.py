@@ -1,6 +1,6 @@
 
 import numpy as np
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import mosaic
 
@@ -79,8 +79,8 @@ class LocalOptimiser(ABC):
         logger = mosaic.logger()
         logger.perf('Updating variable %s,' % self.variable.name)
 
-        problem = kwargs.pop('problem', None)
-        iteration = kwargs.pop('iteration', None)
+        problem = kwargs.get('problem', None)
+        iteration = kwargs.get('iteration', None)
 
         if processed_grad is None:
             if grad is None:
@@ -229,7 +229,7 @@ class LocalOptimiser(ABC):
                 variable = self.variable.transform(self.variable)
             else:
                 variable = self.variable
-            upd_variable = self.update_variable(next_step, variable, direction)
+            upd_variable = self.update_variable(next_step, variable, direction, **kwargs)
             if self.variable.transform is not None:
                 upd_variable = self.variable.transform(upd_variable)
             self.variable.data[:] = upd_variable.data.copy()
@@ -278,8 +278,7 @@ class LocalOptimiser(ABC):
 
         self.variable.release_grad()
 
-    @abstractmethod
-    def update_variable(self, step_size, variable, direction):
+    def update_variable(self, step_size, variable, direction, **kwargs):
         """
 
         Parameters
@@ -297,7 +296,8 @@ class LocalOptimiser(ABC):
             Updated variable.
 
         """
-        pass
+        variable.data[:] -= step_size * direction.data
+        return variable
 
     def reset(self, **kwargs):
         """

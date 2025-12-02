@@ -401,9 +401,11 @@ class Variable:
 
                 prev[nxt.name_idx] = input_grad
 
+        parallel_inits = [task.init_future for task in parallel_returns]
+
         eager = not len(returns) or returns[-1]._eager
         if eager:
-            await asyncio.gather(*returns)
+            await asyncio.gather(*(returns + parallel_inits))
         else:
             summ_returns = []
             summ_dependencies = []
@@ -413,7 +415,7 @@ class Variable:
                     for runtime_deps in ret._dependencies.values():
                         summ_dependencies += list(runtime_deps.values())
 
-            await asyncio.gather(*summ_returns)
+            await asyncio.gather(*(summ_returns + parallel_inits))
 
         self.clear_graph()
 
