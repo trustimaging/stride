@@ -722,6 +722,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
 
         fw3d_mode = kwargs.pop('fw3d_mode', False)
+        fw3d_mode = True  # TODO Force fw3d_mode pending Devito-side fix
         platform = kwargs.get('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
 
