@@ -335,6 +335,8 @@ class Variable:
         parallel_returns = []
         deallocs = []
         for node in self.graph.toposort(self.prev_op):
+            print('Node')
+            print(node)
             kwargs_ = kwargs.copy()
 
             if node.method == '__noop__':
