@@ -148,7 +148,7 @@ class Problem(Gridded):
                 self.medium.fields[field]._resample(old_spacing, new_spacing, slowness=True, **kwargs)
             else:
                 self.medium.fields[field]._resample(old_spacing, new_spacing, **kwargs)
-        return [self.medium.fields[field] for field in self.medium.fields]
+        return tuple(self.medium.fields[field] for field in self.medium.fields)
 
     def time_resample(self, new_step, new_num=None, **kwargs):
         '''

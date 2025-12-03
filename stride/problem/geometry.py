@@ -1,5 +1,4 @@
 import numpy as np
-from collections import OrderedDict
 
 import mosaic.types
 from .base import GriddedSaved, ProblemBase
@@ -136,7 +135,7 @@ class Geometry(ProblemBase):
         else:
             transducers = kwargs.pop('transducers', None)
 
-        self._locations = OrderedDict()
+        self._locations = dict()
         self._transducers = transducers
 
     def add(self, id, transducer, coordinates, orientation=None):
@@ -198,13 +197,12 @@ class Geometry(ProblemBase):
             Found TransducerLocation.
 
         """
-        if isinstance(id, (np.int32, np.int64)):
-            id = int(id)
-
-        if not isinstance(id, int) or id < 0:
+        try:
+            return self._locations[id]
+        except KeyError:
+            if isinstance(id, (np.int32, np.int64)):
+                return self.get(int(id))
             raise ValueError('Transducer IDs have to be positive integer numbers')
-
-        return self._locations[id]
 
     def get_slice(self, start=None, end=None, step=None):
         """
@@ -225,7 +223,7 @@ class Geometry(ProblemBase):
             Found transducer locations in the slice.
 
         """
-        section = OrderedDict()
+        section = dict()
         if start is None:
             _range = range(end)
         elif step is None:

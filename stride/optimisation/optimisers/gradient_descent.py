@@ -29,7 +29,3 @@ class GradientDescent(LocalOptimiser):
                                                    processed_grad=processed_grad,
                                                    **kwargs)
         return processed_grad
-
-    def update_variable(self, step_size, variable, direction):
-        variable.data[:] -= step_size * direction.data
-        return variable

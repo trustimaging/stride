@@ -67,14 +67,24 @@ class Pipeline(Operator):
                 step, do_raise = step
 
             if isinstance(step, str):
+                step_name = step
                 step_cls = steps_registry.get(step, None)
                 if step_cls is None and do_raise:
                     raise ValueError('Pipeline step %s does not exist in the registry' % step)
 
                 if step_cls is not None:
-                    self._steps[step] = step_cls(**kwargs)
+                    step = step_cls(**kwargs)
+                else:
+                    continue
             else:
-                self._steps[str(step)] = step
+                step_name = str(step)
+
+            cnt = 0
+            while step_name in self._steps:
+                step_name = '%s%d' % (step_name, cnt)
+                cnt += 1
+
+            self._steps[step_name] = step
 
     def insert(self, loc, key, step):
         pos = list(self._steps.keys()).index(loc)

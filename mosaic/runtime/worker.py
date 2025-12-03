@@ -32,6 +32,8 @@ class Worker(Runtime):
 
         os.environ['OMP_NUM_THREADS'] = str(self._num_threads)
         os.environ['NUMBA_NUM_THREADS'] = str(self._num_threads)
+        os.environ['MKL_NUM_THREADS'] = str(self._num_threads)
+        os.environ['OPENBLAS_NUM_THREADS'] = str(self._num_threads)
 
     def set_logger(self):
         """

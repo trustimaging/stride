@@ -51,7 +51,7 @@ class MaskField(Operator):
         mask = kwargs.pop('mask', None)
         mask_rampoff = kwargs.pop('mask_rampoff', self.mask_rampoff)
         mask = self._mask if mask is None else mask
-        if mask is None:
+        if mask is None or np.any([m != f for m, f in zip(mask.shape, field.extended_shape)]):
             mask = np.zeros(field.extended_shape, dtype=np.float32)
             mask[field.inner] = 1
             mask *= _rampoff_mask(mask.shape, mask_rampoff)

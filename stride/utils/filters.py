@@ -439,7 +439,7 @@ def lowpass_filter_cos(data, f_max, order=1,
     """
     f_max = f_max / 0.5
 
-    period = int(1 / f_max)
+    period = int(np.round(1 / f_max))
     filter_length = 2*period + 1
 
     table = _make_filter_cos(filter_length)
