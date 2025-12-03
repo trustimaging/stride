@@ -27,7 +27,7 @@ class TransducerLocation(GriddedSaved):
         Optional name for the transducer location.
     transducer : Transducer
         Transducer device to which this location refers.
-    coordinates : ndarray
+    coordinates : ndarray, units [m]
         Coordinates of the transducer in the space grid.
     orientation : ndarray, optional
         Orientation of the transducer with respect to its location.
@@ -352,8 +352,9 @@ class Geometry(ProblemBase):
         plot = kwargs.pop('plot', True)
 
         coordinates = self.coordinates
-        if self.space.dim > 2:
-            coordinates = coordinates / np.array(self.space.spacing)
+        # if self.space.dim > 2:  # Note mayavi plots in cells
+        #     coordinates = coordinates / np.array(self.space.spacing)
+        # coordinates = coordinates / 1e-3  # [m] to [mm]
 
         axis = plotting.plot_points(coordinates, title=title, **kwargs)
 
