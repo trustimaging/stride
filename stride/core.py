@@ -580,24 +580,10 @@ class Variable:
         if grad is None or not self.needs_grad or self.grad is None:
             return
 
+        if isinstance(grad, (list, tuple)):
+            grad = grad[0]
+
         self.grad += grad
-
-    async def __call_adjoint_list__(self, *grad, **kwargs):
-        """
-        List adjoint operation of the variable, which accumulates the given
-        gradient on the ``Variable.grad`` attribute.
-
-        Parameters
-        ----------
-        grad : tuple
-            Provided gradient
-
-        Returns
-        -------
-
-        """
-        for g in grad:
-            await self.__call_adjoint__(g[0])
 
     async def __redux_adjoint__(self):
         """
@@ -618,9 +604,16 @@ class Variable:
         redux_proxy = TesseraProxy(tess._cls, runtime=tess.runtime_id, uid=tess.uid)
         redux_proxy.init_future.set_result(True)
         redux_proxy.state_changed('listening')
-        redux_task = TaskProxy(redux_proxy, '__call_adjoint_list__', *self._redux_grads)
-        await redux_proxy._init_task(redux_task, *self._redux_grads)
-        await redux_task
+
+        inits = []
+        tasks = []
+        for g in self._redux_grads:
+            redux_task = TaskProxy(redux_proxy, '__call_adjoint__', g)
+            inits.append(redux_proxy._init_task(redux_task, g))
+            tasks.append(redux_task)
+
+        await asyncio.gather(*inits)
+        await asyncio.gather(*tasks)
 
         drops = []
         for g in self._redux_grads:
