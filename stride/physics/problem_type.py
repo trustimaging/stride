@@ -1,4 +1,5 @@
 from abc import ABC
+import numpy as np
 
 import mosaic
 
@@ -292,6 +293,23 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            grads.append(method(variable, wrt=wrt, **kwargs))
+            grad = method(variable, wrt=wrt, **kwargs)
+
+            grad_data = grad.data if hasattr(grad, 'data') else grad
+            is_nan = np.any(np.isnan(grad_data))
+            is_inf = np.any(np.isinf(grad_data))
+
+            if is_nan or is_inf:
+                msg = 'Nan or inf detected in %s' % self.name
+
+                problem = kwargs.pop('problem', None)
+                shot_id = problem.shot.id if problem is not None else kwargs.pop('shot_id', None)
+                if shot_id is not None:
+                    msg = '(ShotID %d) ' % shot_id + msg
+
+                self.logger.warn(msg)
+                return
+
+            grads.append(grad)
 
         return tuple(grads)

@@ -557,6 +557,8 @@ class Monitor(Runtime):
             if timeout is not None and (time.time() - tic) > timeout:
                 break
 
+        await self._local_warehouse.run_barrier_tasks(reply=True)
+
         self._monitored_tasks = dict()
         self._runtime_tasks = defaultdict(list)
         self._dirty_tasks = set()
