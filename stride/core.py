@@ -294,7 +294,7 @@ class Variable:
         self.prev_op = None
         self.needs_grad = kwargs.pop('needs_grad', False)
         
-        self._redux_grads = set()
+        self._redux_grads = dict()
         self._redux_task = False
 
     async def adjoint(self, grad=None, **kwargs):
@@ -568,7 +568,7 @@ class Variable:
 
         """
         if redux:
-            self._redux_grads.add(grad[0])
+            self._redux_grads[grad[0].warehouse_id] = grad[0]
 
             if not self._redux_task:
                 runtime = mosaic.runtime()
@@ -607,7 +607,7 @@ class Variable:
 
         inits = []
         tasks = []
-        for g in self._redux_grads:
+        for g in self._redux_grads.values():
             redux_task = TaskProxy(redux_proxy, '__call_adjoint__', g)
             inits.append(redux_proxy._init_task(redux_task, g))
             tasks.append(redux_task)
@@ -616,9 +616,11 @@ class Variable:
         await asyncio.gather(*tasks)
 
         drops = []
-        for g in self._redux_grads:
+        for g in self._redux_grads.values():
             drops.append(g.drop(propagate=True))
         await asyncio.gather(*drops)
+
+        self._redux_grads = dict()
 
     def __repr__(self):
         return self.name
