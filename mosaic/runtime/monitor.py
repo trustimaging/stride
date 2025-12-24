@@ -542,20 +542,25 @@ class Monitor(Runtime):
             pending_tasks.append(task)
         self.logger.info('Pending barrier tasks %d' % len(pending_tasks))
 
+        num_tasks = len(self._monitored_tasks)
+
         tic = time.time()
         while pending_tasks:
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
 
             for task in pending_tasks:
                 if task.state in ['done', 'failed', 'collected']:
                     pending_tasks.remove(task)
 
-            for task in self._monitored_tasks.values():
-                if task.state not in ['done', 'failed', 'collected'] and task not in pending_tasks:
-                    pending_tasks.append(task)
+            if len(self._monitored_tasks) > num_tasks:
+                for task in self._monitored_tasks.values():
+                    if task.state not in ['done', 'failed', 'collected'] and task not in pending_tasks:
+                        pending_tasks.append(task)
 
             if timeout is not None and (time.time() - tic) > timeout:
                 break
+
+        await self._local_warehouse.run_barrier_tasks(reply=True)
 
         self._monitored_tasks = dict()
         self._runtime_tasks = defaultdict(list)
