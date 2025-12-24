@@ -293,7 +293,7 @@ class Variable:
         self.graph = Graph()
         self.prev_op = None
         self.needs_grad = kwargs.pop('needs_grad', False)
-        
+
         self._redux_grads = dict()
         self._redux_task = False
 
@@ -621,6 +621,7 @@ class Variable:
         await asyncio.gather(*drops)
 
         self._redux_grads = dict()
+        self._redux_task = False
 
     def __repr__(self):
         return self.name
