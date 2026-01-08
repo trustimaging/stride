@@ -498,7 +498,14 @@ class Monitor(Runtime):
 
         """
         super().disconnect(sender_id, uid)
+
+        # ensure runtime marked as disconnected
         self._disconnected_runtimes.add(uid)
+
+        # disconnect associated workers
+        if uid in self._monitored_nodes:
+            for worker_id in self._monitored_nodes[uid].sub_resources['workers'].keys():
+                self.disconnect(sender_id, worker_id)
 
         # remove runtime from monitored nodes
         try:
@@ -521,11 +528,6 @@ class Monitor(Runtime):
             except KeyError:
                 pass
         del self._runtime_tasks[uid]
-
-        # disconnect associated workers
-        if uid in self._monitored_nodes:
-            for worker_id in self._monitored_nodes[uid].sub_resources['workers'].keys():
-                self.disconnect(sender_id, worker_id)
 
     async def select_worker(self, sender_id):
         """
