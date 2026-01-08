@@ -324,14 +324,10 @@ class Variable:
         runtime = mosaic.runtime()
 
         async def redux(rec_grads, *grads):
-            if rec_grads is None:
-                sums = [
-                    _maybe_sum(None, g) for g in grads
-                ]
-            else:
-                sums = [
-                    _maybe_sum(r, g) for r, g in zip(rec_grads, grads)
-                ]
+            rec_grads = (None,)*len(grads) if rec_grads is None else rec_grads
+            sums = [
+                _maybe_sum(r, g) for r, g in zip(rec_grads, grads)
+            ]
             return await asyncio.gather(*sums)
 
         def dealloc(objs):

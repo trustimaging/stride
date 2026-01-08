@@ -75,6 +75,7 @@ class Monitor(Runtime):
         self._monitored_nodes = dict()
         self._monitored_tessera = dict()
         self._monitored_tasks = dict()
+        self._disconnected_runtimes = set()
 
         self._runtime_tessera = defaultdict(list)
         self._runtime_tasks = defaultdict(list)
@@ -303,6 +304,8 @@ class Monitor(Runtime):
         self._loop.interval(self.append_description, interval=10)
 
     def update_node(self, sender_id, update, sub_resources):
+        if sender_id in self._disconnected_runtimes:
+            return
         if sender_id not in self._monitored_nodes:
             self._monitored_nodes[sender_id] = MonitoredResource(sender_id)
 
@@ -311,26 +314,36 @@ class Monitor(Runtime):
         self._monitor_strategy.update_node(node)
 
     def add_tessera_event(self, sender_id, msgs):
+        if sender_id in self._disconnected_runtimes:
+            return
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         for msg in msgs:
             self._add_tessera_event(sender_id, **msg)
 
     def add_task_event(self, sender_id, msgs):
+        if sender_id in self._disconnected_runtimes:
+            return
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         for msg in msgs:
             self._add_task_event(sender_id, **msg)
 
     def add_tessera_profile(self, sender_id, msgs):
+        if sender_id in self._disconnected_runtimes:
+            return
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         for msg in msgs:
             self._add_tessera_profile(sender_id, **msg)
 
     def add_task_profile(self, sender_id, msgs):
+        if sender_id in self._disconnected_runtimes:
+            return
         msgs = [msgs] if not isinstance(msgs, list) else msgs
         for msg in msgs:
             self._add_task_profile(sender_id, **msg)
 
     def _add_tessera_event(self, sender_id, runtime_id, uid, **kwargs):
+        if runtime_id in self._disconnected_runtimes:
+            return
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
             self._runtime_tessera[runtime_id].append(uid)
@@ -341,6 +354,8 @@ class Monitor(Runtime):
         self._dirty_tessera.add(uid)
 
     def _add_task_event(self, sender_id, runtime_id, uid, tessera_id, **kwargs):
+        if runtime_id in self._disconnected_runtimes:
+            return
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
             self._runtime_tasks[runtime_id].append(uid)
@@ -351,6 +366,8 @@ class Monitor(Runtime):
         self._dirty_tasks.add(uid)
 
     def _add_tessera_profile(self, sender_id, runtime_id, uid, profile):
+        if runtime_id in self._disconnected_runtimes:
+            return
         if uid not in self._monitored_tessera:
             self._monitored_tessera[uid] = MonitoredObject(runtime_id, uid)
             self._runtime_tessera[runtime_id].append(uid)
@@ -360,6 +377,8 @@ class Monitor(Runtime):
         self._dirty_tessera.add(uid)
 
     def _add_task_profile(self, sender_id, runtime_id, uid, tessera_id, profile):
+        if runtime_id in self._disconnected_runtimes:
+            return
         if uid not in self._monitored_tasks:
             self._monitored_tasks[uid] = MonitoredObject(runtime_id, uid, tessera_id=tessera_id)
             self._runtime_tasks[runtime_id].append(uid)
@@ -479,6 +498,7 @@ class Monitor(Runtime):
 
         """
         super().disconnect(sender_id, uid)
+        self._disconnected_runtimes.add(uid)
 
         # remove runtime from monitored nodes
         try:
@@ -501,6 +521,11 @@ class Monitor(Runtime):
             except KeyError:
                 pass
         del self._runtime_tasks[uid]
+
+        # disconnect associated workers
+        if uid in self._monitored_nodes:
+            for worker_id in self._monitored_nodes[uid].sub_resources['workers'].keys():
+                self.disconnect(sender_id, worker_id)
 
     async def select_worker(self, sender_id):
         """
