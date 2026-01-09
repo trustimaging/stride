@@ -103,6 +103,7 @@ class CMDBase(Base):
         self.init_future.set_exception(
             RuntimeDisconnectedError('Remote runtime %s became disconnected' % uid)
         )
+        self.init_future.exception()
 
     def __repr__(self):
         NotImplementedError('Unimplemented Base method __repr__')

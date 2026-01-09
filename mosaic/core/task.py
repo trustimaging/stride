@@ -737,6 +737,7 @@ class TaskProxy(ProxyBase):
             self._done_future.set_exception(
                 RuntimeDisconnectedError('Remote runtime %s became disconnected' % uid)
             )
+            self._done_future.exception()
         except asyncio.InvalidStateError:
             pass
         else:
