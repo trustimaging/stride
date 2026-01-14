@@ -219,9 +219,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     num_iters = kwargs.pop('num_iters', 1)
     select_shots = kwargs.pop('select_shots', {})
 
-    restart = kwargs.pop('restart', None)
-    restart_id = kwargs.pop('restart_id', -1)
-
     lazy_loading = kwargs.pop('lazy_loading', False)
     dump = kwargs.pop('dump', True)
     safe = kwargs.pop('safe', True)
@@ -267,7 +264,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     if optimiser.reset_block:
         optimiser.reset()
 
-    for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
+    for iteration in block.iterations(num_iters):
         optimiser.clear_grad()
 
         if optimiser.reset_iteration:
@@ -281,16 +278,23 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                     (iteration.id+1, block.num_iterations, block.id+1,
                      optimisation_loop.num_blocks))
 
-        if dump and block.restart and not optimisation_loop.started:
+        if dump and optimisation_loop.restart and not optimisation_loop.started:
             if iteration.abs_id > 0:
+                # reload the latest version of the optimiser variable
                 try:
                     optimiser.load(path=problem.output_folder,
                                    project_name=problem.name,
                                    version=iteration.abs_id)
+
+                    logger.perf('\n')
+                    logger.perf('Loaded optimiser variable for restart, version %d' % iteration.abs_id)
                 except OSError:
                     raise OSError('Optimisation loop cannot be restarted,'
                                   'variable version or optimiser version %d cannot be found.' %
                                   iteration.abs_id)
+
+                # ensure previously used shots are not repeated
+                problem.acquisitions.filter_shot_ids(optimisation_loop, **select_shots)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)

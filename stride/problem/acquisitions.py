@@ -1029,6 +1029,50 @@ class Acquisitions(ProblemBase):
 
         return next_slice
 
+    def filter_shot_ids(self, loop, **kwargs):
+        """
+        Filter out shots that have already been used in the optimisation loop.
+
+        Parameters
+        ----------
+        loop : OptimisationLoop
+            Current optimisation loop.
+        shot_ids : list, optional
+            List of shot IDs to select from.
+        start : int, optional
+            Start of the slice, defaults to the first id.
+        end : int, optional
+            End of the slice, defaults to the last id.
+        num : int, optional
+            Number of shots to select every time the method is called.
+        every : int, optional
+            How many shots to skip in the selection, defaults to 1, which means taking all shots
+            subsequently.
+        randomly : bool, optional
+            Whether to select the shots at random at in order, defaults to False.
+
+        Returns
+        -------
+        list
+            List with selected shots.
+
+        """
+        shot_ids = kwargs.get('shot_ids', None)
+        shot_starts = self.shot_ids if shot_ids is None else shot_ids
+        next_slice, selection = _select_slice([], shot_starts, **kwargs)
+        shot_ids = next_slice + selection
+
+        block = loop.current_block
+        for iter in block._iterations.values():
+            try:
+                iter_shots = [int(shot_id) for shot_id in iter._runs[0].losses.keys()]
+                for shot_id in iter_shots:
+                    shot_ids.remove(shot_id)
+            except KeyError:
+                pass
+
+        self._shot_selection = shot_ids
+
     def select_sequence_ids(self, start=None, end=None, num=None, every=1, randomly=False):
         """
         Select a number of sequences according to the rules given in the arguments to the method.
@@ -1046,10 +1090,10 @@ class Acquisitions(ProblemBase):
         num : int, optional
             Number of shots to select every time the method is called.
         every : int, optional
-            How many shots to skip in the selection, defaults to 1, which means taking all shots
+            How many sequences to skip in the selection, defaults to 1, which means taking all sequences
             subsequently.
         randomly : bool, optional
-            Whether to select the shots at random at in order, defaults to False.
+            Whether to select the sequences at random at in order, defaults to False.
 
         Returns
         -------

@@ -217,6 +217,19 @@ class Iteration:
         self._runs[self._curr_run_idx] = IterationRun(self._curr_run_idx, self)
         return self.curr_run
 
+    def clear(self):
+        """
+        Clear iteration.
+
+        Returns
+        -------
+
+        """
+        self._runs = {
+            0: IterationRun(0, self),
+        }
+        self._curr_run_idx = 0
+
     def clear_run(self):
         """
         Clear run memory.
@@ -292,9 +305,9 @@ class Iteration:
         except AttributeError:
             return
 
-        self_desc = self.__get_desc__(**kwargs)
-
         if h5.file_exists(*args, **dump_kwargs):
+            self_desc = self.__get_desc__(**kwargs)
+
             description = {
                 'running_id': loop.running_id,
                 'num_blocks': loop.num_blocks,
@@ -340,13 +353,20 @@ class Iteration:
             for run in self._runs.values():
                 description['runs'][str(run.id)] = run.__get_desc__(**kwargs)
 
+        if kwargs.pop('no_runs', False):
+            del description['runs']
+
         return description
 
     def __set_desc__(self, description, **kwargs):
         self.id = description.id
         self.abs_id = description.abs_id
 
-        runs = description.runs
+        try:
+            runs = description.runs
+        except AttributeError:
+            self.clear()
+            return
         if isinstance(runs, mosaic.types.Struct):
             runs = runs.values()
 
@@ -415,7 +435,6 @@ class Block:
         self._num_iterations = None
         self._iterations = dict()
         self._current_iteration = None
-        self.restart = False
 
     @property
     def num_iterations(self):
@@ -477,35 +496,6 @@ class Block:
             Iteration iterables.
 
         """
-        loop_restart = self._optimisation_loop.restart
-        restart = loop_restart if restart is None else restart
-        self.restart = restart
-
-        if restart is False:
-            self.clear()
-        else:
-            if type(restart_id) is int and restart_id < 0:
-                curr_iter_id = self._current_iteration.id if self._current_iteration is not None else -1
-                iteration = Iteration(curr_iter_id+1, self._optimisation_loop.running_id,
-                                      self, self._optimisation_loop)
-
-                self._iterations[curr_iter_id+1] = iteration
-                self._optimisation_loop.running_id += 1
-                self._current_iteration = iteration
-
-            elif type(restart_id) is int and restart_id >= 0:
-                if restart_id not in self._iterations:
-                    raise ValueError('Iteration %d does not exist, so loop cannot be '
-                                     'restarted from that point' % restart_id)
-
-                self._current_iteration = self._iterations[restart_id]
-
-                for index in range(restart_id+1, self._num_iterations):
-                    if index in self._iterations:
-                        del self._iterations[index]
-
-            if self._current_iteration is not None:
-                self._optimisation_loop.running_id = self._current_iteration.abs_id+1
 
         if self._num_iterations is None:
             self._num_iterations = num
@@ -525,14 +515,17 @@ class Block:
                 self._optimisation_loop.running_id += 1
 
             self._current_iteration = self._iterations[index]
+            # dump the empty iteration to keep track of loop
+            self._current_iteration.append_iteration(no_runs=True)
 
             if len(zipped) > 1:
-                yield (self._iterations[index],) + zipped[1:]
+                yield (self._current_iteration,) + zipped[1:]
             else:
-                yield self._iterations[index]
+                yield self._current_iteration
 
             self._optimisation_loop.started = True
-            self._iterations[index].append_iteration()
+            # dump completed iteration to enable restart
+            self._current_iteration.append_iteration()
 
     def __get_desc__(self, **kwargs):
         legacy = kwargs.get('legacy', False)
@@ -679,10 +672,10 @@ class OptimisationLoop(Saved):
         restart : int or bool, optional
             Whether or not attempt to restart the loop from a previous
             block. Defaults to ``False``.
-        restart_id : int, optional
+        restart_id : int or tuple, optional
             If an integer greater than zero, it will restart from
-            a specific block. Otherwise, it will restart from the latest
-            available block.
+            a specific iteration. If -1, it will restart from the latest
+            iteration. If a tuple, it will restart from ``(block_id, iteration_id)``.
 
         Returns
         -------
@@ -703,27 +696,74 @@ class OptimisationLoop(Saved):
 
                 self.load(**load_kwargs)
 
-                if type(restart_id) is int and restart_id >= 0:
-                    if restart_id not in self._blocks:
-                        raise ValueError('Block %d does not exist, so loop cannot be '
-                                         'restarted from that point' % restart_id)
-
-                    self._current_block = self._blocks[restart_id]
-                    last_iter = list(self._current_block._iterations.values())[-1]
-                    self.running_id = last_iter.abs_id
-
-                    if restart_id-1 in self._blocks:
-                        prev_block = self._blocks[restart_id-1]
-                        last_iter = prev_block._iterations[prev_block.num_iterations-1]
-                        self.running_id = last_iter.abs_id
-
-                    for index in range(restart_id+1, self._num_blocks):
-                        if index in self._blocks:
-                            del self._blocks[index]
-
             except (OSError, AttributeError):
                 self.clear()
                 self.restart = False
+
+            else:
+                # restart with an absolute iteration_id
+                if type(restart_id) is int and restart_id >= 0:
+                    if restart_id >= self.running_id:
+                        raise ValueError('Iteration %d does not exist, so loop cannot be '
+                                         'restarted from that point' % restart_id)
+
+                    block = self._current_block
+                    iter = list(self._current_block._iterations.values())[-1]
+
+                    found_iter = False
+                    for block in self._blocks.values():
+                        for iter in block._iterations.values():
+                            if iter.abs_id >= restart_id:
+                                found_iter = True
+                                break
+                        if found_iter:
+                            break
+
+                    self._current_block = block
+                    block._current_iteration = iter
+                    self.running_id = iter.abs_id+1
+
+                # restart with a tuple (block_id, iteration_id)
+                elif type(restart_id) is tuple:
+                    block_id, iteration_id = restart_id
+
+                    # point to requested block
+                    if block_id not in self._blocks:
+                        raise ValueError('Block %d does not exist, so loop cannot be '
+                                         'restarted from that point' % block_id)
+
+                    self._current_block = self._blocks[block_id]
+                    block = self._current_block
+
+                    # point to requested iteration
+                    if iteration_id < 0:
+                        last_iter = list(block._iterations.values())[-1]
+                        self.running_id = last_iter.abs_id+1
+
+                    else:
+                        if iteration_id not in block._iterations:
+                            raise ValueError('Iteration %d does not exist, so loop cannot be '
+                                             'restarted from that point' % iteration_id)
+
+                        block._current_iteration = block._iterations[iteration_id]
+                        self.running_id = block._current_iteration.abs_id+1
+
+                # access restarted block an iteration
+                block = self._current_block
+                iter = self._current_block._current_iteration
+
+                # clear iteration
+                iter.clear()
+
+                # delete any other blocks
+                for index in range(block.id+1, self._num_blocks):
+                    if index in self._blocks:
+                        del self._blocks[index]
+
+                # delete any other iterations
+                for index in range(iter.id+1, block._num_iterations):
+                    if index in block._iterations:
+                        del block._iterations[index]
 
         if self._num_blocks is None:
             self._num_blocks = num
@@ -742,11 +782,9 @@ class OptimisationLoop(Saved):
             self._current_block = self._blocks[index]
 
             if len(zipped) > 1:
-                yield (self._blocks[index],) + zipped[1:]
+                yield (self._current_block,) + zipped[1:]
             else:
-                yield self._blocks[index]
-
-            self.restart = False
+                yield self._current_block
 
     def dump(self, *args, **kwargs):
         """
@@ -767,6 +805,7 @@ class OptimisationLoop(Saved):
             dump_kwargs = dict(path=self.problem.output_folder,
                                project_name=self.problem.name, version=0)
             dump_kwargs.update(self._file_kwargs)
+            dump_kwargs.update(kwargs)
 
             super().dump(*args, **dump_kwargs)
         except AttributeError:
