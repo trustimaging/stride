@@ -280,6 +280,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         if dump and optimisation_loop.restart and not optimisation_loop.started:
             if iteration.abs_id > 0:
+                # reload the latest version of the optimiser variable
                 try:
                     optimiser.load(path=problem.output_folder,
                                    project_name=problem.name,
@@ -291,6 +292,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                     raise OSError('Optimisation loop cannot be restarted,'
                                   'variable version or optimiser version %d cannot be found.' %
                                   iteration.abs_id)
+
+                # ensure previously used shots are not repeated
+                problem.acquisitions.filter_shot_ids(optimisation_loop, **select_shots)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
