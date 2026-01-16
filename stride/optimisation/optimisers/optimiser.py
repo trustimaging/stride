@@ -1,6 +1,6 @@
 
 import numpy as np
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import mosaic
 
@@ -38,6 +38,8 @@ class LocalOptimiser(ABC):
         self.variable = variable
         self.step_size = kwargs.pop('step_size', 1.)
         self.test_step_size = kwargs.pop('test_step_size', 1.)
+        self.force_step = kwargs.pop('force_step', False)
+        self.max_step = kwargs.pop('max_step', None)
         self.dump_grad = kwargs.pop('dump_grad', False)
         self.dump_prec = kwargs.pop('dump_prec', False)
         self._process_grad = kwargs.pop('process_grad', ProcessGlobalGradient(**kwargs))
@@ -77,8 +79,8 @@ class LocalOptimiser(ABC):
         logger = mosaic.logger()
         logger.perf('Updating variable %s,' % self.variable.name)
 
-        problem = kwargs.pop('problem', None)
-        iteration = kwargs.pop('iteration', None)
+        problem = kwargs.get('problem', None)
+        iteration = kwargs.get('iteration', None)
 
         if processed_grad is None:
             if grad is None:
@@ -202,10 +204,18 @@ class LocalOptimiser(ABC):
 
             if done_search:
                 # cap the step if needed
-                max_step = kwargs.pop('max_step', None)
+                max_step = self.max_step
                 max_step = np.inf if not isinstance(max_step, (int, float)) else max_step
 
                 unclipped_step = next_step
+
+                if not self.force_step:
+                    if next_step > -0.2:  # if bit -ve, still assume grad is right dirn
+                        next_step = max(0.1, min(next_step, max_step))
+                    elif max_step < np.inf and next_step < -max_step * 0.75:  # in general, prevent -ve steps
+                        next_step = -max_step * 0.75
+                    elif next_step < -0.2:
+                        next_step = next_step * 0.25
 
                 logger.perf('\t taking final update step of %e [unclipped step of %e]' % (next_step, unclipped_step))
             else:
@@ -219,10 +229,11 @@ class LocalOptimiser(ABC):
                 variable = self.variable.transform(self.variable)
             else:
                 variable = self.variable
-            upd_variable = self.update_variable(next_step, variable, direction)
+            upd_variable = self.update_variable(next_step, variable, direction, **kwargs)
             if self.variable.transform is not None:
                 upd_variable = self.variable.transform(upd_variable)
             self.variable.data[:] = upd_variable.data.copy()
+            self.variable.step_size = next_step
 
             # post-process variable after update
             await self.post_process(**kwargs)
@@ -267,8 +278,7 @@ class LocalOptimiser(ABC):
 
         self.variable.release_grad()
 
-    @abstractmethod
-    def update_variable(self, step_size, variable, direction):
+    def update_variable(self, step_size, variable, direction, **kwargs):
         """
 
         Parameters
@@ -286,7 +296,8 @@ class LocalOptimiser(ABC):
             Updated variable.
 
         """
-        pass
+        variable.data[:] -= step_size * direction.data
+        return variable
 
     def reset(self, **kwargs):
         """

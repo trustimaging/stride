@@ -51,7 +51,7 @@ class Concatenate(Operator):
         self.axis = kwargs.pop('axis', 0)
         super().__init__(*args, **kwargs)
 
-    async def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs):
         """
         Parameters
         ----------
@@ -103,7 +103,7 @@ class Concatenate(Operator):
 
         return concat
 
-    async def adjoint(self, d_concat, *args, **kwargs):
+    def adjoint(self, d_concat, *args, **kwargs):
         d_args = []
         for arg_i in range(len(args)):
             if self.new_axis:

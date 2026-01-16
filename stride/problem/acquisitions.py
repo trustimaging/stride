@@ -1,13 +1,12 @@
 
 import functools
 import numpy as np
-from collections import OrderedDict
 from cached_property import cached_property
 
 import mosaic.types
 from mosaic.file_manipulation import h5
 
-from .data import Traces
+from .data import Traces, DiskTraces
 from .base import ProblemBase
 from .. import plotting
 
@@ -106,8 +105,8 @@ class Shot(ProblemBase):
         self._acquisitions = None
         self._sequence = None
 
-        self._sources = OrderedDict()
-        self._receivers = OrderedDict()
+        self._source_ids = []
+        self._receiver_ids = []
         self.wavelets = None
         self.observed = None
 
@@ -118,18 +117,18 @@ class Shot(ProblemBase):
 
         if sources is not None and receivers is not None:
             for source in sources:
-                self._sources[source.id] = source
+                self._source_ids.append(source.id)
 
             for receiver in receivers:
-                self._receivers[receiver.id] = receiver
+                self._receiver_ids.append(receiver.id)
 
-            self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids,
-                                   grid=self.grid)
-            self.observed = Traces(name='observed', transducer_ids=self.receiver_ids,
-                                   compressed=compressed,
-                                   grid=self.grid)
-            self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1),
-                                 grid=self.grid)
+            self.wavelets = self._traces(name='wavelets', transducer_ids=self.source_ids,
+                                         grid=self.grid)
+            self.observed = self._traces(name='observed', transducer_ids=self.receiver_ids,
+                                         compressed=compressed,
+                                         grid=self.grid)
+            self.delays = self._traces(name='delays', transducer_ids=self.source_ids, shape=(len(sources), 1),
+                                       grid=self.grid)
 
             if delays is not None:
                 self.delays.data[:, 0] = delays
@@ -144,7 +143,7 @@ class Shot(ProblemBase):
         Get ids of sources in this Shot in a list.
 
         """
-        return list(self._sources.keys())
+        return self._source_ids
 
     @property
     def receiver_ids(self):
@@ -152,23 +151,39 @@ class Shot(ProblemBase):
         Get ids of receivers in this Shot in a list.
 
         """
-        return list(self._receivers.keys())
+        return self._receiver_ids
 
-    @property
+    @cached_property
     def sources(self):
         """
         Get sources in this Shot as a list.
 
         """
-        return list(self._sources.values())
+        locations = []
+        for loc_id in self.source_ids:
+            try:
+                loc = self._geometry.get(loc_id)
+            except AttributeError:
+                return None
+            locations.append(loc)
 
-    @property
+        return locations
+
+    @cached_property
     def receivers(self):
         """
         Get receivers in this Shot as a list.
 
         """
-        return list(self._receivers.values())
+        locations = []
+        for loc_id in self.receiver_ids:
+            try:
+                loc = self._geometry.get(loc_id)
+            except AttributeError:
+                return None
+            locations.append(loc)
+
+        return locations
 
     @property
     def slow_time_index(self):
@@ -299,12 +314,10 @@ class Shot(ProblemBase):
                     grid=self.grid, geometry=sub_problem.geometry)
 
         for source_id in self.source_ids:
-            location = sub_problem.geometry.get(source_id)
-            shot._sources[location.id] = location
+            shot._source_ids.append(source_id)
 
         for receiver_id in self.receiver_ids:
-            location = sub_problem.geometry.get(receiver_id)
-            shot._receivers[location.id] = location
+            shot._receiver_ids.append(receiver_id)
 
         if self.wavelets is not None:
             shot.wavelets = self.wavelets
@@ -428,6 +441,13 @@ class Shot(ProblemBase):
         else:
             self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
+    def _traces(self, *args, **kwargs):
+        if kwargs.pop('lazy_loading', False):
+            return DiskTraces(*args, **kwargs,
+                              path='/shots/%d/%s' % (self.id, kwargs.get('name')))
+        else:
+            return Traces(*args, **kwargs)
+
     def __get_desc__(self, **kwargs):
         description = {
             'id': self.id,
@@ -449,36 +469,49 @@ class Shot(ProblemBase):
         return description
 
     def __set_desc__(self, description, **kwargs):
+        try:
+            del self.__dict__['sources']
+        except:
+            pass
+        try:
+            del self.__dict__['receivers']
+        except:
+            pass
+
         compressed = kwargs.pop('compressed', False)
 
         self.id = description.id
 
         for source_id in description.source_ids:
-            if self._geometry:
-                source = self._geometry.get(source_id)
-            else:
-                source = None
-            self._sources[source_id] = source
+            self._source_ids.append(source_id)
 
         for receiver_id in description.receiver_ids:
-            if self._geometry:
-                receiver = self._geometry.get(receiver_id)
-            else:
-                receiver = None
-            self._receivers[receiver_id] = receiver
+            self._receiver_ids.append(receiver_id)
 
         lazy_loading = kwargs.pop('lazy_loading', False)
 
-        self.wavelets = Traces(name='wavelets', transducer_ids=self.source_ids, grid=self.grid)
-        if 'wavelets' in description and not lazy_loading:
+        self.wavelets = self._traces(
+            name='wavelets', transducer_ids=self.source_ids,
+            grid=self.grid,
+            lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+        )
+        if not lazy_loading and 'wavelets' in description:
             self.wavelets.__set_desc__(description.wavelets, **kwargs)
 
-        self.observed = Traces(name='observed', transducer_ids=self.receiver_ids, compressed=compressed, grid=self.grid)
-        if 'observed' in description and not lazy_loading:
+        self.observed = self._traces(
+            name='observed', transducer_ids=self.receiver_ids,
+            compressed=compressed, grid=self.grid,
+            lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+        )
+        if not lazy_loading and 'observed' in description:
             self.observed.__set_desc__(description.observed, **kwargs)
 
-        self.delays = Traces(name='delays', transducer_ids=self.source_ids, shape=(len(self.source_ids), 1), grid=self.grid)
-        if 'delays' in description and not lazy_loading:
+        self.delays = self._traces(
+            name='delays', transducer_ids=self.source_ids,
+            shape=(len(self.source_ids), 1), grid=self.grid,
+            lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+        )
+        if not lazy_loading and 'delays' in description:
             self.delays.__set_desc__(description.delays, **kwargs)
 
 
@@ -528,7 +561,7 @@ class Sequence(ProblemBase):
 
         self._geometry = geometry
         self._acquisitions = acquisitions
-        self._shots = OrderedDict()
+        self._shots = dict()
         self._shot_selection = []
 
     @property
@@ -603,13 +636,12 @@ class Sequence(ProblemBase):
             Found Shot.
 
         """
-        if isinstance(frame, (np.int32, np.int64)):
-            frame = int(frame)
-
-        if not isinstance(frame, int) or frame < 0:
+        try:
+            return self._shots[frame]
+        except KeyError:
+            if isinstance(frame, (np.int32, np.int64)):
+                return self.get(int(frame))
             raise ValueError('Shot frames have to be positive integer numbers')
-
-        return self._shots[frame]
 
     def set(self, frame, item):
         """
@@ -732,8 +764,8 @@ class Acquisitions(ProblemBase):
             geometry = kwargs.pop('geometry', None)
 
         self._geometry = geometry
-        self._shots = OrderedDict()
-        self._sequences = OrderedDict()
+        self._shots = dict()
+        self._sequences = dict()
         self._shot_selection = []
         self._sequence_selection = []
         self._prev_load = None, None
@@ -760,7 +792,7 @@ class Acquisitions(ProblemBase):
         Get all IDs of shots in the Acquisitions as a list.
 
         """
-        return list(self._shots.keys())
+        return sorted(list(self._shots.keys()))
 
     @property
     def sequence_ids(self):
@@ -810,7 +842,7 @@ class Acquisitions(ProblemBase):
         Get dict of all shots that have no observed allocated.
 
         """
-        shots = OrderedDict()
+        shots = dict()
         for shot_id, shot in self._shots.items():
             if not shot.observed.allocated:
                 shots[shot_id] = shot
@@ -883,13 +915,12 @@ class Acquisitions(ProblemBase):
             Found Shot.
 
         """
-        if isinstance(id, (np.int32, np.int64)):
-            id = int(id)
-
-        if not isinstance(id, int) or id < 0:
+        try:
+            return self._shots[id]
+        except KeyError:
+            if isinstance(id, (np.int32, np.int64)):
+                return self.get(int(id))
             raise ValueError('Shot IDs have to be positive integer numbers')
-
-        return self._shots[id]
 
     def get_sequence(self, id):
         """
@@ -906,13 +937,12 @@ class Acquisitions(ProblemBase):
             Found Sequence.
 
         """
-        if isinstance(id, (np.int32, np.int64)):
-            id = int(id)
-
-        if not isinstance(id, int) or id < 0:
+        try:
+            return self._sequences[id]
+        except KeyError:
+            if isinstance(id, (np.int32, np.int64)):
+                return self.get(int(id))
             raise ValueError('Sequence IDs have to be positive integer numbers')
-
-        return self._sequences[id]
 
     def set(self, item):
         """
@@ -999,6 +1029,50 @@ class Acquisitions(ProblemBase):
 
         return next_slice
 
+    def filter_shot_ids(self, loop, **kwargs):
+        """
+        Filter out shots that have already been used in the optimisation loop.
+
+        Parameters
+        ----------
+        loop : OptimisationLoop
+            Current optimisation loop.
+        shot_ids : list, optional
+            List of shot IDs to select from.
+        start : int, optional
+            Start of the slice, defaults to the first id.
+        end : int, optional
+            End of the slice, defaults to the last id.
+        num : int, optional
+            Number of shots to select every time the method is called.
+        every : int, optional
+            How many shots to skip in the selection, defaults to 1, which means taking all shots
+            subsequently.
+        randomly : bool, optional
+            Whether to select the shots at random at in order, defaults to False.
+
+        Returns
+        -------
+        list
+            List with selected shots.
+
+        """
+        shot_ids = kwargs.get('shot_ids', None)
+        shot_starts = self.shot_ids if shot_ids is None else shot_ids
+        next_slice, selection = _select_slice([], shot_starts, **kwargs)
+        shot_ids = next_slice + selection
+
+        block = loop.current_block
+        for iter in block._iterations.values():
+            try:
+                iter_shots = [int(shot_id) for shot_id in iter._runs[0].losses.keys()]
+                for shot_id in iter_shots:
+                    shot_ids.remove(shot_id)
+            except KeyError:
+                pass
+
+        self._shot_selection = shot_ids
+
     def select_sequence_ids(self, start=None, end=None, num=None, every=1, randomly=False):
         """
         Select a number of sequences according to the rules given in the arguments to the method.
@@ -1016,10 +1090,10 @@ class Acquisitions(ProblemBase):
         num : int, optional
             Number of shots to select every time the method is called.
         every : int, optional
-            How many shots to skip in the selection, defaults to 1, which means taking all shots
+            How many sequences to skip in the selection, defaults to 1, which means taking all sequences
             subsequently.
         randomly : bool, optional
-            Whether to select the shots at random at in order, defaults to False.
+            Whether to select the sequences at random at in order, defaults to False.
 
         Returns
         -------
@@ -1334,7 +1408,7 @@ class Acquisitions(ProblemBase):
                             problem=self.problem, grid=self.grid)
                 self.add(shot)
 
-            shot = self.get(shot_desc.id)
+            shot = self._shots[shot_desc.id]
             shot.__set_desc__(shot_desc, compressed=compressed, **kwargs)
 
         if 'sequences' in description:

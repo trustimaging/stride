@@ -1,4 +1,5 @@
 from abc import ABC
+import numpy as np
 
 import mosaic
 
@@ -74,13 +75,13 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         self.before_forward(*args, **kwargs)
 
         self.logger.perf('%sRunning state equation for shot' % pre_str)
-        self.run_forward(*args, **kwargs)
+        fw_output = self.run_forward(*args, **kwargs)
 
         self.logger.perf('%sCompleting state equation run for shot' % pre_str)
         output = self.after_forward(*args, **kwargs)
         self.logger.perf('%sCompleted state equation run for shot' % pre_str)
 
-        return output
+        return output if output is not None else fw_output
 
     def adjoint(self, *args, **kwargs):
         """
@@ -102,13 +103,13 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         self.before_adjoint(*args, **kwargs)
 
         self.logger.perf('%sRunning adjoint equation for shot' % pre_str)
-        self.run_adjoint(*args, **kwargs)
+        ad_output = self.run_adjoint(*args, **kwargs)
 
         self.logger.perf('%sCompleting adjoint equation run for shot' % pre_str)
         output = self.after_adjoint(*args, **kwargs)
         self.logger.perf('%sCompleted adjoint equation run for shot' % pre_str)
 
-        return output
+        return output if output is not None else ad_output
 
     def before_forward(self, *args, **kwargs):
         """
@@ -292,6 +293,23 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if method is None:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            grads.append(method(variable, wrt=wrt, **kwargs))
+            grad = method(variable, wrt=wrt, **kwargs)
+
+            grad_data = grad.data if hasattr(grad, 'data') else grad
+            is_nan = np.any(np.isnan(grad_data))
+            is_inf = np.any(np.isinf(grad_data))
+
+            if is_nan or is_inf:
+                msg = 'Nan or inf detected in %s' % self.name
+
+                problem = kwargs.pop('problem', None)
+                shot_id = problem.shot.id if problem is not None else kwargs.pop('shot_id', None)
+                if shot_id is not None:
+                    msg = '(ShotID %d) ' % shot_id + msg
+
+                self.logger.warn(msg)
+                return
+
+            grads.append(grad)
 
         return tuple(grads)

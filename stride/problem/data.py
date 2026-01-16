@@ -18,6 +18,7 @@ except ModuleNotFoundError:
 import mosaic
 from mosaic.core.tessera import PickleClass
 from mosaic.comms.compression import maybe_compress, decompress
+from mosaic.file_manipulation import h5
 
 from .base import GriddedSaved
 from ..core import Variable
@@ -25,7 +26,7 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'SparseField', 'SparseCoordinates']
+           'DiskTraces', 'SparseField', 'SparseCoordinates']
 
 
 def inv_transform(x):
@@ -405,7 +406,7 @@ class StructuredData(Data):
             self.grad.apply_prec(**kwargs)
         return self.grad
 
-    def apply_prec(self, prec_scale=4.0, prec_smooth=None, prec_op=None, prec=None, **kwargs):
+    def apply_prec(self, prec_scale=4.0, prec_smooth=1.0, prec_op=None, prec=None, **kwargs):
         """
         Apply a pre-conditioner to the current field.
 
@@ -744,7 +745,8 @@ class StructuredData(Data):
             'inner': inner,
             'dtype': str(np.dtype(self._dtype)),
             'data': data,
-            'compression': compression if compression is not None else False
+            'compression': compression if compression is not None else False,
+            'step_size': self.step_size
         }
 
         return description
@@ -978,106 +980,49 @@ class ScalarField(StructuredData):
 
         return interp
 
-    def resample(self, space=None, **kwargs):
+    def _resample(self, old_spacing, new_spacing, **kwargs):
         """
-        Resample the internal (non-padded) data given some new space object.
+        An in-place operation to resample the internal (non-padded) data given a new spacing.
 
         Parameters
         ----------
-        space : Space
-            New space.
+        old_spacing : float or tuple(float)
+            The old spacing.
+        new_spacing: float or tuple(float)
+            The new spacing.
         order : int, optional
             Order of the interplation, default is 3.
-        prefilter : bool, optional
-            Determines if the input array is prefiltered
-            before interpolation. If downsampling, this defaults to ``False`` as an anti-aliasing filter
-            will be applied instead. If upsampling, this defaults to ``True``.
-        anti_alias : bool, optional
-            Whether a Gaussian filter is applied to smooth the data before interpolation.
-            The default is ``True``. This is only applied when downsampling.
-        anti_alias_sigma : float or tuple of floats, optional
-            Gaussian filter standard deviations used for the anti-aliasing filter.
-            The default is (d - 1) / 2 where d is the downsampling factor and d > 1. When upsampling,
-            d < 1, and no anti-aliasing filter is applied.
 
         Returns
         -------
 
         """
+
+        old_spacing = (old_spacing,)*self.space.dim if isinstance(old_spacing, float) else old_spacing
+        new_spacing = (new_spacing,)*self.space.dim if isinstance(new_spacing, float) else new_spacing
 
         if self.time_dependent or self.slow_time_dependent:
             data = self.data
 
             interp = []
             for t in range(data.shape[0]):
-                interp.append(self.resample_data(data[t], space, **kwargs))
+                interp.append(self._resample_data(data[t], old_spacing, new_spacing, **kwargs))
 
             interp = np.stack(interp, axis=0)
 
         else:
-            interp = self.resample_data(self.data, space, **kwargs)
+            interp = self._resample_data(self.data, old_spacing, new_spacing, **kwargs)
 
-        self.grid.space = space
         self._init_shape()
         self._data = self.pad_data(interp)
 
-    def resample_data(self, data, space, **kwargs):
-        """
-        Resample the data given some new space object.
+    def _resample_data(self, data, old_spacing, new_spacing, **kwargs):
 
-        Parameters
-        ----------
-        data : ndarray
-            Data to stagger.
-        space : Space
-            New space.
-        order : int, optional
-            Order of the interpolation, default is 3.
-        prefilter : bool, optional
-            Determines if the input array is prefiltered
-            before interpolation. If downsampling, this defaults to ``False`` as an anti-aliasing filter
-            will be applied instead. If upsampling, this defaults to ``True``.
-        anti_alias : bool, optional
-            Whether a Gaussian filter is applied to smooth the data before interpolation.
-            The default is ``True``. This is only applied when downsampling.
-        anti_alias_sigma : float or tuple of floats, optional
-            Gaussian filter standard deviations used for the anti-aliasing filter.
-            The default is (d - 1) / 2 where d is the downsampling factor and d > 1. When upsampling,
-            d < 1, and no anti-aliasing filter is applied.
-
-        Returns
-        -------
-        ndarray
-            Resampled data.
-
-        """
         order = kwargs.pop('order', 3)
         prefilter = kwargs.pop('prefilter', True)
 
         resampling_factors = np.array([dx_old/dx_new
-                             for dx_old, dx_new in zip(self.space.spacing, space.spacing)])
-
-        # Anti-aliasing is only required for down-sampling interpolation
-        if any(factor < 1 for factor in resampling_factors):
-            anti_alias = kwargs.pop('anti_alias', True)
-
-            if anti_alias:
-                anti_alias_sigma = kwargs.pop('anti_alias_sigma', None)
-
-                if anti_alias_sigma is not None:
-                    anti_alias_sigma = anti_alias_sigma * np.ones_like(resampling_factors)
-
-                    if np.any(anti_alias_sigma < 0):
-                        raise ValueError("Anti-alias standard dev. must be equal to or greater than zero")
-
-                # Estimate anti-alias standard deviations if none provided
-                else:
-                    anti_alias_sigma = np.maximum(0, (1/resampling_factors - 1) / 2)
-
-                data = scipy.ndimage.gaussian_filter(data, anti_alias_sigma)
-
-                # Prefiltering is not necessary if anti-alias filter used
-                prefilter = False
+                             for dx_old, dx_new in zip(old_spacing, new_spacing)])
 
         interp = scipy.ndimage.zoom(data, resampling_factors,
                                     order=order, prefilter=prefilter)
@@ -1219,7 +1164,6 @@ class ScalarField(StructuredData):
         description = super().__get_desc__(**kwargs)
         description['time_dependent'] = self._time_dependent
         description['slow_time_dependent'] = self._slow_time_dependent
-
         return description
 
     def __set_desc__(self, description, **kwargs):
@@ -1474,13 +1418,16 @@ class Traces(StructuredData):
         self._transducer_ids = transducer_ids
 
         if self._transducer_ids is not None and self._shape is None:
-            shape = (len(self._transducer_ids), self.time.num)
-            extended_shape = (len(self._transducer_ids), self.time.extended_num)
-            inner = (slice(0, None), self.time.inner)
+            self._init_shape()
 
-            self._shape = shape
-            self._extended_shape = extended_shape
-            self._inner = inner
+    def _init_shape(self):
+        shape = (len(self._transducer_ids), self.time.num)
+        extended_shape = (len(self._transducer_ids), self.time.extended_num)
+        inner = (slice(0, None), self.time.inner)
+
+        self._shape = shape
+        self._extended_shape = extended_shape
+        self._inner = inner
 
     def alike(self, *args, **kwargs):
         """
@@ -1604,13 +1551,23 @@ class Traces(StructuredData):
         """
         title = kwargs.pop('title', self.name)
         plot = kwargs.pop('plot', True)
+        plot_type = kwargs.pop('plot_type', 'gather')
         if self.time.num == self.shape[1]:
             time_axis = self.time.grid / 1e-6
         else:
             time_axis = np.arange(self.shape[1])
 
-        axis = plotting.plot_gather(self.transducer_ids, time_axis, self.data,
-                                    title=title, **kwargs)
+        if plot_type == 'gather':
+            axis = plotting.plot_gather(self.transducer_ids, time_axis, self.data,
+                                        title=title, **kwargs)
+        elif plot_type == 'spectrum':
+            axis = plotting.plot_magnitude_spectrum(self.transducer_ids, time_axis, self.data,
+                                                    sampling_rate=1/self.time.step, title=title, **kwargs)
+        elif plot_type == 'spectrum_gather':
+            axis = plotting.plot_magnitude_spectrum(self.transducer_ids, time_axis, self.data,
+                                                    sampling_rate=1/self.time.step, title=title, spectrum_gather=True, **kwargs)
+        else:
+            raise ValueError("Invalid plot_type. Use 'gather', 'spectrum' or 'spectrum_gather'.")
 
         if plot is True:
             plotting.show(axis)
@@ -1647,21 +1604,29 @@ class Traces(StructuredData):
 
         return axis
 
-    def _resample(self, factor, new_num, **kwargs):
+    def _resample(self, old_step, new_step, new_num, **kwargs):
+        '''
+        Resample the current trace to a new time-spacing.
+
+        Parameters
+        ----------
+        old_step: float
+            The original time step.
+        new_step: float
+            The new time step.
+        new_num
+            The length of the trace.
+        '''
+
+        factor = old_step/new_step
         sr_orig = 1
         sr_new = factor
 
         if self.allocated:
-            data = resampy.resample(self.data, sr_orig, sr_new, axis=1)  # resample
-            if data.shape[-1] < new_num:
-                data = np.pad(data, ((0, 0), (0, new_num-data.shape[-1])), mode='constant', constant_values=0)
-            elif data.shape[-1] > new_num:
-                data = data[:, :new_num]
-            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids, data=data)
-        else:
-            new_traces = Traces(name=self.name, grid=self.grid, transducer_ids=self._transducer_ids)
+            processed_data = self.data
+            self._data = resampy.resample(processed_data, sr_orig, sr_new, axis=1, parallel=True)  # Resample
 
-        return new_traces
+        self._init_shape()
 
     def __get_desc__(self, **kwargs):
         description = super().__get_desc__(**kwargs)
@@ -1674,6 +1639,172 @@ class Traces(StructuredData):
         super().__set_desc__(description, **kwargs)
 
         self._transducer_ids = description.transducer_ids
+
+
+@mosaic.tessera
+class DiskTraces(Traces):
+    """
+    Objects of this type describe a set of time traces defined over the time grid,
+    which are lazily loaded from disk.
+
+    See ``Traces`` for definition of parameters.
+
+    """
+
+    def __init__(self, **kwargs):
+        self._filename = kwargs.pop('filename', None)
+        self._path = kwargs.pop('path', None)
+
+        data = kwargs.pop('data', None)
+        super().__init__(**kwargs)
+
+    @property
+    def _data(self):
+        return None
+
+    @_data.setter
+    def _data(self, value):
+        pass
+
+    def load(self, **kwargs):
+        with h5.HDF5(filename=self._filename, **kwargs, mode='r') as file:
+            file = file.file
+            data = file['%s/data' % self.path][()]
+
+        return Traces(
+            data=data,
+            transducer_ids=self.transducer_ids,
+            grid=self.grid,
+        )
+
+    def get(self, id):
+        """
+        Get one trace based on a transducer ID, selecting the inner domain.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+
+        Returns
+        -------
+        1d-array
+            Time trace.
+
+        """
+        return self.load().get(id)
+
+    def get_extended(self, id):
+        """
+        Get one trace based on a transducer ID, selecting the extended domain.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+
+        Returns
+        -------
+        1d-array
+            Time trace.
+
+        """
+        return self.load().get_extended(id)
+
+    def plot(self, **kwargs):
+        """
+        Plot the inner domain of the traces as a shot gather.
+
+        Parameters
+        ----------
+        kwargs
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        return self.load().plot(**kwargs)
+
+    def plot_one(self, id, **kwargs):
+        """
+        Plot the the inner domain of one of the traces.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+        kwargs
+            Arguments for plotting.
+
+        Returns
+        -------
+        axes
+            Axes on which the plotting is done.
+
+        """
+        return self.load().plot_one(id, **kwargs)
+
+    def _resample(self, old_step, new_step, new_num, **kwargs):
+        '''
+        Resample the current trace to a new time-spacing.
+
+        Parameters
+        ----------
+        old_step: float
+            The original time step.
+        new_step: float
+            The new time step.
+        new_num
+            The length of the trace.
+        '''
+
+        # TODO Enable lazy resampling by marking Traces to be resampled on load
+        raise RuntimeError('DiskTraces cannot be resampled yet')
+
+    def __get_desc__(self, **kwargs):
+        return self.load().__get_desc__(**kwargs)
+
+    def __set_desc__(self, description, **kwargs):
+        del description.data
+        super().__set_desc__(description, **kwargs)
+
+    _serialisation_attrs = ['name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
+                            '_dtype', 'needs_grad', '_compressed', '_compression',
+                            'transform', 'grad', 'prec', '_transducer_ids',
+                            '_filename', '_path', '_grid']
+
+    def _serialisation_helper(self):
+        state = {}
+
+        for attr in self._serialisation_attrs:
+            state[attr] = getattr(self, attr)
+
+        return state
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        instance = Traces.__new__(Traces)
+
+        with h5.HDF5(filename=state.pop('_filename'), mode='r') as file:
+            file = file.file
+            try:
+                data = file['%s/data' % state.pop('_path')][()]
+            except KeyError:
+                data = None
+
+        instance._data = data
+
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+
+        return instance
+
+    def __reduce__(self):
+        state = self._serialisation_helper()
+        return self._deserialisation_helper, (state,)
 
 
 @mosaic.tessera
@@ -1769,7 +1900,7 @@ class SparseField(StructuredData):
         kwargs['num'] = kwargs.pop('num', self.num)
         kwargs['dim'] = kwargs.pop('dim', self.dim)
         kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
-        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().alike(*args, **kwargs)
 
@@ -1787,7 +1918,7 @@ class SparseField(StructuredData):
         kwargs['num'] = kwargs.pop('num', self.num)
         kwargs['dim'] = kwargs.pop('dim', self.dim)
         kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
-        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().detach(*args, **kwargs)
 
@@ -1805,7 +1936,7 @@ class SparseField(StructuredData):
         kwargs['num'] = kwargs.pop('num', self.num)
         kwargs['dim'] = kwargs.pop('dim', self.dim)
         kwargs['time_dependent'] = kwargs.pop('time_dependent', self.time_dependent)
-        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent', self.slow_time_dependent)
 
         return super().as_parameter(*args, **kwargs)
 

@@ -1,6 +1,4 @@
 
-from collections import OrderedDict
-
 from mosaic.utils import camel_case
 
 from .base import ProblemBase
@@ -34,7 +32,7 @@ class Transducers(ProblemBase):
     def __init__(self, name='transducers', problem=None, **kwargs):
         super().__init__(name=name, problem=problem, **kwargs)
 
-        self._transducers = OrderedDict()
+        self._transducers = dict()
 
     def add(self, item):
         """
@@ -69,10 +67,10 @@ class Transducers(ProblemBase):
             Found Transducer.
 
         """
-        if not isinstance(id, int) or id < 0:
+        try:
+            return self._transducers[id]
+        except KeyError:
             raise ValueError('Transducer IDs have to be positive integer numbers')
-
-        return self._transducers[id]
 
     def get_slice(self, start=None, end=None, step=None):
         """
@@ -93,7 +91,7 @@ class Transducers(ProblemBase):
             Found transducers in the slice.
 
         """
-        section = OrderedDict()
+        section = dict()
         if start is None:
             _range = range(end)
         elif step is None:

@@ -516,9 +516,13 @@ class GridDevito(Gridded):
             Generated function.
 
         """
-        time_bounds = time_bounds or (0, self.time.extended_num-1)
+        layers = kwargs.pop('layers', devito.NoLayers)
 
-        time_under, buffer_size = self._time_undersampled('time_under', factor, time_bounds)
+        time_bounds = time_bounds or (0, self.time.extended_num-1)
+        time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
+
+        time_under, buffer_size = self._time_undersampled('time_under', factor, time_bounds,
+                                                          layers=layers)
 
         compression = kwargs.pop('compression', None)
 
@@ -529,11 +533,10 @@ class GridDevito(Gridded):
                                  save=buffer_size,
                                  dtype=kwargs.pop('dtype', self.dtype),
                                  compression=compression,
+                                 layers=layers,
                                  **kwargs)
 
-        space_dims = fun.dimensions[1:]
-
-        return fun.func(time_under - int(time_bounds[0] // factor), *space_dims)
+        return fun
 
     def undersampled_time_derivative(self, fun, factor, time_bounds=None, offset=None,
                                      deriv_order=1, fd_order=1):
@@ -546,15 +549,20 @@ class GridDevito(Gridded):
 
         return deriv
 
-    def _time_undersampled(self, name, factor, time_bounds=None, offset=None):
+    def _time_undersampled(self, name, factor, time_bounds=None, offset=None, layers=devito.NoLayers):
         time_bounds = time_bounds or (0, self.time.extended_num - 1)
+        time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
         offset = offset or (0, 0)
 
         time_dim = self.devito_grid.time_dim
 
-        condition = sympy.And(devito.symbolics.CondEq(time_dim % factor, 0),
-                              devito.Ge(time_dim, time_bounds[0] + offset[0]),
-                              devito.Le(time_dim, time_bounds[1] - offset[1]), )
+        # TODO Current incompatibility between disk spilling and conditional dimensions
+        if layers in [devito.DiskHost, devito.DiskHostDevice, devito.DiskDevice]:
+            condition = None
+        else:
+            condition = sympy.And(devito.CondEq(time_dim % factor, 0),
+                                  devito.Ge(time_dim, time_bounds[0] + offset[0]),
+                                  devito.Le(time_dim, time_bounds[1] - offset[1]), )
 
         time_under = devito.ConditionalDimension('%s%d' % (name, self._time_under_count),
                                                  parent=time_dim,
@@ -562,9 +570,10 @@ class GridDevito(Gridded):
                                                  condition=condition)
         self._time_under_count += 1
 
-        # buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
-        # TODO Force larger buffer size to prevent devito issue
-        buffer_size = (self.time.extended_num - 1 - 0 + factor) // factor + 1
+        if layers in [devito.DiskHost, devito.DiskHostDevice, devito.DiskDevice]:
+            buffer_size = (self.time.extended_num - 1 + factor) // factor + 1
+        else:
+            buffer_size = (time_bounds[1] - time_bounds[0] + factor) // factor + 1
 
         return time_under, buffer_size
 
@@ -602,6 +611,7 @@ class GridDevito(Gridded):
         space_order = self.space_order if space_order is None else space_order
         time_order = self.time_order if time_order is None else time_order
         time_bounds = kwargs.pop('time_bounds', (0, self.time.extended_num))
+        time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
         smooth = kwargs.pop('smooth', False)
 
         # Define variables
@@ -771,6 +781,26 @@ class GridDevito(Gridded):
 
             if collect:
                 devito.clear_cache(force=True)
+
+    def clear_cache(self, collect=False):
+        """
+        Remove all internal references to devito functions.
+
+        Parameters
+        ----------
+        collect : bool, optional
+            Whether to garbage collect after deallocate, defaults to ``False``.
+
+        Returns
+        -------
+
+        """
+        self.vars = Struct()
+        self.cached_args = Struct()
+        self.cached_funcs = Struct()
+
+        if collect:
+            devito.clear_cache(force=True)
 
     def with_halo(self, data, value=None, time_dependent=False, is_vector=False, **kwargs):
         """
@@ -942,6 +972,7 @@ class OperatorDevito:
                 'name': self.name,
                 'subs': subs,
                 'opt': 'advanced',
+                'autotuning': 'off',
                 'compiler': 'cuda',
                 'language': 'cuda',
                 'platform': 'nvidiaX',
@@ -1006,7 +1037,7 @@ class OperatorDevito:
             if arg.name in self.grid.vars:
                 default_kwargs[arg.name] = self.grid.vars[arg.name]
 
-        autotune = kwargs.pop('autotune', None)
+        autotune = kwargs.get('autotune', None)
         default_kwargs.update(kwargs)
 
         if self.grid.time_dim:

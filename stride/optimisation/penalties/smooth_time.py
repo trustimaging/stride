@@ -25,7 +25,7 @@ class SmoothTime(Operator):
         self.residual = None
         self.spacing = kwargs.pop('spacing', None)
 
-    async def forward(self, variable, **kwargs):
+    def forward(self, variable, **kwargs):
         grad = self._grad(variable, **kwargs)
         self.residual = grad
 
@@ -35,7 +35,7 @@ class SmoothTime(Operator):
 
         return fun
 
-    async def adjoint(self, d_fun, variable, **kwargs):
+    def adjoint(self, d_fun, variable, **kwargs):
         grad = self._grad(self.residual, **kwargs)
         grad_variable = -np.asarray(d_fun) * grad
 

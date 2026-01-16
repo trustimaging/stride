@@ -115,9 +115,10 @@ def _write_dataset(name, obj, group):
         dataset.attrs['is_bytes'] = is_bytes
         dataset.attrs['is_none'] = is_none
 
-        flat_obj = np.asarray(obj).flatten().tolist()
-        if name not in group:
-            dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
+        if not isinstance(obj, np.ndarray):
+            flat_obj = np.asarray(obj).flatten().tolist()
+            if name not in group:
+                dataset.attrs['is_str'] = isinstance(flat_obj[0], str)
 
     else:
         group[name][...] = obj
@@ -174,23 +175,23 @@ def read(obj, lazy=True, filter=None, only=None):
 
 
 def _read_dataset(obj, lazy=True):
-    if 'is_none' in obj.attrs and obj.attrs['is_none']:
+    if obj.attrs.get('is_none'):
         return None
 
     if obj.attrs['is_ndarray']:
 
-        def load():
-            return obj[()]
-
-        setattr(obj, 'load', load)
-
         if lazy is True:
+            def load():
+                return obj[()]
+
+            setattr(obj, 'load', load)
+
             return obj
 
         else:
             return obj[()]
 
-    elif 'is_bytes' in obj.attrs and obj.attrs['is_bytes']:
+    elif obj.attrs.get('is_bytes'):
         obj = obj[()].tobytes()
 
         return obj

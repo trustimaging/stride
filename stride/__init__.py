@@ -149,7 +149,11 @@ async def forward(problem, pde, *args, **kwargs):
 
         # save data
         shot = problem.acquisitions.get(shot_id)
-        shot.observed.data[:] = traces.data
+        try:
+            shot.observed.data[:] = traces.data
+        except ValueError as err:
+            logger.warning('Shot %d data assignment error: %s' % (shot_id, str(err)))
+
         if np.any(np.isnan(shot.observed.data)) or np.any(np.isinf(shot.observed.data)):
             raise ValueError('Nan or inf detected in shot %d' % shot_id)
 
@@ -167,7 +171,7 @@ async def forward(problem, pde, *args, **kwargs):
 
 async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwargs):
     """
-    Use a ``problem`` forward using a given ``pde``. The given ``args`` and ``kwargs``
+    Use a ``problem`` in adjoint mode using a given ``pde``. The given ``args`` and ``kwargs``
     will be passed on to the PDE.
 
     Parameters
@@ -215,9 +219,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     num_iters = kwargs.pop('num_iters', 1)
     select_shots = kwargs.pop('select_shots', {})
 
-    restart = kwargs.pop('restart', None)
-    restart_id = kwargs.pop('restart_id', -1)
-
     lazy_loading = kwargs.pop('lazy_loading', False)
     dump = kwargs.pop('dump', True)
     safe = kwargs.pop('safe', True)
@@ -228,9 +229,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     filter_traces = kwargs.pop('filter_traces', True)
     filter_wavelets = kwargs.pop('filter_wavelets', filter_traces)
 
-    fw3d_mode = kwargs.get('fw3d_mode', False)
-    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation',
-                                            0.75 if not fw3d_mode else 0.725)
+    filter_wavelets_relaxation = kwargs.pop('filter_wavelets_relaxation', 0.75)
     filter_traces_relaxation = kwargs.pop('filter_traces_relaxation',
                                           0.75 if filter_wavelets else 1.00)
 
@@ -265,7 +264,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     if optimiser.reset_block:
         optimiser.reset()
 
-    for iteration in block.iterations(num_iters, restart=restart, restart_id=restart_id):
+    for iteration in block.iterations(num_iters):
         optimiser.clear_grad()
 
         if optimiser.reset_iteration:
@@ -279,16 +278,23 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                     (iteration.id+1, block.num_iterations, block.id+1,
                      optimisation_loop.num_blocks))
 
-        if dump and block.restart and not optimisation_loop.started:
+        if dump and optimisation_loop.restart and not optimisation_loop.started:
             if iteration.abs_id > 0:
+                # reload the latest version of the optimiser variable
                 try:
                     optimiser.load(path=problem.output_folder,
                                    project_name=problem.name,
                                    version=iteration.abs_id)
+
+                    logger.perf('\n')
+                    logger.perf('Loaded optimiser variable for restart, version %d' % iteration.abs_id)
                 except OSError:
                     raise OSError('Optimisation loop cannot be restarted,'
                                   'variable version or optimiser version %d cannot be found.' %
                                   iteration.abs_id)
+
+                # ensure previously used shots are not repeated
+                problem.acquisitions.filter_shot_ids(optimisation_loop, **select_shots)
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
@@ -450,9 +456,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 fun.clear_graph()
 
                 iteration.add_loss(fun)
-                iteration.add_completed(sub_problem.shot)
                 logger.perf('Functional value for shot %d: %s' % (shot_id, fun))
 
+                iteration.add_completed(sub_problem.shot)
                 logger.perf('Retrieved test step for shot %d (%d out of %d)'
                             % (sub_problem.shot_id,
                                iteration.num_completed, num_shots))
