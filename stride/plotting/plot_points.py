@@ -1,6 +1,7 @@
 
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 __all__ = ['plot_points', 'plot_points_2d', 'plot_points_3d']
@@ -71,6 +72,39 @@ def plot_points_2d(coordinates, axis=None, colour='red', size=15, title=None,
 
 
 def plot_points_3d(coordinates, axis=None, colour='red', size=15, title=None, **kwargs):
+    """
+    Utility function to plot 3D scattered points using matplotlib.
+
+    Parameters
+    ----------
+    coordinates : 2-dimensional array
+        Coordinates of the points to be plotted, shape should be (n_points, 3).
+    axis : MayaVi axis, optional
+        Axis in which to make the plotting, defaults to new empty one.
+    colour : str
+        Colour to apply to the points, defaults to red.
+    size : float
+        Size of the plotted points, defaults to 15.
+    title : str, optional
+        Figure title, defaults to empty title.
+    """
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_title('3D View: Tangent Points with Out-of-Plane Displacement')
+
+    ax.plot(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], 'o')
+
+    ax.set_xlabel('X (mm)')
+    ax.set_ylabel('Y (mm)')
+    ax.set_zlabel('Z (mm)')
+    ax.legend()
+    ax.grid(True)
+    ax.set_box_aspect([1, 1, 0.5])
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_points_3d_mayavi(coordinates, axis=None, colour='red', size=15, title=None, **kwargs):
     """
     Utility function to plot 3D scattered points using MayaVi.
 
