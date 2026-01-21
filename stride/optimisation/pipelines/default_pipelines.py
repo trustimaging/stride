@@ -138,6 +138,8 @@ class ProcessTraces(Pipeline):
         if kwargs.pop('time_weighting', True):
             steps.append(('time_weighting', False))
 
+        print('Process Traces Steps')
+        print(steps)
         super().__init__(steps, **kwargs)
 
 

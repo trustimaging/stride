@@ -16,13 +16,13 @@ def go():
             comp_path = os.path.join(os.path.join(os.path.dirname(cuda_home), 'compilers'), 'lib')
             break
 
-    if comp_path is None:
+    if comp_path is None or not os.path.exists(comp_path):
         hpcsdk_home = os.environ.get('HPCSDK_HOME')
         if hpcsdk_home:
             comp_path = os.path.join(os.path.join(hpcsdk_home, 'compilers'), 'lib')
 
     # If not, try to get from LD_LIBRARY_PATH
-    if comp_path is None:
+    if comp_path is None or not os.path.exists(comp_path):
         library_path = os.environ.get('LD_LIBRARY_PATH', '')
         for path in library_path.split(':'):
             if re.match('.*/nvidia/hpc_sdk/.*/?compilers/lib', path) or \

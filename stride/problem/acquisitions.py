@@ -56,7 +56,7 @@ def _select_slice(selection, init_ids,
 
 class Shot(ProblemBase):
     """
-    A Shot is an even in which one or more transducers act as sources with a given wavelet and one or more
+    A Shot is an event in which one or more transducers act as sources with a given wavelet and one or more
     transducers act as receivers and record some observed data.
 
     Therefore a shot object maintains data about the ids of the transducer locations that will act as sources,

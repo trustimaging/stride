@@ -252,7 +252,7 @@ def plot_gather(*args, skip=1, time_range=None, norm=True, norm_trace=True,
     axis.set_ylim(time_axis[-1, 0], time_axis[0, 0])
 
     axis.set_xlabel('trace')
-    axis.set_ylabel('time')
+    axis.set_ylabel(r'time ($\mu$s)')
 
     if trace_axis is None:
         trace_axis = np.linspace(0, num_traces-1, num_under_traces, endpoint=True)
