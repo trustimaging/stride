@@ -417,6 +417,7 @@ class Geometry(ProblemBase):
 
             coordinates = None
             orientation = None
+            dipole_offset = None
 
             index = 0
             for location_id, location in self._locations.items():
@@ -431,6 +432,11 @@ class Geometry(ProblemBase):
                         orientation = np.zeros((self.num_locations, self.space.dim), dtype=np.float32)
                     orientation[index, :] = location_desc['orientation']
                     location_desc['orientation'] = index
+                if 'dipole_offset' in location_desc:
+                    if dipole_offset is None:
+                        dipole_offset = np.zeros((self.num_locations, ), dtype=np.float32)
+                    dipole_offset[index] = location_desc['dipole_offset']
+                    location_desc['dipole_offset'] = index
 
                 description['locations'][str(location_id)] = location_desc
                 index += 1
@@ -440,6 +446,9 @@ class Geometry(ProblemBase):
 
             if orientation is not None:
                 description['orientation'] = orientation
+
+            if dipole_offset is not None:
+                description['dipole_offset'] = dipole_offset
 
         return description
 
@@ -457,6 +466,11 @@ class Geometry(ProblemBase):
             for location_desc in locations:
                 idx = location_desc.orientation
                 location_desc.orientation = description.orientation[idx, :]
+
+        if 'dipole_offset' in description:
+            for location_desc in locations:
+                idx = location_desc.dipole_offset
+                location_desc.dipole_offset = description.dipole_offset[idx]
 
         for location_desc in locations:
             if location_desc.id not in self.location_ids:
