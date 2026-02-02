@@ -223,9 +223,10 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if variable is None or not variable.needs_grad:
                 continue
 
-            method = getattr(self, 'prepare_grad_' + variable.name, None)
-
-            if method is None:
+            methods = [getattr(self, 'prepare_grad_' + name_split, None) for name_split in variable.name.split('_')]
+            if any(methods):
+                method = [method_i for method_i in methods if method_i is not None][0]
+            else:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
             update = method(variable, wrt=wrt, **kwargs)
@@ -257,9 +258,10 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if variable is None or not variable.needs_grad:
                 continue
 
-            method = getattr(self, 'init_grad_' + variable.name, None)
-
-            if method is None:
+            methods = [getattr(self, 'init_grad_' + name_split, None) for name_split in variable.name.split('_')]
+            if any(methods):
+                method = [method_i for method_i in methods if method_i is not None][0]
+            else:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
             method(variable, wrt=wrt, **kwargs)
@@ -288,9 +290,10 @@ class ProblemTypeBase(ABC, Gridded, Operator):
                 grads.append(None)
                 continue
 
-            method = getattr(self, 'get_grad_' + variable.name, None)
-
-            if method is None:
+            methods = [getattr(self, 'get_grad_' + name_split, None) for name_split in variable.name.split('_')]
+            if any(methods):
+                method = [method_i for method_i in methods if method_i is not None][0]
+            else:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
             grad = method(variable, wrt=wrt, **kwargs)
