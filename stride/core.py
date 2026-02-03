@@ -342,6 +342,7 @@ class Variable:
         returns = []
         parallel_returns = []
         deallocs = []
+        self_uid = mosaic.runtime().uid
         for node in self.graph.toposort(self.prev_op):
             kwargs_ = kwargs.copy()
 
@@ -356,27 +357,36 @@ class Variable:
             # call adjoint method
             try:
                 method = getattr(node.op, node.method)
+                is_proxy = isinstance(node.op, TesseraProxy)
             except AttributeError:
                 method = getattr(node.op.obj, node.method)
+                is_proxy = isinstance(node.op.obj, TesseraProxy)
+
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
                 redux_grad = await runtime.exec('redux-%s' % node.op.uid, redux, output_grads)
                 ret = method((redux_grad,), **{**kwargs_, **{'eager': True, 'redux': True}})
 
             else:
-                ret = method(*output_grads, **kwargs_)
+                if is_proxy:
+                    ret = method(*output_grads, **{**kwargs_, **{'eager': True}})
+                else:
+                    ret = method(*output_grads, **kwargs_)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
                 ret = await ret
 
             if isinstance(ret, TaskProxy):
-                if len(deallocs):
-                    ret.add_done_callback(dealloc(deallocs))
-
-                if (not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy) and \
-                        (not hasattr(node.op, 'is_parameter') or not node.op.is_parameter):
-                    returns.append(ret)
+                if ret.runtime_id == self_uid:
+                    ret = await ret
                 else:
-                    parallel_returns.append(ret)
+                    if len(deallocs):
+                        ret.add_done_callback(dealloc(deallocs))
+
+                    if (not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy) and \
+                            (not hasattr(node.op, 'is_parameter') or not node.op.is_parameter):
+                        returns.append(ret)
+                    else:
+                        parallel_returns.append(ret)
 
                 input_grads = ret.outputs
             else:
