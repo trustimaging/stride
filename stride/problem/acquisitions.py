@@ -482,9 +482,11 @@ class Shot(ProblemBase):
 
         self.id = description.id
 
+        self._source_ids = []
         for source_id in description.source_ids:
             self._source_ids.append(source_id)
 
+        self._receiver_ids = []
         for receiver_id in description.receiver_ids:
             self._receiver_ids.append(receiver_id)
 
