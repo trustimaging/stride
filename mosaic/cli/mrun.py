@@ -43,6 +43,10 @@ from ..utils.logger import _stdout, _stderr
 # cluster options
 @click.option('--local/--cluster', '-l/-c', default=False, required=True, show_default=True,
               help='whether to run mosaic locally or in a cluster system')
+@click.option('--dynamic', is_flag=True, default=False, show_default=True,
+              help='run monitor in dynamic mode, waiting for nodes to phone home')
+@click.option('--phone-home', type=str, required=False, show_default=True,
+              help='path to monitor.key file for node to phone home to monitor')
 @click.option('--reuse-head/--free-head', '-rh/-fh', default=False, required=True, show_default=True,
               help='whether to create workers in the head node')
 # log level
@@ -62,6 +66,8 @@ def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)
+    dynamic = kwargs.get('dynamic', False)
+    phone_home = kwargs.get('phone_home', None)
     reuse_head = kwargs.get('reuse_head', False)
 
     if runtime_indices is not None:
@@ -76,9 +82,9 @@ def go(cmd=None, **kwargs):
     log_level = kwargs.get('log_level', 'perf')
     profile = kwargs.get('profile', False)
 
-    # If not in local mode, find the node list
+    # If not in local mode, find the node list (skip if dynamic mode)
     node_list = None
-    if not local and runtime_type in [None, 'monitor']:
+    if not local and not dynamic and runtime_type in [None, 'monitor']:
         # sun grid engine   - PE_HOSTFILE
         # slurm             - SLURM_JOB_NODELIST
         # pbs/torque        - PBS_NODEFILE
@@ -104,6 +110,14 @@ def go(cmd=None, **kwargs):
         if node_list is not None and num_nodes != len(node_list):
             node_list = node_list[:num_nodes]
 
+    # Determine mode
+    if dynamic:
+        mode = 'dynamic'
+    elif local:
+        mode = 'local'
+    else:
+        mode = 'cluster'
+
     runtime_config = {
         'runtime_indices': runtime_indices,
         'address': kwargs.get('address', None),
@@ -114,11 +128,12 @@ def go(cmd=None, **kwargs):
         'num_nodes': num_nodes,
         'num_workers': num_workers,
         'num_threads': num_threads,
-        'mode': 'local' if local is True else 'cluster',
+        'mode': mode,
         'reuse_head': reuse_head,
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,
+        'phone_home': phone_home,
     }
 
     # Initialise the runtime

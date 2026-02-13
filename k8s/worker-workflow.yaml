@@ -1,0 +1,64 @@
+# Argo Workflow to spawn Mosaic worker nodes
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: mosaic-workers-
+spec:
+  entrypoint: spawn-workers
+  arguments:
+    parameters:
+      - name: num-nodes
+        value: "2"
+      - name: workers-per-node
+        value: "2"
+
+  templates:
+    - name: spawn-workers
+      steps:
+        # Spawn all worker nodes in parallel
+        - - name: worker-node
+            template: worker-node
+            arguments:
+              parameters:
+                - name: node-index
+                  value: "{{item}}"
+                - name: workers-per-node
+                  value: "{{workflow.parameters.workers-per-node}}"
+            withSequence:
+              count: "{{workflow.parameters.num-nodes}}"
+
+    - name: worker-node
+      inputs:
+        parameters:
+          - name: node-index
+          - name: workers-per-node
+      container:
+        image: mosaic-worker:latest
+        imagePullPolicy: Never
+        args:
+          - /app/k8s_inversion.py
+          - --worker
+        env:
+          - name: NODE_INDEX
+            value: "{{inputs.parameters.node-index}}"
+          - name: WORKERS_PER_NODE
+            value: "{{inputs.parameters.workers-per-node}}"
+          - name: MONITOR_HOST
+            value: "mosaic-monitor"
+          - name: MONITOR_PORT
+            value: "3000"
+          - name: PUBSUB_PORT
+            value: "3001"
+          - name: MINIO_ENDPOINT
+            value: "minio:9000"
+          - name: MINIO_ACCESS_KEY
+            value: "minioadmin"
+          - name: MINIO_SECRET_KEY
+            value: "minioadmin"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"

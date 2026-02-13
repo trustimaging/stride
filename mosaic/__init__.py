@@ -30,6 +30,7 @@ def init(runtime_type='head', runtime_indices=(),
          num_workers=1, num_threads=None,
          mode='local', reuse_head=False, monitor_strategy='round-robin',
          log_level='perf', profile=False, node_list=None,
+         phone_home=None, timeout=None,
          asyncio_loop=None, dump_init=False, wait=False,
          **kwargs):
     """
@@ -61,11 +62,13 @@ def init(runtime_type='head', runtime_indices=(),
         Publishing port of the monitor to connect to.
     num_workers : int, optional
         Number of workers to instantiate in each node, defaults to 1.
+        In dynamic mode, this is the minimum number of workers to wait for.
     num_threads : int, optional
         Number of threads to assign to each worker, defaults to the number of
         available cores over ``num_workers``.
     mode : str, optional
-        Mode of the runtime, defaults to ``local``.
+        Mode of the runtime: ``local``, ``cluster``, or ``dynamic``.
+        In ``dynamic`` mode, the monitor waits for nodes to phone home.
     reuse_head : bool, optional
         Whether to set up workers in the head node, defaults to False.
     monitor_strategy : str, optional
@@ -76,6 +79,10 @@ def init(runtime_type='head', runtime_indices=(),
         Whether to start the profiler, defaults to False.
     node_list : list, optional
         List of available node addresses to connect to.
+    phone_home : str, optional
+        Path to monitor.key file for node to phone home to monitor.
+    timeout : float, optional
+        Timeout in seconds for waiting for workers to connect.
     asyncio_loop: object, optional
         Async loop to use in our mosaic event loop, defaults to new loop.
     dump_init : bool, optional
@@ -106,8 +113,12 @@ def init(runtime_type='head', runtime_indices=(),
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,
+        'phone_home': phone_home,
         'dump_init': dump_init,
     }
+
+    if timeout is not None:
+        runtime_config['timeout'] = timeout
 
     if address is not None and port is not None:
         runtime_config['address'] = address

@@ -6,6 +6,7 @@ import asyncio
 import datetime
 import subprocess as cmd_subprocess
 from collections import defaultdict
+from typing import Any, Dict, Optional
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
@@ -104,8 +105,8 @@ class Monitor(Runtime):
         """
         await super().init(**kwargs)
 
-        # Maybe dump file
-        if kwargs.get('dump_init', False):
+        # Write key file if requested or in dynamic mode (so nodes can phone home)
+        if kwargs.get('dump_init', False) or self.mode == 'dynamic':
             self.init_file({})
 
         # Start local cluster
@@ -113,6 +114,9 @@ class Monitor(Runtime):
 
         if self.mode in ['local', 'interactive']:
             await self.init_local(**kwargs)
+
+        elif self.mode == 'dynamic':
+            await self.init_dynamic(**kwargs)
 
         else:
             await self.init_cluster(**kwargs)
@@ -151,6 +155,99 @@ class Monitor(Runtime):
         self._comms.start_heartbeat(node_proxy.uid)
 
         self.logger.info('Listening at <NODE:0 | WORKER:0-%d>' % num_workers)
+
+    async def init_dynamic(self, **kwargs: Any) -> None:
+        """
+        Init in dynamic mode, waiting for nodes to phone home.
+
+        In this mode, the Monitor does not spawn nodes. Instead, it waits
+        for nodes to connect independently. Nodes can be added at runtime
+        by starting them with the --phone-home flag pointing to the monitor.key file.
+
+        Parameters
+        ----------
+        kwargs : Any
+            Keyword arguments including:
+            - num_workers: Minimum workers to wait for (default: 0)
+            - timeout: Timeout in seconds (default: 300)
+
+        """
+        num_workers: int = kwargs.get('num_workers', 0)
+
+        self.logger.info('Waiting for nodes to phone home (dynamic mode)')
+
+        # Wait for at least the requested number of workers if specified
+        if num_workers > 0:
+            timeout: float = kwargs.get('timeout', 300)
+            tic = time.time()
+            while self._get_total_workers() < num_workers:
+                if (time.time() - tic) > timeout:
+                    raise RuntimeError(
+                        'Timed out waiting for %d workers to connect (got %d)' %
+                        (num_workers, self._get_total_workers()))
+                await asyncio.sleep(0.1)
+
+            self.logger.info('Dynamic mesh ready with %d workers' % self._get_total_workers())
+
+    def _get_total_workers(self) -> int:
+        """
+        Get total number of workers across all nodes.
+
+        Returns
+        -------
+        int
+            Total worker count.
+
+        """
+        total: int = 0
+        for node in self._monitored_nodes.values():
+            if hasattr(node, 'sub_resources') and 'workers' in node.sub_resources:
+                total += len(node.sub_resources['workers'])
+        return total
+
+    async def register_node(
+        self,
+        sender_id: str,
+        node_uid: str,
+        num_workers: int
+    ) -> Dict[str, str]:
+        """
+        Register a node that has phoned home.
+
+        This method is called when a node connects in dynamic mode.
+        The node is added to the mesh and can immediately receive work.
+
+        Parameters
+        ----------
+        sender_id : str
+            The UID of the sender (should match node_uid).
+        node_uid : str
+            The UID of the node registering.
+        num_workers : int
+            Number of workers on this node.
+
+        Returns
+        -------
+        Dict[str, str]
+            Registration confirmation with status.
+
+        """
+        if node_uid in self._nodes:
+            self.logger.warning('Node %s already registered, skipping' % node_uid)
+            return {'status': 'already_registered'}
+
+        # Create a proxy for the new node
+        node_proxy = RuntimeProxy(uid=node_uid)
+        node_proxy.subprocess = None  # Node was not spawned by us
+
+        self._nodes[node_uid] = node_proxy
+
+        self.logger.info('Node %s registered with %d workers' % (node_uid, num_workers))
+
+        # Start heartbeat for this node
+        self._comms.start_heartbeat(node_uid)
+
+        return {'status': 'registered'}
 
     async def init_cluster(self, **kwargs):
         """
@@ -303,11 +400,18 @@ class Monitor(Runtime):
 
         self._loop.interval(self.append_description, interval=10)
 
-    def update_node(self, sender_id, update, sub_resources):
+    def update_node(self, sender_id: str, update: Dict[str, Any], sub_resources: Dict[str, Any]) -> None:
         if sender_id in self._disconnected_runtimes:
             return
-        if sender_id not in self._monitored_nodes:
+
+        is_new_node: bool = sender_id not in self._monitored_nodes
+        if is_new_node:
             self._monitored_nodes[sender_id] = MonitoredResource(sender_id)
+
+            # In dynamic mode, start heartbeat for newly connected nodes
+            if self.mode == 'dynamic':
+                self._comms.start_heartbeat(sender_id)
+                self.logger.info('Node %s connected (dynamic mode)' % sender_id)
 
         node = self._monitored_nodes[sender_id]
         node.update(update, **sub_resources)

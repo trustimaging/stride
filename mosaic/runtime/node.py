@@ -1,5 +1,9 @@
 
+import os
+import asyncio
 import psutil
+from typing import Any, Dict, Optional, TypedDict, Union
+from pathlib import Path
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
@@ -10,7 +14,77 @@ from ..utils.utils import memory_limit, cpu_count
 from ..profile import profiler, global_profiler
 
 
-__all__ = ['Node']
+__all__ = ['Node', 'read_monitor_key']
+
+
+class MonitorConfig(TypedDict):
+    """Type definition for monitor configuration."""
+    monitor_address: str
+    monitor_port: int
+    pubsub_port: int
+
+
+def read_monitor_key(key_file: Union[str, Path]) -> MonitorConfig:
+    """
+    Read monitor connection info from a key file or environment variables.
+
+    This function first checks if the key_file path exists. If not, it checks
+    for environment variables (MONITOR_HOST, MONITOR_PORT, PUBSUB_PORT).
+
+    Parameters
+    ----------
+    key_file : Union[str, Path]
+        Path to the monitor.key file, or a placeholder if using env vars.
+
+    Returns
+    -------
+    MonitorConfig
+        Dictionary with 'monitor_address', 'monitor_port', 'pubsub_port'.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the key file does not exist and env vars are not set.
+    ValueError
+        If the key file is malformed.
+
+    """
+    key_path = Path(key_file)
+
+    # First, try environment variables (useful for Kubernetes)
+    env_host = os.environ.get('MONITOR_HOST')
+    env_port = os.environ.get('MONITOR_PORT')
+    env_pubsub = os.environ.get('PUBSUB_PORT')
+
+    if env_host and env_port and env_pubsub:
+        return {
+            'monitor_address': env_host,
+            'monitor_port': int(env_port),
+            'pubsub_port': int(env_pubsub),
+        }
+
+    # Fall back to key file
+    if not key_path.exists():
+        raise FileNotFoundError(f'Monitor key file not found: {key_file}')
+
+    with open(key_path, 'r') as file:
+        lines = file.readlines()
+
+    config: Dict[str, str] = {}
+    for line in lines:
+        line = line.strip()
+        if '=' in line:
+            key, value = line.split('=', 1)
+            config[key] = value
+
+    if 'ADD' not in config or 'PRT' not in config or 'PUB' not in config:
+        raise ValueError(f'Malformed monitor key file: {key_file}')
+
+    return {
+        'monitor_address': config['ADD'],
+        'monitor_port': int(config['PRT']),
+        'pubsub_port': int(config['PUB']),
+    }
 
 
 class Node(Runtime):
@@ -50,11 +124,26 @@ class Node(Runtime):
         -------
 
         """
+        # Handle phone-home mode: read monitor address from key file
+        phone_home = kwargs.get('phone_home', None)
+        if phone_home is not None:
+            self._phone_home = True
+            monitor_config = read_monitor_key(phone_home)
+            kwargs['monitor_address'] = monitor_config['monitor_address']
+            kwargs['monitor_port'] = monitor_config['monitor_port']
+            kwargs['pubsub_port'] = monitor_config['pubsub_port']
+        else:
+            self._phone_home = False
+
         await super().init(**kwargs)
 
         # Start local cluster
         await self.init_warehouse(indices=self.indices[0], **kwargs)
         await self.init_workers(**kwargs)
+
+        # In phone-home mode, log successful connection
+        if self._phone_home:
+            self.logger.info('Successfully connected to monitor (phone-home mode)')
 
     async def init_workers(self, **kwargs):
         """
@@ -313,3 +402,4 @@ class Node(Runtime):
                                      method='update_node',
                                      update=history,
                                      sub_resources=sub_resources)
+

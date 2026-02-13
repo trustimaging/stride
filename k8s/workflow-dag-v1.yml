@@ -1,0 +1,172 @@
+apiVersion: argoproj.io/v1alpha1                                                                                                                                                                                                                                                                                                                 
+kind: Workflow                      
+metadata:                                                                                                                                                                                                                                                                                                                                        
+  generateName: seismic-inversion-  
+spec:
+  entrypoint: inversion-dag
+  arguments:
+    parameters:
+      - name: num-workers        # number of worker pods
+        value: "4"
+      - name: workers-per-node   # mosaic workers per pod
+        value: "2"
+      - name: num-iterations
+        value: "50"
+      - name: monitor-port
+        value: "3000"
+      - name: pubsub-port
+        value: "3001"
+      - name: image
+        value: registry.example.com/seismic-inversion:latest
+
+  templates:
+    # ─────────────────────────────────────────────────
+    # DAG: defines the dependency graph
+    # ─────────────────────────────────────────────────
+    - name: inversion-dag
+      dag:
+        tasks:
+          # Step 1: Create a K8s Service so workers can find the monitor
+          - name: create-service
+            template: monitor-service
+
+          # Step 2: Head+Monitor pod (the main workload)
+          - name: head
+            template: head
+            dependencies: [create-service]
+
+          # Step 3: Worker pods (daemons — stay alive until head completes)
+          - name: workers
+            template: worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "{{item}}"
+            withSequence:
+              count: "{{workflow.parameters.num-workers}}"
+
+    # ─────────────────────────────────────────────────
+    # K8s Service (so workers can reach monitor by DNS)
+    # ─────────────────────────────────────────────────
+    - name: monitor-service
+      resource:
+        action: apply
+        manifest: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: monitor-svc-{{workflow.name}}
+            namespace: {{workflow.namespace}}
+            ownerReferences:
+              - apiVersion: argoproj.io/v1alpha1
+                kind: Workflow
+                name: {{workflow.name}}
+                uid: {{workflow.uid}}
+          spec:
+            selector:
+              role: head
+              workflow: {{workflow.name}}
+            ports:
+              - name: rpc
+                port: {{workflow.parameters.monitor-port}}
+                targetPort: {{workflow.parameters.monitor-port}}
+              - name: pubsub
+                port: {{workflow.parameters.pubsub-port}}
+                targetPort: {{workflow.parameters.pubsub-port}}
+
+    # ─────────────────────────────────────────────────
+    # Head + Monitor pod
+    # ─────────────────────────────────────────────────
+    - name: head
+      metadata:
+        labels:
+          role: head
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        command: [python, run_inversion.py]
+        env:
+          - name: MODE
+            value: dynamic
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+          - name: NUM_WORKERS
+            value: "{{workflow.parameters.num-workers}}"
+          - name: WORKERS_PER_NODE
+            value: "{{workflow.parameters.workers-per-node}}"
+          - name: NUM_ITERATIONS
+            value: "{{workflow.parameters.num-iterations}}"
+        resources:
+          requests:
+            cpu: "2"
+            memory: 8Gi
+
+    # ─────────────────────────────────────────────────
+    # Worker pod (one per fan-out item)
+    # ─────────────────────────────────────────────────
+    - name: worker
+      daemon: true          # stays alive until workflow completes
+      inputs:
+        parameters:
+          - name: index
+      metadata:
+        labels:
+          role: worker
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        command:
+          - python
+          - -m
+          - mosaic.cli.mrun
+          - --node
+          - --phone-home
+          - env                    # triggers phone-home; env vars take priority
+          - -nw
+          - "{{workflow.parameters.workers-per-node}}"
+          - -i
+          - "{{inputs.parameters.index}}"
+          - --perf
+        env:
+          - name: MONITOR_HOST
+            value: "monitor-svc-{{workflow.name}}"
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+        resources:
+          requests:
+            cpu: "4"
+            memory: 16Gi
+      retryStrategy:
+        limit: 3
+        retryPolicy: OnError
+
+    # ─────────────────────────────────────────────────
+    # Accumulator pod
+    # ─────────────────────────────────────────────────
+    - name: accumulator
+      daemon: true
+      container:
+        image: "{{workflow.parameters.image}}"
+        command: [python, accumulator.py]
+        env:
+          - name: MINIO_ENDPOINT
+            value: minio.default.svc:9000
+          - name: MINIO_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: {name: minio-creds, key: access-key}
+          - name: MINIO_SECRET_KEY
+            valueFrom:
+              secretKeyRef: {name: minio-creds, key: secret-key}
+          - name: GRADIENT_BUCKET
+            value: gradients
+          - name: NUM_WORKERS
+            value: "{{workflow.parameters.num-workers}}"
+        resources:
+          requests:
+            cpu: "4"
+            memory: 16Gi        # needs enough RAM to hold 2 gradients at once

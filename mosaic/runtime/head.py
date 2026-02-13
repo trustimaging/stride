@@ -2,6 +2,7 @@
 import os
 import time
 import asyncio
+from typing import Any, Optional
 
 import mosaic
 from .runtime import Runtime, RuntimeProxy
@@ -65,13 +66,15 @@ class Head(Runtime):
         await super().init(**kwargs)
 
         # Wait for workers to be ready
-        tic = time.time()
-        num_workers = kwargs.pop('num_workers')
-        timeout = 180
-        while len(self.workers) < num_workers:
-            if timeout is not None and (time.time() - tic) > timeout:
-                raise RuntimeError('Timed out while waiting for %d workers to connect' % num_workers)
-            await asyncio.sleep(0.1)
+        # In dynamic mode, num_workers is the minimum to wait for (0 means don't wait)
+        num_workers = kwargs.pop('num_workers', 0)
+        if num_workers > 0:
+            tic = time.time()
+            timeout = kwargs.get('timeout', 180)
+            while len(self.workers) < num_workers:
+                if timeout is not None and (time.time() - tic) > timeout:
+                    raise RuntimeError('Timed out while waiting for %d workers to connect' % num_workers)
+                await asyncio.sleep(0.1)
 
     async def init_monitor(self, **kwargs):
         """
@@ -97,6 +100,39 @@ class Head(Runtime):
         monitor_proxy.subprocess = monitor_subprocess
 
         self._monitor = monitor_proxy
+
+    async def wait_for_workers(self, num_workers: int, timeout: Optional[float] = 180) -> int:
+        """
+        Wait for a specific number of workers to be available.
+
+        This is useful in dynamic mode where workers connect at runtime.
+
+        Parameters
+        ----------
+        num_workers : int
+            Minimum number of workers to wait for.
+        timeout : float, optional
+            Timeout in seconds, defaults to 180.
+
+        Returns
+        -------
+        int
+            Actual number of workers available.
+
+        Raises
+        ------
+        RuntimeError
+            If timeout is reached before enough workers connect.
+
+        """
+        tic = time.time()
+        while len(self.workers) < num_workers:
+            if timeout is not None and (time.time() - tic) > timeout:
+                raise RuntimeError('Timed out while waiting for %d workers to connect (got %d)' %
+                                   (num_workers, len(self.workers)))
+            await asyncio.sleep(0.1)
+
+        return len(self.workers)
 
     async def stop(self, sender_id=None):
         """
