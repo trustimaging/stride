@@ -48,6 +48,7 @@ from .problem import *
 from .physics import *
 from .optimisation import *
 from .utils.operators import *
+from .utils.s3 import S3Config, get_s3_client, ensure_bucket, upload_model
 
 
 async def forward(problem, pde, *args, **kwargs):
@@ -85,6 +86,7 @@ async def forward(problem, pde, *args, **kwargs):
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
     safe = kwargs.pop('safe', True)
+    s3_config = kwargs.pop('s3_config', None)
 
     if dump is True:
         try:
@@ -106,6 +108,15 @@ async def forward(problem, pde, *args, **kwargs):
 
     published_args = [runtime.put(each, publish=True) for each in args]
     published_args = await asyncio.gather(*published_args)
+
+    # Persist model to S3 if configured
+    if s3_config is not None:
+        try:
+            s3_client = get_s3_client(s3_config)
+            ensure_bucket(s3_client, s3_config.bucket)
+            upload_model(s3_client, s3_config, 'forward', args)
+        except Exception as e:
+            logger.warning('S3 model upload failed: %s' % str(e))
 
     platform = kwargs.get('platform', 'cpu')
     using_gpu = 'nvidia' in platform or 'gpu' in platform
@@ -222,6 +233,17 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     lazy_loading = kwargs.pop('lazy_loading', False)
     dump = kwargs.pop('dump', True)
     safe = kwargs.pop('safe', True)
+    s3_config = kwargs.pop('s3_config', None)
+
+    # Initialise S3 client if configured
+    s3_client = None
+    if s3_config is not None:
+        try:
+            s3_client = get_s3_client(s3_config)
+            ensure_bucket(s3_client, s3_config.bucket)
+        except Exception as e:
+            logger.warning('S3 init failed, continuing without S3: %s' % str(e))
+            s3_client = None
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
@@ -272,6 +294,13 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
         published_args = [runtime.put(each, publish=True) for each in args]
         published_args = await asyncio.gather(*published_args)
+
+        # Persist model to S3 at start of iteration
+        if s3_client is not None:
+            try:
+                upload_model(s3_client, s3_config, iteration.abs_id, args)
+            except Exception as e:
+                logger.warning('S3 model upload failed at iteration %d: %s' % (iteration.abs_id, str(e)))
 
         logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
@@ -469,6 +498,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                              f_min=f_min, f_max=f_max,
                              filter_relaxation=min(filter_wavelets_relaxation, filter_traces_relaxation),
                              step_loop=step_loop,
+                             s3_config=s3_config,
                              **kwargs)
 
         if dump:

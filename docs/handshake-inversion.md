@@ -153,24 +153,29 @@ if kwargs.get('dump_init', False) or self.mode == 'dynamic':
 ```python
 def read_monitor_key(key_file):
     """
-    Read monitor connection info from a key file.
+    Read monitor connection info from a key file or environment variables.
+
+    First checks for MONITOR_HOST, MONITOR_PORT, PUBSUB_PORT env vars
+    (useful for Kubernetes where the monitor address is injected via
+    env vars rather than a shared file). Falls back to reading the
+    key file if env vars are not set.
 
     Returns dict with 'monitor_address', 'monitor_port', 'pubsub_port'.
     """
-    with open(key_file, 'r') as file:
-        lines = file.readlines()
+    # First, try environment variables (useful for Kubernetes)
+    env_host = os.environ.get('MONITOR_HOST')
+    env_port = os.environ.get('MONITOR_PORT')
+    env_pubsub = os.environ.get('PUBSUB_PORT')
 
-    config = {}
-    for line in lines:
-        if '=' in line:
-            key, value = line.strip().split('=', 1)
-            config[key] = value
+    if env_host and env_port and env_pubsub:
+        return {
+            'monitor_address': env_host,
+            'monitor_port': int(env_port),
+            'pubsub_port': int(env_pubsub),
+        }
 
-    return {
-        'monitor_address': config['ADD'],
-        'monitor_port': int(config['PRT']),
-        'pubsub_port': int(config['PUB']),
-    }
+    # Fall back to key file
+    # ...
 ```
 
 #### Modified `init()` to support phone-home
@@ -503,6 +508,42 @@ python k8s_inversion.py --monitor # Uses env vars
    ```bash
    kubectl run test --rm -it --image=busybox -- nc -zv mosaic-monitor 3000
    ```
+
+### Address resolution in Kubernetes
+
+All mosaic runtimes must advertise **routable IP addresses**, not
+hostnames. In K8s, pod hostnames (e.g., `stride-forward-xxx-head-123`)
+are not DNS-resolvable from other pods. Use `status.podIP`:
+
+- **Workers**: pass `--address $POD_IP` to `mrun`.
+- **Head**: pass `address=os.environ['POD_IP']` to `mosaic.run()`.
+
+Without this, the handshake fails with:
+```
+ValueError: Address and port combination <hostname>:<port> is not valid
+```
+
+The `--local` flag must **not** be used in K8s — it forces all
+connections to `127.0.0.1` (see `comms.py:Connection._local`).
+
+### Warehouse address bug (inverse hangs silently)
+
+Even after passing `--address $POD_IP` to the head and worker runtimes,
+the **warehouse subprocesses** (spawned internally by mosaic) can still
+advertise non-routable addresses. The monitor listens on `0.0.0.0`, and
+the warehouse subprocess inherits this. The original `comms.py` address
+auto-detection accepted `0.0.0.0` as a valid address (it passes
+`inet_pton`), so the warehouse would advertise `0.0.0.0:<port>` to
+other runtimes via the network dict.
+
+This only affects inverse runs: `ScalarField.parameter()` creates remote
+tesserae (proxy objects) that use `push(publish=True)`, which triggers
+cross-warehouse communication. Forward runs use plain `ScalarField()`
+objects that stay local to each warehouse.
+
+The fix in `mosaic/comms/comms.py` treats `0.0.0.0` as "not yet set"
+and auto-detects a routable IP via a UDP probe. See
+`docs/warehouse-address-bug.md` for the full investigation.
 
 ### Head times out waiting for workers
 

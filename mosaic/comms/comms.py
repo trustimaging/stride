@@ -392,33 +392,29 @@ class InboundConnection(Connection):
         If no address is set, it will try to discover it.
 
         """
-        if self._address is None:
-            # Try using a hostname first
-            self._address = get_hostname()
+        if self._address is None or self._address == '0.0.0.0':
+            # 0.0.0.0 is valid for binding but not routable — auto-detect
+            self._address = None
 
+            # Try to find a routable IP via UDP probe first (works in K8s
+            # where hostname may not be resolvable from other pods)
             try:
-                validate_address(self._address)
-            except ValueError:
-                # Try to find an IP address otherwise
-                address, port = '8.8.8.8', '53'
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 try:
-                    # This command will raise an exception if there is no internet
-                    # connection.
-                    s.connect((address, int(port)))
+                    s.connect(('8.8.8.8', 53))
                     self._address = s.getsockname()[0]
-                except OSError as e:
-                    self._address = '127.0.0.1'
-                    # [Errno 101] Network is unreachable
-                    if e.errno == errno.ENETUNREACH:
-                        try:
-                            # try get node ip address from host name
-                            host_name = get_hostname()
-                            self._address = socket.gethostbyname(host_name)
-                        except Exception:
-                            pass
                 finally:
                     s.close()
+            except OSError:
+                pass
+
+            # Fall back to hostname
+            if self._address is None:
+                self._address = get_hostname()
+                try:
+                    validate_address(self._address)
+                except ValueError:
+                    self._address = '127.0.0.1'
 
         return self._address
 
@@ -860,33 +856,29 @@ class Publication(Connection):
         If no address is set, it will try to discover it.
 
         """
-        if self._address is None:
-            # Try using a hostname first
-            self._address = get_hostname()
+        if self._address is None or self._address == '0.0.0.0':
+            # 0.0.0.0 is valid for binding but not routable — auto-detect
+            self._address = None
 
+            # Try to find a routable IP via UDP probe first (works in K8s
+            # where hostname may not be resolvable from other pods)
             try:
-                validate_address(self._address)
-            except ValueError:
-                # Try to find an IP address otherwise
-                address, port = '8.8.8.8', '53'
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 try:
-                    # This command will raise an exception if there is no internet
-                    # connection.
-                    s.connect((address, int(port)))
+                    s.connect(('8.8.8.8', 53))
                     self._address = s.getsockname()[0]
-                except OSError as e:
-                    self._address = '127.0.0.1'
-                    # [Errno 101] Network is unreachable
-                    if e.errno == errno.ENETUNREACH:
-                        try:
-                            # try get node ip address from host name
-                            host_name = get_hostname()
-                            self._address = socket.gethostbyname(host_name)
-                        except Exception:
-                            pass
                 finally:
                     s.close()
+            except OSError:
+                pass
+
+            # Fall back to hostname
+            if self._address is None:
+                self._address = get_hostname()
+                try:
+                    validate_address(self._address)
+                except ValueError:
+                    self._address = '127.0.0.1'
 
         return self._address
 

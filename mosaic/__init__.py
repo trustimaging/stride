@@ -120,8 +120,9 @@ def init(runtime_type='head', runtime_indices=(),
     if timeout is not None:
         runtime_config['timeout'] = timeout
 
-    if address is not None and port is not None:
+    if address is not None:
         runtime_config['address'] = address
+    if port is not None:
         runtime_config['port'] = port
 
     if parent_id is not None and parent_address is not None and parent_port is not None:
