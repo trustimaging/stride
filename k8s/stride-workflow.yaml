@@ -106,10 +106,18 @@ spec:
             value: "{{workflow.parameters.run-mode}}"
           - name: EXP_NAME
             value: "{{workflow.parameters.exp-name}}"
+        volumeMounts:
+          - name: exps
+            mountPath: /app/stride/exps
         resources:
           requests:
             cpu: "1"
             memory: 2Gi
+      volumes:
+        - name: exps
+          hostPath:
+            path: /data/stride-exps
+            type: DirectoryOrCreate
 
     # ── Worker pod (daemon — stays alive until head exits) ─
     - name: worker
