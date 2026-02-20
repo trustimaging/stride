@@ -30,7 +30,7 @@ def init(runtime_type='head', runtime_indices=(),
          num_workers=1, num_threads=None,
          mode='local', reuse_head=False, monitor_strategy='round-robin',
          log_level='perf', profile=False, node_list=None,
-         phone_home=None, timeout=None,
+         phone_home=False, timeout=None,
          asyncio_loop=None, dump_init=False, wait=False,
          **kwargs):
     """
@@ -79,8 +79,9 @@ def init(runtime_type='head', runtime_indices=(),
         Whether to start the profiler, defaults to False.
     node_list : list, optional
         List of available node addresses to connect to.
-    phone_home : str, optional
-        Path to monitor.key file for node to phone home to monitor.
+    phone_home : bool, optional
+        If True, read monitor address from MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT
+        environment variables and connect to the monitor (phone-home mode).
     timeout : float, optional
         Timeout in seconds for waiting for workers to connect.
     asyncio_loop: object, optional

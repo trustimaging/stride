@@ -18,6 +18,12 @@ Set EXP_NAME env var to choose the experiment directory:
 import os
 import sys
 
+# After restructuring, scripts live in k8s/scripts/ rather than a top-level
+# scripts/ dir. When this file is copied to /app/stride/k8s_runner.py and run
+# from WORKDIR /app/stride/, add /app/stride/k8s/ to sys.path so that
+# `scripts.simple_forward` etc. still resolve correctly.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'k8s'))
+
 TOTAL_WORKERS = (int(os.environ.get('NUM_WORKERS', '2'))
                  * int(os.environ.get('WORKERS_PER_NODE', '1')))
 TIMEOUT = int(os.environ.get('WORKER_TIMEOUT', '300'))

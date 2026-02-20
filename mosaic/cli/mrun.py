@@ -45,8 +45,8 @@ from ..utils.logger import _stdout, _stderr
               help='whether to run mosaic locally or in a cluster system')
 @click.option('--dynamic', is_flag=True, default=False, show_default=True,
               help='run monitor in dynamic mode, waiting for nodes to phone home')
-@click.option('--phone-home', type=str, required=False, show_default=True,
-              help='path to monitor.key file for node to phone home to monitor')
+@click.option('--phone-home', is_flag=True, default=False, show_default=True,
+              help='connect to monitor address from MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT env vars')
 @click.option('--reuse-head/--free-head', '-rh/-fh', default=False, required=True, show_default=True,
               help='whether to create workers in the head node')
 # log level
@@ -67,7 +67,7 @@ def go(cmd=None, **kwargs):
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)
     dynamic = kwargs.get('dynamic', False)
-    phone_home = kwargs.get('phone_home', None)
+    phone_home = kwargs.get('phone_home', False)
     reuse_head = kwargs.get('reuse_head', False)
 
     if runtime_indices is not None:

@@ -145,7 +145,7 @@ spec:
 
             echo "Starting node: POD_IP=$POD_IP MONITOR_HOST=$MONITOR_HOST MONITOR_PORT=$MONITOR_PORT PUBSUB_PORT=$PUBSUB_PORT"
 
-            python3 -u -m mosaic.cli.mrun --node --phone-home env \
+            python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
               -nw {{workflow.parameters.workers-per-node}} \
               -i {{inputs.parameters.index}} 2>&1

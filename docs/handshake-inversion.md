@@ -84,8 +84,8 @@ Benefits:
 │                          │                                   │
 │  NODES (started independently, discover monitor)             │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │  mosaic.init('node', phone_home='/path/to/monitor.key') │ │
-│  │  - Reads monitor address from key file                  │ │
+│  │  mosaic.init('node', phone_home=True)                  │ │
+│  │  - Reads monitor address from MONITOR_HOST/PORT env vars│ │
 │  │  - Initiates handshake to monitor                       │ │
 │  │  - Spawns workers                                       │ │
 │  │  - Calls update_node() to complete registration         │ │
@@ -149,46 +149,24 @@ if kwargs.get('dump_init', False) or self.mode == 'dynamic':
 
 ### 2. Node Changes (`mosaic/runtime/node.py`)
 
-#### Added `read_monitor_key()` function
-```python
-def read_monitor_key(key_file):
-    """
-    Read monitor connection info from a key file or environment variables.
-
-    First checks for MONITOR_HOST, MONITOR_PORT, PUBSUB_PORT env vars
-    (useful for Kubernetes where the monitor address is injected via
-    env vars rather than a shared file). Falls back to reading the
-    key file if env vars are not set.
-
-    Returns dict with 'monitor_address', 'monitor_port', 'pubsub_port'.
-    """
-    # First, try environment variables (useful for Kubernetes)
-    env_host = os.environ.get('MONITOR_HOST')
-    env_port = os.environ.get('MONITOR_PORT')
-    env_pubsub = os.environ.get('PUBSUB_PORT')
-
-    if env_host and env_port and env_pubsub:
-        return {
-            'monitor_address': env_host,
-            'monitor_port': int(env_port),
-            'pubsub_port': int(env_pubsub),
-        }
-
-    # Fall back to key file
-    # ...
-```
-
 #### Modified `init()` to support phone-home
 ```python
 async def init(self, **kwargs):
-    # Handle phone-home mode: read monitor address from key file
-    phone_home = kwargs.get('phone_home', None)
-    if phone_home is not None:
+    # Handle phone-home mode: read monitor address from environment variables
+    phone_home = kwargs.get('phone_home', False)
+    if phone_home:
         self._phone_home = True
-        monitor_config = read_monitor_key(phone_home)
-        kwargs['monitor_address'] = monitor_config['monitor_address']
-        kwargs['monitor_port'] = monitor_config['monitor_port']
-        kwargs['pubsub_port'] = monitor_config['pubsub_port']
+        monitor_host = os.environ.get('MONITOR_HOST')
+        monitor_port = os.environ.get('MONITOR_PORT')
+        pubsub_port  = os.environ.get('PUBSUB_PORT')
+        if not (monitor_host and monitor_port and pubsub_port):
+            raise RuntimeError(
+                'phone_home=True but MONITOR_HOST, MONITOR_PORT, '
+                'and PUBSUB_PORT environment variables are not set'
+            )
+        kwargs['monitor_address'] = monitor_host
+        kwargs['monitor_port']    = int(monitor_port)
+        kwargs['pubsub_port']     = int(pubsub_port)
 
     await super().init(**kwargs)
     # ... rest of init
@@ -217,26 +195,91 @@ async def wait_for_workers(self, num_workers, timeout=180):
 ```python
 @click.option('--dynamic', is_flag=True, default=False,
               help='run monitor in dynamic mode, waiting for nodes to phone home')
-@click.option('--phone-home', type=str, required=False,
-              help='path to monitor.key file for node to phone home to monitor')
+@click.option('--phone-home', is_flag=True, default=False,
+              help='connect to monitor via MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT env vars')
 ```
 
 ### 5. API Changes (`mosaic/__init__.py`)
 
 #### Updated `init()` signature
 ```python
-def init(runtime_type='head', ..., phone_home=None, timeout=None, ...):
+def init(runtime_type='head', ..., phone_home=False, timeout=None, ...):
     """
     Parameters
     ----------
     mode : str
         Mode: 'local', 'cluster', or 'dynamic'
-    phone_home : str, optional
-        Path to monitor.key file for node to phone home
+    phone_home : bool, optional
+        If True, read monitor address from MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT env vars
     timeout : float, optional
         Timeout for waiting for workers
     """
 ```
+
+### 6. Warehouse Address Fix (`mosaic/comms/comms.py`)
+
+#### Problem
+
+Even after passing `--address $POD_IP` to the head and worker runtimes,
+the warehouse subprocesses spawned internally by mosaic still advertised
+`0.0.0.0` as their routable address. The monitor starts with
+`--address 0.0.0.0` (correct for binding), and its warehouse subprocess
+inherits this value. The original address auto-detection was guarded by
+`if self._address is None`, so `0.0.0.0` was accepted as-is and
+broadcast to other runtimes in the network dict during the handshake.
+
+This broke inverse runs on K8s: `ScalarField.parameter()` creates proxy
+objects that trigger cross-warehouse `push_remote(publish=True)` calls,
+which require the monitor's warehouse to be reachable from node warehouses.
+Node warehouses connected to `0.0.0.0:port` on their own pod (interpreting
+`0.0.0.0` as localhost), causing the optimisation loop to hang silently.
+Forward runs were unaffected because `ScalarField()` uses simple
+store-and-retrieve via the monitor — no cross-warehouse callbacks needed.
+
+#### Fix
+
+Modified both `InboundConnection.address` and `Publication.address` in
+`mosaic/comms/comms.py` to treat `0.0.0.0` the same as `None`, triggering
+auto-detection. The probe order was also changed: UDP probe first (returns
+the pod's actual routable IP without sending any packets), then hostname as
+a fallback. The original code tried hostname first, which returned the pod
+hostname — locally resolvable but not DNS-resolvable from other pods.
+
+```python
+@property
+def address(self):
+    if self._address is None or self._address == '0.0.0.0':
+        # 0.0.0.0 is valid for binding but not routable — auto-detect
+        self._address = None
+
+        # UDP probe: query the routing table to get the pod's network IP.
+        # No packets are sent; s.getsockname() returns the local address
+        # the OS would use to reach 8.8.8.8.
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 53))
+                self._address = s.getsockname()[0]
+            finally:
+                s.close()
+        except OSError:
+            pass
+
+        # Hostname fallback (only if UDP probe failed)
+        if self._address is None:
+            self._address = get_hostname()
+            try:
+                validate_address(self._address)
+            except ValueError:
+                self._address = '127.0.0.1'
+
+    return self._address
+```
+
+The same logic is applied to both `InboundConnection` (ZMQ ROUTER socket
+for receiving RPC messages) and `Publication` (ZMQ PUB socket for pubsub).
+
+See `docs/warehouse-address-bug.md` for the full debugging investigation.
 
 ---
 
@@ -245,14 +288,16 @@ def init(runtime_type='head', ..., phone_home=None, timeout=None, ...):
 ### Option 1: CLI (Multiple Terminals)
 
 ```bash
-# Terminal 1: Start monitor in dynamic mode
-mrun --monitor --dynamic
+# Terminal 1: Start monitor in dynamic mode (writes monitor.key)
+mrun --dynamic
 
 # Terminal 2: Start a node that phones home
-mrun --node --phone-home ./mosaic-workspace/monitor.key -nw 4 -i 0
+MONITOR_HOST=<address> MONITOR_PORT=3000 PUBSUB_PORT=3001 \
+  mrun --node --phone-home -nw 4 -i 0
 
 # Terminal 3: Add another node (dynamic scaling!)
-mrun --node --phone-home ./mosaic-workspace/monitor.key -nw 4 -i 1
+MONITOR_HOST=<address> MONITOR_PORT=3000 PUBSUB_PORT=3001 \
+  mrun --node --phone-home -nw 4 -i 1
 
 # Terminal 4: Run your script
 python my_inversion.py
@@ -278,7 +323,7 @@ mosaic.run(main, mode='dynamic', num_workers=4)
 
 ### Option 3: Programmatic Process Spawning
 
-See `demo_dynamic_inversion.py` for an example that spawns all processes from a single script.
+See `k8s/scripts/demo_phone_home.py` for an example that spawns all processes from a single script.
 
 ---
 
@@ -286,61 +331,96 @@ See `demo_dynamic_inversion.py` for an example that spawns all processes from a 
 
 ### Architecture on Kubernetes
 
+The entire distributed run is orchestrated by a single Argo DAG workflow.
+The monitor is **embedded in the head pod** (not a separate deployment):
+`mrun --dynamic` starts the monitor inline, then runs `k8s_runner.py` as
+the user script. A K8s Service is created first so workers can discover
+the head pod by a stable DNS name.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Kubernetes Cluster                         │
+│                  Kubernetes Cluster (argo namespace)            │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐ │
-│  │  MinIO (S3-compatible storage)                            │ │
-│  │  - Stores gradients from workers                          │ │
-│  │  - Head aggregates gradients                              │ │
-│  └───────────────────────────────────────────────────────────┘ │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐ │
-│  │  Monitor Pod + Service                                    │ │
-│  │  - ClusterIP service: mosaic-monitor:3000                 │ │
-│  │  - Workers discover via K8s DNS                           │ │
+│  │  K8s Service: monitor-svc-{workflow-name}                 │ │
+│  │  Selector: role=head  →  routes :3000/:3001 to Head pod   │ │
 │  └───────────────────────────────────────────────────────────┘ │
 │                          ▲                                      │
-│                          │ phone-home (TCP)                     │
+│                          │ phone-home (TCP :3000)               │
 │                          │                                      │
-│  ┌───────────────────────────────────────────────────────────┐ │
-│  │  Worker Pods (spawned by Argo Workflow)                   │ │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐         │ │
-│  │  │ Node:0  │ │ Node:1  │ │ Node:2  │ │ Node:3  │  ...    │ │
-│  │  │ 2 wkrs  │ │ 2 wkrs  │ │ 2 wkrs  │ │ 2 wkrs  │         │ │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘         │ │
-│  │                                                           │ │
-│  │  Each worker:                                             │ │
-│  │  1. Phones home to mosaic-monitor:3000                    │ │
-│  │  2. Receives work (shot IDs)                              │ │
-│  │  3. Computes gradient                                     │ │
-│  │  4. Stores to MinIO                                       │ │
-│  └───────────────────────────────────────────────────────────┘ │
+│  ┌─────────────┐         │    ┌─────────────┐                   │
+│  │  Worker Pod │─────────┤    │  Worker Pod │  ...             │ │
+│  │  Node:0     │         │    │  Node:1     │                   │
+│  │  mrun --node│         └───►│  mrun --node│                   │
+│  │  --phone-   │              │  --phone-   │                   │
+│  │  home env   │              │  home env   │                   │
+│  └─────────────┘              └─────────────┘                   │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐ │
-│  │  Head Job                                                 │ │
-│  │  - Connects to Monitor                                    │ │
-│  │  - Runs OptimisationLoop                                  │ │
-│  │  - Distributes shots to workers                           │ │
-│  │  - Aggregates gradients from MinIO                        │ │
-│  │  - Updates model                                          │ │
+│  │  Head Pod  (label: role=head)                             │ │
+│  │  mrun --dynamic  ← embeds Monitor, writes no key file     │ │
+│  │  k8s_runner.py   ← waits for workers, then runs script   │ │
 │  └───────────────────────────────────────────────────────────┘ │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Files
+The Argo DAG runs steps in order:
+1. `create-service` — creates the K8s Service
+2. `head` + `workers` (parallel, both depend on service)
+Workers resolve `monitor-svc-{workflow-name}` via K8s DNS to get the head
+pod IP and connect. When the head pod exits the workers are terminated
+automatically (Argo daemon pods).
 
-| File | Purpose |
-|------|---------|
-| `k8s/Dockerfile` | Container image with Mosaic + dependencies |
-| `k8s/minio.yaml` | MinIO deployment for gradient storage |
-| `k8s/monitor.yaml` | Monitor deployment + service |
-| `k8s/worker-workflow.yaml` | Argo workflow to spawn worker pods |
-| `k8s/head-job.yaml` | Head job that runs the optimisation |
-| `k8s/run.sh` | Automation script |
-| `k8s_inversion.py` | Main script (runs as monitor/worker/head) |
+### k8s Directory Overview
+
+```
+k8s/
+├── docker/
+│   └── Dockerfile.stride          # Multi-stage image: conda env + stride install
+├── scripts/
+│   ├── k8s_runner.py              # Head pod entry point: waits for workers, dispatches script
+│   ├── simple_forward.py          # 2D acoustic forward simulation
+│   ├── simple_inverse.py          # Full-waveform inversion (self-contained, no S3)
+│   ├── simple_inverse_s3.py       # FWI with MinIO gradient/model persistence
+│   └── demo_phone_home.py         # Local multi-process phone-home demo
+├── workflows/
+│   └── stride-workflow.yaml       # Argo DAG: service → head + workers
+└── run.sh                         # Automation: setup / build / start / logs / status / stop
+```
+
+**`k8s/docker/Dockerfile.stride`** — Three-stage build (`anaconda → builder → user`). Copies
+`environment.yml` first so the expensive conda-environment layer is cached unless dependencies
+change. Installs `minio` pip package for S3 support. Copies `k8s/scripts/k8s_runner.py` to
+the working directory root (`/app/stride/`) so the Argo workflow can launch it with
+`python3 k8s_runner.py`.
+
+**`k8s/scripts/k8s_runner.py`** — Entry point for the head pod. Reads `NUM_WORKERS`,
+`WORKERS_PER_NODE`, `RUN_MODE`, and `EXP_NAME` from environment variables. Calls
+`runtime.wait_for_workers()` before importing and running the selected script module.
+Passes `POD_IP` to `mosaic.run()` so the head's runtime advertises the correct pod IP.
+
+**`k8s/scripts/simple_forward.py`** — Standalone 2D acoustic forward run: 100×100 grid,
+layered velocity model (1500/1600 m/s), 8 transducers, 500 kHz tone burst. Validates
+worker connectivity and PDE compilation.
+
+**`k8s/scripts/simple_inverse.py`** — Two-phase FWI: (1) forward pass to generate observed
+data, (2) inversion from a homogeneous initial model using L2 loss and gradient descent.
+2 blocks × 2 iterations. Self-contained — no S3 required.
+
+**`k8s/scripts/simple_inverse_s3.py`** — Same as `simple_inverse.py` but stages shot data
+and saves models/gradients to MinIO at each iteration. Reads S3 credentials from
+`MINIO_*` environment variables.
+
+**`k8s/scripts/demo_phone_home.py`** — Spawns a full monitor + nodes + head locally using
+`subprocess`, demonstrating the phone-home flow without Kubernetes.
+
+**`k8s/workflows/stride-workflow.yaml`** — Argo DAG with three templates: `monitor-service`
+(creates a K8s Service that selects the head pod), `head` (runs `mrun --dynamic` with
+`k8s_runner.py`), and `worker` (daemon pods that phone home via env vars). Parameterised
+for `run-mode`, `num-workers`, `workers-per-node`, `image`.
+
+**`k8s/run.sh`** — Helper script wrapping common operations. See Quick Start below.
 
 ### Quick Start
 
@@ -370,25 +450,21 @@ NUM_NODES=4 WORKERS_PER_NODE=4 ./k8s/run.sh start
 ### Workflow Details
 
 1. **Setup Phase** (`./k8s/run.sh setup`)
-   - Installs Argo Workflows in the cluster
-   - Builds `mosaic-worker:latest` Docker image
-   - Deploys MinIO for gradient storage
-   - Deploys Monitor as a Kubernetes Service
+   - Installs Argo Workflows v3.5.0 in the `argo` namespace
+   - Builds `stride-k8s:latest` Docker image inside minikube's Docker daemon
+   - Creates the `stride-workflow` service account with pod/service RBAC
 
 2. **Execution Phase** (`./k8s/run.sh start`)
-   - Argo spawns N worker pods in parallel
-   - Each worker phones home to `mosaic-monitor:3000`
-   - Head job starts and runs OptimisationLoop
-   - For each iteration:
-     - Head distributes shot IDs to workers
-     - Workers compute gradients → store to MinIO
-     - Head aggregates gradients from MinIO
-     - Head updates model
+   - Submits `k8s/workflows/stride-workflow.yaml` to the `argo` namespace
+   - Argo DAG runs:
+     1. Creates `monitor-svc-{workflow-name}` K8s Service (routes → head pod)
+     2. Launches head pod: `mrun --dynamic` embeds monitor, then `k8s_runner.py` waits for workers and runs the configured script
+     3. Launches N worker daemon pods in parallel: each resolves the service DNS, connects via phone-home, and waits for shots
+   - Worker daemons are automatically terminated when the head pod exits
 
 3. **Dynamic Scaling**
-   - Add more workers anytime by submitting another Argo workflow
-   - New workers phone home and join the mesh
-   - Next iteration uses the new workers
+   - Submit additional worker-only workflows targeting the same monitor service to add workers mid-run
+   - New workers phone home and join the mesh; next iteration uses them
 
 ---
 
@@ -399,13 +475,13 @@ NUM_NODES=4 WORKERS_PER_NODE=4 ./k8s/run.sh start
 Run the demo script that spawns everything locally:
 
 ```bash
-python demo_dynamic_inversion.py
+python k8s/scripts/demo_phone_home.py
 ```
 
 This script:
 1. Starts Monitor in dynamic mode (subprocess)
 2. Spawns Node processes that phone home
-3. Runs OptimisationLoop with dummy work
+3. Runs a dummy computation to verify the mesh
 
 ### With Minikube
 
@@ -419,40 +495,20 @@ minikube start --cpus=4 --memory=8192
 ./k8s/run.sh logs
 ```
 
-Expected output:
+Expected output (tail of head pod logs for `run-mode=inverse`):
 ```
-============================================================
-HEAD: Starting Optimisation Loop
-============================================================
-
-Workers available: 4
-  - worker:0:0
-  - worker:0:1
-  - worker:1:0
-  - worker:1:1
-
-Configuration:
-  Blocks: 2
-  Iterations/block: 3
-  Shots: 16
-  Workers: 4
-
-============================================================
-BLOCK 0
-============================================================
-
---- Iteration 0 (abs: 0) ---
-  Computing gradients on workers...
-    Worker 0: 4 shots, norm=142.35
-    Worker 1: 4 shots, norm=138.92
-    Worker 2: 4 shots, norm=145.21
-    Worker 3: 4 shots, norm=140.88
-  Aggregating gradients from MinIO...
-    Total gradient norm: 567.36
-  Model range: [1443.2, 1556.8]
-
---- Iteration 1 (abs: 1) ---
-...
+Updating variable vp,
+  grad before processing in range [-4.2e-01, 3.6e-01]
+  grad after processing in range [-3.3e-06, 2.9e-06]
+  variable range before update [1.46e+03, 1.56e+03]
+  taking final update step of 5.0e+00
+  variable range after update [1.45e+03, 1.58e+03]
+Done iteration 2 (out of 2), block 2 (out of 2) - Total loss 2.05e-02
+====================================================================
+Inversion complete.
+Final model range: [1453.6, 1583.4] m/s
+=== inverse Complete ===
+Process ended with code: 0
 ```
 
 ---
@@ -476,16 +532,12 @@ BLOCK 0
 ### CLI Options
 
 ```bash
-# Monitor
-mrun --monitor --dynamic
+# Start monitor in dynamic mode (waits for nodes to phone home)
+mrun --dynamic --address 0.0.0.0 --port 3000 -nw 0 python3 k8s_runner.py
 
-# Node (phone-home)
-mrun --node --phone-home /path/to/monitor.key -nw 4 -i 0
-
-# With explicit addresses (for K8s)
-python k8s_inversion.py --worker  # Uses env vars
-python k8s_inversion.py --head    # Uses env vars
-python k8s_inversion.py --monitor # Uses env vars
+# Start a node that phones home (reads MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT from env)
+MONITOR_HOST=<address> MONITOR_PORT=3000 PUBSUB_PORT=3001 \
+  mrun --node --phone-home -nw 1 -i 0
 ```
 
 ---
@@ -494,19 +546,19 @@ python k8s_inversion.py --monitor # Uses env vars
 
 ### Workers not connecting
 
-1. Check Monitor is running and accessible:
+1. Check the head pod logs (contains monitor output):
    ```bash
-   kubectl logs -l app=mosaic-monitor
+   kubectl logs -n argo -l role=head
    ```
 
-2. Check worker logs:
+2. Check worker pod logs:
    ```bash
-   kubectl logs -l app=mosaic-worker
+   kubectl logs -n argo -l role=worker
    ```
 
-3. Verify service is reachable:
+3. Verify the monitor service is reachable from a worker pod:
    ```bash
-   kubectl run test --rm -it --image=busybox -- nc -zv mosaic-monitor 3000
+   kubectl run test -n argo --rm -it --image=busybox -- nc -zv monitor-svc-<workflow-name> 3000
    ```
 
 ### Address resolution in Kubernetes
@@ -526,24 +578,9 @@ ValueError: Address and port combination <hostname>:<port> is not valid
 The `--local` flag must **not** be used in K8s — it forces all
 connections to `127.0.0.1` (see `comms.py:Connection._local`).
 
-### Warehouse address bug (inverse hangs silently)
+### Inverse hangs silently after "Beginning optimisation loop"
 
-Even after passing `--address $POD_IP` to the head and worker runtimes,
-the **warehouse subprocesses** (spawned internally by mosaic) can still
-advertise non-routable addresses. The monitor listens on `0.0.0.0`, and
-the warehouse subprocess inherits this. The original `comms.py` address
-auto-detection accepted `0.0.0.0` as a valid address (it passes
-`inet_pton`), so the warehouse would advertise `0.0.0.0:<port>` to
-other runtimes via the network dict.
-
-This only affects inverse runs: `ScalarField.parameter()` creates remote
-tesserae (proxy objects) that use `push(publish=True)`, which triggers
-cross-warehouse communication. Forward runs use plain `ScalarField()`
-objects that stay local to each warehouse.
-
-The fix in `mosaic/comms/comms.py` treats `0.0.0.0` as "not yet set"
-and auto-detects a routable IP via a UDP probe. See
-`docs/warehouse-address-bug.md` for the full investigation.
+This was caused by the warehouse address bug — see [Code Change 6](#6-warehouse-address-fix-mosaiccommscommspy) above and `docs/warehouse-address-bug.md` for the full debugging investigation. The fix is already in `mosaic/comms/comms.py`.
 
 ### Head times out waiting for workers
 

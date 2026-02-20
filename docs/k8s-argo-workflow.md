@@ -16,7 +16,7 @@ Argo DAG Workflow
 │    ▼         ▼
 ├─ 2. head    workers (x N, daemon)
 │    │         │
-│    │  mrun --node --phone-home env
+│    │  mrun --node --phone-home
 │    │         │
 │    │  ◄──────┘  workers phone home via Service DNS
 │    │
@@ -60,16 +60,15 @@ python -m mosaic.cli.mrun --dynamic --address 0.0.0.0 --port 3000 \
 
 This does two things:
 1. `mrun` starts an embedded mosaic **monitor** listening on `0.0.0.0:3000`
-   (PubSub on `:3001`), then writes a `monitor.key` file.
+   (PubSub on `:3001`).
 2. `mrun` launches `k8s_runner.py` as a subprocess. The script calls
-   `mosaic.run(main, address=POD_IP)` which reads `monitor.key` and
-   connects as a **head** to the local monitor, using the pod's IP as its
-   advertised address (so workers can reach it via the network dict
-   returned during the handshake).
+   `mosaic.run(main, address=POD_IP)` which connects as a **head** to the
+   local monitor, using the pod's IP as its advertised address (so workers
+   can reach it via the network dict returned during the handshake).
 
 **Worker pods** (one per `withSequence` item) each run:
 ```
-python -m mosaic.cli.mrun --node --phone-home env \
+python -m mosaic.cli.mrun --node --phone-home \
     --address $POD_IP --port 3000 \
     -nw <workers-per-node> -i <index>
 ```
@@ -129,9 +128,10 @@ When the head pod exits:
 
 | File | Purpose |
 |------|---------|
-| `k8s/Dockerfile.stride` | Docker image based on `devitocodes/bases:cpu-gcc` with Stride + mosaic installed |
-| `k8s/k8s_runner.py` | Head entrypoint — waits for workers, runs forward/inverse script |
-| `k8s/stride-workflow.yaml` | Argo DAG workflow definition |
+| `k8s/docker/Dockerfile.stride` | Docker image based on `devitocodes/bases:cpu-gcc` with Stride + mosaic installed |
+| `k8s/scripts/k8s_runner.py` | Head entrypoint — waits for workers, runs forward/inverse script |
+| `k8s/workflows/stride-workflow.yaml` | Argo DAG workflow definition |
+| `k8s/run.sh` | Helper script: setup / build / start / logs / stop |
 
 ---
 
@@ -216,7 +216,7 @@ inside Minikube's Docker:
 eval $(minikube docker-env)
 
 # Build the image from the project root
-docker build -t stride-k8s:latest -f k8s/Dockerfile.stride .
+docker build -t stride-k8s:latest -f k8s/docker/Dockerfile.stride .
 ```
 
 `eval $(minikube docker-env)` sets `DOCKER_HOST` and related env vars so
@@ -249,7 +249,7 @@ This means code-only changes rebuild in ~30 seconds instead of ~10 minutes.
 
 ```bash
 eval $(minikube docker-env)
-docker build -t stride-k8s:latest -f k8s/Dockerfile.stride .
+docker build -t stride-k8s:latest -f k8s/docker/Dockerfile.stride .
 ```
 
 #### Cleaning Up Old Images
@@ -278,14 +278,14 @@ docker system df
 For real clusters (not Minikube), push the image to a registry:
 
 ```bash
-docker build -t registry.example.com/stride-k8s:latest -f k8s/Dockerfile.stride .
+docker build -t registry.example.com/stride-k8s:latest -f k8s/docker/Dockerfile.stride .
 docker push registry.example.com/stride-k8s:latest
 ```
 
 Then override the image parameter when submitting:
 
 ```bash
-argo submit k8s/stride-workflow.yaml -p image="registry.example.com/stride-k8s:latest"
+argo submit k8s/workflows/stride-workflow.yaml -p image="registry.example.com/stride-k8s:latest"
 ```
 
 Remove `imagePullPolicy: Never` from the workflow YAML when using a remote
@@ -295,19 +295,19 @@ registry.
 
 ```bash
 # Forward (default)
-argo submit k8s/stride-workflow.yaml -n argo
+argo submit k8s/workflows/stride-workflow.yaml -n argo
 
 # Inverse
-argo submit k8s/stride-workflow.yaml -n argo -p run-mode="inverse"
+argo submit k8s/workflows/stride-workflow.yaml -n argo -p run-mode="inverse"
 
 # Inverse with S3 persistence
-argo submit k8s/stride-workflow.yaml -n argo -p run-mode="inverse_s3"
+argo submit k8s/workflows/stride-workflow.yaml -n argo -p run-mode="inverse_s3"
 ```
 
 Override parameters:
 
 ```bash
-argo submit k8s/stride-workflow.yaml -n argo \
+argo submit k8s/workflows/stride-workflow.yaml -n argo \
     -p run-mode="inverse" \
     -p num-workers="4" \
     -p workers-per-node="2"

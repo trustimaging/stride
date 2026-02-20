@@ -72,7 +72,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH=/opt/conda/envs/stride/bin:$PATH
 
 # Copy k8s runner
-COPY --chown=app:app k8s/k8s_runner.py /app/stride/k8s_runner.py
+COPY --chown=app:app k8s/scripts/k8s_runner.py /app/stride/k8s_runner.py
 
 WORKDIR /app/stride
 USER app

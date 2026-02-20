@@ -3,12 +3,13 @@
 # Run Mosaic Inversion on Kubernetes with Argo
 #
 # Usage:
-#   ./k8s/run.sh setup    # First time: install Argo, build image, deploy
-#   ./k8s/run.sh start    # Start the inversion (spawn workers + run head)
-#   ./k8s/run.sh logs     # Watch the head job logs
+#   ./k8s/run.sh setup    # First time: install Argo, build image, create RBAC
+#   ./k8s/run.sh build    # (Re)build the Docker image
+#   ./k8s/run.sh start    # Submit the Argo inversion workflow
+#   ./k8s/run.sh logs     # Stream logs from the active workflow
 #   ./k8s/run.sh status   # Check status of all components
-#   ./k8s/run.sh cleanup  # Remove everything
-#   ./k8s/run.sh stop     # Stop workers and head (keep monitor/minio)
+#   ./k8s/run.sh stop     # Delete active workflows
+#   ./k8s/run.sh cleanup  # Remove all workflows and RBAC
 
 set -e
 
@@ -16,8 +17,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Configuration
-NUM_NODES="${NUM_NODES:-2}"
-WORKERS_PER_NODE="${WORKERS_PER_NODE:-2}"
+NUM_WORKERS="${NUM_WORKERS:-2}"
+WORKERS_PER_NODE="${WORKERS_PER_NODE:-1}"
+RUN_MODE="${RUN_MODE:-inverse}"
+ARGO_NAMESPACE="${ARGO_NAMESPACE:-argo}"
 
 # Colors
 RED='\033[0;31m'
@@ -25,9 +28,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-log() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+error(){ echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Check if minikube is running
 check_minikube() {
@@ -56,162 +59,143 @@ install_argo() {
     log "Argo installed"
 }
 
-# Build Docker image
-build_image() {
-    log "Building Docker image..."
+# Create RBAC for the stride-workflow service account
+setup_rbac() {
+    log "Setting up RBAC for stride-workflow service account..."
 
-    # Point to Minikube's Docker daemon
+    kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: stride-workflow
+  namespace: argo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: stride-workflow
+  namespace: argo
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: stride-workflow
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: stride-workflow
+subjects:
+  - kind: ServiceAccount
+    name: stride-workflow
+    namespace: argo
+EOF
+
+    log "RBAC configured"
+}
+
+# Build Docker image inside minikube's Docker daemon
+build_image() {
+    log "Building Docker image stride-k8s:latest..."
+
     eval $(minikube docker-env)
 
     cd "$PROJECT_DIR"
-    docker build -t mosaic-worker:latest -f k8s/Dockerfile .
+    docker build -t stride-k8s:latest -f k8s/docker/Dockerfile.stride .
 
-    log "Image built: mosaic-worker:latest"
+    log "Image built: stride-k8s:latest"
 }
 
-# Deploy MinIO
-deploy_minio() {
-    log "Deploying MinIO..."
-    kubectl apply -f "$SCRIPT_DIR/minio.yaml"
+# Submit the Argo workflow
+start() {
+    check_minikube
 
-    log "Waiting for MinIO to be ready..."
-    kubectl wait --for=condition=ready pod -l app=minio --timeout=120s
+    log "Submitting Argo workflow (mode=$RUN_MODE, workers=$NUM_WORKERS, workers-per-node=$WORKERS_PER_NODE)..."
 
-    log "MinIO deployed"
+    argo submit "$SCRIPT_DIR/workflows/stride-workflow.yaml" \
+        -n "$ARGO_NAMESPACE" \
+        -p run-mode="$RUN_MODE" \
+        -p num-workers="$NUM_WORKERS" \
+        -p workers-per-node="$WORKERS_PER_NODE"
+
+    echo ""
+    log "Workflow submitted!"
+    echo ""
+    echo "Watch logs with:   ./k8s/run.sh logs"
+    echo "Check status with: ./k8s/run.sh status"
+    echo ""
 }
 
-# Deploy Monitor
-deploy_monitor() {
-    log "Deploying Mosaic Monitor..."
-    kubectl apply -f "$SCRIPT_DIR/monitor.yaml"
-
-    log "Waiting for Monitor to be ready..."
-    kubectl wait --for=condition=ready pod -l app=mosaic-monitor --timeout=120s
-
-    log "Monitor deployed"
-}
-
-# Spawn workers via Argo
-spawn_workers() {
-    log "Spawning $NUM_NODES worker nodes ($WORKERS_PER_NODE workers each)..."
-
-    # Delete any existing worker workflows
-    argo delete --all 2>/dev/null || true
-
-    # Submit new workflow
-    argo submit "$SCRIPT_DIR/worker-workflow.yaml" \
-        -p num-nodes="$NUM_NODES" \
-        -p workers-per-node="$WORKERS_PER_NODE" \
-        --wait=false
-
-    log "Worker workflow submitted"
-
-    # Wait a bit for workers to connect
-    log "Waiting for workers to connect to monitor..."
-    sleep 10
-}
-
-# Run head job
-run_head() {
-    log "Running head job (optimisation script)..."
-
-    # Delete existing head job if any
-    kubectl delete job mosaic-head 2>/dev/null || true
-
-    # Wait for deletion
-    sleep 2
-
-    # Create new head job
-    kubectl apply -f "$SCRIPT_DIR/head-job.yaml"
-
-    log "Head job started"
-}
-
-# Show logs
+# Stream logs from the most recent workflow
 show_logs() {
-    log "Showing head job logs (Ctrl+C to exit)..."
-    kubectl logs -f job/mosaic-head
+    local workflow
+    workflow=$(argo list -n "$ARGO_NAMESPACE" --running --output name 2>/dev/null | head -1)
+    if [ -z "$workflow" ]; then
+        workflow=$(argo list -n "$ARGO_NAMESPACE" --output name 2>/dev/null | head -1)
+    fi
+    if [ -z "$workflow" ]; then
+        error "No workflows found in namespace $ARGO_NAMESPACE"
+    fi
+    log "Streaming logs for $workflow (Ctrl+C to exit)..."
+    argo logs -n "$ARGO_NAMESPACE" "$workflow" --follow
 }
 
-# Show status
+# Show status of all components
 show_status() {
     echo ""
-    log "=== Kubernetes Status ==="
+    log "=== Argo Workflows ==="
+    argo list -n "$ARGO_NAMESPACE" 2>/dev/null || echo "(no workflows)"
     echo ""
 
-    echo "--- Pods ---"
-    kubectl get pods -o wide
+    log "=== Pods ==="
+    kubectl get pods -n "$ARGO_NAMESPACE" -o wide
     echo ""
 
-    echo "--- Services ---"
-    kubectl get services
-    echo ""
-
-    echo "--- Argo Workflows ---"
-    argo list 2>/dev/null || echo "(no workflows)"
-    echo ""
-
-    echo "--- Jobs ---"
-    kubectl get jobs
+    log "=== Services ==="
+    kubectl get services -n "$ARGO_NAMESPACE"
     echo ""
 }
 
-# Stop workers and head
+# Stop all active workflows
 stop() {
-    log "Stopping workers and head..."
-
-    # Delete Argo workflows (workers)
-    argo delete --all 2>/dev/null || true
-
-    # Delete head job
-    kubectl delete job mosaic-head 2>/dev/null || true
-
+    log "Deleting active workflows..."
+    argo delete --all -n "$ARGO_NAMESPACE" 2>/dev/null || true
     log "Stopped"
 }
 
-# Full cleanup
+# Remove all workflows and RBAC
 cleanup() {
-    log "Cleaning up everything..."
+    log "Cleaning up..."
 
-    # Delete Argo workflows
-    argo delete --all 2>/dev/null || true
-
-    # Delete all resources
-    kubectl delete -f "$SCRIPT_DIR/head-job.yaml" 2>/dev/null || true
-    kubectl delete -f "$SCRIPT_DIR/monitor.yaml" 2>/dev/null || true
-    kubectl delete -f "$SCRIPT_DIR/minio.yaml" 2>/dev/null || true
+    argo delete --all -n "$ARGO_NAMESPACE" 2>/dev/null || true
+    kubectl delete serviceaccount stride-workflow -n "$ARGO_NAMESPACE" 2>/dev/null || true
+    kubectl delete role stride-workflow -n "$ARGO_NAMESPACE" 2>/dev/null || true
+    kubectl delete rolebinding stride-workflow -n "$ARGO_NAMESPACE" 2>/dev/null || true
 
     log "Cleanup complete"
 }
 
-# Full setup
+# Full first-time setup
 setup() {
     check_minikube
     install_argo
     build_image
-    deploy_minio
-    deploy_monitor
+    setup_rbac
 
     echo ""
     log "Setup complete!"
     echo ""
     echo "Next steps:"
-    echo "  1. Start the inversion:  ./k8s/run.sh start"
-    echo "  2. Watch the logs:       ./k8s/run.sh logs"
-    echo "  3. Check status:         ./k8s/run.sh status"
-    echo ""
-}
-
-# Start inversion
-start() {
-    check_minikube
-    spawn_workers
-    run_head
-
-    echo ""
-    log "Inversion started!"
-    echo ""
-    echo "Watch logs with: ./k8s/run.sh logs"
+    echo "  1. Start an inversion: ./k8s/run.sh start"
+    echo "  2. Watch the logs:     ./k8s/run.sh logs"
+    echo "  3. Check status:       ./k8s/run.sh status"
     echo ""
 }
 
@@ -219,6 +203,10 @@ start() {
 case "${1:-}" in
     setup)
         setup
+        ;;
+    build)
+        check_minikube
+        build_image
         ;;
     start)
         start
@@ -235,25 +223,23 @@ case "${1:-}" in
     cleanup)
         cleanup
         ;;
-    build)
-        check_minikube
-        build_image
-        ;;
     *)
-        echo "Usage: $0 {setup|start|logs|status|stop|cleanup|build}"
+        echo "Usage: $0 {setup|build|start|logs|status|stop|cleanup}"
         echo ""
         echo "Commands:"
-        echo "  setup    - First time setup (install Argo, build image, deploy)"
-        echo "  start    - Start the inversion (spawn workers + run head)"
-        echo "  logs     - Watch the head job logs"
+        echo "  setup    - First-time setup (install Argo, build image, create RBAC)"
+        echo "  build    - Rebuild the Docker image"
+        echo "  start    - Submit the Argo inversion workflow"
+        echo "  logs     - Stream logs from the active workflow"
         echo "  status   - Check status of all components"
-        echo "  stop     - Stop workers and head (keep monitor/minio)"
-        echo "  cleanup  - Remove everything"
-        echo "  build    - Rebuild the Docker image only"
+        echo "  stop     - Delete active workflows"
+        echo "  cleanup  - Remove all workflows and RBAC"
         echo ""
         echo "Environment variables:"
-        echo "  NUM_NODES=$NUM_NODES"
+        echo "  NUM_WORKERS=$NUM_WORKERS"
         echo "  WORKERS_PER_NODE=$WORKERS_PER_NODE"
+        echo "  RUN_MODE=$RUN_MODE          (forward|inverse|inverse_s3)"
+        echo "  ARGO_NAMESPACE=$ARGO_NAMESPACE"
         exit 1
         ;;
 esac
