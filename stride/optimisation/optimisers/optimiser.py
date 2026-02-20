@@ -46,7 +46,6 @@ class LocalOptimiser(ABC):
         self._process_model = kwargs.pop('process_model', ProcessModelIteration(**kwargs))
         self.reset_block = kwargs.pop('reset_block', False)
         self.reset_iteration = kwargs.pop('reset_iteration', False)
-        self.s3_config = kwargs.pop('s3_config', None)
 
     def clear_grad(self):
         """
@@ -83,24 +82,10 @@ class LocalOptimiser(ABC):
         problem = kwargs.get('problem', None)
         iteration = kwargs.get('iteration', None)
 
-        s3_config = kwargs.pop('s3_config', self.s3_config)
-
         if processed_grad is None:
             if grad is None:
                 if hasattr(self.variable, 'is_proxy') and self.variable.is_proxy:
                     await self.variable.pull(attr='grad')
-
-                # Upload raw gradient to S3 if configured
-                if s3_config is not None and iteration is not None:
-                    try:
-                        from stride.utils.s3 import get_s3_client, ensure_bucket, upload_array
-                        s3_client = get_s3_client(s3_config)
-                        ensure_bucket(s3_client, s3_config.bucket)
-                        key = '%s/iter_%s/raw_gradient.npy' % (s3_config.gradient_prefix, iteration.abs_id)
-                        upload_array(s3_client, s3_config.bucket, key, np.asarray(self.variable.grad.data))
-                        logger.perf('Uploaded raw gradient to S3: %s' % key)
-                    except Exception as e:
-                        logger.warning('S3 gradient upload failed: %s' % str(e))
 
                 dump_grad = kwargs.pop('dump_grad', self.dump_grad)
                 dump_prec = kwargs.pop('dump_prec', self.dump_prec)
