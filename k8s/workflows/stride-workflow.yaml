@@ -106,6 +106,16 @@ spec:
             value: "{{workflow.parameters.run-mode}}"
           - name: EXP_NAME
             value: "{{workflow.parameters.exp-name}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
         volumeMounts:
           - name: exps
             mountPath: /app/stride/exps
@@ -180,6 +190,16 @@ spec:
             value: "{{workflow.parameters.monitor-port}}"
           - name: PUBSUB_PORT
             value: "{{workflow.parameters.pubsub-port}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
         resources:
           requests:
             cpu: "1"

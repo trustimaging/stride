@@ -26,7 +26,7 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'DiskTraces', 'SparseField', 'SparseCoordinates']
+           'DiskTraces', 'ArtifactTraces', 'SparseField', 'SparseCoordinates']
 
 
 def inv_transform(x):
@@ -1805,6 +1805,183 @@ class DiskTraces(Traces):
     def __reduce__(self):
         state = self._serialisation_helper()
         return self._deserialisation_helper, (state,)
+
+
+@mosaic.tessera
+class ArtifactTraces(Traces):
+    """
+    Objects of this type describe a set of time traces that are lazily fetched
+    from an artifact store (MinIO / S3-compatible) on demand.
+
+    On the head node the object holds only connection metadata — no data is
+    held in memory.  When pickled and sent to a worker via mosaic, the worker's
+    ``_deserialisation_helper`` downloads the array from the artifact store and
+    materialises a plain ``Traces`` object, so the worker always has real data.
+
+    See ``Traces`` for definition of parameters.
+
+    Parameters
+    ----------
+    artifact_config : ArtifactConfig
+        Connection configuration for the artifact store.
+    artifact_key : str
+        Object key within the bucket (e.g. ``'shots/0/observed.npy'``).
+
+    """
+
+    def __init__(self, **kwargs) -> None:
+        artifact_config = kwargs.pop('artifact_config', None)
+        if artifact_config is not None:
+            self._artifact_endpoint: str = artifact_config.endpoint
+            self._artifact_access_key: str = artifact_config.access_key
+            self._artifact_secret_key: str = artifact_config.secret_key
+            self._artifact_secure: bool = artifact_config.secure
+            self._artifact_backend: str = artifact_config.backend
+            self._artifact_bucket: str = artifact_config.bucket
+        else:
+            self._artifact_endpoint = kwargs.pop('artifact_endpoint', None)
+            self._artifact_access_key = kwargs.pop('artifact_access_key', None)
+            self._artifact_secret_key = kwargs.pop('artifact_secret_key', None)
+            self._artifact_secure = kwargs.pop('artifact_secure', False)
+            self._artifact_backend = kwargs.pop('artifact_backend', 'minio')
+            self._artifact_bucket = kwargs.pop('artifact_bucket', None)
+
+        self._artifact_key: str = kwargs.pop('artifact_key', None)
+
+        kwargs.pop('data', None)
+        super().__init__(**kwargs)
+
+    # ------------------------------------------------------------------ lazy
+    @property
+    def _data(self):
+        return None
+
+    @_data.setter
+    def _data(self, value) -> None:
+        pass
+
+    # ----------------------------------------------------------------- load
+    def load(self, **kwargs) -> 'Traces':
+        """
+        Fetch the array from the artifact store and return an in-memory
+        ``Traces`` object.
+
+        Returns
+        -------
+        Traces
+
+        """
+        from stride.utils.artifacts import get_client, download_array
+        from stride.utils.artifacts import ArtifactConfig
+
+        config = ArtifactConfig(
+            endpoint=self._artifact_endpoint,
+            access_key=self._artifact_access_key,
+            secret_key=self._artifact_secret_key,
+            bucket=self._artifact_bucket,
+            secure=self._artifact_secure,
+            backend=self._artifact_backend,
+        )
+        client = get_client(config)
+        data = download_array(client, self._artifact_bucket, self._artifact_key)
+
+        return Traces(
+            data=data,
+            transducer_ids=self.transducer_ids,
+            grid=self.grid,
+        )
+
+    # ------------------------------------------------- delegate to load()
+    def get(self, id: int) -> np.ndarray:
+        """
+        Get one trace based on a transducer ID, selecting the inner domain.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+        return self.load().get(id)
+
+    def get_extended(self, id: int) -> np.ndarray:
+        """
+        Get one trace based on a transducer ID, selecting the extended domain.
+
+        Parameters
+        ----------
+        id : int
+            Transducer ID.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+        return self.load().get_extended(id)
+
+    def plot(self, **kwargs):
+        return self.load().plot(**kwargs)
+
+    def plot_one(self, id: int, **kwargs):
+        return self.load().plot_one(id, **kwargs)
+
+    # --------------------------------------------------------- serialisation
+    def __get_desc__(self, **kwargs):
+        return self.load().__get_desc__(**kwargs)
+
+    def __set_desc__(self, description, **kwargs) -> None:
+        del description.data
+        super().__set_desc__(description, **kwargs)
+
+    _serialisation_attrs = [
+        'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
+        '_dtype', 'needs_grad', '_compressed', '_compression',
+        'transform', 'grad', 'prec', '_transducer_ids', '_grid',
+        '_artifact_endpoint', '_artifact_access_key', '_artifact_secret_key',
+        '_artifact_secure', '_artifact_backend', '_artifact_bucket', '_artifact_key',
+    ]
+
+    def _serialisation_helper(self) -> dict:
+        return {attr: getattr(self, attr) for attr in self._serialisation_attrs}
+
+    @classmethod
+    def _deserialisation_helper(cls, state: dict) -> 'Traces':
+        """
+        Deserialise on a worker: download from the artifact store and return
+        a fully-allocated ``Traces`` object (not an ``ArtifactTraces``).
+        """
+        from stride.utils.artifacts import ArtifactConfig, get_client, download_array
+
+        config = ArtifactConfig(
+            endpoint=state.pop('_artifact_endpoint'),
+            access_key=state.pop('_artifact_access_key'),
+            secret_key=state.pop('_artifact_secret_key'),
+            bucket=state.pop('_artifact_bucket'),
+            secure=state.pop('_artifact_secure'),
+            backend=state.pop('_artifact_backend'),
+        )
+        key = state.pop('_artifact_key')
+
+        client = get_client(config)
+        try:
+            data = download_array(client, config.bucket, key)
+        except Exception:
+            data = None
+
+        instance = Traces.__new__(Traces)
+        instance._data = data
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+
+        return instance
+
+    def __reduce__(self):
+        return self._deserialisation_helper, (self._serialisation_helper(),)
 
 
 @mosaic.tessera

@@ -101,6 +101,17 @@ EOF
     log "RBAC configured"
 }
 
+# Deploy MinIO to the argo namespace
+deploy_minio() {
+    log "Deploying MinIO..."
+    kubectl apply -f "$SCRIPT_DIR/manifests/minio.yaml"
+    log "Waiting for MinIO to be ready..."
+    kubectl wait -n "$ARGO_NAMESPACE" --for=condition=ready pod \
+        -l app=minio --timeout=120s
+    log "MinIO is ready (API: minio.argo.svc.cluster.local:9000)"
+    log "  Console: kubectl port-forward -n argo svc/minio 9001:9001"
+}
+
 # Build Docker image inside minikube's Docker daemon
 build_image() {
     log "Building Docker image stride-k8s:latest..."
@@ -186,8 +197,9 @@ cleanup() {
 setup() {
     check_minikube
     install_argo
-    build_image
     setup_rbac
+    deploy_minio
+    build_image
 
     echo ""
     log "Setup complete!"
@@ -207,6 +219,10 @@ case "${1:-}" in
     build)
         check_minikube
         build_image
+        ;;
+    minio)
+        check_minikube
+        deploy_minio
         ;;
     start)
         start
@@ -238,7 +254,7 @@ case "${1:-}" in
         echo "Environment variables:"
         echo "  NUM_WORKERS=$NUM_WORKERS"
         echo "  WORKERS_PER_NODE=$WORKERS_PER_NODE"
-        echo "  RUN_MODE=$RUN_MODE          (forward|inverse|inverse_s3)"
+        echo "  RUN_MODE=$RUN_MODE          (forward|inverse|inverse_artifacts)"
         echo "  ARGO_NAMESPACE=$ARGO_NAMESPACE"
         exit 1
         ;;

@@ -42,6 +42,7 @@ dependencies:
   - zict>=3.0.0
   - pip:
       - devito>=4.6
+      - minio
       - ndsplines
       - python-daemon
       - py-libnuma

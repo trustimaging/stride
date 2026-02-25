@@ -1,12 +1,15 @@
 
+from __future__ import annotations
+
 import functools
 import numpy as np
+from typing import Optional, List
 from cached_property import cached_property
 
 import mosaic.types
 from mosaic.file_manipulation import h5
 
-from .data import Traces, DiskTraces
+from .data import Traces, DiskTraces, ArtifactTraces
 from .base import ProblemBase
 from .. import plotting
 
@@ -442,7 +445,14 @@ class Shot(ProblemBase):
             self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
     def _traces(self, *args, **kwargs):
-        if kwargs.pop('lazy_loading', False):
+        artifact_config = kwargs.pop('artifact_config', None)
+        if artifact_config is not None:
+            key = '%s/%d/%s.npy' % (artifact_config.shot_prefix, self.id,
+                                    kwargs.get('name', 'traces'))
+            return ArtifactTraces(*args, **kwargs,
+                                  artifact_config=artifact_config,
+                                  artifact_key=key)
+        elif kwargs.pop('lazy_loading', False):
             return DiskTraces(*args, **kwargs,
                               path='/shots/%d/%s' % (self.id, kwargs.get('name')))
         else:
@@ -1355,6 +1365,50 @@ class Acquisitions(ProblemBase):
                         pass
 
         self._prev_load = args, kwargs
+
+    def load_artifacts(self, artifact_config: 'ArtifactConfig',
+                       shot_ids: Optional[List[int]] = None) -> None:
+        """
+        Set up :class:`ArtifactTraces` for each shot's ``observed`` field,
+        pointing at the artifact store.  No data is downloaded at this point —
+        workers fetch the array lazily when they first call ``.load()``.
+
+        Call this instead of :meth:`load` when observed data has already been
+        uploaded to the artifact store (e.g. after a forward pass that used
+        ``artifact_config``).
+
+        Parameters
+        ----------
+        artifact_config : ArtifactConfig
+            Connection configuration for the artifact store.
+        shot_ids : list of int, optional
+            Subset of shot IDs to set up. Defaults to all shots.
+
+        """
+        from stride.utils.artifacts import get_client, download_array
+
+        if shot_ids is None:
+            shot_ids = list(self._shots.keys())
+
+        client = get_client(artifact_config)
+
+        for shot_id in shot_ids:
+            shot = self._shots[shot_id]
+
+            # Wavelets — download eagerly; needed by workers before the PDE runs
+            key_wav = '%s/%d/wavelets.npy' % (artifact_config.shot_prefix, shot_id)
+            wavelet_data = download_array(client, artifact_config.bucket, key_wav)
+            shot.wavelets.data[:] = wavelet_data
+
+            # Observed — lazy via ArtifactTraces; workers fetch on demand
+            key_obs = '%s/%d/observed.npy' % (artifact_config.shot_prefix, shot_id)
+            shot.observed = ArtifactTraces(
+                name='observed',
+                transducer_ids=shot.receiver_ids,
+                grid=shot.grid,
+                artifact_config=artifact_config,
+                artifact_key=key_obs,
+            )
 
     def __get_desc__(self, **kwargs):
         legacy = kwargs.pop('legacy', False)

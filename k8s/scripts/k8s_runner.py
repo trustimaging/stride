@@ -33,7 +33,7 @@ EXP_NAME = os.environ.get('EXP_NAME', 'simple')
 SCRIPTS = {
     'forward': 'scripts.simple_forward',
     'inverse': 'scripts.simple_inverse',
-    'inverse_s3': 'scripts.simple_inverse_s3',
+    'inverse_artifacts': 'scripts.simple_inverse_artifacts',
 }
 
 import mosaic
