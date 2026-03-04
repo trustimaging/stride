@@ -753,7 +753,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
             if wavelets.needs_grad:
-                src_term = src.interpolate(expr=p_a)
+                src_term = src.interpolate(expr=-p_a)
             else:
                 src_term = []
 
@@ -898,8 +898,9 @@ class IsoAcousticDevito(ProblemTypeBase):
         functions = dict(
             vp=self.dev_grid.vars.vp,
             rec=self.dev_grid.vars.rec,
-            p_saved=self._wavefield,
         )
+        if self._wavefield is not None:
+            functions['p_saved'] = self._wavefield
 
         devito_args = kwargs.get('devito_args', {})
 
@@ -1206,6 +1207,60 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         return grad
 
+    def prepare_grad_wavelets(self, wavelets, **kwargs):
+        """
+        Prepare the problem type to calculate the gradients wrt source wavelets.
+        Parameters
+        ----------
+        wavelets : Traces
+            Wavelet variable to calculate the gradient.
+        Returns
+        -------
+        tuple
+            Tuple of gradient and preconditioner updates.
+        """
+        return ()
+
+    def init_grad_wavelets(self, wavelets, **kwargs):
+        """
+        Initialise buffers in the problem type to calculate the gradients wrt wavelets.
+        Parameters
+        ----------
+        wavelets : Traces
+            Wavelet variable to calculate the gradient.
+        Returns
+        -------
+        """
+        grad = self.dev_grid.vars.src
+        grad.data_with_halo.fill(0.)
+
+    def get_grad_wavelets(self, wavelets, **kwargs):
+        """
+        Retrieve the gradients calculated wrt to the input.
+        The variable is updated inplace.
+        Parameters
+        ----------
+        wavelets : Traces
+            Wavelet variable to calculate the gradient.
+        Returns
+        -------
+        Traces
+            Gradient wrt wavelets.
+        """
+        variable_grad = self.dev_grid.vars.src
+        variable_grad = np.asarray(variable_grad.data, dtype=np.float32).T
+
+        deallocate = kwargs.pop('deallocate', False)
+        if deallocate:
+            self.dev_grid.deallocate('grad_wavelets')
+
+        grad = wavelets.alike(name='wavelets_grad', data=variable_grad,
+                              shape=variable_grad.shape,
+                              extended_shape=variable_grad.shape,
+                              inner=None)
+
+        return grad
+
     # utils
 
     def _check_problem(self, wavelets, vp, rho=None, alpha=None, **kwargs):
@@ -1318,9 +1373,9 @@ class IsoAcousticDevito(ProblemTypeBase):
                     f_centres.append(f_centre)
                     f_maxs.append(f_max)
 
-            f_min = np.min(f_mins)
-            f_max = np.max(f_maxs)
-            f_centre = np.median(f_centres)
+            f_min = np.min(f_mins) if len(f_mins) else 0.05 / self.time.step
+            f_max = np.max(f_maxs) if len(f_maxs) else 0.05 / self.time.step
+            f_centre = np.median(f_centres) if len(f_centres) else 0.05 / self.time.step
 
         self._bandwidth = (f_min, f_centre, f_max)
 

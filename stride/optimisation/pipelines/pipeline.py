@@ -135,6 +135,7 @@ class Pipeline(Operator):
         for step in reversed(self._steps.values()):
             outputs = step.adjoint(*outputs, *input_args, **{**self._kwargs, **kwargs},
                                    prev_step=prev_step)
+            outputs = (outputs,) if not isinstance(outputs, tuple) else outputs
             prev_step = None if isinstance(step, Dump) else step
 
         if len(outputs) == 1:
