@@ -38,6 +38,7 @@ class NormField(Operator):
             if variable.transform is not None:
                 mid_val = variable.transform(mid_val)
             var_corr = mid_val * norm_guess_change / 100
+            var_corr = var_corr if np.abs(var_corr) > 0. else 1.
         else:
             var_corr = 1.
 
