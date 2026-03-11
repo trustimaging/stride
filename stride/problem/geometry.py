@@ -464,8 +464,11 @@ class Geometry(ProblemBase):
 
         if 'orientation' in description:
             for location_desc in locations:
-                idx = location_desc.orientation
-                location_desc.orientation = description.orientation[idx, :]
+                try:
+                    idx = location_desc.orientation
+                    location_desc.orientation = description.orientation[idx, :]
+                except:
+                    location_desc.orientation = None
 
         if 'dipole_offset' in description:
             for location_desc in locations:
