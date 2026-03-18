@@ -3,7 +3,7 @@
 Artifact-backed inversion script.
 
 Runs the same 2D acoustic FWI as simple_inverse.py, but uses an artifact
-store (MinIO) for all shot data transfer:
+store (MinIO) for all shot data transfer and gradient accumulation:
 
   Phase 1 — Forward pass
     Observed traces and wavelets are computed and uploaded to MinIO as .npy
@@ -15,43 +15,43 @@ store (MinIO) for all shot data transfer:
     (metadata only — no data held in the head's memory).
 
   Phase 2 — Inversion
-    acquisitions.default() creates shots with the correct geometry and
-    allocates array buffers. load_artifacts() then populates each shot:
+    acquisitions.load_artifacts() populates each shot:
         wavelets  — downloaded eagerly on the head (small; needed before
                     the PDE runs on the worker)
         observed  — wired as an ArtifactTraces reference; workers fetch
                     their shot's data from MinIO on demand (lazy loading)
 
-    After each iteration the accumulated gradient is uploaded to MinIO:
-        gradients/iter_{N}/gradient.npy
+    After each iteration the external gradient-accumulator service sums the
+    per-worker gradient files and writes:
+        gradients/iter_{N}/final.pkl
 
-Environment variables (see ArtifactConfig.from_env):
+    The head's variable.pull(attr='grad') polls for this file and loads it.
+
+Environment variables (see ArtifactWarehouse.from_env):
     ARTIFACT_ENDPOINT   MinIO endpoint, e.g. minio.argo.svc.cluster.local:9000
     ARTIFACT_ACCESS_KEY Access key
     ARTIFACT_SECRET_KEY Secret key
     ARTIFACT_BUCKET     Bucket name (default: stride-data)
-    ARTIFACT_BACKEND    Backend identifier (default: minio)
-    NUM_WORKERS         Total worker count (default: 2)
-    WORKERS_PER_NODE    Workers per node (default: 1)
-    EXP_NAME            Experiment name (default: simple)
 """
 
 import os
 import numpy as np
 
 from stride import *
-from stride.utils import wavelets, ArtifactConfig
+from stride.utils import wavelets
 
 import mosaic
 
 N = 2
+NUM_ITERS = int(os.environ.get('NUM_ITERS', '4'))
 
 
 async def main(runtime, exp_name: str = 'simple') -> None:
     exp_dir = os.path.join(os.path.dirname(__file__), '..', 'exps', exp_name)
     os.makedirs(exp_dir, exist_ok=True)
 
-    artifact_config = ArtifactConfig.from_env()
+    # The ArtifactWarehouse is already configured globally by mrun via the
+    # ARTIFACT_ENDPOINT env var — no need to construct it here.
 
     # -- Shared grid / time --------------------------------------------------
     shape = (100, 100)
@@ -95,9 +95,9 @@ async def main(runtime, exp_name: str = 'simple') -> None:
     pde_fwd = IsoAcousticDevito.remote(grid=problem_fwd.grid,
                                        len=runtime.num_workers)
 
-    # forward() uploads each shot's observed.npy to MinIO and replaces
-    # shot.observed with an ArtifactTraces reference.
-    await forward(problem_fwd, pde_fwd, vp_true, artifact_config=artifact_config)
+    # forward() uploads each shot's observed.npy and wavelets.npy to MinIO
+    # and replaces shot.observed with an ArtifactTraces reference.
+    await forward(problem_fwd, pde_fwd, vp_true)
 
     print('Phase 1 complete. Observed traces uploaded to artifact store.', flush=True)
 
@@ -120,7 +120,7 @@ async def main(runtime, exp_name: str = 'simple') -> None:
 
     # Set up ArtifactTraces for each shot — no data downloaded here.
     # Workers will fetch from MinIO lazily when they run their shot.
-    problem.acquisitions.load_artifacts(artifact_config)
+    problem.acquisitions.load_artifacts()
 
     print('Loaded %d shots via artifact store.' % len(problem.acquisitions.shot_ids),
           flush=True)
@@ -139,14 +139,12 @@ async def main(runtime, exp_name: str = 'simple') -> None:
 
     print('Beginning optimisation loop.', flush=True)
 
-    for block in optimisation_loop.blocks(2):
+    for block in optimisation_loop.blocks(NUM_ITERS):
         try:
-            # adjoint() uploads accumulated gradient to MinIO after each iteration.
             await adjoint(problem, pde, loss,
                           optimisation_loop, optimiser, vp,
-                          num_iters=2,
-                          select_shots=dict(num=N),
-                          artifact_config=artifact_config)
+                          num_iters=1,
+                          select_shots=dict(num=N))
             print('Block complete.', flush=True)
         except Exception as e:
             import traceback

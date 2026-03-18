@@ -171,3 +171,5 @@ def download_array(client: Minio, bucket: str, key: str) -> np.ndarray:
     finally:
         response.close()
         response.release_conn()
+
+

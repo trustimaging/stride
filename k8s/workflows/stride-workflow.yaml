@@ -21,6 +21,8 @@ spec:
         value: forward
       - name: exp-name
         value: simple
+      - name: num-iters
+        value: "4"
 
   templates:
     # ── DAG ──────────────────────────────────────────────
@@ -43,6 +45,10 @@ spec:
                   value: "{{item}}"
             withSequence:
               count: "{{workflow.parameters.num-workers}}"
+
+          - name: gradient-accumulator
+            template: gradient-accumulator
+            dependencies: [create-service]
 
     # ── K8s Service (routes workers → head pod) ─────────
     - name: monitor-service
@@ -100,6 +106,8 @@ spec:
                 fieldPath: status.podIP
           - name: NUM_WORKERS
             value: "{{workflow.parameters.num-workers}}"
+          - name: NUM_ITERS
+            value: "{{workflow.parameters.num-iters}}"
           - name: WORKERS_PER_NODE
             value: "{{workflow.parameters.workers-per-node}}"
           - name: RUN_MODE
@@ -116,12 +124,14 @@ spec:
             value: "stride-data"
           - name: ARTIFACT_BACKEND
             value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
         volumeMounts:
           - name: exps
             mountPath: /app/stride/exps
         resources:
           requests:
-            cpu: "1"
+            cpu: "500m"
             memory: 2Gi
       volumes:
         - name: exps
@@ -200,7 +210,44 @@ spec:
             value: "stride-data"
           - name: ARTIFACT_BACKEND
             value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
         resources:
           requests:
-            cpu: "1"
+            cpu: "500m"
             memory: 2Gi
+
+    # ── Gradient accumulator (daemon — sums worker gradients per iteration) ─
+    - name: gradient-accumulator
+      daemon: true
+      metadata:
+        labels:
+          role: gradient-accumulator
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command:
+          - python3
+          - k8s/scripts/gradient_accumulator.py
+        env:
+          - name: NUM_WORKERS
+            value: "{{workflow.parameters.num-workers}}"
+          - name: NUM_ITERS
+            value: "{{workflow.parameters.num-iters}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: 1Gi

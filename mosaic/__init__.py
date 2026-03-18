@@ -14,6 +14,7 @@ from .profile import profiler
 
 
 _runtime = None
+_artifact_warehouse = None
 _runtime_types = {
     'head': Head,
     'monitor': Monitor,
@@ -136,6 +137,14 @@ def init(runtime_type='head', runtime_indices=(),
         runtime_config['monitor_port'] = monitor_port
         runtime_config['pubsub_port'] = pubsub_port
 
+    # Auto-configure ArtifactWarehouse from env if not already set
+    if _artifact_warehouse is None and os.environ.get('ARTIFACT_ENDPOINT'):
+        try:
+            from mosaic.runtime.artifact_warehouse import ArtifactWarehouse
+            set_artifact_warehouse(ArtifactWarehouse.from_env())
+        except Exception:
+            pass
+
     # Create global runtime
     try:
         _runtime = _runtime_types[runtime_type](**runtime_config)
@@ -184,6 +193,38 @@ def clear_runtime():
 
         del _runtime
         _runtime = None
+
+
+def set_artifact_warehouse(warehouse):
+    """
+    Register an :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`
+    globally so that all runtimes in this process can access it without
+    passing it through kwargs.
+
+    Parameters
+    ----------
+    warehouse : ArtifactWarehouse
+
+    Returns
+    -------
+
+    """
+    global _artifact_warehouse
+    _artifact_warehouse = warehouse
+
+
+def get_artifact_warehouse():
+    """
+    Return the globally registered artifact warehouse, or ``None`` if
+    artifact storage has not been configured.
+
+    Returns
+    -------
+    ArtifactWarehouse or None
+
+    """
+    global _artifact_warehouse
+    return _artifact_warehouse
 
 
 def runtime():

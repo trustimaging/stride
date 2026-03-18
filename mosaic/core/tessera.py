@@ -499,6 +499,17 @@ class ParameterMixin:
         if self.has_tessera:
             await self
 
+            # When artifact warehouse is configured and the caller wants the
+            # gradient, poll S3 for the externally accumulated final gradient
+            # rather than fetching from the SpillBuffer warehouse.
+            art_warehouse = mosaic.get_artifact_warehouse()
+            if art_warehouse is not None and attr == 'grad':
+                key = '%s/iter_%d/final.pkl' % (
+                    art_warehouse.gradient_prefix, art_warehouse.iteration)
+                data = art_warehouse.pull_remote(key, poll=True)
+                self.grad.data[:] = data
+                return
+
             warehouse = mosaic.get_warehouse()
             __dict__ = await warehouse.pull_remote(uid=self.ref, attr=attr, reply=True)
 

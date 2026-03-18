@@ -49,8 +49,7 @@ from .problem import *
 from .physics import *
 from .optimisation import *
 from .utils.operators import *
-from .utils.artifacts import ArtifactConfig, get_client, ensure_bucket, upload_array
-from .utils.gradient_sink import GradientSink
+from .utils.artifacts import ArtifactConfig
 
 
 async def forward(problem, pde, *args, **kwargs):
@@ -88,12 +87,10 @@ async def forward(problem, pde, *args, **kwargs):
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
     safe = kwargs.pop('safe', True)
-    artifact_config = kwargs.pop('artifact_config', None)
 
-    artifact_client = None
-    if artifact_config is not None:
-        artifact_client = get_client(artifact_config)
-        ensure_bucket(artifact_client, artifact_config.bucket)
+    art_warehouse = mosaic.get_artifact_warehouse()
+    if art_warehouse is not None:
+        art_warehouse.ensure_bucket()
 
     if dump is True:
         try:
@@ -166,18 +163,15 @@ async def forward(problem, pde, *args, **kwargs):
         if np.any(np.isnan(shot.observed.data)) or np.any(np.isinf(shot.observed.data)):
             raise ValueError('Nan or inf detected in shot %d' % shot_id)
 
-        if artifact_config is not None:
-            key_obs = '%s/%d/observed.npy' % (artifact_config.shot_prefix, shot_id)
-            upload_array(artifact_client, artifact_config.bucket, key_obs,
-                         shot.observed.data)
-            key_wav = '%s/%d/wavelets.npy' % (artifact_config.shot_prefix, shot_id)
-            upload_array(artifact_client, artifact_config.bucket, key_wav,
-                         shot.wavelets.data)
+        if art_warehouse is not None:
+            key_obs = '%s/%d/observed.npy' % (art_warehouse.shot_prefix, shot_id)
+            key_wav = '%s/%d/wavelets.npy' % (art_warehouse.shot_prefix, shot_id)
+            art_warehouse.push_remote(key_obs, shot.observed.data)
+            art_warehouse.push_remote(key_wav, shot.wavelets.data)
             shot.observed = ArtifactTraces(
                 name=shot.observed.name,
                 transducer_ids=shot.observed.transducer_ids,
                 grid=shot.observed.grid,
-                artifact_config=artifact_config,
                 artifact_key=key_obs,
             )
             logger.perf('Uploaded observed traces and wavelets for shot %d to artifact store'
@@ -248,12 +242,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     lazy_loading = kwargs.pop('lazy_loading', False)
     dump = kwargs.pop('dump', True)
     safe = kwargs.pop('safe', True)
-    artifact_config = kwargs.pop('artifact_config', None)
 
-    artifact_client = None
-    if artifact_config is not None:
-        artifact_client = get_client(artifact_config)
-        ensure_bucket(artifact_client, artifact_config.bucket)
+    art_warehouse = mosaic.get_artifact_warehouse()
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
@@ -296,13 +286,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     if optimiser.reset_block:
         optimiser.reset()
 
-    gradient_sink = None
-    if artifact_config is not None:
-        gradient_sink = GradientSink.remote(
-            variable=optimiser.variable,
-            len=runtime.num_workers,
-        )
-
     for iteration in block.iterations(num_iters):
         optimiser.clear_grad()
 
@@ -338,12 +321,17 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
 
+        if art_warehouse is not None:
+            art_warehouse.set_iteration(iteration.abs_id)
+
         if lazy_loading:
             problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False, fast=True)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
             _kwargs = kwargs.copy()
+            if art_warehouse is not None:
+                _kwargs['_abs_iteration'] = iteration.abs_id
 
             logger.perf('\n')
             logger.perf('Giving shot %d to %s (%d out of %d)'
@@ -504,24 +492,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             await loop
 
-        # Dispatch per-worker gradient upload
-        if gradient_sink is not None:
-            @runtime.async_for(list(range(runtime.num_workers)), safe=safe)
-            async def upload_loop(worker, _dummy):
-                await gradient_sink.upload(
-                    iteration.abs_id,
-                    worker.indices[0],
-                    artifact_config.endpoint,
-                    artifact_config.access_key,
-                    artifact_config.secret_key,
-                    artifact_config.bucket,
-                    artifact_config.gradient_prefix,
-                    artifact_config.secure,
-                    runtime=worker,
-                ).result()
-            await upload_loop
-
         await optimiser.step(iteration=iteration, problem=problem,
+                             grad=None,
                              f_min=f_min, f_max=f_max,
                              filter_relaxation=min(filter_wavelets_relaxation, filter_traces_relaxation),
                              step_loop=step_loop,

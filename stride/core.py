@@ -328,7 +328,8 @@ class Variable:
             sums = [
                 _maybe_sum(r, g) for r, g in zip(rec_grads, grads)
             ]
-            return await asyncio.gather(*sums)
+            result = await asyncio.gather(*sums)
+            return result
 
         def dealloc(objs):
             def _dealloc(*args):
@@ -366,7 +367,9 @@ class Variable:
                 is_proxy = isinstance(node.op.obj, TesseraProxy)
 
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
-                redux_grad = await runtime.exec('redux-%s' % node.op.uid, redux, output_grads)
+                _abs_iter = kwargs_.pop('_abs_iteration', None)
+                _fkw = {'iteration': _abs_iter} if _abs_iter is not None else None
+                redux_grad = await runtime.exec('redux-%s' % node.op.uid, redux, output_grads, func_kwargs=_fkw)
                 ret = method((redux_grad,), **{**kwargs_, **{'eager': True, 'redux': True}})
 
             else:
@@ -577,6 +580,13 @@ class Variable:
 
         """
         if redux:
+            # When artifact warehouse is configured each worker has already
+            # uploaded its gradient in ArtifactWarehouse.exec_remote.
+            # The external accumulator service handles cross-worker summation,
+            # so the __redux_adjoint__ ZMQ barrier is not needed.
+            if mosaic.get_artifact_warehouse() is not None:
+                return
+
             self._redux_grads[grad[0].warehouse_id] = grad[0]
 
             if not self._redux_task:

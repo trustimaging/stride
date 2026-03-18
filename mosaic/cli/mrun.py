@@ -1,4 +1,5 @@
 
+import os
 import click
 import subprocess as cmd_subprocess
 
@@ -61,6 +62,9 @@ from ..utils.logger import _stdout, _stderr
 # profiling
 @click.option('--profile/--perf', default=False, required=False, show_default=True,
               help='whether to profile the mosaic run')
+# artifact storage
+@click.option('--artifact-storage', is_flag=True, default=False, show_default=True,
+              help='enable S3/MinIO artifact storage for gradient and shot data')
 @click.version_option()
 def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
@@ -69,6 +73,16 @@ def go(cmd=None, **kwargs):
     dynamic = kwargs.get('dynamic', False)
     phone_home = kwargs.get('phone_home', False)
     reuse_head = kwargs.get('reuse_head', False)
+
+    # Set up artifact warehouse if requested explicitly or ARTIFACT_ENDPOINT is set
+    artifact_storage = kwargs.get('artifact_storage', False)
+    if artifact_storage or os.environ.get('ARTIFACT_ENDPOINT'):
+        try:
+            from mosaic.runtime.artifact_warehouse import ArtifactWarehouse
+            from mosaic import set_artifact_warehouse
+            set_artifact_warehouse(ArtifactWarehouse.from_env())
+        except KeyError:
+            pass  # ARTIFACT_ENDPOINT not set — skip silently
 
     if runtime_indices is not None:
         runtime_indices = tuple([int(i) for i in runtime_indices.split(':')])

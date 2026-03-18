@@ -1811,40 +1811,36 @@ class DiskTraces(Traces):
 class ArtifactTraces(Traces):
     """
     Objects of this type describe a set of time traces that are lazily fetched
-    from an artifact store (MinIO / S3-compatible) on demand.
+    from an artifact store (MinIO / S3-compatible) on demand via the globally
+    registered :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`.
 
-    On the head node the object holds only connection metadata — no data is
-    held in memory.  When pickled and sent to a worker via mosaic, the worker's
-    ``_deserialisation_helper`` downloads the array from the artifact store and
-    materialises a plain ``Traces`` object, so the worker always has real data.
+    Only the S3 key is stored on the instance — no connection credentials.
+    The warehouse (configured once per process via
+    ``mosaic.set_artifact_warehouse()``) handles all I/O.
+
+    When serialised and sent to a worker the worker's
+    ``_deserialisation_helper`` fetches the array through its locally
+    configured warehouse and materialises a plain ``Traces`` object so the
+    worker always has real data in memory.
 
     See ``Traces`` for definition of parameters.
 
     Parameters
     ----------
-    artifact_config : ArtifactConfig
-        Connection configuration for the artifact store.
     artifact_key : str
         Object key within the bucket (e.g. ``'shots/0/observed.npy'``).
 
     """
 
     def __init__(self, **kwargs) -> None:
-        artifact_config = kwargs.pop('artifact_config', None)
-        if artifact_config is not None:
-            self._artifact_endpoint: str = artifact_config.endpoint
-            self._artifact_access_key: str = artifact_config.access_key
-            self._artifact_secret_key: str = artifact_config.secret_key
-            self._artifact_secure: bool = artifact_config.secure
-            self._artifact_backend: str = artifact_config.backend
-            self._artifact_bucket: str = artifact_config.bucket
-        else:
-            self._artifact_endpoint = kwargs.pop('artifact_endpoint', None)
-            self._artifact_access_key = kwargs.pop('artifact_access_key', None)
-            self._artifact_secret_key = kwargs.pop('artifact_secret_key', None)
-            self._artifact_secure = kwargs.pop('artifact_secure', False)
-            self._artifact_backend = kwargs.pop('artifact_backend', 'minio')
-            self._artifact_bucket = kwargs.pop('artifact_bucket', None)
+        # Accept (and discard) artifact_config for backward compatibility
+        kwargs.pop('artifact_config', None)
+        # Also discard any per-instance connection fields that may have been
+        # passed by older callers
+        for _legacy in ('artifact_endpoint', 'artifact_access_key',
+                        'artifact_secret_key', 'artifact_secure',
+                        'artifact_backend', 'artifact_bucket'):
+            kwargs.pop(_legacy, None)
 
         self._artifact_key: str = kwargs.pop('artifact_key', None)
 
@@ -1863,27 +1859,22 @@ class ArtifactTraces(Traces):
     # ----------------------------------------------------------------- load
     def load(self, **kwargs) -> 'Traces':
         """
-        Fetch the array from the artifact store and return an in-memory
-        ``Traces`` object.
+        Fetch the array from the artifact store via the globally registered
+        ``ArtifactWarehouse`` and return an in-memory ``Traces`` object.
 
         Returns
         -------
         Traces
 
         """
-        from stride.utils.artifacts import get_client, download_array
-        from stride.utils.artifacts import ArtifactConfig
+        import mosaic
+        warehouse = mosaic.get_artifact_warehouse()
+        if warehouse is None:
+            raise RuntimeError(
+                'No ArtifactWarehouse configured; call '
+                'mosaic.set_artifact_warehouse() before loading ArtifactTraces')
 
-        config = ArtifactConfig(
-            endpoint=self._artifact_endpoint,
-            access_key=self._artifact_access_key,
-            secret_key=self._artifact_secret_key,
-            bucket=self._artifact_bucket,
-            secure=self._artifact_secure,
-            backend=self._artifact_backend,
-        )
-        client = get_client(config)
-        data = download_array(client, self._artifact_bucket, self._artifact_key)
+        data = warehouse.pull_remote(self._artifact_key)
 
         return Traces(
             data=data,
@@ -1942,8 +1933,7 @@ class ArtifactTraces(Traces):
         'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
         '_dtype', 'needs_grad', '_compressed', '_compression',
         'transform', 'grad', 'prec', '_transducer_ids', '_grid',
-        '_artifact_endpoint', '_artifact_access_key', '_artifact_secret_key',
-        '_artifact_secure', '_artifact_backend', '_artifact_bucket', '_artifact_key',
+        '_artifact_key',
     ]
 
     def _serialisation_helper(self) -> dict:
@@ -1952,24 +1942,16 @@ class ArtifactTraces(Traces):
     @classmethod
     def _deserialisation_helper(cls, state: dict) -> 'Traces':
         """
-        Deserialise on a worker: download from the artifact store and return
-        a fully-allocated ``Traces`` object (not an ``ArtifactTraces``).
+        Deserialise on a worker: download from the artifact store via the
+        globally registered ``ArtifactWarehouse`` and return a plain
+        ``Traces`` object with real data.
         """
-        from stride.utils.artifacts import ArtifactConfig, get_client, download_array
-
-        config = ArtifactConfig(
-            endpoint=state.pop('_artifact_endpoint'),
-            access_key=state.pop('_artifact_access_key'),
-            secret_key=state.pop('_artifact_secret_key'),
-            bucket=state.pop('_artifact_bucket'),
-            secure=state.pop('_artifact_secure'),
-            backend=state.pop('_artifact_backend'),
-        )
+        import mosaic
         key = state.pop('_artifact_key')
 
-        client = get_client(config)
+        warehouse = mosaic.get_artifact_warehouse()
         try:
-            data = download_array(client, config.bucket, key)
+            data = warehouse.pull_remote(key) if warehouse is not None else None
         except Exception:
             data = None
 

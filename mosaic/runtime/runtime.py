@@ -1102,7 +1102,13 @@ class Runtime(BaseRPC):
 
     async def exec(self, uid, func, func_args=None, func_kwargs=None):
         """
-        Retrieve an object from the warehouse.
+        Retrieve an object from the warehouse and execute function on it.
+
+        If an :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`
+        is configured (via ``mosaic.set_artifact_warehouse()``), the call is
+        routed there instead of the local SpillBuffer warehouse.  The
+        warehouse uploads the gradient result directly to S3 and returns an
+        ``ArtifactWarehouseObject``.
 
         Parameters
         ----------
@@ -1115,6 +1121,12 @@ class Runtime(BaseRPC):
         -------
 
         """
+        import mosaic as _mosaic
+        art_warehouse = _mosaic.get_artifact_warehouse()
+        if art_warehouse is not None:
+            return await art_warehouse.exec_remote(
+                uid, func, func_args=func_args, func_kwargs=func_kwargs)
+
         ret = await self._local_warehouse.exec_remote(uid=uid, func=func,
                                                       func_args=func_args, func_kwargs=func_kwargs,
                                                       reply=True)
