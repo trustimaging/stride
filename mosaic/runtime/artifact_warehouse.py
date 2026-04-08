@@ -174,6 +174,26 @@ class ArtifactWarehouse:
         """Set the current inversion iteration (used to construct gradient keys)."""
         self._iteration = iteration
 
+    def write_shot_list(self, iteration: int, shot_ids: list) -> None:
+        """
+        Write the list of expected shot IDs for *iteration* to S3.
+
+        Called by the head before dispatching shots each iteration, and again
+        after the loop if workers dropped below the threshold (to tell the
+        accumulator which shots actually completed).
+
+        Parameters
+        ----------
+        iteration : int
+            Zero-based absolute iteration index.
+        shot_ids : list of int
+            Shot IDs expected (or completed) for this iteration.
+
+        """
+        import json
+        key = '%s/iter_%d/shots.json' % (self.gradient_prefix, iteration)
+        self._upload_bytes(key, json.dumps(shot_ids).encode())
+
     def ensure_bucket(self) -> None:
         """Create the bucket if it does not already exist."""
         if not self.client.bucket_exists(self._bucket):
@@ -313,6 +333,7 @@ class ArtifactWarehouse:
         func_args = func_args or ()
         func_kwargs = dict(func_kwargs) if func_kwargs else {}
         iteration = func_kwargs.pop('iteration', self._iteration)
+        shot_id   = func_kwargs.pop('shot_id', None)
 
         # Call the redux closure (rec_grads=None — no prior accumulated value)
         result = await func(None, *func_args, **func_kwargs)
@@ -322,13 +343,13 @@ class ArtifactWarehouse:
         if isinstance(grad, tuple):
             grad = grad[0]
 
-        # Determine worker index from the runtime
+        # Key by shot ID when available, fall back to worker index
         runtime = mosaic.runtime()
         worker_id = (runtime.indices[0]
                      if (runtime is not None and len(runtime.indices))
                      else 0)
-        key = '%s/iter_%d/worker_%d.pkl' % (
-            self.gradient_prefix, iteration, worker_id)
+        id_part = ('shot_%d' % shot_id) if shot_id is not None else ('worker_%d' % worker_id)
+        key = '%s/iter_%d/%s.pkl' % (self.gradient_prefix, iteration, id_part)
 
         if hasattr(grad, 'data'):
             self._upload_bytes(key, pickle.dumps(np.asarray(grad.data)))

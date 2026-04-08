@@ -953,6 +953,8 @@ class ArrayProxy(CMDBase):
 
         self._cls = PickleClass(cls)
         self._len = kwargs.pop('len', 1)
+        self._init_args = args
+        self._init_kwargs = dict(kwargs)
         self._cls_attr_names = None
 
         self._proxies = []
@@ -1125,6 +1127,7 @@ class ArrayProxy(CMDBase):
                 task_proxies = asyncio.gather(*task_proxies)
 
             else:
+                # Fast path: worker already known
                 task_proxies = None
                 for proxy in self_ref()._proxies:
                     if proxy.runtime_id == runtime:
@@ -1132,7 +1135,21 @@ class ArrayProxy(CMDBase):
                         break
 
                 if task_proxies is None:
-                    raise RuntimeError('Runtime %s is no contained in the ArrayProxy' % runtime)
+                    # Slow path: new worker joined after init — create tessera on demand.
+                    # TesseraProxy starts with _init_future unresolved; TaskArrayProxy
+                    # awaits it before dispatching (task.py:1149), so the call blocks
+                    # naturally until __init_async__ completes in the background.
+                    # Note: tessera starts fresh (no state copy); first call incurs init latency.
+                    # Note: _len is the initial target count; _proxies may grow beyond it.
+                    proxy = TesseraProxy(self_ref()._cls.cls,
+                                        *self_ref()._init_args,
+                                        runtime=runtime,
+                                        **self_ref()._init_kwargs)
+                    self_ref()._proxies.append(proxy)
+                    asyncio.ensure_future(
+                        proxy.__init_async__(*self_ref()._init_args,
+                                             **self_ref()._init_kwargs))
+                    task_proxies = proxy[item](*args, **kwargs)
 
             return task_proxies
 
@@ -1204,6 +1221,9 @@ class ArrayProxy(CMDBase):
     def __await__(self):
         yield from self._init_future.__await__()
         return self
+
+    def deregister_runtime(self, uid):
+        self._proxies = [p for p in self._proxies if p.runtime_id != uid]
 
     _serialisation_attrs = CMDBase._serialisation_attrs + ['_cls',
                                                            '_proxies',

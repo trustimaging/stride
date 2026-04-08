@@ -151,14 +151,16 @@ Inside `adjoint()` per iteration (`stride/__init__.py`):
 
 ### Accumulator Service
 
-Runs as a daemon pod. Reads `NUM_ITERS` and `NUM_WORKERS` from env, then processes
-exactly that many iterations before exiting cleanly with code 0:
+Runs as a daemon pod via `python3 -m mosaic.runtime.gradient_accumulator`.
+Reads `NUM_ITERS` and `NUM_WORKERS` from env, then processes exactly that many
+iterations before exiting cleanly with code 0:
 
 ```
-warehouse.ensure_bucket()
-for i in range(NUM_ITERS):
-    wait until each worker_{K}.pkl arrives, fold into running sum immediately
-    upload final.pkl
+GradientAccumulator.from_env().run()
+  → for i in range(num_iters):
+      accumulate_iteration(i)
+        poll until each worker_{K}.pkl arrives, fold into running sum immediately
+        upload final.pkl
 exit 0
 ```
 
@@ -213,28 +215,30 @@ class ArtifactWarehouse:
 `ArtifactWarehouseObject` is a lightweight `(key, bucket)` handle mirroring
 `WarehouseObject` for the SpillBuffer.
 
-#### `k8s/scripts/gradient_accumulator.py`
+#### `mosaic/runtime/gradient_accumulator.py`
 
-Daemon script that runs as its own pod. Reads `NUM_ITERS` and `NUM_WORKERS` from
-env. For each iteration, polls MinIO and folds worker files into a running sum as
-they arrive (two arrays in memory at a time), then writes `final.pkl`.
+`GradientAccumulator` — daemon class that runs as its own pod. Reads `NUM_ITERS`
+and `NUM_WORKERS` from env via `from_env()`. For each iteration, polls MinIO and
+folds worker files into a running sum as they arrive (two arrays in memory at a
+time), then writes `final.pkl`. Invokable directly as a module:
 
 ```python
-warehouse = ArtifactWarehouse.from_env()
-warehouse.ensure_bucket()
-gradient_prefix = warehouse.gradient_prefix   # includes run prefix
+class GradientAccumulator:
+    @classmethod
+    def from_env(cls) -> 'GradientAccumulator':
+        # calls ArtifactWarehouse.from_env(), then reads NUM_WORKERS, NUM_ITERS
 
-for iteration in range(num_iters):
-    # poll; fold each worker_{K}.pkl into running sum as it arrives
-    accumulated = None
-    while folded < expected_keys:
-        for key in newly_available:
-            arr = pickle.loads(warehouse._download_bytes(key))
-            accumulated = np.array(arr) if accumulated is None else accumulated + arr
-            folded.add(key)
-    warehouse._upload_bytes(final_key, pickle.dumps(accumulated))
+    def accumulate_iteration(self, iteration: int) -> None:
+        # polls iter_{i}/ prefix; folds each worker_{K}.pkl into running sum;
+        # uploads final.pkl once all NUM_WORKERS files have been folded in
 
-# exits with code 0
+    def run(self) -> None:
+        # loops over range(num_iters), calling accumulate_iteration(i) each time
+
+# Entry point: python3 -m mosaic.runtime.gradient_accumulator
+if __name__ == '__main__':
+    logging.basicConfig(...)
+    GradientAccumulator.from_env().run()
 ```
 
 ### Modified Files
@@ -252,7 +256,7 @@ def get_artifact_warehouse(): ...
 
 #### `mosaic/runtime/__init__.py`
 
-Exports the `artifact_warehouse` module.
+Exports the `artifact_warehouse` and `gradient_accumulator` modules.
 
 #### `mosaic/cli/mrun.py`
 
@@ -374,7 +378,8 @@ for block in optimisation_loop.blocks(NUM_ITERS):
 
 #### `k8s/workflows/stride-workflow.yaml`
 
-- Added `gradient-accumulator` daemon task (depends only on `create-service`)
+- Added `gradient-accumulator` daemon task (depends only on `create-service`);
+  command is now `python3 -m mosaic.runtime.gradient_accumulator`
 - Added `num-iters` workflow parameter (default `"4"`)
 - Added `ARTIFACT_*` and `NUM_ITERS` env vars to head, worker, and accumulator specs:
 
@@ -442,7 +447,7 @@ All configuration is via environment variables, read by `ArtifactWarehouse.from_
 | `ARTIFACT_SHOT_PREFIX` | `shots` | Key prefix for shot data |
 
 The bucket is auto-created by `ensure_bucket()` if it does not exist. This is called
-at the start of `forward()` on the head and at startup in `gradient_accumulator.py`.
+at the start of `forward()` on the head and inside `GradientAccumulator.from_env()`.
 
 Workflow-level parameters (set in `stride-workflow.yaml` or overridden at submit time):
 
@@ -492,15 +497,15 @@ Final model range: [xxxx.x, xxxx.x] m/s
 
 Expected output (accumulator pod):
 ```
-[accumulator 13:25:48] Started — 4 iteration(s), 2 worker(s) per iteration, prefix='stride-x7k2p/gradients'.
-[accumulator 13:25:49] Iter 0 — waiting for 2 file(s).
-[accumulator 13:25:50] Iter 0 — downloading worker_0.pkl (1/2).
-[accumulator 13:25:50] Iter 0 — folded worker_0 (1/2 accumulated).
-[accumulator 13:25:51] Iter 0 — downloading worker_1.pkl (2/2).
-[accumulator 13:25:51] Iter 0 — folded worker_1 (2/2 accumulated).
-[accumulator 13:25:51] Iter 0 done — final.pkl written (1.23s).
+[mosaic.runtime.gradient_accumulator 13:25:48] Started — 4 iteration(s), 2 worker(s) per iteration, prefix='stride-x7k2p/gradients'.
+[mosaic.runtime.gradient_accumulator 13:25:49] Iter 0 — waiting for 2 file(s).
+[mosaic.runtime.gradient_accumulator 13:25:50] Iter 0 — downloading worker_0.pkl (1/2).
+[mosaic.runtime.gradient_accumulator 13:25:50] Iter 0 — folded worker_0 (1/2 accumulated).
+[mosaic.runtime.gradient_accumulator 13:25:51] Iter 0 — downloading worker_1.pkl (2/2).
+[mosaic.runtime.gradient_accumulator 13:25:51] Iter 0 — folded worker_1 (2/2 accumulated).
+[mosaic.runtime.gradient_accumulator 13:25:51] Iter 0 done — final.pkl written (1.23s).
 ...
-[accumulator 13:26:30] All 4 iteration(s) complete. Exiting.
+[mosaic.runtime.gradient_accumulator 13:26:30] All 4 iteration(s) complete. Exiting.
 ```
 
 ---

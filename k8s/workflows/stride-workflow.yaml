@@ -23,6 +23,8 @@ spec:
         value: simple
       - name: num-iters
         value: "4"
+      - name: drop-threshold
+        value: "0.3"
 
   templates:
     # ── DAG ──────────────────────────────────────────────
@@ -108,6 +110,8 @@ spec:
             value: "{{workflow.parameters.num-workers}}"
           - name: NUM_ITERS
             value: "{{workflow.parameters.num-iters}}"
+          - name: DROP_THRESHOLD
+            value: "{{workflow.parameters.drop-threshold}}"
           - name: WORKERS_PER_NODE
             value: "{{workflow.parameters.workers-per-node}}"
           - name: RUN_MODE
@@ -229,10 +233,9 @@ spec:
         imagePullPolicy: Never
         command:
           - python3
-          - k8s/scripts/gradient_accumulator.py
+          - -m
+          - mosaic.runtime.gradient_accumulator
         env:
-          - name: NUM_WORKERS
-            value: "{{workflow.parameters.num-workers}}"
           - name: NUM_ITERS
             value: "{{workflow.parameters.num-iters}}"
           - name: ARTIFACT_ENDPOINT

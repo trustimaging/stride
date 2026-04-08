@@ -44,6 +44,7 @@ import mosaic
 
 N = 2
 NUM_ITERS = int(os.environ.get('NUM_ITERS', '4'))
+DROP_THRESHOLD = float(os.environ.get('DROP_THRESHOLD', '0')) or None
 
 
 async def main(runtime, exp_name: str = 'simple') -> None:
@@ -144,7 +145,8 @@ async def main(runtime, exp_name: str = 'simple') -> None:
             await adjoint(problem, pde, loss,
                           optimisation_loop, optimiser, vp,
                           num_iters=1,
-                          select_shots=dict(num=N))
+                          select_shots=dict(num=N),
+                          drop_threshold=DROP_THRESHOLD)
             print('Block complete.', flush=True)
         except Exception as e:
             import traceback

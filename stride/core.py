@@ -368,7 +368,11 @@ class Variable:
 
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
                 _abs_iter = kwargs_.pop('_abs_iteration', None)
-                _fkw = {'iteration': _abs_iter} if _abs_iter is not None else None
+                _shot_id  = kwargs_.pop('_shot_id', None)
+                _fkw = {}
+                if _abs_iter is not None: _fkw['iteration'] = _abs_iter
+                if _shot_id  is not None: _fkw['shot_id']   = _shot_id
+                _fkw = _fkw or None
                 redux_grad = await runtime.exec('redux-%s' % node.op.uid, redux, output_grads, func_kwargs=_fkw)
                 ret = method((redux_grad,), **{**kwargs_, **{'eager': True, 'redux': True}})
 

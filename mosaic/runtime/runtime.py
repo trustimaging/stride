@@ -155,6 +155,7 @@ class Runtime(BaseRPC):
         self._nodes = dict()
         self._worker = None
         self._workers = dict()
+        self._on_worker_count_changed = []
         self._zmq_context = None
         self._loop = None
         self._remote_warehouse = None
@@ -734,6 +735,9 @@ class Runtime(BaseRPC):
         if found_proxy is None:
             if hasattr(self, '_' + proxy.name + 's'):
                 getattr(self, '_' + proxy.name + 's')[uid] = proxy
+                if proxy.name == 'worker':
+                    for cb in self._on_worker_count_changed:
+                        cb()
 
             elif hasattr(self, '_' + proxy.name):
                 setattr(self, '_' + proxy.name, proxy)
@@ -761,6 +765,9 @@ class Runtime(BaseRPC):
         if hasattr(self, '_' + proxy.name + 's'):
             try:
                 del getattr(self, '_' + proxy.name + 's')[uid]
+                if proxy.name == 'worker':
+                    for cb in self._on_worker_count_changed:
+                        cb()
             except KeyError:
                 pass
 
