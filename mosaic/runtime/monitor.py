@@ -401,6 +401,8 @@ class Monitor(Runtime):
         self._loop.interval(self.append_description, interval=10)
 
     def update_node(self, sender_id: str, update: Dict[str, Any], sub_resources: Dict[str, Any]) -> None:
+        self.logger.debug('UPDATE-NODE: recv from %s (blocked=%s)'
+                         % (sender_id, sender_id in self._disconnected_runtimes))
         if sender_id in self._disconnected_runtimes:
             return
 
@@ -411,7 +413,12 @@ class Monitor(Runtime):
             # In dynamic mode, start heartbeat for newly connected nodes
             if self.mode == 'dynamic':
                 self._comms.start_heartbeat(sender_id)
-                self.logger.info('Node %s connected (dynamic mode)' % sender_id)
+                worker_ids = list(sub_resources.get('workers', {}).keys())
+                self.logger.info(
+                    'NODE-CONNECTED: %s joined (dynamic mode) — '
+                    'bringing %d workers: %s — total nodes now: %d'
+                    % (sender_id, len(worker_ids), worker_ids,
+                       len(self._monitored_nodes)))
 
         node = self._monitored_nodes[sender_id]
         node.update(update, **sub_resources)
@@ -601,14 +608,23 @@ class Monitor(Runtime):
         -------
 
         """
+        self.logger.info('MONITOR-DISCONNECT: %s (sender=%s)' % (uid, sender_id))
         super().disconnect(sender_id, uid)
 
         # ensure runtime marked as disconnected
         self._disconnected_runtimes.add(uid)
 
+        # remove from scheduling strategy so no new work is dispatched to this uid
+        self._monitor_strategy.remove_worker(uid)
+        self.logger.info('MONITOR-DISCONNECT: removed %s from strategy pool (pool_size=%s)'
+                         % (uid, getattr(self._monitor_strategy, '_num_workers', '?')))
+
         # disconnect associated workers
         if uid in self._monitored_nodes:
-            for worker_id in self._monitored_nodes[uid].sub_resources['workers'].keys():
+            worker_ids = list(self._monitored_nodes[uid].sub_resources.get('workers', {}).keys())
+            self.logger.info('MONITOR-DISCONNECT: cascading to workers of %s: %s'
+                             % (uid, worker_ids))
+            for worker_id in worker_ids:
                 self.disconnect(sender_id, worker_id)
 
         # remove runtime from monitored nodes
@@ -679,8 +695,9 @@ class Monitor(Runtime):
         while pending_tasks:
             await asyncio.sleep(0.1)
 
-            for task in pending_tasks:
-                if task.state in ['done', 'failed', 'collected']:
+            tracked_uids = set(self._monitored_tasks.keys())
+            for task in list(pending_tasks):
+                if task.state in ['done', 'failed', 'collected'] or task.uid not in tracked_uids:
                     pending_tasks.remove(task)
 
             if len(self._monitored_tasks) > num_tasks:

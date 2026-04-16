@@ -33,6 +33,7 @@ def init(runtime_type='head', runtime_indices=(),
          log_level='perf', profile=False, node_list=None,
          phone_home=False, timeout=None,
          asyncio_loop=None, dump_init=False, wait=False,
+         runtime_uid=None,
          **kwargs):
     """
     Starts the global mosaic runtime.
@@ -107,6 +108,7 @@ def init(runtime_type='head', runtime_indices=(),
 
     runtime_config = {
         'runtime_indices': runtime_indices,
+        'runtime_uid': runtime_uid,
         'mode': mode,
         'reuse_head': reuse_head,
         'monitor_strategy': monitor_strategy,
@@ -142,8 +144,9 @@ def init(runtime_type='head', runtime_indices=(),
         try:
             from mosaic.runtime.artifact_warehouse import ArtifactWarehouse
             set_artifact_warehouse(ArtifactWarehouse.from_env())
-        except Exception:
-            pass
+        except Exception as e:
+            import traceback
+            print('WARNING: ArtifactWarehouse.from_env() failed: %s\n%s' % (e, traceback.format_exc()), flush=True)
 
     # Create global runtime
     try:

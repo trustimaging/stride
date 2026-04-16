@@ -55,14 +55,20 @@ class BaseRPC:
     """
 
     def __init__(self, name=None, indices=(), uid=None):
+        self._uid_override = None
         if uid is not None:
-            uid = uid.split(':')
-            name = uid[0]
-
-            if len(uid) > 1:
-                indices = tuple([int(each) for each in uid[1:]])
-            else:
-                indices = ()
+            parts = uid.split(':')
+            name = parts[0]
+            numeric_indices = []
+            for part in parts[1:]:
+                try:
+                    numeric_indices.append(int(part))
+                except ValueError:
+                    # Non-numeric part (e.g. instance UUID) — store full UID as
+                    # override and stop parsing indices here.
+                    self._uid_override = uid
+                    break
+            indices = tuple(numeric_indices)
 
         elif name is None:
             raise ValueError('Either name and indices or UID are required to instantiate the RPC')
@@ -97,6 +103,9 @@ class BaseRPC:
         Runtime UID.
 
         """
+        if self._uid_override is not None:
+            return self._uid_override
+
         if len(self.indices):
             indices = ':'.join([str(each) for each in self.indices])
             return '%s:%s' % (self.name, indices)
@@ -142,8 +151,11 @@ class Runtime(BaseRPC):
     is_warehouse = False
 
     def __init__(self, **kwargs):
+        runtime_uid = kwargs.pop('runtime_uid', None)
         runtime_indices = kwargs.pop('runtime_indices', ())
         super().__init__(name=self.__class__.__name__.lower(), indices=runtime_indices)
+        if runtime_uid is not None:
+            self._uid_override = runtime_uid
 
         self.mode = kwargs.get('mode', 'local')
         self.reuse_head = kwargs.get('reuse_head', False)
@@ -186,7 +198,7 @@ class Runtime(BaseRPC):
 
         if self.uid == 'warehouse':
             self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.85))
-        elif 'worker' in self.uid:
+        elif self.uid.startswith('worker:'):
             self._mem_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.85))
         else:
             self._mem_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.85))
@@ -212,8 +224,11 @@ class Runtime(BaseRPC):
         self.set_logger()
 
         # Start warehouse
+        local_warehouse_uid = kwargs.pop('local_warehouse_uid', None)
         self._remote_warehouse = self.proxy('warehouse')
-        if len(self.indices):
+        if local_warehouse_uid is not None:
+            self._local_warehouse = self.proxy(uid=local_warehouse_uid)
+        elif len(self.indices):
             self._local_warehouse = self.proxy('warehouse', indices=self.indices[0])
         else:
             self._local_warehouse = self._remote_warehouse
@@ -235,7 +250,7 @@ class Runtime(BaseRPC):
             self.set_profiler()
 
         # Start maintenance loop
-        if self.uid == 'head' or 'worker' in self.uid:
+        if self.uid == 'head' or self.uid.startswith('worker:'):
             maintenance_interval = max(0.5, min(len(self._workers)*0.5, 60))
         else:
             maintenance_interval = 0.5
@@ -265,15 +280,22 @@ class Runtime(BaseRPC):
 
         """
         warehouse_indices = kwargs.pop('indices', -1)
-        if warehouse_indices < 0:
+        warehouse_uid = kwargs.pop('warehouse_uid', None)
+        if warehouse_uid is not None:
+            warehouse_proxy = RuntimeProxy(uid=warehouse_uid)
+            indices = warehouse_proxy.indices
+        elif warehouse_indices < 0:
             warehouse_proxy = RuntimeProxy(name='warehouse')
+            indices = warehouse_proxy.indices
         else:
             warehouse_proxy = RuntimeProxy(name='warehouse', indices=warehouse_indices)
-        indices = warehouse_proxy.indices
+            indices = warehouse_proxy.indices
 
         def start_warehouse(*args, **extra_kwargs):
             kwargs.update(extra_kwargs)
             kwargs['runtime_indices'] = indices
+            if warehouse_uid is not None:
+                kwargs['runtime_uid'] = warehouse_uid
             mosaic.init('warehouse', *args, **kwargs, wait=True)
 
         warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)
@@ -392,8 +414,11 @@ class Runtime(BaseRPC):
                 raise RuntimeError('No workers available to complete async workload')
 
             worker_queue = asyncio.Queue()
+            worker_uids = []
             for worker in self._workers.values():
                 await worker_queue.put(worker)
+                worker_uids.append(worker.uid)
+            self.logger.info('ASYNC-FOR-QUEUE: dispatching with workers %s' % worker_uids)
 
             async def call(*iters):
                 res = None
@@ -434,7 +459,10 @@ class Runtime(BaseRPC):
                             pass
                     break
 
+            self.logger.info('ASYNC-FOR-BARRIER: waiting (workers in pool: %s)'
+                             % list(self._workers.keys()))
             await self.barrier()
+            self.logger.info('ASYNC-FOR-BARRIER: done')
 
             self._inside_async_for = False
 
@@ -736,6 +764,10 @@ class Runtime(BaseRPC):
             if hasattr(self, '_' + proxy.name + 's'):
                 getattr(self, '_' + proxy.name + 's')[uid] = proxy
                 if proxy.name == 'worker':
+                    self.logger.info(
+                        'POOL-JOIN: %s added to %s pool (pool now: %s)'
+                        % (uid, self.uid,
+                           list(getattr(self, '_workers', {}).keys())))
                     for cb in self._on_worker_count_changed:
                         cb()
 
@@ -745,6 +777,10 @@ class Runtime(BaseRPC):
             return proxy
 
         else:
+            if proxy.name == 'worker':
+                self.logger.info(
+                    'POOL-SKIP: %s already in %s pool — returning existing proxy'
+                    % (uid, self.uid))
             return found_proxy
 
     def remove_proxy_from_uid(self, uid, proxy=None):
@@ -766,6 +802,9 @@ class Runtime(BaseRPC):
             try:
                 del getattr(self, '_' + proxy.name + 's')[uid]
                 if proxy.name == 'worker':
+                    self.logger.info('POOL-REMOVE: %s removed from %s pool — remaining: %s, callbacks: %d'
+                                     % (uid, self.uid, list(self._workers.keys()),
+                                        len(self._on_worker_count_changed)))
                     for cb in self._on_worker_count_changed:
                         cb()
             except KeyError:
@@ -913,7 +952,13 @@ class Runtime(BaseRPC):
         -------
 
         """
+        self.logger.info('HAND: %s connecting from %s:%d (runtime=%s, pool_before=%s)'
+                         % (sender_id, address, port, self.uid,
+                            list(getattr(self, '_workers', {}).keys())))
         self.proxy_from_uid(sender_id)
+        self.logger.info('HAND-DONE: %s registered on %s (pool_after=%s)'
+                         % (sender_id, self.uid,
+                            list(getattr(self, '_workers', {}).keys())))
 
     def shake(self, sender_id, network):
         """
@@ -1500,6 +1545,10 @@ class Runtime(BaseRPC):
         -------
 
         """
+        methods = [t['method'] for t in tasks.values()]
+        self.logger.info('WORKER-RECV-TASK: %s received task array %s from %s (methods=%s)'
+                         % (self.uid, uid, sender_id, methods))
+
         processed_tasks = {}
         for t_uid, task in tasks.items():
             obj_uid = task['tessera_id']
@@ -1519,6 +1568,9 @@ class Runtime(BaseRPC):
 
         for tessera, task in zip(task.tesseras, task.tasks):
             tessera.queue_task((sender_id, task))
+
+        self.logger.info('WORKER-QUEUED-TASK: %s queued task array %s (methods=%s)'
+                         % (self.uid, uid, methods))
 
     def inc_pending_tasks(self):
         self._pending_tasks += 1

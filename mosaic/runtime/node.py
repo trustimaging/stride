@@ -1,5 +1,6 @@
 
 import os
+import uuid
 import asyncio
 import psutil
 
@@ -52,6 +53,14 @@ class Node(Runtime):
         -------
 
         """
+        # Generate a per-boot instance ID so every spawn of this node produces
+        # globally unique UIDs for both the node and its workers, eliminating
+        # UID collisions when a node pod is replaced.  Set _uid_override before
+        # super().init() so the unique UID is used for all ZMQ identity/comms
+        # setup.  Logged after super().init() once the logger is ready.
+        self._instance_id = uuid.uuid4().hex[:8]
+        self._uid_override = 'node:%d:%s' % (self.indices[0], self._instance_id)
+
         # Handle phone-home mode: read monitor address from environment variables
         phone_home = kwargs.get('phone_home', False)
         if phone_home:
@@ -71,9 +80,15 @@ class Node(Runtime):
             self._phone_home = False
 
         await super().init(**kwargs)
+        self.logger.info('NODE-INIT: super().init() done — handshake complete (uid=%s, instance_id=%s)'
+                         % (self.uid, self._instance_id))
 
-        # Start local cluster
-        await self.init_warehouse(indices=self.indices[0], **kwargs)
+        # Start local cluster — give the warehouse a unique per-boot UID so a
+        # replacement pod never collides with the stale connection the monitor
+        # holds for the old warehouse.
+        self._warehouse_uid = 'warehouse:%d:%s' % (self.indices[0], self._instance_id)
+        await self.init_warehouse(indices=self.indices[0], warehouse_uid=self._warehouse_uid, **kwargs)
+        self.logger.info('NODE-INIT: init_warehouse() done (uid=%s)' % self.uid)
         await self.init_workers(**kwargs)
 
         # In phone-home mode, log successful connection
@@ -163,31 +178,49 @@ class Node(Runtime):
                     worker_cpus.update(worker_chunk)
 
         # Initialise workers
+        self.logger.info('INIT-WORKERS: starting (uid=%s, num_workers=%d, instance_id=%s)'
+                         % (self.uid, self._num_workers, self._instance_id))
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
+            # Unique UID: worker:{node_idx}:{slot_idx}:{instance_id}
+            # Both node and worker share the same instance_id, so a pod
+            # restart produces a new (node, worker) pair that never collides
+            # with the dead pair in any runtime's dict.
+            worker_uid = 'worker:%d:%d:%s' % (self.indices[0], worker_index, self._instance_id)
 
             def start_worker(*args, **extra_kwargs):
                 kwargs.update(extra_kwargs)
                 kwargs['runtime_indices'] = indices
+                kwargs['runtime_uid'] = worker_uid
+                kwargs['local_warehouse_uid'] = self._warehouse_uid
                 kwargs['num_workers'] = num_workers
                 kwargs['num_threads'] = num_threads
 
                 mosaic.init('worker', *args, **kwargs, wait=True)
 
-            worker_proxy = RuntimeProxy(name='worker', indices=indices)
-            worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
+            worker_proxy = RuntimeProxy(uid=worker_uid)
+            worker_subprocess = subprocess(start_worker)(name=worker_uid,
                                                          daemon=False,
                                                          cpu_affinity=worker_cpus.get(worker_index, None))
             worker_subprocess.start_process()
             worker_proxy.subprocess = worker_subprocess
+            self.logger.info('INIT-WORKERS: subprocess started for %s (uid=%s, pre-shaken=%s)'
+                             % (worker_uid, self.uid, self._comms.shaken(worker_uid)))
 
-            self._workers[worker_proxy.uid] = worker_proxy
-            self._own_workers[worker_proxy.uid] = worker_proxy
-            await self._comms.wait_for(worker_proxy.uid)
+            self._workers[worker_uid] = worker_proxy
+            self._own_workers[worker_uid] = worker_proxy
+            await self._comms.wait_for(worker_uid)
+            self.logger.info('INIT-WORKERS: wait_for done for %s' % worker_uid)
 
         self.resource_monitor()
 
+        self.logger.info('INIT-WORKERS: all %d workers up on %s (%s) — '
+                         'sending update_monitored_node to register with monitor'
+                         % (self._num_workers, self.uid,
+                            list(self._own_workers.keys())))
         await self.update_monitored_node()
+        self.logger.info('INIT-WORKERS: update_monitored_node sent — '
+                         'node %s fully registered' % self.uid)
 
     def set_logger(self):
         """
@@ -246,6 +279,15 @@ class Node(Runtime):
 
         for worker_id, worker in self._own_workers.items():
             resource = self._monitored_node.add_resource('workers', worker_id)
+
+            # Detect unexpected subprocess crash: state machine says 'running'
+            # but the OS process is gone. Schedule a disconnect so the network
+            # removes the dead worker rather than waiting forever for replies.
+            if worker.subprocess.running() and not worker.subprocess._mp_process.is_alive():
+                self.logger.info('NODE: worker subprocess %s died unexpectedly — disconnecting'
+                                 % worker_id)
+                worker.subprocess._state = 'stopped'
+                asyncio.ensure_future(self._comms.disconnect(worker_id, worker_id, notify=True))
 
             worker_cpu_load = worker.subprocess.cpu_load()
             worker_memory_fraction = worker.subprocess.memory() / self._memory_limit

@@ -574,8 +574,11 @@ class OutboundConnection(Connection):
 
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
-        self._heartbeat_max_attempts = 5
-        self._heartbeat_interval = 15
+
+        self._heartbeat_max_attempts = 2
+        self._heartbeat_interval = 3
+
+        self._pending_reply_futures = []
 
         self._shaken = False
 
@@ -655,9 +658,21 @@ class OutboundConnection(Connection):
         -------
 
         """
+        # Bail out if this connection has been closed (stale timer from a
+        # previous connection object for this UID).  With unique worker instance
+        # IDs this should never happen in practice, but the guard is cheap.
+        if self._state != 'connected' or self._comms._send_conn.get(self.uid) is not self:
+            self._comms._runtime.logger.info(
+                'HEARTBEAT-ORPHAN: stopping stale timer for %s' % self.uid)
+            self.stop_heartbeat()
+            return
+
         self._heartbeat_attempts -= 1
 
         if self._heartbeat_attempts == 0:
+            self._comms._runtime.logger.info(
+                'HEARTBEAT-EXPIRE: %s → disconnecting %s (no beat received)'
+                % (self._comms._runtime.uid, self.uid))
             await self._comms.disconnect(self.uid, self.uid, notify=True)
             await self._loop.run(self._runtime.disconnect, self.uid, self.uid)
             return
@@ -665,7 +680,19 @@ class OutboundConnection(Connection):
         interval = self._heartbeat_interval * self._heartbeat_max_attempts/self._heartbeat_attempts
         self._heartbeat_timeout = self._loop.timeout(self.heart, timeout=interval)
 
-        await self.send_async(method='heart')
+        self._comms._runtime.logger.debug(
+            'HEARTBEAT: %s → heart to %s (attempts_left=%d, next_check_in=%.1fs)'
+            % (self._comms._runtime.uid, self.uid, self._heartbeat_attempts, interval))
+        try:
+            await self.send_async(method='heart')
+        except Exception as exc:
+            # Send failed — peer is unreachable, disconnect immediately.
+            self._comms._runtime.logger.info(
+                'HEARTBEAT-SEND-FAIL: %s → %s failed: %s — disconnecting'
+                % (self._comms._runtime.uid, self.uid, exc))
+            self._heartbeat_timeout.cancel()
+            await self._comms.disconnect(self.uid, self.uid, notify=True)
+            await self._loop.run(self._runtime.disconnect, self.uid, self.uid)
 
     async def beat(self):
         """
@@ -751,6 +778,7 @@ class OutboundConnection(Connection):
         if reply is True:
             reply_future = Reply(name=method)
             self._comms.register_reply_future(reply_future)
+            self._pending_reply_futures.append(reply_future)
             reply = reply_future.uid
 
         else:
@@ -815,8 +843,22 @@ class OutboundConnection(Connection):
         return reply_future, msg_size, multipart_msg
 
     def disconnect(self):
+        # Always cancel the heartbeat timer, even if already disconnected —
+        # handles the case where a stale timer outlives the state transition.
+        self.stop_heartbeat()
+
         if self._state != 'connected':
             return
+
+        # Cancel any reply futures that were waiting on this connection so
+        # that send_recv_async callers get RuntimeDisconnectedError instead
+        # of hanging forever.
+        from ..core.base import RuntimeDisconnectedError
+        pending, self._pending_reply_futures = self._pending_reply_futures, []
+        for future in pending:
+            if not future.done():
+                future.set_exception(RuntimeDisconnectedError(
+                    'Remote runtime %s disconnected before reply could be received' % self.uid))
 
         self._socket.disconnect(self.connect_address)
         super().disconnect()
@@ -1538,7 +1580,18 @@ class CommsManager:
         """
         validate_address(address, port)
 
-        if uid not in self._send_conn.keys() and uid != self._runtime.uid:
+        existing = self._send_conn.get(uid)
+        address_changed = (existing is not None
+                           and (existing.address != address or existing.port != port))
+        if uid != self._runtime.uid and (existing is None
+                                         or existing.state == 'disconnected'
+                                         or address_changed):
+            if address_changed:
+                self._runtime.logger.info(
+                    'CONNECT-SEND: address changed for %s (%s:%d → %s:%d) — reconnecting'
+                    % (uid, existing.address, existing.port, address, port))
+            if existing is not None and existing.state == 'connected':
+                existing.disconnect()
             self._send_conn[uid] = OutboundConnection(uid, address, port,
                                                       socket=self._send_socket,
                                                       runtime=self._runtime,
@@ -2223,6 +2276,10 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
+        self._runtime.logger.info(
+            'COMMS-DISCONNECT: %s (notify=%s, runtime=%s)'
+            % (uid, notify, self._runtime.uid))
+
         if uid in self._send_conn.keys():
             self._send_conn[uid].disconnect()
 
@@ -2234,7 +2291,7 @@ class CommsManager:
                                       method='disconnect',
                                       uid=uid)
 
-            if 'node' in uid and uid in self._runtime._nodes:
+            if uid.startswith('node:') and uid in self._runtime._nodes:
                 node_index = self._runtime._nodes[uid].indices[0]
                 for worker in self._runtime.workers:
                     if worker.indices[0] == node_index:
@@ -2274,26 +2331,84 @@ class CommsManager:
         # zmq.ROUTER messages will be dropped if endpoint not yet connected
         await asyncio.sleep(0.1)
 
+        self._runtime.logger.info('COMMS-HS: sending hand to %s at %s:%d (my addr=%s:%d, runtime=%s)'
+                                  % (uid, address, port, self.address, self.port, self._runtime.uid))
         await self.send_async(uid,
                               method='hand',
                               address=self.address, port=self.port)
 
-        while True:
-            try:
-                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=60)
-                if (uid == sender_id and response.method == 'shake') or self.shaken(uid):
+        # Buffer any RPC messages that arrive before the shake from uid.
+        # They are dispatched after the handshake completes, once all outbound
+        # connections (including back to those senders) are fully established.
+        pending_msgs = []
+
+        # IMPORTANT: never cancel the recv_async() coroutine on timeout.
+        # Cancelling a pending pyzmq asyncio recv_multipart() consumes the
+        # socket's FD-readability event without delivering the message, so
+        # subsequent recv calls block indefinitely even when messages are
+        # queued.  Instead, keep one persistent recv task alive and only
+        # re-send the hand on each timeout — do not cancel the recv task.
+        recv_task = asyncio.ensure_future(self.recv_async())
+        try:
+            while True:
+                done, _ = await asyncio.wait([recv_task], timeout=60)
+
+                if not done:
+                    # Timeout — retry hand but keep recv_task alive.
+                    self._runtime.logger.info(
+                        'COMMS-HS: 60s timeout waiting for shake from %s, retrying hand (runtime=%s)'
+                        % (uid, self._runtime.uid))
+                    await self.send_async(uid,
+                                          method='hand',
+                                          address=self.address, port=self.port)
+                    continue
+
+                sender_id, response = recv_task.result()
+                if response.method != 'reply':
+                    self._runtime.logger.info(
+                        'COMMS-HS: recv %s from %s (waiting for shake from %s, runtime=%s)'
+                        % (response.method, sender_id, uid, self._runtime.uid))
+
+                if uid == sender_id and response.method == 'shake':
+                    self._runtime.logger.info('COMMS-HS: handshake complete with %s (runtime=%s)'
+                                              % (sender_id, self._runtime.uid))
                     break
-            except asyncio.TimeoutError:
-                await self.send_async(uid,
-                                      method='hand',
-                                      address=self.address, port=self.port)
+                elif response.method not in ('shake', 'hand', 'reply'):
+                    # RPC call from another peer arrived while still waiting
+                    # for the shake.  Buffer it — outbound connection to the
+                    # sender may not exist until we process the network shake.
+                    self._runtime.logger.info(
+                        'COMMS-HS: buffering %s from %s received during handshake wait'
+                        % (response.method, sender_id))
+                    pending_msgs.append((sender_id, response))
+
+                # Message processed — start waiting for the next one.
+                recv_task = asyncio.ensure_future(self.recv_async())
+        finally:
+            # Clean up any still-pending recv task if we exit unexpectedly.
+            if not recv_task.done():
+                recv_task.cancel()
+                try:
+                    await recv_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
         self._send_conn[uid].shake()
         if pubsub_port is not None:
             self._pubsub_conn.shake()
 
+        # response is always the shake from uid here — safe to use its kwargs.
         await self.shake(sender_id, **response.kwargs)
         await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
+
+        # Dispatch messages that arrived during the handshake wait.
+        # At this point all outbound connections are established, so call_safe
+        # can send replies back to those senders without a KeyError.
+        for buf_sender_id, buf_response in pending_msgs:
+            self._runtime.logger.info(
+                'COMMS-HS: dispatching buffered %s from %s post-handshake'
+                % (buf_response.method, buf_sender_id))
+            await self.process_msg(buf_sender_id, buf_response)
 
     async def hand(self, sender_id, address, port):
         """
@@ -2315,20 +2430,45 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
+        existing = self._send_conn.get(sender_id)
+        existing_state = existing.state if existing is not None else 'none'
+        disconnected_set = getattr(self._runtime, '_disconnected_runtimes', set())
+        self._runtime.logger.info(
+            'COMMS-HAND: recv hand from %s at %s:%d '
+            '(runtime=%s, existing_conn_state=%s, in_disconnected_set=%s)'
+            % (sender_id, address, port, self._runtime.uid,
+               existing_state, sender_id in disconnected_set))
+
+        # A 'hand' always means the peer just (re)started.  If we have a stale
+        # outbound connection from a previous run (same UID, same address), the
+        # ZMQ DEALER socket may be dead.  Force-disconnect it so connect_send()
+        # always creates a fresh socket — guaranteeing the shake reply is
+        # delivered on a live TCP connection.
+        if existing is not None and existing.state == 'connected':
+            self._runtime.logger.info(
+                'COMMS-HAND: force-disconnecting stale conn for %s before re-handshake'
+                % sender_id)
+            existing.disconnect()
+
         self.connect_send(sender_id, address, port)
 
-        # zmq.ROUTER messages will be dropped if endpoint not yet connected
+        # Allow ZMQ to complete the outbound DEALER→ROUTER connection before
+        # we try to send the shake back.
         await asyncio.sleep(0.1)
 
         network = {}
         if self._runtime.uid == 'monitor':
             for connected_id, connection in self._send_conn.items():
-                network[connected_id] = (connection.address, connection.port)
+                if connection.state == 'connected':
+                    network[connected_id] = (connection.address, connection.port)
 
+        self._runtime.logger.info('COMMS-HAND: sending shake to %s (network=%s)'
+                                  % (sender_id, list(network.keys())))
         await self.send_async(sender_id,
                               method='shake',
                               network=network,
                               reply=False)
+        self._runtime.logger.info('COMMS-HAND: shake sent to %s' % sender_id)
         self._send_conn[sender_id].shake()
 
         if self._runtime.uid == 'monitor':
@@ -2375,11 +2515,15 @@ class CommsManager:
         -------
 
         """
-        if self._state == 'disconnected' or 'node' not in self._runtime.uid:
+        if self._state == 'disconnected':
             return
 
-        await self.send_async(sender_id,
-                              method='beat')
+        try:
+            await self.send_async(sender_id,
+                                  method='beat')
+        except Exception as exc:
+            self._runtime.logger.info('HEART-BEAT-FAIL: %s failed to send beat to %s: %s'
+                                      % (self._runtime.uid, sender_id, exc))
 
     async def beat(self, sender_id):
         """
@@ -2511,6 +2655,8 @@ class CommsManager:
         sync = kwargs.pop('sync', False)
 
         def send_recv_sync():
+            from ..core.base import RuntimeDisconnectedError
+
             if send_uid == self._runtime.uid:
                 future = self._circ_conn.send_sync(*args, reply=True, **kwargs)
 
@@ -2520,9 +2666,15 @@ class CommsManager:
 
                 future = self._send_conn[send_uid].send_sync(*args, reply=True, **kwargs)
 
+            if future is None:
+                raise RuntimeDisconnectedError('Remote runtime %s became disconnected '
+                                               'before reply could be received' % send_uid)
+
             return future
 
         async def send_recv_async():
+            from ..core.base import RuntimeDisconnectedError
+
             if send_uid == self._runtime.uid:
                 future = await self._circ_conn.send_async(*args, reply=True, **kwargs)
 
@@ -2531,6 +2683,10 @@ class CommsManager:
                     raise KeyError('Endpoint %s is not connected' % send_uid)
 
                 future = await self._send_conn[send_uid].send_async(*args, reply=True, **kwargs)
+
+            if future is None:
+                raise RuntimeDisconnectedError('Remote runtime %s became disconnected '
+                                               'before reply could be received' % send_uid)
 
             return await future
 

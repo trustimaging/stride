@@ -30,7 +30,7 @@ class WarehouseObject:
             self._uid = uid
 
         runtime = self.runtime
-        if 'worker' in runtime.uid:
+        if runtime.uid.startswith('worker:'):
             node_id = 'node:%d' % runtime.indices[0]
         else:
             node_id = runtime.uid

@@ -274,7 +274,12 @@ class Tessera(RemoteBase):
                 self._put_run_queue(sender_id=sender_id, task=task, future=None)
                 break
 
+            self.logger.info('TESSERA-QUEUE: %s received task %s.%s from %s'
+                             % (self.uid, self.obj.__class__.__name__, task.method, sender_id))
+
             future = await task.prepare_args()
+            self.logger.info('TESSERA-ARGS-READY: %s args ready for task %s.%s'
+                             % (self.uid, self.obj.__class__.__name__, task.method))
 
             if self.is_async:
                 future.add_done_callback(functools.partial(self._put_run_queue,
@@ -320,7 +325,11 @@ class Tessera(RemoteBase):
 
             await asyncio.sleep(0)
             await self.logger.send()
+            self.logger.info('TESSERA-RUN: %s starting %s.%s'
+                             % (self.uid, self.obj.__class__.__name__, task.method))
             await self.call_safe(sender_id, method, task)
+            self.logger.info('TESSERA-DONE: %s finished %s.%s'
+                             % (self.uid, self.obj.__class__.__name__, task.method))
 
             del task
             del method
@@ -1136,19 +1145,29 @@ class ArrayProxy(CMDBase):
 
                 if task_proxies is None:
                     # Slow path: new worker joined after init — create tessera on demand.
-                    # TesseraProxy starts with _init_future unresolved; TaskArrayProxy
-                    # awaits it before dispatching (task.py:1149), so the call blocks
-                    # naturally until __init_async__ completes in the background.
-                    # Note: tessera starts fresh (no state copy); first call incurs init latency.
-                    # Note: _len is the initial target count; _proxies may grow beyond it.
+                    import mosaic as _mosaic
+                    _mosaic.logger().info(
+                        'TESSERA-SLOW-PATH: initialising %s on new worker %s'
+                        % (self_ref()._cls.cls.__name__, runtime))
                     proxy = TesseraProxy(self_ref()._cls.cls,
                                         *self_ref()._init_args,
                                         runtime=runtime,
                                         **self_ref()._init_kwargs)
                     self_ref()._proxies.append(proxy)
-                    asyncio.ensure_future(
+                    # Store a strong reference on the proxy to prevent the task
+                    # being garbage collected while suspended at the first await.
+                    proxy._pending_init_task = asyncio.ensure_future(
                         proxy.__init_async__(*self_ref()._init_args,
                                              **self_ref()._init_kwargs))
+
+                    def _suppress_disconnected(t):
+                        # Retrieve the exception so Python does not emit
+                        # "Task exception was never retrieved". RuntimeDisconnectedError
+                        # is already logged inside __init_async__ as a warning.
+                        if not t.cancelled():
+                            t.exception()
+
+                    proxy._pending_init_task.add_done_callback(_suppress_disconnected)
                     task_proxies = proxy[item](*args, **kwargs)
 
             return task_proxies
@@ -1223,7 +1242,19 @@ class ArrayProxy(CMDBase):
         return self
 
     def deregister_runtime(self, uid):
+        import mosaic as _mosaic
+        removed = [p for p in self._proxies if p.runtime_id == uid]
+        for p in removed:
+            task = getattr(p, '_pending_init_task', None)
+            if task is not None and not task.done():
+                _mosaic.logger().info(
+                    'TESSERA-DEREGISTER: cancelling pending init task for %s on %s'
+                    % (self.uid, uid))
+                task.cancel()
         self._proxies = [p for p in self._proxies if p.runtime_id != uid]
+        _mosaic.logger().info(
+            'TESSERA-ARRAY-DEREGISTER: removed %d proxy/proxies for %s from %s (remaining=%d)'
+            % (len(removed), uid, self.uid, len(self._proxies)))
 
     _serialisation_attrs = CMDBase._serialisation_attrs + ['_cls',
                                                            '_proxies',

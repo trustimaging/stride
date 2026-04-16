@@ -129,7 +129,7 @@ async def forward(problem, pde, *args, **kwargs):
         logger.perf('\n')
         logger.perf('Giving shot %d to %s (%d out of %d)'
                     % (shot_id, worker.uid,
-                       num_submitted, num_shots))
+                       num_submitted + 1, num_shots))
 
         sub_problem = problem.sub_problem(shot_id)
         submitted_shots.append(shot_id)
@@ -189,26 +189,110 @@ async def forward(problem, pde, *args, **kwargs):
     await loop
 
 
-async def _watch_workers(runtime, initial, threshold, task, event):
-    """Cancel *task* if the worker drop fraction exceeds *threshold*.
+async def _wait_for_workers(runtime, target, timeout=300.0, heartbeat=30.0):
+    """Wait (up to *timeout* seconds) until *runtime* has at least *target* workers.
 
-    Wakes immediately whenever a worker joins or leaves (event-driven via
-    runtime._on_worker_count_changed) rather than polling on a fixed interval.
+    Called after a worker-drop retry so that replacement pods have time to
+    phone home before the new ``async_for`` worker queue is built.  If
+    replacements never arrive within the timeout we proceed with whoever is
+    available and let the iteration succeed on a smaller crew.
+
+    Logs progress every *heartbeat* seconds so the operator can see the wait
+    is active and which UIDs have joined.
     """
+    logger = mosaic.logger()
+
+    present_uids = set(w.uid for w in runtime.workers)
+    if runtime.num_workers >= target:
+        logger.info('WAIT-FOR-WORKERS: already have %d/%d workers — skipping wait '
+                    '(present: %s)' % (runtime.num_workers, target, sorted(present_uids)))
+        return
+
+    logger.info('WAIT-FOR-WORKERS: start — need %d workers, have %d (present: %s)'
+                % (target, runtime.num_workers, sorted(present_uids)))
+
+    event = asyncio.Event()
+    cb = event.set
+    runtime._on_worker_count_changed.append(cb)
+    tic = asyncio.get_event_loop().time()
+    try:
+        end_time = tic + timeout
+        while runtime.num_workers < target:
+            remaining = end_time - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                elapsed = asyncio.get_event_loop().time() - tic
+                logger.warning(
+                    'WAIT-FOR-WORKERS: timed out after %.0fs — '
+                    'proceeding with %d/%d workers (present: %s)'
+                    % (elapsed, runtime.num_workers, target,
+                       sorted(w.uid for w in runtime.workers)))
+                break
+            try:
+                await asyncio.wait_for(event.wait(), timeout=min(heartbeat, remaining))
+                # Event fired — a worker joined or left.
+                event.clear()
+                current_uids = set(w.uid for w in runtime.workers)
+                elapsed = asyncio.get_event_loop().time() - tic
+                logger.info(
+                    'WAIT-FOR-WORKERS: pool changed at +%.0fs — '
+                    '%d/%d workers (present: %s, joined: %s, left: %s)'
+                    % (elapsed, runtime.num_workers, target,
+                       sorted(current_uids),
+                       sorted(current_uids - present_uids),
+                       sorted(present_uids - current_uids)))
+                present_uids = current_uids
+            except asyncio.TimeoutError:
+                # Heartbeat tick — log progress so operators can see we are still waiting.
+                elapsed = asyncio.get_event_loop().time() - tic
+                logger.info(
+                    'WAIT-FOR-WORKERS: still waiting at +%.0fs — '
+                    '%d/%d workers present (present: %s)'
+                    % (elapsed, runtime.num_workers, target,
+                       sorted(w.uid for w in runtime.workers)))
+    finally:
+        try:
+            runtime._on_worker_count_changed.remove(cb)
+        except ValueError:
+            pass
+
+    elapsed = asyncio.get_event_loop().time() - tic
+    logger.info('WAIT-FOR-WORKERS: done after %.0fs — proceeding with %d workers '
+                '(target was %d, present: %s)'
+                % (elapsed, runtime.num_workers, target,
+                   sorted(w.uid for w in runtime.workers)))
+
+
+async def _watch_workers(runtime, initial_uids, threshold, task, event):
+    """Cancel *task* if the fraction of *dropped* original workers exceeds *threshold*.
+
+    Tracks which specific worker UIDs were alive at the start of the attempt.
+    A replacement worker joining with a new UID does not mask a drop.
+
+    Purely event-driven: wakes whenever runtime._on_worker_count_changed fires
+    (i.e. any worker joins or leaves via remove_proxy_from_uid).
+    """
+    logger = mosaic.logger()
+    n = len(initial_uids)
+    logger.info('_watch_workers started — initial_uids=%s threshold=%.2f' % (initial_uids, threshold))
     while not task.done():
         await event.wait()
         event.clear()
-        current = len(runtime.workers)
-        if initial > 0 and (initial - current) / initial > threshold:
+        current_uids = set(w.uid for w in runtime.workers)
+        lost = initial_uids - current_uids
+        fraction = len(lost) / n if n > 0 else 0.0
+        logger.info('_watch_workers check — lost=%s fraction=%.2f threshold=%.2f' % (lost, fraction, threshold))
+        if n > 0 and fraction > threshold:
+            logger.info('_watch_workers: drop threshold exceeded (%.2f > %.2f) — cancelling' % (fraction, threshold))
             task.cancel()
             return
+    logger.info('_watch_workers: loop_task already done, exiting')
 
 
-def _start_worker_monitor(runtime, initial_workers, drop_threshold, loop_task):
+def _start_worker_monitor(runtime, drop_threshold, loop_task):
     """Start a worker-drop monitor for *loop_task*.
 
-    Registers an event-driven callback on the runtime so the monitor wakes
-    immediately on any worker join/leave rather than polling on a timer.
+    Captures the current set of worker UIDs as the baseline so that a
+    replacement worker joining with a new UID does not mask a drop.
 
     Returns (monitor_task, cleanup) where *cleanup()* must be called in a
     finally block to deregister the callback regardless of outcome.
@@ -217,11 +301,16 @@ def _start_worker_monitor(runtime, initial_workers, drop_threshold, loop_task):
     if drop_threshold is None:
         return None, lambda: None
 
+    logger = mosaic.logger()
+    initial_uids = set(w.uid for w in runtime.workers)
+    logger.info('_start_worker_monitor: initial_uids=%s threshold=%.2f callbacks_before=%d'
+                % (initial_uids, drop_threshold, len(runtime._on_worker_count_changed)))
+
     event = asyncio.Event()
     cb = event.set
     runtime._on_worker_count_changed.append(cb)
     monitor_task = asyncio.ensure_future(
-        _watch_workers(runtime, initial_workers, drop_threshold, loop_task, event))
+        _watch_workers(runtime, initial_uids, drop_threshold, loop_task, event))
 
     def cleanup():
         monitor_task.cancel()
@@ -331,13 +420,17 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     if optimiser.reset_block:
         optimiser.reset()
 
+    desired_worker_count = runtime.num_workers
+
     for iteration in block.iterations(num_iters):
         optimiser.clear_grad()
 
         if optimiser.reset_iteration:
             optimiser.reset()
 
-        published_args = [runtime.put(each, publish=True) for each in args]
+        await _wait_for_workers(runtime, desired_worker_count)
+
+        published_args = [runtime.put(each, publish=False) for each in args]
         published_args = await asyncio.gather(*published_args)
 
         logger.perf('Starting iteration %d (out of %d), '
@@ -375,8 +468,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if art_warehouse is not None:
             art_warehouse.write_shot_list(iteration.abs_id, shot_ids)
 
-        initial_workers = len(runtime.workers)
-
+        initial_worker_count = runtime.num_workers
         while True:
             completed_shots = []
 
@@ -390,7 +482,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 logger.perf('\n')
                 logger.perf('Giving shot %d to %s (%d out of %d)'
                             % (shot_id, worker.uid,
-                               iteration.num_submitted, num_shots))
+                               iteration.num_submitted + 1, num_shots))
 
                 sub_problem = problem.sub_problem(shot_id)
                 iteration.add_submitted(sub_problem.shot)
@@ -465,7 +557,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
             loop_task = asyncio.ensure_future(_run_loop())
             monitor_task, cleanup_monitor = _start_worker_monitor(
-                runtime, initial_workers,
+                runtime,
                 drop_threshold if art_warehouse is not None else None,
                 loop_task)
 
@@ -476,10 +568,20 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                     art_warehouse.write_shot_list(iteration.abs_id, completed_shots)
                 break
             except asyncio.CancelledError:
+                runtime._inside_async_for = False
+                iteration.clear()
                 optimiser.clear_grad()
-                initial_workers = len(runtime.workers)
-                logger.info('Iteration %d: drop threshold exceeded, retrying'
-                            % iteration.abs_id)
+                current_uids = sorted(w.uid for w in runtime.workers)
+                logger.info(
+                    'ADJOINT-RETRY: iteration %d — drop threshold exceeded, '
+                    'clearing and retrying. Workers now: %d/%d %s'
+                    % (iteration.abs_id, runtime.num_workers,
+                       initial_worker_count, current_uids))
+                await _wait_for_workers(runtime, initial_worker_count)
+                logger.info(
+                    'ADJOINT-RETRY: iteration %d — proceeding with workers: %s'
+                    % (iteration.abs_id,
+                       sorted(w.uid for w in runtime.workers)))
             finally:
                 cleanup_monitor()
 
@@ -496,7 +598,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 logger.perf('\n')
                 logger.perf('Giving shot %d to %s (%d out of %d)'
                             % (shot_id, worker.uid,
-                               iteration.num_submitted, num_shots))
+                               iteration.num_submitted + 1, num_shots))
 
                 sub_problem = problem.sub_problem(shot_id)
                 iteration.add_submitted(sub_problem.shot)

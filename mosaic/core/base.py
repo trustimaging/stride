@@ -1,4 +1,5 @@
 
+import asyncio
 import time
 
 import mosaic
@@ -79,14 +80,32 @@ class CMDBase(Base):
         self.is_async = False
 
     async def __init_async__(self, *args, **kwargs):
-        await self.init(*args, **kwargs)
+        try:
+            # Wrap in shield to prevent monitor-triggered cancellation 
+            # from stopping the worker's setup.
+            await asyncio.shield(self.init(*args, **kwargs))
+            
+        except asyncio.CancelledError:
+            # If the monitor cancels this, the shield allows the actual 
+            # init to continue, but we still log that a cancellation 
+            # event was caught.
+            self.logger.warning(f"INIT-SHIELDED: {self.uid} setup is continuing in "
+                                  f"background despite iteration retry.")
+            # We must wait for the shielded task to finish if we want 
+            # the worker to be ready before the next retry loop starts.
+            await self.init(*args, **kwargs)
+            
+        except RuntimeDisconnectedError as e:
+            self.logger.warning(f"INIT-DISCONNECT: {self.uid} failed init due to {e}")
+            raise # Re-raise to let the system know this worker is truly unusable
 
+        # Safety check: ensure the future reflects the actual state
         if self._init_future.done():
             exc = self._init_future.exception()
             if exc is not None:
                 raise exc
-
-        self._init_future.set_result(True)
+        else:
+            self._init_future.set_result(True)
 
         return self
 
