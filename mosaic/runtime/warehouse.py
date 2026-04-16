@@ -34,7 +34,26 @@ class Warehouse(Runtime):
         super().__init__(**kwargs)
 
         self._warehouses = dict()
+        self._node_warehouse_map = {}  # node_index (int) -> warehouse_uid (str)
         self._spill_directory = None
+
+    def hand(self, sender_id, address, port):
+        """
+        Override to track peer warehouse UIDs by node index so publish()
+        can route to the correct unique warehouse UID (e.g. warehouse:0:abc123).
+        """
+        super().hand(sender_id, address, port)
+        if sender_id.startswith('warehouse:') and sender_id != self.uid:
+            parts = sender_id.split(':')
+            # parts[1] is the node index (numeric), parts[2] (if present) is instance_id
+            if len(parts) >= 2:
+                try:
+                    node_idx = int(parts[1])
+                    self._node_warehouse_map[node_idx] = sender_id
+                    self.logger.info('WAREHOUSE: registered peer warehouse %s for node index %d'
+                                     % (sender_id, node_idx))
+                except ValueError:
+                    pass
 
     async def init(self, **kwargs):
         await super().init(**kwargs)
@@ -365,9 +384,14 @@ class Warehouse(Runtime):
         tasks = []
 
         for node in self._nodes.values():
-            if node.uid not in self._warehouses:
-                self._warehouses[node.uid] = self.proxy('warehouse',
-                                                        indices=node.indices[0])
+            node_idx = node.indices[0]
+            # Prefer the instance-specific UID tracked via hand(); fall back to
+            # the index-only form for backwards-compat with non-unique warehouses.
+            warehouse_uid = self._node_warehouse_map.get(node_idx,
+                                                         'warehouse:%d' % node_idx)
+            if node.uid not in self._warehouses or \
+                    self._warehouses[node.uid].uid != warehouse_uid:
+                self._warehouses[node.uid] = self.proxy(uid=warehouse_uid)
             tasks.append(self._warehouses[node.uid].put_remote(obj=obj, uid=obj_id, reply=True))
 
         if len(self.indices):
