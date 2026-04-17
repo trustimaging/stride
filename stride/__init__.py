@@ -92,7 +92,12 @@ async def forward(problem, pde, *args, **kwargs):
     if art_warehouse is not None:
         art_warehouse.ensure_bucket()
 
-    if dump is True:
+    # Skip the disk-load/early-return optimisation when an artifact warehouse
+    # is configured: each workflow run uses a fresh MinIO prefix (keyed by
+    # run ID), so local disk data from a previous run with the same exp_name
+    # must not cause the forward pass to be skipped — the MinIO objects would
+    # never be written and load_artifacts() would fail with NoSuchKey.
+    if dump is True and art_warehouse is None:
         try:
             problem.acquisitions.load(path=problem.output_folder,
                                       project_name=problem.name, version=0)
@@ -273,19 +278,19 @@ async def _watch_workers(runtime, initial_uids, threshold, task, event):
     """
     logger = mosaic.logger()
     n = len(initial_uids)
-    logger.info('_watch_workers started — initial_uids=%s threshold=%.2f' % (initial_uids, threshold))
+    logger.debug('_watch_workers started — initial_uids=%s threshold=%.2f' % (initial_uids, threshold))
     while not task.done():
         await event.wait()
         event.clear()
         current_uids = set(w.uid for w in runtime.workers)
         lost = initial_uids - current_uids
         fraction = len(lost) / n if n > 0 else 0.0
-        logger.info('_watch_workers check — lost=%s fraction=%.2f threshold=%.2f' % (lost, fraction, threshold))
+        logger.debug('_watch_workers check — lost=%s fraction=%.2f threshold=%.2f' % (lost, fraction, threshold))
         if n > 0 and fraction > threshold:
-            logger.info('_watch_workers: drop threshold exceeded (%.2f > %.2f) — cancelling' % (fraction, threshold))
+            logger.warning('_watch_workers: drop threshold exceeded (%.2f > %.2f) — cancelling' % (fraction, threshold))
             task.cancel()
             return
-    logger.info('_watch_workers: loop_task already done, exiting')
+    logger.debug('_watch_workers: loop_task already done, exiting')
 
 
 def _start_worker_monitor(runtime, drop_threshold, loop_task):
@@ -303,8 +308,8 @@ def _start_worker_monitor(runtime, drop_threshold, loop_task):
 
     logger = mosaic.logger()
     initial_uids = set(w.uid for w in runtime.workers)
-    logger.info('_start_worker_monitor: initial_uids=%s threshold=%.2f callbacks_before=%d'
-                % (initial_uids, drop_threshold, len(runtime._on_worker_count_changed)))
+    logger.debug('_start_worker_monitor: initial_uids=%s threshold=%.2f'
+                 % (initial_uids, drop_threshold))
 
     event = asyncio.Event()
     cb = event.set

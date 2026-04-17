@@ -33,7 +33,7 @@ def init(runtime_type='head', runtime_indices=(),
          log_level='perf', profile=False, node_list=None,
          phone_home=False, timeout=None,
          asyncio_loop=None, dump_init=False, wait=False,
-         runtime_uid=None,
+         runtime_uid=None, local_warehouse_uid=None,
          **kwargs):
     """
     Starts the global mosaic runtime.
@@ -120,6 +120,9 @@ def init(runtime_type='head', runtime_indices=(),
         'phone_home': phone_home,
         'dump_init': dump_init,
     }
+
+    if local_warehouse_uid is not None:
+        runtime_config['local_warehouse_uid'] = local_warehouse_uid
 
     if timeout is not None:
         runtime_config['timeout'] = timeout

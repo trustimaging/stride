@@ -31,7 +31,14 @@ class WarehouseObject:
 
         runtime = self.runtime
         if runtime.uid.startswith('worker:'):
-            node_id = 'node:%d' % runtime.indices[0]
+            # Derive the node UID from the worker UID. With unique instance
+            # IDs the worker UID is 'worker:{node}:{slot}:{instance}', so
+            # the node UID is 'node:{node}:{instance}'.
+            parts = runtime.uid.split(':')
+            if len(parts) >= 4:
+                node_id = 'node:%s:%s' % (parts[1], parts[3])
+            else:
+                node_id = 'node:%s' % parts[1]
         else:
             node_id = runtime.uid
 

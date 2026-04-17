@@ -253,6 +253,12 @@ class Task(RemoteBase):
                 self._kwargs_value[key] = value
 
         await asyncio.gather(*tasks)
+
+        if self._args_pending or self._kwargs_pending:
+            self.logger.debug(
+                'PREPARE-ARGS: %s waiting for %d pending args, %d pending kwargs'
+                % (self.uid, len(self._args_pending), len(self._kwargs_pending)))
+
         await self._check_ready()
 
         return self._ready_future
@@ -523,7 +529,7 @@ class Task(RemoteBase):
             arg = self.args[index]
 
             if type(arg) in types.awaitable_types:
-                self._args_state[index] = 'ready'
+                self._args_state[index] = 'ready'  
 
                 async def _await_arg(_index, _arg):
                     _result = await _arg.result()
@@ -711,6 +717,15 @@ class TaskProxy(ProxyBase):
 
         """
         self.runtime.register(self)
+
+        # If the target worker was already disconnected before we could
+        # register, fail immediately so the done-future resolves instead
+        # of hanging forever.
+        runtime_id = self.runtime_id
+        disconnected = getattr(self.runtime, '_disconnected_runtimes', set())
+        if runtime_id in disconnected:
+            raise RuntimeDisconnectedError(
+                'Remote runtime %s already disconnected before task init' % runtime_id)
 
         task = {
             'tessera_id': self.tessera_id,
@@ -1155,7 +1170,14 @@ class TaskArrayProxy(TaskProxy):
         self._dependencies[self.runtime_id][self.uid] = self
         self._dependencies = dict(reversed(list(self._dependencies.items())))
 
+        disconnected = getattr(self.runtime, '_disconnected_runtimes', set())
+
         for runtime_id, proxies in self._dependencies.items():
+            # Fail fast if the target worker is already disconnected.
+            if runtime_id in disconnected:
+                raise RuntimeDisconnectedError(
+                    'Remote runtime %s already disconnected before task array init' % runtime_id)
+
             proxies = list(proxies.values())
 
             tasks = {}

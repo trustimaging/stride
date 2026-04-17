@@ -274,12 +274,10 @@ class Tessera(RemoteBase):
                 self._put_run_queue(sender_id=sender_id, task=task, future=None)
                 break
 
-            self.logger.info('TESSERA-QUEUE: %s received task %s.%s from %s'
-                             % (self.uid, self.obj.__class__.__name__, task.method, sender_id))
+            self.logger.debug('TESSERA-QUEUE: %s received task %s.%s from %s'
+                              % (self.uid, self.obj.__class__.__name__, task.method, sender_id))
 
             future = await task.prepare_args()
-            self.logger.info('TESSERA-ARGS-READY: %s args ready for task %s.%s'
-                             % (self.uid, self.obj.__class__.__name__, task.method))
 
             if self.is_async:
                 future.add_done_callback(functools.partial(self._put_run_queue,
@@ -325,11 +323,9 @@ class Tessera(RemoteBase):
 
             await asyncio.sleep(0)
             await self.logger.send()
-            self.logger.info('TESSERA-RUN: %s starting %s.%s'
-                             % (self.uid, self.obj.__class__.__name__, task.method))
+            self.logger.debug('TESSERA-RUN: %s starting %s.%s'
+                              % (self.uid, self.obj.__class__.__name__, task.method))
             await self.call_safe(sender_id, method, task)
-            self.logger.info('TESSERA-DONE: %s finished %s.%s'
-                             % (self.uid, self.obj.__class__.__name__, task.method))
 
             del task
             del method
@@ -1146,7 +1142,7 @@ class ArrayProxy(CMDBase):
                 if task_proxies is None:
                     # Slow path: new worker joined after init — create tessera on demand.
                     import mosaic as _mosaic
-                    _mosaic.logger().info(
+                    _mosaic.logger().debug(
                         'TESSERA-SLOW-PATH: initialising %s on new worker %s'
                         % (self_ref()._cls.cls.__name__, runtime))
                     proxy = TesseraProxy(self_ref()._cls.cls,

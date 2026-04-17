@@ -34,6 +34,7 @@ SCRIPTS = {
     'forward': 'scripts.simple_forward',
     'inverse': 'scripts.simple_inverse',
     'inverse_artifacts': 'scripts.simple_inverse_artifacts',
+    'disconnect_test': 'scripts.disconnect_test',
 }
 
 import mosaic

@@ -80,15 +80,15 @@ class Node(Runtime):
             self._phone_home = False
 
         await super().init(**kwargs)
-        self.logger.info('NODE-INIT: super().init() done — handshake complete (uid=%s, instance_id=%s)'
-                         % (self.uid, self._instance_id))
+        self.logger.debug('NODE-INIT: handshake complete (uid=%s, instance_id=%s)'
+                          % (self.uid, self._instance_id))
 
         # Start local cluster — give the warehouse a unique per-boot UID so a
         # replacement pod never collides with the stale connection the monitor
         # holds for the old warehouse.
         self._warehouse_uid = 'warehouse:%d:%s' % (self.indices[0], self._instance_id)
         await self.init_warehouse(indices=self.indices[0], warehouse_uid=self._warehouse_uid, **kwargs)
-        self.logger.info('NODE-INIT: init_warehouse() done (uid=%s)' % self.uid)
+        self.logger.debug('NODE-INIT: init_warehouse() done (uid=%s)' % self.uid)
         await self.init_workers(**kwargs)
 
         # In phone-home mode, log successful connection
@@ -178,8 +178,8 @@ class Node(Runtime):
                     worker_cpus.update(worker_chunk)
 
         # Initialise workers
-        self.logger.info('INIT-WORKERS: starting (uid=%s, num_workers=%d, instance_id=%s)'
-                         % (self.uid, self._num_workers, self._instance_id))
+        self.logger.debug('INIT-WORKERS: starting (uid=%s, num_workers=%d, instance_id=%s)'
+                          % (self.uid, self._num_workers, self._instance_id))
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
             # Unique UID: worker:{node_idx}:{slot_idx}:{instance_id}
@@ -204,23 +204,19 @@ class Node(Runtime):
                                                          cpu_affinity=worker_cpus.get(worker_index, None))
             worker_subprocess.start_process()
             worker_proxy.subprocess = worker_subprocess
-            self.logger.info('INIT-WORKERS: subprocess started for %s (uid=%s, pre-shaken=%s)'
-                             % (worker_uid, self.uid, self._comms.shaken(worker_uid)))
+            self.logger.debug('INIT-WORKERS: subprocess started for %s (uid=%s)'
+                              % (worker_uid, self.uid))
 
             self._workers[worker_uid] = worker_proxy
             self._own_workers[worker_uid] = worker_proxy
             await self._comms.wait_for(worker_uid)
-            self.logger.info('INIT-WORKERS: wait_for done for %s' % worker_uid)
+            self.logger.debug('INIT-WORKERS: wait_for done for %s' % worker_uid)
 
         self.resource_monitor()
 
-        self.logger.info('INIT-WORKERS: all %d workers up on %s (%s) — '
-                         'sending update_monitored_node to register with monitor'
-                         % (self._num_workers, self.uid,
-                            list(self._own_workers.keys())))
+        self.logger.info('INIT-WORKERS: %d workers up on %s — registered with monitor'
+                         % (self._num_workers, self.uid))
         await self.update_monitored_node()
-        self.logger.info('INIT-WORKERS: update_monitored_node sent — '
-                         'node %s fully registered' % self.uid)
 
     def set_logger(self):
         """

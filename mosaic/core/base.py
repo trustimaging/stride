@@ -97,7 +97,12 @@ class CMDBase(Base):
             
         except RuntimeDisconnectedError as e:
             self.logger.warning(f"INIT-DISCONNECT: {self.uid} failed init due to {e}")
-            raise # Re-raise to let the system know this worker is truly unusable
+            # Set _done_future so any code awaiting this proxy unblocks
+            # instead of hanging forever.
+            if hasattr(self, '_done_future') and hasattr(self._done_future, 'done') and not self._done_future.done():
+                self._done_future.set_exception(e)
+                self._done_future.exception()  # mark retrieved
+            raise  # Re-raise to let the system know this worker is truly unusable
 
         # Safety check: ensure the future reflects the actual state
         if self._init_future.done():

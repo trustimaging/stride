@@ -687,7 +687,7 @@ class Monitor(Runtime):
                 continue
 
             pending_tasks.append(task)
-        self.logger.info('Pending barrier tasks %d' % len(pending_tasks))
+        self.logger.debug('Pending barrier tasks %d' % len(pending_tasks))
 
         num_tasks = len(self._monitored_tasks)
 

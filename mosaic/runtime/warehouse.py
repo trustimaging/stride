@@ -125,6 +125,8 @@ class Warehouse(Runtime):
 
         self._local_warehouse[uid] = obj
 
+        self.logger.debug('WAREHOUSE-PUT: %s stored %s' % (self.uid, uid))
+
         if publish:
             await self.publish(sender_id, uid)
 
@@ -151,7 +153,12 @@ class Warehouse(Runtime):
             obj_id = uid
 
         if obj_id in self._local_warehouse:
+            self.logger.debug('WAREHOUSE-GET: %s found %s locally' % (self.uid, obj_id))
             return self._local_warehouse[obj_id]
+
+        self.logger.debug(
+            'WAREHOUSE-GET: %s miss for %s — warehouse_id=%s node_id=%s'
+            % (self.uid, obj_id, warehouse_id, node_id))
 
         if warehouse_id == self.uid or (node_id is None and warehouse_id is None):
             retries = 0
@@ -162,6 +169,9 @@ class Warehouse(Runtime):
                 retries += 1
                 if retries > 20:
                     break
+                self.logger.debug(
+                    'WAREHOUSE-GET: %s still waiting for %s (retry %d)'
+                    % (self.uid, obj_id, retries))
 
             if obj_id in self._local_warehouse:
                 return self._local_warehouse[obj_id]
@@ -171,6 +181,9 @@ class Warehouse(Runtime):
         if node_id not in self._warehouses:
             self._warehouses[node_id] = self.proxy(uid=warehouse_id)
 
+        self.logger.debug(
+            'WAREHOUSE-GET: %s fetching %s from remote %s'
+            % (self.uid, obj_id, warehouse_id))
         obj = await self._warehouses[node_id].get_remote(uid=uid, reply=True)
 
         if hasattr(obj, 'cached') and obj.cached:
@@ -376,8 +389,16 @@ class Warehouse(Runtime):
         obj = self._local_warehouse[obj_id]
         tasks = []
 
+        self.logger.info(
+            'WAREHOUSE-PUBLISH: %s publishing %s to %d nodes: %s (indices=%s)'
+            % (self.uid, obj_id, len(self._nodes),
+               list(self._nodes.keys()), self.indices))
+
         for node in self._nodes.values():
             warehouse_uid = self._warehouse_uid_for_node(node)
+            self.logger.info(
+                'WAREHOUSE-PUBLISH: %s → %s (node %s)'
+                % (self.uid, warehouse_uid, node.uid))
             if node.uid not in self._warehouses or \
                     self._warehouses[node.uid].uid != warehouse_uid:
                 self._warehouses[node.uid] = self.proxy(uid=warehouse_uid)
@@ -389,6 +410,7 @@ class Warehouse(Runtime):
             tasks.append(self._warehouses['head'].put_remote(obj=obj, uid=obj_id, reply=True))
 
         await asyncio.gather(*tasks)
+        self.logger.info('WAREHOUSE-PUBLISH: %s publish of %s complete' % (self.uid, obj_id))
 
     async def init_parameter(self, sender_id, cls, uid, args, **kwargs):
         """

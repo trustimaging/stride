@@ -658,15 +658,6 @@ class OutboundConnection(Connection):
         -------
 
         """
-        # Bail out if this connection has been closed (stale timer from a
-        # previous connection object for this UID).  With unique worker instance
-        # IDs this should never happen in practice, but the guard is cheap.
-        if self._state != 'connected' or self._comms._send_conn.get(self.uid) is not self:
-            self._comms._runtime.logger.info(
-                'HEARTBEAT-ORPHAN: stopping stale timer for %s' % self.uid)
-            self.stop_heartbeat()
-            return
-
         self._heartbeat_attempts -= 1
 
         if self._heartbeat_attempts == 0:
@@ -680,19 +671,7 @@ class OutboundConnection(Connection):
         interval = self._heartbeat_interval * self._heartbeat_max_attempts/self._heartbeat_attempts
         self._heartbeat_timeout = self._loop.timeout(self.heart, timeout=interval)
 
-        self._comms._runtime.logger.debug(
-            'HEARTBEAT: %s → heart to %s (attempts_left=%d, next_check_in=%.1fs)'
-            % (self._comms._runtime.uid, self.uid, self._heartbeat_attempts, interval))
-        try:
-            await self.send_async(method='heart')
-        except Exception as exc:
-            # Send failed — peer is unreachable, disconnect immediately.
-            self._comms._runtime.logger.info(
-                'HEARTBEAT-SEND-FAIL: %s → %s failed: %s — disconnecting'
-                % (self._comms._runtime.uid, self.uid, exc))
-            self._heartbeat_timeout.cancel()
-            await self._comms.disconnect(self.uid, self.uid, notify=True)
-            await self._loop.run(self._runtime.disconnect, self.uid, self.uid)
+        await self.send_async(method='heart')
 
     async def beat(self):
         """
@@ -2331,8 +2310,8 @@ class CommsManager:
         # zmq.ROUTER messages will be dropped if endpoint not yet connected
         await asyncio.sleep(0.1)
 
-        self._runtime.logger.info('COMMS-HS: sending hand to %s at %s:%d (my addr=%s:%d, runtime=%s)'
-                                  % (uid, address, port, self.address, self.port, self._runtime.uid))
+        self._runtime.logger.debug('COMMS-HS: sending hand to %s at %s:%d (runtime=%s)'
+                                   % (uid, address, port, self._runtime.uid))
         await self.send_async(uid,
                               method='hand',
                               address=self.address, port=self.port)
@@ -2365,20 +2344,20 @@ class CommsManager:
 
                 sender_id, response = recv_task.result()
                 if response.method != 'reply':
-                    self._runtime.logger.info(
-                        'COMMS-HS: recv %s from %s (waiting for shake from %s, runtime=%s)'
-                        % (response.method, sender_id, uid, self._runtime.uid))
+                    self._runtime.logger.debug(
+                        'COMMS-HS: recv %s from %s (waiting for shake from %s)'
+                        % (response.method, sender_id, uid))
 
                 if uid == sender_id and response.method == 'shake':
-                    self._runtime.logger.info('COMMS-HS: handshake complete with %s (runtime=%s)'
-                                              % (sender_id, self._runtime.uid))
+                    self._runtime.logger.debug('COMMS-HS: handshake complete with %s (runtime=%s)'
+                                               % (sender_id, self._runtime.uid))
                     break
                 elif response.method not in ('shake', 'hand', 'reply'):
                     # RPC call from another peer arrived while still waiting
                     # for the shake.  Buffer it — outbound connection to the
                     # sender may not exist until we process the network shake.
-                    self._runtime.logger.info(
-                        'COMMS-HS: buffering %s from %s received during handshake wait'
+                    self._runtime.logger.debug(
+                        'COMMS-HS: buffering %s from %s during handshake wait'
                         % (response.method, sender_id))
                     pending_msgs.append((sender_id, response))
 
@@ -2431,13 +2410,9 @@ class CommsManager:
             return
 
         existing = self._send_conn.get(sender_id)
-        existing_state = existing.state if existing is not None else 'none'
-        disconnected_set = getattr(self._runtime, '_disconnected_runtimes', set())
-        self._runtime.logger.info(
-            'COMMS-HAND: recv hand from %s at %s:%d '
-            '(runtime=%s, existing_conn_state=%s, in_disconnected_set=%s)'
-            % (sender_id, address, port, self._runtime.uid,
-               existing_state, sender_id in disconnected_set))
+        self._runtime.logger.debug(
+            'COMMS-HAND: recv hand from %s at %s:%d (runtime=%s)'
+            % (sender_id, address, port, self._runtime.uid))
 
         # A 'hand' always means the peer just (re)started.  If we have a stale
         # outbound connection from a previous run (same UID, same address), the
@@ -2462,13 +2437,13 @@ class CommsManager:
                 if connection.state == 'connected':
                     network[connected_id] = (connection.address, connection.port)
 
-        self._runtime.logger.info('COMMS-HAND: sending shake to %s (network=%s)'
-                                  % (sender_id, list(network.keys())))
+        self._runtime.logger.debug('COMMS-HAND: sending shake to %s (network=%s)'
+                                   % (sender_id, list(network.keys())))
         await self.send_async(sender_id,
                               method='shake',
                               network=network,
                               reply=False)
-        self._runtime.logger.info('COMMS-HAND: shake sent to %s' % sender_id)
+        self._runtime.logger.debug('COMMS-HAND: shake sent to %s' % sender_id)
         self._send_conn[sender_id].shake()
 
         if self._runtime.uid == 'monitor':
@@ -2682,13 +2657,15 @@ class CommsManager:
                 if send_uid not in self._send_conn.keys():
                     raise KeyError('Endpoint %s is not connected' % send_uid)
 
-                future = await self._send_conn[send_uid].send_async(*args, reply=True, **kwargs)
+                conn = self._send_conn[send_uid]
+                future = await conn.send_async(*args, reply=True, **kwargs)
 
             if future is None:
                 raise RuntimeDisconnectedError('Remote runtime %s became disconnected '
                                                'before reply could be received' % send_uid)
 
-            return await future
+            result = await future
+            return result
 
         if sync:
             return send_recv_sync()

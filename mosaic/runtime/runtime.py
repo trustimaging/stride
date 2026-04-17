@@ -195,6 +195,7 @@ class Runtime(BaseRPC):
         self._barrier_tasks = []
 
         self._inside_async_for = False
+        self._disconnected_runtimes = set()
 
         if self.uid == 'warehouse':
             self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.85))
@@ -418,7 +419,7 @@ class Runtime(BaseRPC):
             for worker in self._workers.values():
                 await worker_queue.put(worker)
                 worker_uids.append(worker.uid)
-            self.logger.info('ASYNC-FOR-QUEUE: dispatching with workers %s' % worker_uids)
+            self.logger.debug('ASYNC-FOR-QUEUE: dispatching with workers %s' % worker_uids)
 
             async def call(*iters):
                 res = None
@@ -473,8 +474,10 @@ class Runtime(BaseRPC):
     @contextlib.asynccontextmanager
     async def _exclusive_proxy(self, queue, safe=False):
         proxy = await queue.get()
-        yield proxy
-        await queue.put(proxy)
+        try:
+            yield proxy
+        finally:
+            await queue.put(proxy)
 
     @property
     def address(self):
@@ -764,10 +767,9 @@ class Runtime(BaseRPC):
             if hasattr(self, '_' + proxy.name + 's'):
                 getattr(self, '_' + proxy.name + 's')[uid] = proxy
                 if proxy.name == 'worker':
-                    self.logger.info(
-                        'POOL-JOIN: %s added to %s pool (pool now: %s)'
-                        % (uid, self.uid,
-                           list(getattr(self, '_workers', {}).keys())))
+                    self.logger.debug(
+                        'POOL-JOIN: %s added to %s pool'
+                        % (uid, self.uid))
                     for cb in self._on_worker_count_changed:
                         cb()
 
@@ -778,8 +780,8 @@ class Runtime(BaseRPC):
 
         else:
             if proxy.name == 'worker':
-                self.logger.info(
-                    'POOL-SKIP: %s already in %s pool — returning existing proxy'
+                self.logger.debug(
+                    'POOL-SKIP: %s already in %s pool'
                     % (uid, self.uid))
             return found_proxy
 
@@ -952,13 +954,9 @@ class Runtime(BaseRPC):
         -------
 
         """
-        self.logger.info('HAND: %s connecting from %s:%d (runtime=%s, pool_before=%s)'
-                         % (sender_id, address, port, self.uid,
-                            list(getattr(self, '_workers', {}).keys())))
+        self.logger.debug('HAND: %s connecting from %s:%d (runtime=%s)'
+                          % (sender_id, address, port, self.uid))
         self.proxy_from_uid(sender_id)
-        self.logger.info('HAND-DONE: %s registered on %s (pool_after=%s)'
-                         % (sender_id, self.uid,
-                            list(getattr(self, '_workers', {}).keys())))
 
     def shake(self, sender_id, network):
         """
@@ -1006,6 +1004,8 @@ class Runtime(BaseRPC):
         -------
 
         """
+        self._disconnected_runtimes.add(uid)
+
         # deregister if remote uid held a proxy to a local tessera
         for obj in self._tessera.values():
             obj.deregister_proxy(uid)
@@ -1546,8 +1546,8 @@ class Runtime(BaseRPC):
 
         """
         methods = [t['method'] for t in tasks.values()]
-        self.logger.info('WORKER-RECV-TASK: %s received task array %s from %s (methods=%s)'
-                         % (self.uid, uid, sender_id, methods))
+        self.logger.debug('WORKER-RECV-TASK: %s received task array %s from %s (methods=%s)'
+                          % (self.uid, uid, sender_id, methods))
 
         processed_tasks = {}
         for t_uid, task in tasks.items():
@@ -1569,8 +1569,8 @@ class Runtime(BaseRPC):
         for tessera, task in zip(task.tesseras, task.tasks):
             tessera.queue_task((sender_id, task))
 
-        self.logger.info('WORKER-QUEUED-TASK: %s queued task array %s (methods=%s)'
-                         % (self.uid, uid, methods))
+        self.logger.debug('WORKER-QUEUED-TASK: %s queued task array %s (methods=%s)'
+                          % (self.uid, uid, methods))
 
     def inc_pending_tasks(self):
         self._pending_tasks += 1
