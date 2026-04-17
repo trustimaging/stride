@@ -95,8 +95,26 @@ class RoundRobin(MonitorStrategy):
         self._last_worker = -1
 
     def update_node(self, updated):
+        # Evict stale workers from the same node index that belong to a previous
+        # instance of this node (e.g. a dropped worker whose heartbeat hasn't
+        # expired yet when the replacement joins).  Any worker whose UID starts
+        # with 'worker:<node_idx>:' but is NOT in the incoming worker set is
+        # from the old instance and must be removed before the new ones are added.
+        node_idx = int(updated.uid.split(':')[1])
+        incoming = set(updated.sub_resources.get('workers', {}).keys())
+        prefix = 'worker:%d:' % node_idx
+        stale = {w for w in self._worker_list
+                 if w.startswith(prefix) and w not in incoming}
+        if stale:
+            self._worker_list -= stale
+            self._num_workers = len(self._worker_list)
+            self._monitor.logger.info(
+                'STRATEGY-POOL: evicted stale workers %s for node index %d '
+                '(replaced by new instance)'
+                % (sorted(stale), node_idx))
+
         before = set(self._worker_list)
-        for worker_id in updated.sub_resources['workers'].keys():
+        for worker_id in incoming:
             self._worker_list.add(worker_id)
 
         self._num_workers = len(self._worker_list)
