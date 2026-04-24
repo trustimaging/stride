@@ -1,0 +1,412 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: stride-4w-drop-
+spec:
+  entrypoint: stride-dag
+  serviceAccountName: stride-workflow
+
+  activeDeadlineSeconds: 3600
+
+  arguments:
+    parameters:
+      - name: workers-per-node
+        value: "1"
+      - name: monitor-port
+        value: "3000"
+      - name: pubsub-port
+        value: "3001"
+      - name: image
+        value: stride-k8s:latest
+      - name: exp-name
+        value: 4worker-drop-test
+      - name: num-iters
+        value: "4"
+      - name: drop-threshold
+        value: "0.3"
+      - name: drop-delay
+        value: "200"
+      - name: join-delay
+        value: "220"
+
+  templates:
+    # ── DAG ──────────────────────────────────────────────────────────────────
+    - name: stride-dag
+      dag:
+        tasks:
+          - name: create-service
+            template: monitor-service
+
+          - name: head
+            template: head
+            dependencies: [create-service]
+
+          # Permanent workers — stay alive for the entire run.
+          - name: worker-0
+            template: worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "0"
+
+          - name: worker-1
+            template: worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "1"
+
+          - name: worker-2
+            template: worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "2"
+
+          # Mortal worker — drops after drop-delay seconds.
+          # Triggers the threshold check in _watch_workers.
+          - name: worker-3-mortal
+            template: mortal-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "3"
+
+          # Replacement worker — joins after join-delay seconds with the same
+          # index so its gradient file (shot_N.pkl) unblocks the accumulator
+          # on the retry iteration.
+          - name: worker-3-replacement
+            template: late-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "3"
+
+          - name: gradient-accumulator
+            template: gradient-accumulator
+            dependencies: [create-service]
+
+    # ── K8s Service ───────────────────────────────────────────────────────────
+    - name: monitor-service
+      resource:
+        action: apply
+        manifest: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: monitor-svc-{{workflow.name}}
+            namespace: {{workflow.namespace}}
+            ownerReferences:
+              - apiVersion: argoproj.io/v1alpha1
+                kind: Workflow
+                name: {{workflow.name}}
+                uid: {{workflow.uid}}
+          spec:
+            selector:
+              role: head
+              workflow: {{workflow.name}}
+            ports:
+              - name: rpc
+                port: {{workflow.parameters.monitor-port}}
+                targetPort: {{workflow.parameters.monitor-port}}
+              - name: pubsub
+                port: {{workflow.parameters.pubsub-port}}
+                targetPort: {{workflow.parameters.pubsub-port}}
+
+    # ── Head ──────────────────────────────────────────────────────────────────
+    - name: head
+      metadata:
+        labels:
+          role: head
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command:
+          - python3
+          - -m
+          - mosaic.cli.mrun
+          - --dynamic
+          - --address
+          - "0.0.0.0"
+          - --port
+          - "{{workflow.parameters.monitor-port}}"
+          - -nw
+          - "0"
+          - python3
+          - k8s_runner.py
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: NUM_WORKERS
+            value: "4"
+          - name: NUM_ITERS
+            value: "{{workflow.parameters.num-iters}}"
+          - name: DROP_THRESHOLD
+            value: "{{workflow.parameters.drop-threshold}}"
+          - name: WORKERS_PER_NODE
+            value: "{{workflow.parameters.workers-per-node}}"
+          - name: RUN_MODE
+            value: "inverse_test"
+          - name: EXP_NAME
+            value: "{{workflow.parameters.exp-name}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+          - name: BASELINE_PATH
+            value: "/app/stride/k8s/tests/baselines/vp_100x100_4iter.npy"
+          - name: BASELINE_TOLERANCE
+            value: "0.05"
+        volumeMounts:
+          - name: exps
+            mountPath: /app/stride/exps
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+      volumes:
+        - name: exps
+          hostPath:
+            path: /data/stride-exps
+            type: DirectoryOrCreate
+
+    # ── Worker — permanent ────────────────────────────────────────────────────
+    - name: worker
+      daemon: true
+      inputs:
+        parameters:
+          - name: index
+      metadata:
+        labels:
+          role: worker
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command: [bash, -c]
+        args:
+          - |
+            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
+              echo "Waiting for monitor DNS..."
+              sleep 2
+            done
+            export MONITOR_HOST=$MONITOR_IP
+            echo "Worker {{inputs.parameters.index}} starting: POD_IP=$POD_IP MONITOR_HOST=$MONITOR_HOST"
+            python3 -u -m mosaic.cli.mrun --node --phone-home \
+              --address $POD_IP --port 3000 \
+              -nw {{workflow.parameters.workers-per-node}} \
+              -i {{inputs.parameters.index}} 2>&1
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MONITOR_DNS
+            value: "monitor-svc-{{workflow.name}}"
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+
+    # ── Mortal worker — drops after drop-delay seconds ────────────────────────
+    - name: mortal-worker
+      daemon: true
+      inputs:
+        parameters:
+          - name: index
+      metadata:
+        labels:
+          role: worker
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command: [bash, -c]
+        args:
+          - |
+            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
+              echo "Waiting for monitor DNS..."
+              sleep 2
+            done
+            export MONITOR_HOST=$MONITOR_IP
+            echo "Worker {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay}}s)"
+
+            python3 -u -m mosaic.cli.mrun --node --phone-home \
+              --address $POD_IP --port 3000 \
+              -nw {{workflow.parameters.workers-per-node}} \
+              -i {{inputs.parameters.index}} 2>&1 &
+            MRUN_PID=$!
+
+            sleep {{workflow.parameters.drop-delay}}
+            echo "=== Simulating node drop: killing worker {{inputs.parameters.index}} ==="
+            kill $MRUN_PID
+            wait $MRUN_PID 2>/dev/null || true
+            echo "Worker {{inputs.parameters.index}} dropped."
+            exit 0
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MONITOR_DNS
+            value: "monitor-svc-{{workflow.name}}"
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+
+    # ── Replacement worker — joins after join-delay seconds ───────────────────
+    - name: late-worker
+      daemon: true
+      inputs:
+        parameters:
+          - name: index
+      metadata:
+        labels:
+          role: worker
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command: [bash, -c]
+        args:
+          - |
+            echo "Replacement worker {{inputs.parameters.index}} waiting {{workflow.parameters.join-delay}}s before connecting..."
+            sleep {{workflow.parameters.join-delay}}
+
+            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
+              echo "Waiting for monitor DNS..."
+              sleep 2
+            done
+            export MONITOR_HOST=$MONITOR_IP
+            echo "=== Replacement worker {{inputs.parameters.index}} connecting: POD_IP=$POD_IP ==="
+
+            python3 -u -m mosaic.cli.mrun --node --phone-home \
+              --address $POD_IP --port 3000 \
+              -nw {{workflow.parameters.workers-per-node}} \
+              -i {{inputs.parameters.index}} 2>&1
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MONITOR_DNS
+            value: "monitor-svc-{{workflow.name}}"
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+
+    # ── Gradient accumulator ──────────────────────────────────────────────────
+    - name: gradient-accumulator
+      daemon: true
+      metadata:
+        labels:
+          role: gradient-accumulator
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command:
+          - python3
+          - -m
+          - mosaic.runtime.gradient_accumulator
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: NUM_ITERS
+            value: "{{workflow.parameters.num-iters}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: 1Gi

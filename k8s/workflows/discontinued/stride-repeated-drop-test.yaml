@@ -1,13 +1,11 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: stride-ft-
+  generateName: stride-rep-drop-
 spec:
   entrypoint: stride-dag
   serviceAccountName: stride-workflow
 
-  # No hard deadline — fault tolerance should allow the run to complete.
-  # Increase only if shots are very slow on your hardware.
   activeDeadlineSeconds: 3600
 
   arguments:
@@ -21,37 +19,26 @@ spec:
       - name: image
         value: stride-k8s:latest
       - name: exp-name
-        value: ft-test
+        value: repeated-drop-test
       - name: num-iters
-        value: "4"
-
-      # ── Fault-tolerance parameters ────────────────────────────────────────
-      #
-      # Two test scenarios (adjust drop-threshold to select):
-      #
-      #   RESTART  (default): drop-threshold: "0.3"
-      #     1 of 2 workers drops → 50% > 30% → iteration cancelled and retried.
-      #     Replacement worker joins; retry runs all shots across both workers.
-      #     Expected: inversion completes with correct gradients on every iter.
-      #
-      #   CONTINUE: drop-threshold: "0.6"
-      #     1 of 2 workers drops → 50% < 60% → iteration continues with partial
-      #     gradients. Head updates shots.json; accumulator finishes immediately.
-      #     Expected: inversion completes with a noisier but valid gradient.
-      #
+        value: "8"
       - name: drop-threshold
         value: "0.3"
 
-      # Worker-1 kills itself after this many seconds. Set long enough for the
-      # forward pass to finish and at least one adjoint iteration to start.
-      - name: drop-delay
+      # ── Repeated-drop parameters ─────────────────────────────────────────
+      #
+      # Worker-1 dies at drop-delay-1.  Its first replacement (worker-1a)
+      # joins at join-delay-1a but is ALSO mortal — it drops at drop-delay-1a.
+      # A second, permanent replacement (worker-1b) joins at join-delay-1b.
+      #
+      - name: drop-delay-1
+        value: "180"
+      - name: join-delay-1a
         value: "200"
-
-      # Replacement worker connects after this many seconds (must be > drop-delay).
-      # Only relevant for the RESTART scenario — accumulator waits for both shots
-      # on retry and unblocks once the replacement worker uploads its gradient.
-      - name: join-delay
-        value: "215"
+      - name: drop-delay-1a
+        value: "360"
+      - name: join-delay-1b
+        value: "380"
 
   templates:
     # ── DAG ──────────────────────────────────────────────────────────────────
@@ -74,8 +61,7 @@ spec:
                 - name: index
                   value: "0"
 
-          # Mortal worker — drops after drop-delay seconds.
-          # Triggers the threshold check in _watch_workers.
+          # Mortal worker — drops after drop-delay-1 seconds.
           - name: worker-1-mortal
             template: mortal-worker
             dependencies: [create-service]
@@ -84,10 +70,17 @@ spec:
                 - name: index
                   value: "1"
 
-          # Replacement worker — joins after join-delay seconds with the same
-          # index so its gradient file (shot_N.pkl) unblocks the accumulator
-          # on the retry iteration.
-          - name: worker-1-replacement
+          # First replacement — also mortal, drops at drop-delay-1a.
+          - name: worker-1a-replacement
+            template: late-mortal-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "1"
+
+          # Second replacement — permanent, joins at join-delay-1b.
+          - name: worker-1b-replacement
             template: late-worker
             dependencies: [create-service]
             arguments:
@@ -149,6 +142,8 @@ spec:
           - python3
           - k8s_runner.py
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: POD_IP
             valueFrom:
               fieldRef:
@@ -162,7 +157,7 @@ spec:
           - name: WORKERS_PER_NODE
             value: "{{workflow.parameters.workers-per-node}}"
           - name: RUN_MODE
-            value: "inverse_artifacts"
+            value: "inverse_test"
           - name: EXP_NAME
             value: "{{workflow.parameters.exp-name}}"
           - name: ARTIFACT_ENDPOINT
@@ -177,6 +172,10 @@ spec:
             value: "minio"
           - name: ARTIFACT_RUN_ID
             value: "{{workflow.name}}"
+          - name: BASELINE_PATH
+            value: "/app/stride/k8s/tests/baselines/vp_100x100_4iter.npy"
+          - name: BASELINE_TOLERANCE
+            value: "0.05"
         volumeMounts:
           - name: exps
             mountPath: /app/stride/exps
@@ -217,6 +216,8 @@ spec:
               -nw {{workflow.parameters.workers-per-node}} \
               -i {{inputs.parameters.index}} 2>&1
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: PYTHONUNBUFFERED
             value: "1"
           - name: POD_IP
@@ -246,7 +247,7 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Worker 1 — drops after drop-delay seconds ─────────────────────────────
+    # ── Worker 1 — drops after drop-delay-1 seconds ───────────────────────────
     - name: mortal-worker
       daemon: true
       inputs:
@@ -267,7 +268,7 @@ spec:
               sleep 2
             done
             export MONITOR_HOST=$MONITOR_IP
-            echo "Worker {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay}}s)"
+            echo "Worker {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay-1}}s)"
 
             python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
@@ -275,13 +276,15 @@ spec:
               -i {{inputs.parameters.index}} 2>&1 &
             MRUN_PID=$!
 
-            sleep {{workflow.parameters.drop-delay}}
+            sleep {{workflow.parameters.drop-delay-1}}
             echo "=== Simulating node drop: killing worker {{inputs.parameters.index}} ==="
             kill $MRUN_PID
             wait $MRUN_PID 2>/dev/null || true
             echo "Worker {{inputs.parameters.index}} dropped."
             exit 0
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: PYTHONUNBUFFERED
             value: "1"
           - name: POD_IP
@@ -311,7 +314,76 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Replacement worker — joins after join-delay seconds ───────────────────
+    # ── Late mortal worker — joins at join-delay-1a, drops at drop-delay-1a ───
+    - name: late-mortal-worker
+      daemon: true
+      inputs:
+        parameters:
+          - name: index
+      metadata:
+        labels:
+          role: worker
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command: [bash, -c]
+        args:
+          - |
+            echo "Replacement worker {{inputs.parameters.index}} waiting {{workflow.parameters.join-delay-1a}}s before connecting..."
+            sleep {{workflow.parameters.join-delay-1a}}
+
+            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
+              echo "Waiting for monitor DNS..."
+              sleep 2
+            done
+            export MONITOR_HOST=$MONITOR_IP
+            echo "=== Replacement worker {{inputs.parameters.index}} connecting (mortal, drops after {{workflow.parameters.drop-delay-1a}}s) ==="
+
+            python3 -u -m mosaic.cli.mrun --node --phone-home \
+              --address $POD_IP --port 3000 \
+              -nw {{workflow.parameters.workers-per-node}} \
+              -i {{inputs.parameters.index}} 2>&1 &
+            MRUN_PID=$!
+
+            sleep 160
+            echo "=== Simulating second drop: killing replacement worker {{inputs.parameters.index}} ==="
+            kill $MRUN_PID
+            wait $MRUN_PID 2>/dev/null || true
+            exit 0
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MONITOR_DNS
+            value: "monitor-svc-{{workflow.name}}"
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+
+    # ── Late worker — permanent replacement, joins at join-delay-1b ───────────
     - name: late-worker
       daemon: true
       inputs:
@@ -327,8 +399,8 @@ spec:
         command: [bash, -c]
         args:
           - |
-            echo "Replacement worker {{inputs.parameters.index}} waiting {{workflow.parameters.join-delay}}s before connecting..."
-            sleep {{workflow.parameters.join-delay}}
+            echo "Replacement worker {{inputs.parameters.index}} waiting {{workflow.parameters.join-delay-1b}}s before connecting..."
+            sleep {{workflow.parameters.join-delay-1b}}
 
             until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
               echo "Waiting for monitor DNS..."
@@ -342,6 +414,8 @@ spec:
               -nw {{workflow.parameters.workers-per-node}} \
               -i {{inputs.parameters.index}} 2>&1
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: PYTHONUNBUFFERED
             value: "1"
           - name: POD_IP
@@ -386,6 +460,8 @@ spec:
           - -m
           - mosaic.runtime.gradient_accumulator
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: NUM_ITERS
             value: "{{workflow.parameters.num-iters}}"
           - name: ARTIFACT_ENDPOINT

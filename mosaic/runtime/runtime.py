@@ -804,7 +804,7 @@ class Runtime(BaseRPC):
             try:
                 del getattr(self, '_' + proxy.name + 's')[uid]
                 if proxy.name == 'worker':
-                    self.logger.info('POOL-REMOVE: %s removed from %s pool — remaining: %s, callbacks: %d'
+                    self.logger.debug('POOL-REMOVE: %s removed from %s pool — remaining: %s, callbacks: %d'
                                      % (uid, self.uid, list(self._workers.keys()),
                                         len(self._on_worker_count_changed)))
                     for cb in self._on_worker_count_changed:

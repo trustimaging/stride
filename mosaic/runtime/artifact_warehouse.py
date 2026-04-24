@@ -353,6 +353,11 @@ class ArtifactWarehouse:
 
         if hasattr(grad, 'data'):
             self._upload_bytes(key, pickle.dumps(np.asarray(grad.data)))
+
+            # Upload preconditioner alongside gradient (same key with _prec suffix)
+            if hasattr(grad, 'prec') and grad.prec is not None:
+                prec_key = key.replace('.pkl', '_prec.pkl')
+                self._upload_bytes(prec_key, pickle.dumps(np.asarray(grad.prec.data)))
         elif grad is not None:
             self._upload_bytes(key, pickle.dumps(grad))
 

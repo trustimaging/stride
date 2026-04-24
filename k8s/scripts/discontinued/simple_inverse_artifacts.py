@@ -98,7 +98,7 @@ from stride.utils import wavelets
 import mosaic
 from mosaic.runtime.head import Head
 
-N: int = 2
+N: int = 16
 NUM_ITERS: int = int(os.environ.get('NUM_ITERS', '4'))
 _dt_env: str = os.environ.get('DROP_THRESHOLD', '')
 DROP_THRESHOLD: Optional[float] = float(_dt_env) if _dt_env != '' else None
@@ -148,11 +148,15 @@ async def main(runtime: Head, exp_name: str = 'simple') -> None:
     problem_fwd = Problem(name=exp_name, space=space, time=time,
                           output_folder=exp_dir)
 
-    # True model — layered: 1500 m/s top, 1600 m/s bottom
+    # True model — circular inclusion: 1500 m/s background, 1600 m/s disk
     # ScalarField (not .parameter) — plain numpy array, lives only on the head.
     vp_true = ScalarField(name='vp', grid=problem_fwd.grid)
     vp_true.fill(1500.)
-    vp_true.data[shape[0] // 2:, :] = 1600.
+    cx, cz = shape[0] // 2, shape[1] // 2
+    radius = 25
+    yy, xx = np.mgrid[:shape[0], :shape[1]]
+    mask = (xx - cx)**2 + (yy - cz)**2 <= radius**2
+    vp_true.data[mask] = 1600.
     problem_fwd.medium.add(vp_true)
 
     # Transducers: physical source/receiver elements (geometry metadata only).
@@ -292,6 +296,51 @@ async def main(runtime: Head, exp_name: str = 'simple') -> None:
 
     print('\nInversion complete.')
     print('Final model range: [%.1f, %.1f] m/s' % (vp.data.min(), vp.data.max()))
+
+    # ── Validate against baseline ────────────────────────────────────────────
+    baseline_path = os.environ.get('BASELINE_PATH')
+    if baseline_path and os.path.exists(baseline_path):
+        baseline = np.load(baseline_path)
+        rel_error = np.linalg.norm(vp.data - baseline) / np.linalg.norm(baseline)
+        tolerance = float(os.environ.get('BASELINE_TOLERANCE', '0.15'))
+        print('VALIDATION: relative L2 error = %.6f (tolerance = %.2f)' % (rel_error, tolerance))
+        if rel_error > tolerance:
+            print('VALIDATION: FAIL — result diverged too far from baseline')
+            raise RuntimeError('Baseline validation failed: rel_error=%.6f > tolerance=%.2f'
+                               % (rel_error, tolerance))
+        else:
+            print('VALIDATION: PASS')
+
+        # Save comparison plot if requested
+        plot_path = os.environ.get('PLOT_PATH')
+        if plot_path:
+            try:
+                import matplotlib
+                matplotlib.use('Agg')
+                import matplotlib.pyplot as plt
+
+                fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+
+                vmin = min(baseline.min(), vp.data.min())
+                vmax = max(baseline.max(), vp.data.max())
+
+                axes[0].imshow(baseline.T, aspect='auto', vmin=vmin, vmax=vmax, cmap='viridis')
+                axes[0].set_title('Baseline')
+
+                axes[1].imshow(vp.data.T, aspect='auto', vmin=vmin, vmax=vmax, cmap='viridis')
+                axes[1].set_title('Test Result')
+
+                diff = vp.data - baseline
+                im2 = axes[2].imshow(diff.T, aspect='auto', cmap='RdBu_r')
+                axes[2].set_title('Difference (L2=%.4f)' % rel_error)
+                fig.colorbar(im2, ax=axes[2], shrink=0.8)
+
+                fig.tight_layout()
+                fig.savefig(plot_path, dpi=150)
+                plt.close(fig)
+                print('VALIDATION: saved plot to %s' % plot_path)
+            except ImportError:
+                print('VALIDATION: matplotlib not available, skipping plot')
 
 
 if __name__ == '__main__':

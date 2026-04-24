@@ -1,14 +1,12 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: stride-lazy-
+  generateName: stride-multi-drop-
 spec:
   entrypoint: stride-dag
   serviceAccountName: stride-workflow
 
-  # Auto-terminate so the workflow doesn't hang indefinitely once worker-1
-  # has dropped and the accumulator stalls waiting for worker_1.pkl.
-  activeDeadlineSeconds: 1200
+  activeDeadlineSeconds: 3600
 
   arguments:
     parameters:
@@ -21,33 +19,29 @@ spec:
       - name: image
         value: stride-k8s:latest
       - name: exp-name
-        value: lazy-init-test
+        value: multi-drop-test
       - name: num-iters
-        value: "8"
+        value: "4"
       - name: drop-threshold
         value: "0.3"
-      # Worker-1 kills itself after this many seconds.
       - name: drop-delay
         value: "200"
-      # Worker-2 phones home after this many seconds (must be > drop-delay but
-      # short enough to be registered before iter 1's adjoint pass begins).
       - name: join-delay
-        value: "210"
+        value: "220"
 
   templates:
-    # ── DAG ──────────────────────────────────────────────────────────────
+    # ── DAG ──────────────────────────────────────────────────────────────────
     - name: stride-dag
       dag:
         tasks:
           - name: create-service
             template: monitor-service
 
-          # Head waits for both worker-0 and worker-1 before starting.
           - name: head
             template: head
             dependencies: [create-service]
 
-          # Worker 0 — connects immediately, stays alive the whole run.
+          # Permanent worker — stays alive for the entire run.
           - name: worker-0
             template: worker
             dependencies: [create-service]
@@ -56,8 +50,7 @@ spec:
                 - name: index
                   value: "0"
 
-          # Worker 1 — connects immediately, drops after drop-delay seconds.
-          # Exercises deregister_runtime pruning it from _proxies.
+          # Mortal worker 1 — drops after drop-delay seconds.
           - name: worker-1-mortal
             template: mortal-worker
             dependencies: [create-service]
@@ -66,10 +59,16 @@ spec:
                 - name: index
                   value: "1"
 
-          # Replacement worker — joins after join-delay seconds using the same
-          # index as the dropped worker (1) so it writes worker_1.pkl and the
-          # accumulator unblocks. Lazy-init still fires because deregister_runtime
-          # pruned the old worker:1:0 proxy, so the new connection gets a fresh tessera.
+          # Mortal worker 2 — drops after drop-delay seconds.
+          - name: worker-2-mortal
+            template: mortal-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "2"
+
+          # Replacement worker 1 — joins after join-delay seconds with index 1.
           - name: worker-1-replacement
             template: late-worker
             dependencies: [create-service]
@@ -78,14 +77,20 @@ spec:
                 - name: index
                   value: "1"
 
-          # Accumulator expects worker_0.pkl and worker_1.pkl per iteration.
-          # After worker-1 drops it will stall — workflow terminates via
-          # activeDeadlineSeconds before it hangs forever.
+          # Replacement worker 2 — joins after join-delay seconds with index 2.
+          - name: worker-2-replacement
+            template: late-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "2"
+
           - name: gradient-accumulator
             template: gradient-accumulator
             dependencies: [create-service]
 
-    # ── K8s Service ──────────────────────────────────────────────────────
+    # ── K8s Service ───────────────────────────────────────────────────────────
     - name: monitor-service
       resource:
         action: apply
@@ -112,7 +117,7 @@ spec:
                 port: {{workflow.parameters.pubsub-port}}
                 targetPort: {{workflow.parameters.pubsub-port}}
 
-    # ── Head ─────────────────────────────────────────────────────────────
+    # ── Head ──────────────────────────────────────────────────────────────────
     - name: head
       metadata:
         labels:
@@ -135,13 +140,14 @@ spec:
           - python3
           - k8s_runner.py
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: POD_IP
             valueFrom:
               fieldRef:
                 fieldPath: status.podIP
-          # Wait for both worker-0 and worker-1 before starting.
           - name: NUM_WORKERS
-            value: "2"
+            value: "3"
           - name: NUM_ITERS
             value: "{{workflow.parameters.num-iters}}"
           - name: DROP_THRESHOLD
@@ -149,7 +155,7 @@ spec:
           - name: WORKERS_PER_NODE
             value: "{{workflow.parameters.workers-per-node}}"
           - name: RUN_MODE
-            value: "inverse_artifacts"
+            value: "inverse_test"
           - name: EXP_NAME
             value: "{{workflow.parameters.exp-name}}"
           - name: ARTIFACT_ENDPOINT
@@ -164,6 +170,10 @@ spec:
             value: "minio"
           - name: ARTIFACT_RUN_ID
             value: "{{workflow.name}}"
+          - name: BASELINE_PATH
+            value: "/app/stride/k8s/tests/baselines/vp_100x100_4iter.npy"
+          - name: BASELINE_TOLERANCE
+            value: "0.05"
         volumeMounts:
           - name: exps
             mountPath: /app/stride/exps
@@ -177,7 +187,7 @@ spec:
             path: /data/stride-exps
             type: DirectoryOrCreate
 
-    # ── Worker 0 — permanent ──────────────────────────────────────────
+    # ── Worker — permanent ────────────────────────────────────────────────────
     - name: worker
       daemon: true
       inputs:
@@ -204,6 +214,8 @@ spec:
               -nw {{workflow.parameters.workers-per-node}} \
               -i {{inputs.parameters.index}} 2>&1
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: PYTHONUNBUFFERED
             value: "1"
           - name: POD_IP
@@ -233,7 +245,7 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Worker 1 — drops after drop-delay seconds ─────────────────────
+    # ── Mortal worker — drops after drop-delay seconds ────────────────────────
     - name: mortal-worker
       daemon: true
       inputs:
@@ -254,7 +266,7 @@ spec:
               sleep 2
             done
             export MONITOR_HOST=$MONITOR_IP
-            echo "Worker {{inputs.parameters.index}} starting (will drop after {{workflow.parameters.drop-delay}}s)"
+            echo "Worker {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay}}s)"
 
             python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
@@ -269,6 +281,8 @@ spec:
             echo "Worker {{inputs.parameters.index}} dropped."
             exit 0
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: PYTHONUNBUFFERED
             value: "1"
           - name: POD_IP
@@ -298,7 +312,7 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Worker 2 — replacement, joins after join-delay seconds ────────
+    # ── Replacement worker — joins after join-delay seconds ───────────────────
     - name: late-worker
       daemon: true
       inputs:
@@ -329,6 +343,8 @@ spec:
               -nw {{workflow.parameters.workers-per-node}} \
               -i {{inputs.parameters.index}} 2>&1
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: PYTHONUNBUFFERED
             value: "1"
           - name: POD_IP
@@ -358,7 +374,7 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Gradient accumulator ──────────────────────────────────────────
+    # ── Gradient accumulator ──────────────────────────────────────────────────
     - name: gradient-accumulator
       daemon: true
       metadata:
@@ -373,6 +389,8 @@ spec:
           - -m
           - mosaic.runtime.gradient_accumulator
         env:
+          - name: OMP_NUM_THREADS
+            value: "2"
           - name: NUM_ITERS
             value: "{{workflow.parameters.num-iters}}"
           - name: ARTIFACT_ENDPOINT

@@ -1,0 +1,262 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: stride-
+spec:
+  entrypoint: stride-dag
+  serviceAccountName: stride-workflow
+  arguments:
+    parameters:
+      - name: num-workers
+        value: "2"
+      - name: workers-per-node
+        value: "1"
+      - name: monitor-port
+        value: "3000"
+      - name: pubsub-port
+        value: "3001"
+      - name: image
+        value: stride-k8s:latest
+      - name: run-mode
+        value: forward
+      - name: exp-name
+        value: simple
+      - name: num-iters
+        value: "4"
+      - name: drop-threshold
+        value: "0.3"
+
+  templates:
+    # ── DAG ──────────────────────────────────────────────
+    - name: stride-dag
+      dag:
+        tasks:
+          - name: create-service
+            template: monitor-service
+
+          - name: head
+            template: head
+            dependencies: [create-service]
+
+          - name: workers
+            template: worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "{{item}}"
+            withSequence:
+              count: "{{workflow.parameters.num-workers}}"
+
+          - name: gradient-accumulator
+            template: gradient-accumulator
+            dependencies: [create-service]
+
+    # ── K8s Service (routes workers → head pod) ─────────
+    - name: monitor-service
+      resource:
+        action: apply
+        manifest: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: monitor-svc-{{workflow.name}}
+            namespace: {{workflow.namespace}}
+            ownerReferences:
+              - apiVersion: argoproj.io/v1alpha1
+                kind: Workflow
+                name: {{workflow.name}}
+                uid: {{workflow.uid}}
+          spec:
+            selector:
+              role: head
+              workflow: {{workflow.name}}
+            ports:
+              - name: rpc
+                port: {{workflow.parameters.monitor-port}}
+                targetPort: {{workflow.parameters.monitor-port}}
+              - name: pubsub
+                port: {{workflow.parameters.pubsub-port}}
+                targetPort: {{workflow.parameters.pubsub-port}}
+
+    # ── Head pod (embedded monitor + runner script) ─────
+    - name: head
+      metadata:
+        labels:
+          role: head
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command:
+          - python3
+          - -m
+          - mosaic.cli.mrun
+          - --dynamic
+          - --address
+          - "0.0.0.0"
+          - --port
+          - "{{workflow.parameters.monitor-port}}"
+          - -nw
+          - "0"
+          - python3
+          - k8s_runner.py
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: NUM_WORKERS
+            value: "{{workflow.parameters.num-workers}}"
+          - name: NUM_ITERS
+            value: "{{workflow.parameters.num-iters}}"
+          - name: DROP_THRESHOLD
+            value: "{{workflow.parameters.drop-threshold}}"
+          - name: WORKERS_PER_NODE
+            value: "{{workflow.parameters.workers-per-node}}"
+          - name: RUN_MODE
+            value: "{{workflow.parameters.run-mode}}"
+          - name: EXP_NAME
+            value: "{{workflow.parameters.exp-name}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        volumeMounts:
+          - name: exps
+            mountPath: /app/stride/exps
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+      volumes:
+        - name: exps
+          hostPath:
+            path: /data/stride-exps
+            type: DirectoryOrCreate
+
+    # ── Worker pod (daemon — stays alive until head exits) ─
+    - name: worker
+      daemon: true
+      inputs:
+        parameters:
+          - name: index
+      metadata:
+        labels:
+          role: worker
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command: [bash, -c]
+        args:
+          - |
+            # Resolve monitor DNS to IP (mosaic validate_address needs an IP)
+            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
+              echo "Waiting for monitor DNS to resolve..."
+              sleep 2
+            done
+            echo "Monitor resolved: $MONITOR_DNS -> $MONITOR_IP"
+            export MONITOR_HOST=$MONITOR_IP
+
+            echo "Starting node: POD_IP=$POD_IP MONITOR_HOST=$MONITOR_HOST MONITOR_PORT=$MONITOR_PORT PUBSUB_PORT=$PUBSUB_PORT"
+
+            python3 -u -m mosaic.cli.mrun --node --phone-home \
+              --address $POD_IP --port 3000 \
+              -nw {{workflow.parameters.workers-per-node}} \
+              -i {{inputs.parameters.index}} 2>&1
+
+            EXIT_CODE=$?
+            echo "MRUN exited with code: $EXIT_CODE"
+            if [ $EXIT_CODE -ne 0 ]; then
+              echo "=== Debug info ==="
+              echo "POD_IP=$POD_IP"
+              echo "MONITOR_HOST=$MONITOR_HOST"
+              python3 -c "
+            import socket
+            try:
+                s = socket.create_connection(('$MONITOR_HOST', $MONITOR_PORT), timeout=5)
+                print('TCP to monitor RPC: OK')
+                s.close()
+            except Exception as e:
+                print(f'TCP to monitor RPC: FAILED - {e}')
+            "
+            fi
+            exit $EXIT_CODE
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MONITOR_DNS
+            value: "monitor-svc-{{workflow.name}}"
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+
+    # ── Gradient accumulator (daemon — sums worker gradients per iteration) ─
+    - name: gradient-accumulator
+      daemon: true
+      metadata:
+        labels:
+          role: gradient-accumulator
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command:
+          - python3
+          - -m
+          - mosaic.runtime.gradient_accumulator
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: NUM_ITERS
+            value: "{{workflow.parameters.num-iters}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: 1Gi

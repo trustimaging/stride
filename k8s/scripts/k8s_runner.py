@@ -7,9 +7,8 @@ Launched by mrun inside the head pod:
         -nw 0 python k8s_runner.py
 
 Set RUN_MODE env var to choose the script:
-    forward      — scripts.simple_forward  (default)
-    inverse      — scripts.simple_inverse
-    inverse_s3   — scripts.simple_inverse_s3
+    forward      — scripts.simple_forward
+    inverse_test — scripts.inverse_test  (default)
 
 Set EXP_NAME env var to choose the experiment directory:
     simple       — exps/simple  (default)
@@ -27,14 +26,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'k8s
 TOTAL_WORKERS = (int(os.environ.get('NUM_WORKERS', '2'))
                  * int(os.environ.get('WORKERS_PER_NODE', '1')))
 TIMEOUT = int(os.environ.get('WORKER_TIMEOUT', '300'))
-RUN_MODE = os.environ.get('RUN_MODE', 'forward')
+RUN_MODE = os.environ.get('RUN_MODE', 'inverse_test')
 EXP_NAME = os.environ.get('EXP_NAME', 'simple')
 
 SCRIPTS = {
-    'forward': 'scripts.simple_forward',
-    'inverse': 'scripts.simple_inverse',
-    'inverse_artifacts': 'scripts.simple_inverse_artifacts',
-    'disconnect_test': 'scripts.disconnect_test',
+    'forward': 'scripts.forward_test',
+    'inverse_test': 'scripts.inverse_test',
 }
 
 import mosaic

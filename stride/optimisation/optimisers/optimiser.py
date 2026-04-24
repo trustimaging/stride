@@ -87,6 +87,20 @@ class LocalOptimiser(ABC):
                 if hasattr(self.variable, 'is_proxy') and self.variable.is_proxy:
                     await self.variable.pull(attr='grad')
 
+                # ── DIAG: raw gradient after pull ──
+                _g = self.variable.grad
+                if _g is not None:
+                    _gd = _g.data
+                    _gx = _g.extended_data
+                    _iter_id = iteration.abs_id if iteration is not None else '?'
+                    logger.perf(
+                        'DIAG iter=%s  raw grad.data      sum=%.8e  min=%.8e  max=%.8e  shape=%s'
+                        % (_iter_id, float(np.sum(_gd)), float(np.min(_gd)),
+                           float(np.max(_gd)), _gd.shape))
+                    logger.perf(
+                        'DIAG iter=%s  raw grad.ext_data  sum=%.8e  shape=%s'
+                        % (_iter_id, float(np.sum(_gx)), _gx.shape))
+
                 dump_grad = kwargs.pop('dump_grad', self.dump_grad)
                 dump_prec = kwargs.pop('dump_prec', self.dump_prec)
                 if dump_grad and problem is not None:

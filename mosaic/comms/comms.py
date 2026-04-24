@@ -2255,7 +2255,7 @@ class CommsManager:
         if self._state == 'disconnected':
             return
 
-        self._runtime.logger.info(
+        self._runtime.logger.debug(
             'COMMS-DISCONNECT: %s (notify=%s, runtime=%s)'
             % (uid, notify, self._runtime.uid))
 

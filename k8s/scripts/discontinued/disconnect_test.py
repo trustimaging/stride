@@ -28,7 +28,7 @@ from stride.utils import wavelets
 import mosaic
 from mosaic.runtime.head import Head
 
-N: int = 2
+N: int = 16
 NUM_ITERS: int = int(os.environ.get('NUM_ITERS', '4'))
 
 
@@ -64,7 +64,11 @@ async def main(runtime: Head, exp_name: str = 'disconnect-test') -> None:
 
     vp_true = ScalarField(name='vp', grid=problem_fwd.grid)
     vp_true.fill(1500.)
-    vp_true.data[shape[0] // 2:, :] = 1600.
+    cx, cz = shape[0] // 2, shape[1] // 2
+    radius = 25
+    yy, xx = np.mgrid[:shape[0], :shape[1]]
+    mask = (xx - cx)**2 + (yy - cz)**2 <= radius**2
+    vp_true.data[mask] = 1600.
     problem_fwd.medium.add(vp_true)
 
     problem_fwd.transducers.default()
@@ -151,6 +155,20 @@ async def main(runtime: Head, exp_name: str = 'disconnect-test') -> None:
     node_uids = sorted(runtime._nodes.keys()) if hasattr(runtime, '_nodes') else []
     print('DISCONNECT-TEST: mesh check — workers=%s nodes=%s'
           % (worker_uids, node_uids), flush=True)
+
+    # ── Validate against baseline ────────────────────────────────────────────
+    baseline_path = os.environ.get('BASELINE_PATH')
+    if baseline_path and os.path.exists(baseline_path):
+        baseline = np.load(baseline_path)
+        rel_error = np.linalg.norm(vp.data - baseline) / np.linalg.norm(baseline)
+        tolerance = float(os.environ.get('BASELINE_TOLERANCE', '0.15'))
+        print('VALIDATION: relative L2 error = %.6f (tolerance = %.2f)' % (rel_error, tolerance))
+        if rel_error > tolerance:
+            print('VALIDATION: FAIL — result diverged too far from baseline')
+            raise RuntimeError('Baseline validation failed: rel_error=%.6f > tolerance=%.2f'
+                               % (rel_error, tolerance))
+        else:
+            print('VALIDATION: PASS')
 
 
 if __name__ == '__main__':

@@ -56,7 +56,14 @@ install_argo() {
     kubectl wait -n argo --for=condition=available deployment/argo-server --timeout=120s || true
     kubectl wait -n argo --for=condition=available deployment/workflow-controller --timeout=120s || true
 
-    log "Argo installed"
+    # The quick-start bundles its own MinIO Deployment for Argo artifact
+    # storage. We use our own StatefulSet (k8s/manifests/minio.yaml), so
+    # delete the bundled one to avoid two MinIO pods behind the same Service.
+    kubectl delete deployment minio -n argo 2>/dev/null || true
+
+    # Expose Argo UI via NodePort so it's accessible from the host
+    kubectl patch svc argo-server -n argo -p '{"spec":{"type":"NodePort"}}'
+    log "Argo installed (argo-server patched to NodePort)"
 }
 
 # Create RBAC for the stride-workflow service account
@@ -107,9 +114,15 @@ deploy_minio() {
     kubectl apply -f "$SCRIPT_DIR/manifests/minio.yaml"
     log "Waiting for MinIO to be ready..."
     kubectl wait -n "$ARGO_NAMESPACE" --for=condition=ready pod \
-        -l app=minio --timeout=120s
+        minio-0 --timeout=120s
+    # Expose MinIO via NodePort so it's accessible from the host
+    kubectl patch svc minio -n argo -p '{"spec":{"type":"NodePort"}}'
+
+    # The stride-data bucket is created automatically by ensure_bucket()
+    # in the ArtifactWarehouse and GradientAccumulator on startup.
+
     log "MinIO is ready (API: minio.argo.svc.cluster.local:9000)"
-    log "  Console: kubectl port-forward -n argo svc/minio 9001:9001"
+    log "  Console: minikube service minio -n argo --url"
 }
 
 # Build Docker image inside minikube's Docker daemon
@@ -181,6 +194,39 @@ stop() {
     log "Stopped"
 }
 
+# Download plots from MinIO to local misc/plots/
+export_plots() {
+    local dest="$PROJECT_DIR/misc/plots"
+    mkdir -p "$dest"
+
+    # Get MinIO API NodePort
+    local node_port
+    node_port=$(kubectl get svc minio -n "$ARGO_NAMESPACE" -o jsonpath='{.spec.ports[?(@.name=="api")].nodePort}')
+    local minio_ip
+    minio_ip=$(minikube ip)
+    local endpoint="${minio_ip}:${node_port}"
+
+    log "Downloading plots from MinIO ($endpoint)..."
+
+    python3 -c "
+import os, sys
+from minio import Minio
+
+client = Minio('${endpoint}', access_key='admin', secret_key='password', secure=False)
+dest = '${dest}'
+found = False
+for obj in client.list_objects('stride-data', prefix='plots/', recursive=True):
+    if obj.object_name.endswith('.png'):
+        fname = os.path.basename(obj.object_name)
+        client.fget_object('stride-data', obj.object_name, os.path.join(dest, fname))
+        print('  %s → %s/%s' % (obj.object_name, dest, fname))
+        found = True
+if not found:
+    print('  No plots found in stride-data/plots/')
+    sys.exit(1)
+" || warn "No plots found in MinIO"
+}
+
 # Remove all workflows and RBAC
 cleanup() {
     log "Cleaning up..."
@@ -236,11 +282,15 @@ case "${1:-}" in
     stop)
         stop
         ;;
+    plots)
+        check_minikube
+        export_plots
+        ;;
     cleanup)
         cleanup
         ;;
     *)
-        echo "Usage: $0 {setup|build|start|logs|status|stop|cleanup}"
+        echo "Usage: $0 {setup|build|start|logs|status|stop|plots|cleanup}"
         echo ""
         echo "Commands:"
         echo "  setup    - First-time setup (install Argo, build image, create RBAC)"
@@ -249,6 +299,7 @@ case "${1:-}" in
         echo "  logs     - Stream logs from the active workflow"
         echo "  status   - Check status of all components"
         echo "  stop     - Delete active workflows"
+        echo "  plots    - Export result plots from minikube to misc/plots/"
         echo "  cleanup  - Remove all workflows and RBAC"
         echo ""
         echo "Environment variables:"

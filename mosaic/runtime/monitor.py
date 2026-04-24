@@ -580,7 +580,10 @@ class Monitor(Runtime):
 
         # Close nodes
         for node_id, node in self._nodes.items():
-            await node.stop()
+            try:
+                await node.stop()
+            except (KeyError, RuntimeError):
+                pass
 
             if hasattr(node.subprocess, 'stop_process'):
                 node.subprocess.join_process()

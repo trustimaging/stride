@@ -513,6 +513,16 @@ class ParameterMixin:
                     art_warehouse.gradient_prefix, art_warehouse.iteration)
                 data = art_warehouse.pull_remote(key, poll=True)
                 self.grad.data[:] = data
+
+                # Load accumulated preconditioner if available
+                prec_key = '%s/iter_%d/final_prec.pkl' % (
+                    art_warehouse.gradient_prefix, art_warehouse.iteration)
+                try:
+                    prec_data = art_warehouse.pull_remote(prec_key, poll=False)
+                    if self.grad.prec is not None:
+                        self.grad.prec.data[:] = prec_data
+                except Exception:
+                    pass
                 return
 
             warehouse = mosaic.get_warehouse()

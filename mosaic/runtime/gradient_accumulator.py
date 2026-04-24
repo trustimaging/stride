@@ -124,6 +124,7 @@ class GradientAccumulator:
                     iteration, len(expected), shot_ids)
 
         accumulated = None
+        accumulated_prec = None
         folded: set = set()
         iter_start  = time.time()
         wait        = 1.0
@@ -154,8 +155,18 @@ class GradientAccumulator:
                     iteration, shot_id, len(folded) + 1, len(expected),
                 )
                 arr = pickle.loads(self._warehouse._download_bytes(key))
-                accumulated = (np.array(arr, dtype=float) if accumulated is None
+                accumulated = (arr.copy() if accumulated is None
                                else accumulated + arr)
+
+                # Accumulate preconditioner if present
+                prec_key = key.replace('.pkl', '_prec.pkl')
+                try:
+                    prec_arr = pickle.loads(self._warehouse._download_bytes(prec_key))
+                    accumulated_prec = (prec_arr.copy() if accumulated_prec is None
+                                        else accumulated_prec + prec_arr)
+                except Exception:
+                    pass
+
                 folded.add(key)
                 logger.info(
                     'Iter %d — folded shot_%s (%d/%d accumulated).',
@@ -168,6 +179,12 @@ class GradientAccumulator:
 
         final_key = '%s/iter_%d/final.pkl' % (gprefix, iteration)
         self._warehouse._upload_bytes(final_key, pickle.dumps(accumulated))
+
+        # Write accumulated preconditioner if any shots had one
+        if accumulated_prec is not None:
+            final_prec_key = '%s/iter_%d/final_prec.pkl' % (gprefix, iteration)
+            self._warehouse._upload_bytes(final_prec_key, pickle.dumps(accumulated_prec))
+            logger.info('Iter %d — final_prec.pkl written.', iteration)
 
         elapsed = time.time() - iter_start
         logger.info('Iter %d done — final.pkl written (%d/%d shots, %.2fs).',

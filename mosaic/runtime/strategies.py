@@ -108,7 +108,7 @@ class RoundRobin(MonitorStrategy):
         if stale:
             self._worker_list -= stale
             self._num_workers = len(self._worker_list)
-            self._monitor.logger.info(
+            self._monitor.logger.debug(
                 'STRATEGY-POOL: evicted stale workers %s for node index %d '
                 '(replaced by new instance)'
                 % (sorted(stale), node_idx))
@@ -121,7 +121,7 @@ class RoundRobin(MonitorStrategy):
 
         new_workers = self._worker_list - before
         if new_workers:
-            self._monitor.logger.info(
+            self._monitor.logger.debug(
                 'STRATEGY-POOL: added workers %s from node %s '
                 '(pool now %d: %s)'
                 % (sorted(new_workers), updated.uid,
