@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: stride-single-drop-nr-
+  generateName: stride-multi-drop-nr-
 spec:
   entrypoint: stride-dag
   serviceAccountName: stride-workflow
@@ -19,16 +19,18 @@ spec:
       - name: image
         value: stride-k8s:latest
       - name: exp-name
-        value: single-drop-no-rejoin-test
+        value: multi-drop-no-rejoin-test
       - name: num-iters
         value: "4"
 
       - name: drop-threshold
         value: "0"
 
-      # Worker-7 drops during the adjoint phase; no replacement joins.
-      - name: drop-delay
+      # Nodes 6 and 7 drop during adjoint; no replacements join.
+      - name: drop-delay-1
         value: "180"
+      - name: drop-delay-2
+        value: "185"
 
   templates:
     # ── DAG ──────────────────────────────────────────────────────────────────
@@ -42,7 +44,7 @@ spec:
             template: head
             dependencies: [create-service]
 
-          # 7 permanent workers (indices 0-6)
+          # 6 permanent nodes (indices 0-5)
           - name: workers
             template: worker
             dependencies: [create-service]
@@ -51,11 +53,20 @@ spec:
                 - name: index
                   value: "{{item}}"
             withSequence:
-              count: "7"
+              count: "6"
 
-          # Worker 7 — drops after drop-delay, no replacement
-          - name: worker-7-mortal
-            template: mortal-worker
+          # Node 6 — drops after drop-delay-1
+          - name: node-6-mortal
+            template: mortal-worker-1
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "6"
+
+          # Node 7 — drops after drop-delay-2
+          - name: node-7-mortal
+            template: mortal-worker-2
             dependencies: [create-service]
             arguments:
               parameters:
@@ -155,7 +166,7 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Permanent workers (indices 0-6) ───────────────────────────────────────
+    # ── Permanent nodes (indices 0-5) ─────────────────────────────────────────
     - name: worker
       daemon: true
       inputs:
@@ -176,7 +187,7 @@ spec:
               sleep 2
             done
             export MONITOR_HOST=$MONITOR_IP
-            echo "Worker {{inputs.parameters.index}} starting: POD_IP=$POD_IP MONITOR_HOST=$MONITOR_HOST"
+            echo "Node {{inputs.parameters.index}} starting: POD_IP=$POD_IP MONITOR_HOST=$MONITOR_HOST"
             python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
               -nw {{workflow.parameters.workers-per-node}} \
@@ -213,8 +224,8 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Worker 7 — drops after drop-delay, no replacement ─────────────────────
-    - name: mortal-worker
+    # ── Node 6 — drops after drop-delay-1 (180s) ─────────────────────────────
+    - name: mortal-worker-1
       daemon: true
       inputs:
         parameters:
@@ -234,7 +245,7 @@ spec:
               sleep 2
             done
             export MONITOR_HOST=$MONITOR_IP
-            echo "Node {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay}}s)"
+            echo "Node {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay-1}}s)"
 
             python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
@@ -242,7 +253,74 @@ spec:
               -i {{inputs.parameters.index}} 2>&1 &
             MRUN_PID=$!
 
-            sleep {{workflow.parameters.drop-delay}}
+            sleep {{workflow.parameters.drop-delay-1}}
+            echo "=== Simulating node drop: killing node {{inputs.parameters.index}} ==="
+            kill $MRUN_PID
+            wait $MRUN_PID 2>/dev/null || true
+            echo "Node {{inputs.parameters.index}} dropped."
+            exit 0
+        env:
+          - name: OMP_NUM_THREADS
+            value: "2"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MONITOR_DNS
+            value: "monitor-svc-{{workflow.name}}"
+          - name: MONITOR_PORT
+            value: "{{workflow.parameters.monitor-port}}"
+          - name: PUBSUB_PORT
+            value: "{{workflow.parameters.pubsub-port}}"
+          - name: ARTIFACT_ENDPOINT
+            value: "minio.argo.svc.cluster.local:9000"
+          - name: ARTIFACT_ACCESS_KEY
+            value: "admin"
+          - name: ARTIFACT_SECRET_KEY
+            value: "password"
+          - name: ARTIFACT_BUCKET
+            value: "stride-data"
+          - name: ARTIFACT_BACKEND
+            value: "minio"
+          - name: ARTIFACT_RUN_ID
+            value: "{{workflow.name}}"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 2Gi
+
+    # ── Node 7 — drops after drop-delay-2 (185s) ─────────────────────────────
+    - name: mortal-worker-2
+      daemon: true
+      inputs:
+        parameters:
+          - name: index
+      metadata:
+        labels:
+          role: worker
+          workflow: "{{workflow.name}}"
+      container:
+        image: "{{workflow.parameters.image}}"
+        imagePullPolicy: Never
+        command: [bash, -c]
+        args:
+          - |
+            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
+              echo "Waiting for monitor DNS..."
+              sleep 2
+            done
+            export MONITOR_HOST=$MONITOR_IP
+            echo "Node {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay-2}}s)"
+
+            python3 -u -m mosaic.cli.mrun --node --phone-home \
+              --address $POD_IP --port 3000 \
+              -nw {{workflow.parameters.workers-per-node}} \
+              -i {{inputs.parameters.index}} 2>&1 &
+            MRUN_PID=$!
+
+            sleep {{workflow.parameters.drop-delay-2}}
             echo "=== Simulating node drop: killing node {{inputs.parameters.index}} ==="
             kill $MRUN_PID
             wait $MRUN_PID 2>/dev/null || true

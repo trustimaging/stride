@@ -23,11 +23,14 @@ spec:
       - name: num-iters
         value: "4"
 
+      - name: drop-threshold
+        value: "0.5"
+
       # Node 7 drops during adjoint; replacement joins shortly after.
       - name: drop-delay
-        value: "120"
+        value: "140"
       - name: join-delay
-        value: "150"
+        value: "170"
 
   templates:
     # ── DAG ──────────────────────────────────────────────────────────────────
@@ -135,7 +138,7 @@ spec:
           - name: NUM_ITERS
             value: "{{workflow.parameters.num-iters}}"
           - name: DROP_THRESHOLD
-            value: "0.5"
+            value: "{{workflow.parameters.drop-threshold}}"
           - name: WORKERS_PER_NODE
             value: "{{workflow.parameters.workers-per-node}}"
           - name: RUN_MODE

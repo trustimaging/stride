@@ -462,7 +462,7 @@ class Runtime(BaseRPC):
 
             self.logger.info('ASYNC-FOR-BARRIER: waiting (workers in pool: %s)'
                              % list(self._workers.keys()))
-            await self.barrier(timeout=30)
+            await self.barrier(timeout=10)
             self.logger.info('ASYNC-FOR-BARRIER: done')
 
             self._inside_async_for = False

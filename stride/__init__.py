@@ -587,8 +587,24 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             finally:
                 cleanup_monitor()
 
-            if loop_ok:
+            if loop_ok and iteration.num_completed >= num_shots:
                 break
+
+            drop_fraction = 1.0 - (iteration.num_completed / num_shots) if num_shots > 0 else 0.0
+
+            if loop_ok and drop_threshold is not None and drop_fraction <= drop_threshold:
+                logger.info('FAULT-TOLERANCE: %d/%d shots succeeded (%.0f%% loss within %.0f%% threshold), '
+                            'continuing with partial result'
+                            % (iteration.num_completed, num_shots,
+                               drop_fraction * 100, drop_threshold * 100))
+                if art_warehouse is not None:
+                    completed_ids = list(iteration.curr_run.completed_shots)
+                    art_warehouse.write_shot_list(iteration.abs_id, completed_ids, attempt=attempt)
+                break
+
+            if loop_ok:
+                logger.info('FAULT-TOLERANCE: loop completed but only %d/%d shots succeeded'
+                            % (iteration.num_completed, num_shots))
 
             if drop_threshold is not None and art_warehouse is not None:
                 attempt += 1
