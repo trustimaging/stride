@@ -39,8 +39,15 @@ import mosaic
 
 async def main(runtime):
     print(f'Waiting for {TOTAL_WORKERS} workers (timeout={TIMEOUT}s)...')
-    await runtime.wait_for_workers(TOTAL_WORKERS, timeout=TIMEOUT)
-    print(f'Workers connected: {len(runtime.workers)}')
+    try:
+        await runtime.wait_for_workers(TOTAL_WORKERS, timeout=TIMEOUT)
+    except RuntimeError:
+        pass
+    num_connected = len(runtime.workers)
+    if num_connected < 1:
+        print(f'No workers connected, aborting')
+        sys.exit(1)
+    print(f'Workers connected: {num_connected}/{TOTAL_WORKERS}')
 
     if RUN_MODE not in SCRIPTS:
         print(f'Unknown RUN_MODE={RUN_MODE!r}, expected one of: {", ".join(SCRIPTS)}')

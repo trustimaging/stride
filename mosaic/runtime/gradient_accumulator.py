@@ -90,6 +90,13 @@ class GradientAccumulator:
         except Exception:
             return None
 
+    @staticmethod
+    def _parse_shot_list(raw):
+        """Parse shots.json payload, handling both old (list) and new (dict) formats."""
+        if isinstance(raw, list):
+            return raw, 0
+        return raw['shot_ids'], raw.get('attempt', 0)
+
     # ------------------------------------------------------------------ main
 
     def accumulate_iteration(self, iteration: int) -> None:
@@ -117,11 +124,12 @@ class GradientAccumulator:
         prefix    = '%s/iter_%d/' % (gprefix, iteration)
 
         logger.info('Iter %d — waiting for shots.json.', iteration)
-        shot_ids = self._poll_json(shots_key)
+        raw = self._poll_json(shots_key)
+        shot_ids, attempt = self._parse_shot_list(raw)
         expected = {('%s/iter_%d/shot_%d.pkl' % (gprefix, iteration, s))
                     for s in shot_ids}
-        logger.info('Iter %d — expecting %d shot(s): %s.',
-                    iteration, len(expected), shot_ids)
+        logger.info('Iter %d — expecting %d shot(s) (attempt %d): %s.',
+                    iteration, len(expected), attempt, shot_ids)
 
         accumulated = None
         accumulated_prec = None
@@ -130,11 +138,21 @@ class GradientAccumulator:
         wait        = 1.0
 
         while folded < expected:
-            # Re-read shots.json — head may have shrunk it on a partial iteration
-            updated = self._read_json(shots_key)
-            if updated is not None:
+            # Re-read shots.json — head may have updated it
+            updated_raw = self._read_json(shots_key)
+            if updated_raw is not None:
+                new_ids, new_attempt = self._parse_shot_list(updated_raw)
+                if new_attempt != attempt:
+                    logger.info(
+                        'Iter %d — attempt changed (%d → %d), resetting accumulation.',
+                        iteration, attempt, new_attempt,
+                    )
+                    attempt = new_attempt
+                    accumulated = None
+                    accumulated_prec = None
+                    folded = set()
                 new_expected = {('%s/iter_%d/shot_%d.pkl' % (gprefix, iteration, s))
-                                for s in updated}
+                                for s in new_ids}
                 if new_expected != expected:
                     logger.info(
                         'Iter %d — shots.json updated (%d → %d shot(s)).',

@@ -275,6 +275,9 @@ async def _watch_workers(runtime, initial_uids, threshold, task, event):
 
     Purely event-driven: wakes whenever runtime._on_worker_count_changed fires
     (i.e. any worker joins or leaves via remove_proxy_from_uid).
+
+    Debounces for 2 seconds after a drop to let the full node disconnect
+    cascade complete before cancelling.
     """
     logger = mosaic.logger()
     n = len(initial_uids)
@@ -287,7 +290,12 @@ async def _watch_workers(runtime, initial_uids, threshold, task, event):
         fraction = len(lost) / n if n > 0 else 0.0
         logger.debug('_watch_workers check — lost=%s fraction=%.2f threshold=%.2f' % (lost, fraction, threshold))
         if n > 0 and fraction > threshold:
-            logger.warning('_watch_workers: drop threshold exceeded (%.2f > %.2f) — cancelling' % (fraction, threshold))
+            await asyncio.sleep(2)
+            current_uids = set(w.uid for w in runtime.workers)
+            lost = initial_uids - current_uids
+            fraction = len(lost) / n if n > 0 else 0.0
+            logger.warning('_watch_workers: drop threshold exceeded (%.2f > %.2f, lost=%s) '
+                           '— cancelling' % (fraction, threshold, sorted(lost)))
             task.cancel()
             return
     logger.debug('_watch_workers: loop_task already done, exiting')
@@ -470,13 +478,13 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if lazy_loading:
             problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False, fast=True)
 
+        attempt = 0
         if art_warehouse is not None:
-            art_warehouse.write_shot_list(iteration.abs_id, shot_ids)
+            art_warehouse.write_shot_list(iteration.abs_id, shot_ids, attempt=attempt)
 
         initial_worker_count = runtime.num_workers
-        while True:
-            completed_shots = []
 
+        while True:
             @runtime.async_for(shot_ids, safe=safe)
             async def loop(worker, shot_id):
                 _kwargs = kwargs.copy()
@@ -552,7 +560,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 logger.perf('Functional value for shot %d: %s' % (shot_id, fun_value))
 
                 iteration.add_completed(sub_problem.shot)
-                completed_shots.append(shot_id)
                 logger.perf('Retrieved gradient for shot %d (%d out of %d)'
                             % (sub_problem.shot_id,
                                iteration.num_completed, num_shots))
@@ -566,29 +573,51 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 drop_threshold if art_warehouse is not None else None,
                 loop_task)
 
+            loop_ok = False
             try:
                 await loop_task
-                if (art_warehouse is not None
-                        and len(completed_shots) < len(shot_ids)):
-                    art_warehouse.write_shot_list(iteration.abs_id, completed_shots)
-                break
+                logger.info('FAULT-TOLERANCE: loop_task completed normally')
+                loop_ok = True
             except asyncio.CancelledError:
                 runtime._inside_async_for = False
-                iteration.clear()
-                optimiser.clear_grad()
-                current_uids = sorted(w.uid for w in runtime.workers)
-                logger.info(
-                    'ADJOINT-RETRY: iteration %d — drop threshold exceeded, '
-                    'clearing and retrying. Workers now: %d/%d %s'
-                    % (iteration.abs_id, runtime.num_workers,
-                       initial_worker_count, current_uids))
-                await _wait_for_workers(runtime, initial_worker_count)
-                logger.info(
-                    'ADJOINT-RETRY: iteration %d — proceeding with workers: %s'
-                    % (iteration.abs_id,
-                       sorted(w.uid for w in runtime.workers)))
+                logger.info('FAULT-TOLERANCE: loop_task cancelled')
+            except Exception as exc:
+                runtime._inside_async_for = False
+                logger.warning('FAULT-TOLERANCE: loop_task failed (%s: %s)' % (type(exc).__name__, exc))
             finally:
                 cleanup_monitor()
+
+            if loop_ok:
+                break
+
+            if drop_threshold is not None and art_warehouse is not None:
+                attempt += 1
+                logger.info(
+                    'ADJOINT-RETRY: iteration %d attempt %d — restarting. '
+                    'Workers: %d/%d %s'
+                    % (iteration.abs_id, attempt,
+                       runtime.num_workers, initial_worker_count,
+                       sorted(w.uid for w in runtime.workers)))
+
+                reset_rpcs = []
+                for worker in runtime.workers:
+                    try:
+                        reset_rpcs.append(
+                            worker.cancel_and_reset_tasks(reply=True))
+                    except Exception:
+                        pass
+                if reset_rpcs:
+                    await asyncio.gather(*reset_rpcs, return_exceptions=True)
+
+                iteration.clear()
+                optimiser.clear_grad()
+                art_warehouse.clear_iteration_gradients(iteration.abs_id)
+                art_warehouse.write_shot_list(iteration.abs_id, shot_ids, attempt=attempt)
+                if runtime.num_workers < 1:
+                    await _wait_for_workers(runtime, 1)
+                continue
+
+            break
 
         async def step_loop():
             iteration.next_run()

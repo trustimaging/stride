@@ -665,7 +665,17 @@ class OutboundConnection(Connection):
                 'HEARTBEAT-EXPIRE: %s → disconnecting %s (no beat received)'
                 % (self._comms._runtime.uid, self.uid))
             await self._comms.disconnect(self.uid, self.uid, notify=True)
-            await self._loop.run(self._runtime.disconnect, self.uid, self.uid)
+            try:
+                result = self._loop.run(self._runtime.disconnect, self.uid, self.uid)
+                if result is not None:
+                    await result
+                else:
+                    self._comms._runtime.logger.warning(
+                        'HEARTBEAT-EXPIRE: _loop.run returned None for disconnect %s'
+                        % self.uid)
+            except Exception as exc:
+                self._comms._runtime.logger.warning(
+                    'HEARTBEAT-EXPIRE: disconnect failed for %s: %s' % (self.uid, exc))
             return
 
         interval = self._heartbeat_interval * self._heartbeat_max_attempts/self._heartbeat_attempts
@@ -2330,12 +2340,12 @@ class CommsManager:
         recv_task = asyncio.ensure_future(self.recv_async())
         try:
             while True:
-                done, _ = await asyncio.wait([recv_task], timeout=60)
+                done, _ = await asyncio.wait([recv_task], timeout=10)
 
                 if not done:
                     # Timeout — retry hand but keep recv_task alive.
                     self._runtime.logger.info(
-                        'COMMS-HS: 60s timeout waiting for shake from %s, retrying hand (runtime=%s)'
+                        'COMMS-HS: 10s timeout waiting for shake from %s, retrying hand (runtime=%s)'
                         % (uid, self._runtime.uid))
                     await self.send_async(uid,
                                           method='hand',

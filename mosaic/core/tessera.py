@@ -78,6 +78,7 @@ class Tessera(RemoteBase):
         self._task_queue = asyncio.Queue()
         self._run_queue = asyncio.Queue()
         self._task_lock = asyncio.Lock()
+        self._running_exec = None
 
         self._cls = cls
         self._obj = None
@@ -325,13 +326,28 @@ class Tessera(RemoteBase):
             await self.logger.send()
             self.logger.debug('TESSERA-RUN: %s starting %s.%s'
                               % (self.uid, self.obj.__class__.__name__, task.method))
-            await self.call_safe(sender_id, method, task)
+
+            self._running_exec = asyncio.ensure_future(
+                self.call_safe(sender_id, method, task))
+            try:
+                await self._running_exec
+            except asyncio.CancelledError:
+                task.state_changed('failed')
+            finally:
+                self._running_exec = None
 
             del task
             del method
             self.runtime.dec_running_tasks()
 
         self.state_changed('stopped')
+
+    def cancel_running_task(self):
+        """Cancel the currently running task, if any."""
+        if self._running_exec is not None and not self._running_exec.done():
+            self._running_exec.cancel()
+            return True
+        return False
 
     async def call_safe(self, sender_id, method, task):
         """

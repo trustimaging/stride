@@ -174,7 +174,7 @@ class ArtifactWarehouse:
         """Set the current inversion iteration (used to construct gradient keys)."""
         self._iteration = iteration
 
-    def write_shot_list(self, iteration: int, shot_ids: list) -> None:
+    def write_shot_list(self, iteration: int, shot_ids: list, attempt: int = 0) -> None:
         """
         Write the list of expected shot IDs for *iteration* to S3.
 
@@ -188,11 +188,23 @@ class ArtifactWarehouse:
             Zero-based absolute iteration index.
         shot_ids : list of int
             Shot IDs expected (or completed) for this iteration.
+        attempt : int, optional
+            Retry attempt counter. When the accumulator detects a change it
+            resets its running sum for this iteration.
 
         """
         import json
         key = '%s/iter_%d/shots.json' % (self.gradient_prefix, iteration)
-        self._upload_bytes(key, json.dumps(shot_ids).encode())
+        payload = {'shot_ids': shot_ids, 'attempt': attempt}
+        self._upload_bytes(key, json.dumps(payload).encode())
+
+    def clear_iteration_gradients(self, iteration: int) -> None:
+        """Delete all ``shot_*.pkl`` gradient files for *iteration*."""
+        prefix = '%s/iter_%d/' % (self.gradient_prefix, iteration)
+        objects = list(self._client.list_objects(self._bucket, prefix=prefix))
+        for obj in objects:
+            if obj.object_name.endswith('.pkl'):
+                self._client.remove_object(self._bucket, obj.object_name)
 
     def ensure_bucket(self) -> None:
         """Create the bucket if it does not already exist."""

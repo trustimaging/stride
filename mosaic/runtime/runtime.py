@@ -462,7 +462,7 @@ class Runtime(BaseRPC):
 
             self.logger.info('ASYNC-FOR-BARRIER: waiting (workers in pool: %s)'
                              % list(self._workers.keys()))
-            await self.barrier()
+            await self.barrier(timeout=30)
             self.logger.info('ASYNC-FOR-BARRIER: done')
 
             self._inside_async_for = False
@@ -1151,6 +1151,28 @@ class Runtime(BaseRPC):
         self._warehouse_pending.remove(obj_uid)
 
         return obj
+
+    async def cancel_and_reset_tasks(self, sender_id):
+        """Cancel all running tessera tasks and clear operator state."""
+        cancelled = 0
+        for tessera in self._tessera.values():
+            if hasattr(tessera, 'cancel_running_task') and tessera.cancel_running_task():
+                cancelled += 1
+
+        for tessera in self._tessera.values():
+            if hasattr(tessera, '_running_exec') and tessera._running_exec is not None:
+                try:
+                    await tessera._running_exec
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+        for tessera in self._tessera.values():
+            if hasattr(tessera, 'inputs'):
+                tessera.inputs = None
+                tessera.num_outputs = None
+
+        self.logger.info('CANCEL-AND-RESET: cancelled %d tasks, cleared operator state' % cancelled)
+        return cancelled
 
     async def exec(self, uid, func, func_args=None, func_kwargs=None):
         """

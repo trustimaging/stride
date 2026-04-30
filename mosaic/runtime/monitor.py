@@ -83,6 +83,7 @@ class Monitor(Runtime):
 
         self._dirty_tessera = set()
         self._dirty_tasks = set()
+        self._barrier_task = None
 
         now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         self._profile_filename = '%s.profile.h5' % now
@@ -204,6 +205,19 @@ class Monitor(Runtime):
             if hasattr(node, 'sub_resources') and 'workers' in node.sub_resources:
                 total += len(node.sub_resources['workers'])
         return total
+
+    @property
+    def num_workers(self):
+        return self._get_total_workers()
+
+    @property
+    def workers(self):
+        result = []
+        for node in self._monitored_nodes.values():
+            if hasattr(node, 'sub_resources') and 'workers' in node.sub_resources:
+                for uid in node.sub_resources['workers']:
+                    result.append(RuntimeProxy(uid=uid))
+        return result
 
     async def register_node(
         self,
@@ -631,10 +645,16 @@ class Monitor(Runtime):
                 self.disconnect(sender_id, worker_id)
 
         # remove runtime from monitored nodes
-        try:
+        had_workers = False
+        if uid in self._monitored_nodes:
+            node = self._monitored_nodes[uid]
+            if hasattr(node, 'sub_resources') and node.sub_resources.get('workers'):
+                had_workers = True
             del self._monitored_nodes[uid]
-        except KeyError:
-            pass
+
+        if had_workers:
+            for cb in self._on_worker_count_changed:
+                cb()
 
         # remove monitored tessera
         for obj_uid in self._runtime_tessera[uid]:
@@ -684,13 +704,38 @@ class Monitor(Runtime):
         -------
 
         """
+        if self._barrier_task is not None and not self._barrier_task.done():
+            self.logger.info('BARRIER: cancelling previous barrier')
+            self._barrier_task.cancel()
+            try:
+                await self._barrier_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._monitored_tasks = dict()
+            self._runtime_tasks = defaultdict(list)
+            self._dirty_tasks = set()
+        elif self._barrier_task is not None:
+            self.logger.info('BARRIER: previous barrier already done')
+        else:
+            self.logger.info('BARRIER: no previous barrier')
+
+        self._barrier_task = asyncio.current_task()
+
+        stale = [uid for uid, task in self._monitored_tasks.items()
+                 if task.state in ['done', 'failed', 'collected']
+                 or getattr(task, 'runtime_id', None) in self._disconnected_runtimes]
+        for uid in stale:
+            del self._monitored_tasks[uid]
+
         pending_tasks = []
         for task in self._monitored_tasks.values():
             if task.state in ['done', 'failed', 'collected']:
                 continue
 
             pending_tasks.append(task)
-        self.logger.debug('Pending barrier tasks %d' % len(pending_tasks))
+        self.logger.info('BARRIER: %d pending, %d stale purged, %d total tracked, disconnected=%s'
+                         % (len(pending_tasks), len(stale), len(self._monitored_tasks),
+                            sorted(self._disconnected_runtimes)))
 
         num_tasks = len(self._monitored_tasks)
 
@@ -700,13 +745,23 @@ class Monitor(Runtime):
 
             tracked_uids = set(self._monitored_tasks.keys())
             for task in list(pending_tasks):
-                if task.state in ['done', 'failed', 'collected'] or task.uid not in tracked_uids:
+                if (task.state in ['done', 'failed', 'collected']
+                        or task.uid not in tracked_uids
+                        or getattr(task, 'runtime_id', None) in self._disconnected_runtimes):
                     pending_tasks.remove(task)
 
             if len(self._monitored_tasks) > num_tasks:
                 for task in self._monitored_tasks.values():
-                    if task.state not in ['done', 'failed', 'collected'] and task not in pending_tasks:
+                    if (task.state not in ['done', 'failed', 'collected']
+                            and task not in pending_tasks
+                            and getattr(task, 'runtime_id', None) not in self._disconnected_runtimes):
                         pending_tasks.append(task)
+
+            elapsed = time.time() - tic
+            if elapsed > 10 and int(elapsed) % 10 == 0:
+                stuck = [(t.uid, t.runtime_id, t.state) for t in pending_tasks[:5]]
+                self.logger.info('BARRIER: still waiting after %.0fs — %d pending, sample: %s'
+                                 % (elapsed, len(pending_tasks), stuck))
 
             if timeout is not None and (time.time() - tic) > timeout:
                 break
@@ -716,3 +771,4 @@ class Monitor(Runtime):
         self._monitored_tasks = dict()
         self._runtime_tasks = defaultdict(list)
         self._dirty_tasks = set()
+        self._barrier_task = None
