@@ -318,6 +318,13 @@ class Shot(ProblemBase):
 
         for receiver_id in self.receiver_ids:
             shot._receiver_ids.append(receiver_id)
+        # for source_id in self.source_ids:
+        #     location = sub_problem.geometry.get(source_id)
+        #     shot._sources[location.id] = location
+
+        # for receiver_id in self.receiver_ids:
+        #     location = sub_problem.geometry.get(receiver_id)
+        #     shot._receivers[location.id] = location
 
         if self.wavelets is not None:
             shot.wavelets = self.wavelets
@@ -776,6 +783,8 @@ class Acquisitions(ProblemBase):
         Get all shots in the Acquisitions as a list.
 
         """
+        # sorted_ids = sorted(self._shots.keys())
+        # return [self._shots[id] for id in sorted_ids]
         return list(self._shots.values())
 
     @property
