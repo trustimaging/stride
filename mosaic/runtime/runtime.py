@@ -179,6 +179,7 @@ class Runtime(BaseRPC):
         self._dealloc_queue = []
         self._maintenance_queue = []
         self._maintenance_msgs = {}
+        self._barrier_tasks = []
 
         self._inside_async_for = False
 
@@ -338,6 +339,25 @@ class Runtime(BaseRPC):
             pass
 
         return 0
+
+    def register_barrier_task(self, task):
+        """
+        Register task for execution at barrier.
+
+        Parameters
+        ----------
+        task
+
+        Returns
+        -------
+
+        """
+        self._barrier_tasks.append(task)
+
+    async def run_barrier_tasks(self, sender_id):
+        for task in self._barrier_tasks:
+            await task()
+        self._barrier_tasks = []
 
     async def barrier(self, timeout=None):
         """
@@ -1080,7 +1100,27 @@ class Runtime(BaseRPC):
 
         return obj
 
-    async def drop(self, uid, cache_only=False):
+    async def exec(self, uid, func, func_args=None, func_kwargs=None):
+        """
+        Retrieve an object from the warehouse.
+
+        Parameters
+        ----------
+        uid
+        func
+        func_args
+        func_kwargs
+
+        Returns
+        -------
+
+        """
+        ret = await self._local_warehouse.exec_remote(uid=uid, func=func,
+                                                      func_args=func_args, func_kwargs=func_kwargs,
+                                                      reply=True)
+        return ret
+
+    async def drop(self, uid, cache_only=False, propagate=False):
         """
         Delete an object from the warehouse.
 
@@ -1088,13 +1128,14 @@ class Runtime(BaseRPC):
         ----------
         uid
         cache_only
+        propagate
 
         Returns
         -------
 
         """
         if not cache_only:
-            await self._local_warehouse.drop_remote(uid=uid)
+            await self._local_warehouse.drop_remote(uid=uid, propagate=propagate)
 
         obj_uid = uid.uid if hasattr(uid, 'uid') else uid
         try:

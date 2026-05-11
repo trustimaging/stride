@@ -1,4 +1,5 @@
 from abc import ABC
+import numpy as np
 
 import mosaic
 
@@ -222,9 +223,11 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if variable is None or not variable.needs_grad:
                 continue
 
-            method = getattr(self, 'prepare_grad_' + variable.name, None)
-
-            if method is None:
+            methods = [getattr(self, 'prepare_grad_' + name_split, None)
+                       for name_split in variable.name.split('_')]
+            if any(methods):
+                method = [method_i for method_i in methods if method_i is not None][0]
+            else:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
             update = method(variable, wrt=wrt, **kwargs)
@@ -256,9 +259,11 @@ class ProblemTypeBase(ABC, Gridded, Operator):
             if variable is None or not variable.needs_grad:
                 continue
 
-            method = getattr(self, 'init_grad_' + variable.name, None)
-
-            if method is None:
+            methods = [getattr(self, 'init_grad_' + name_split, None)
+                       for name_split in variable.name.split('_')]
+            if any(methods):
+                method = [method_i for method_i in methods if method_i is not None][0]
+            else:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
             method(variable, wrt=wrt, **kwargs)
@@ -287,11 +292,30 @@ class ProblemTypeBase(ABC, Gridded, Operator):
                 grads.append(None)
                 continue
 
-            method = getattr(self, 'get_grad_' + variable.name, None)
-
-            if method is None:
+            methods = [getattr(self, 'get_grad_' + name_split, None)
+                       for name_split in variable.name.split('_')]
+            if any(methods):
+                method = [method_i for method_i in methods if method_i is not None][0]
+            else:
                 raise ValueError('Variable %s not implemented' % variable.name)
 
-            grads.append(method(variable, wrt=wrt, **kwargs))
+            grad = method(variable, wrt=wrt, **kwargs)
+
+            grad_data = grad.data if hasattr(grad, 'data') else grad
+            is_nan = np.any(np.isnan(grad_data))
+            is_inf = np.any(np.isinf(grad_data))
+
+            if is_nan or is_inf:
+                msg = 'Nan or inf detected in %s' % self.name
+
+                problem = kwargs.pop('problem', None)
+                shot_id = problem.shot.id if problem is not None else kwargs.pop('shot_id', None)
+                if shot_id is not None:
+                    msg = '(ShotID %d) ' % shot_id + msg
+
+                self.logger.warn(msg)
+                return
+
+            grads.append(grad)
 
         return tuple(grads)

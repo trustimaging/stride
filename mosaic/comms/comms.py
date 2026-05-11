@@ -579,7 +579,7 @@ class OutboundConnection(Connection):
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
         self._heartbeat_max_attempts = 5
-        self._heartbeat_interval = 5
+        self._heartbeat_interval = 15
 
         self._shaken = False
 

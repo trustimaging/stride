@@ -675,8 +675,9 @@ class TaskProxy(ProxyBase):
     def __init__(self, proxy, method, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        cls = proxy._cls.cls if hasattr(proxy._cls, 'cls') else proxy._cls
         self._uid = '%s-%s-%s-%s' % ('task',
-                                     proxy._cls.cls.__name__.lower(),
+                                     cls.__name__.lower(),
                                      method,
                                      uuid.uuid4().hex)
         self._tessera_proxy = proxy
@@ -736,6 +737,7 @@ class TaskProxy(ProxyBase):
             self._done_future.set_exception(
                 RuntimeDisconnectedError('Remote runtime %s became disconnected' % uid)
             )
+            self._done_future.exception()
         except asyncio.InvalidStateError:
             pass
         else:

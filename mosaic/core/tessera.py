@@ -632,9 +632,10 @@ class TesseraProxy(ProxyBase):
         runtime = kwargs.pop('runtime', None)
         self._runtime_id = runtime.uid if hasattr(runtime, 'uid') else runtime
 
+        uid = kwargs.pop('uid', None)
         self._uid = '%s-%s-%s' % ('tess',
                                   self._cls.__name__.lower(),
-                                  uuid.uuid4().hex)
+                                  uuid.uuid4().hex) if uid is None else uid
 
         self._cls_attr_names = None
         self._set_cls()

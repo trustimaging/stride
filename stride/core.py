@@ -2,14 +2,13 @@
 import uuid
 import asyncio
 import inspect
-import numpy as np
 from abc import abstractmethod
 from collections import OrderedDict
 
 import mosaic
 from mosaic import types
 from mosaic.core.base import CMDBase
-from mosaic.core import TaskProxy
+from mosaic.core import TesseraProxy, TaskProxy
 
 
 __all__ = ['Variable', 'Operator']
@@ -35,7 +34,6 @@ async def _maybe_sum(a, b):
             return b[0] + a, b[1]
         elif isinstance(a, tuple) and isinstance(b, tuple):
             return a[0] + b[0], a[1] + b[1]
-
         return a + b
 
 
@@ -296,6 +294,9 @@ class Variable:
         self.prev_op = None
         self.needs_grad = kwargs.pop('needs_grad', False)
 
+        self._redux_grads = dict()
+        self._redux_task = False
+
     async def adjoint(self, grad=None, **kwargs):
         """
         Run the adjoint graph that has this variable as its root.
@@ -322,6 +323,13 @@ class Variable:
 
         runtime = mosaic.runtime()
 
+        async def redux(rec_grads, *grads):
+            rec_grads = (None,)*len(grads) if rec_grads is None else rec_grads
+            sums = [
+                _maybe_sum(r, g) for r, g in zip(rec_grads, grads)
+            ]
+            return await asyncio.gather(*sums)
+
         def dealloc(objs):
             def _dealloc(*args):
                 loop = mosaic.get_event_loop()
@@ -334,6 +342,10 @@ class Variable:
         returns = []
         parallel_returns = []
         deallocs = []
+        try:
+            self_uid = mosaic.runtime().uid
+        except AttributeError:
+            self_uid = None
         for node in self.graph.toposort(self.prev_op):
             print('Node')
             print(node)
@@ -350,25 +362,36 @@ class Variable:
             # call adjoint method
             try:
                 method = getattr(node.op, node.method)
+                is_proxy = isinstance(node.op, TesseraProxy)
             except AttributeError:
                 method = getattr(node.op.obj, node.method)
+                is_proxy = isinstance(node.op.obj, TesseraProxy)
+
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
-                ret = method(*output_grads, **{**kwargs_, **{'eager': True}})
+                redux_grad = await runtime.exec('redux-%s' % node.op.uid, redux, output_grads)
+                ret = method((redux_grad,), **{**kwargs_, **{'eager': True, 'redux': True}})
+
             else:
-                ret = method(*output_grads, **kwargs_)
+                if is_proxy:
+                    ret = method(*output_grads, **{**kwargs_, **{'eager': True}})
+                else:
+                    ret = method(*output_grads, **kwargs_)
 
             if inspect.iscoroutine(ret) or inspect.iscoroutinefunction(ret):
                 ret = await ret
 
             if isinstance(ret, TaskProxy):
-                if len(deallocs):
-                    ret.add_done_callback(dealloc(deallocs))
-
-                if (not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy) and \
-                        (not hasattr(node.op, 'is_parameter') or not node.op.is_parameter):
-                    returns.append(ret)
+                if ret.runtime_id == self_uid:
+                    ret = await ret
                 else:
-                    parallel_returns.append(ret)
+                    if len(deallocs):
+                        ret.add_done_callback(dealloc(deallocs))
+
+                    if (not hasattr(node.op, 'has_tessera') or not node.op.has_tessera or not node.op.is_proxy) and \
+                            (not hasattr(node.op, 'is_parameter') or not node.op.is_parameter):
+                        returns.append(ret)
+                    else:
+                        parallel_returns.append(ret)
 
                 input_grads = ret.outputs
             else:
@@ -541,7 +564,7 @@ class Variable:
         """
         raise NotImplementedError('Unimplemented Variable method process_grad')
 
-    async def __call_adjoint__(self, grad, **kwargs):
+    async def __call_adjoint__(self, grad, redux=False, **kwargs):
         """
         Adjoint operation of the variable, which accumulates the given
         gradient on the ``Variable.grad`` attribute.
@@ -555,25 +578,61 @@ class Variable:
         -------
 
         """
+        if redux:
+            self._redux_grads[grad[0].warehouse_id] = grad[0]
+
+            if not self._redux_task:
+                runtime = mosaic.runtime()
+                runtime.register_barrier_task(self.__redux_adjoint__)
+                self._redux_task = True
+
+            return
+
         if grad is None or not self.needs_grad or self.grad is None:
             return
 
-        grad_data = grad.data if hasattr(grad, 'data') else grad
-        is_nan = np.any(np.isnan(grad_data))
-        is_inf = np.any(np.isinf(grad_data))
-
-        if is_nan or is_inf:
-            msg = 'Nan or inf detected in %s' % self.name
-
-            problem = kwargs.pop('problem', None)
-            shot_id = problem.shot.id if problem is not None else kwargs.pop('shot_id', None)
-            if shot_id is not None:
-                msg = '(ShotID %d) ' % shot_id + msg
-
-            mosaic.logger().warn(msg)
-            return
+        if isinstance(grad, (list, tuple)):
+            grad = grad[0]
 
         self.grad += grad
+
+    async def __redux_adjoint__(self):
+        """
+        Reduction adjoint operation of the variable, which accumulates the given
+        gradient on the ``Variable.grad`` attribute.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+
+        """
+        if not hasattr(self, '_tessera'):
+            return
+
+        tess = self._tessera
+        redux_proxy = TesseraProxy(tess._cls, runtime=tess.runtime_id, uid=tess.uid)
+        redux_proxy.init_future.set_result(True)
+        redux_proxy.state_changed('listening')
+
+        inits = []
+        tasks = []
+        for g in self._redux_grads.values():
+            redux_task = TaskProxy(redux_proxy, '__call_adjoint__', g)
+            inits.append(redux_proxy._init_task(redux_task, g))
+            tasks.append(redux_task)
+
+        await asyncio.gather(*inits)
+        await asyncio.gather(*tasks)
+
+        drops = []
+        for g in self._redux_grads.values():
+            drops.append(g.drop(propagate=True))
+        await asyncio.gather(*drops)
+
+        self._redux_grads = dict()
+        self._redux_task = False
 
     def __repr__(self):
         return self.name

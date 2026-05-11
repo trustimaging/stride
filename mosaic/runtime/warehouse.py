@@ -83,15 +83,15 @@ class Warehouse(Runtime):
         super().set_profiler()
 
     async def put(self, obj, uid=None, publish=False, **kwargs):
-        return await self.put_remote(self.uid, obj, uid=uid)
+        return await self.put_remote(self.uid, obj, uid=uid, **kwargs)
 
     async def get(self, uid, **kwargs):
-        return await self.get_remote(self.uid, uid=uid)
+        return await self.get_remote(self.uid, uid=uid, **kwargs)
 
     async def drop(self, uid, **kwargs):
-        return await self.drop_remote(self.uid, uid=uid)
+        return await self.drop_remote(self.uid, uid=uid, **kwargs)
 
-    async def put_remote(self, sender_id, obj, uid=None, publish=False):
+    async def put_remote(self, sender_id, obj, uid=None, publish=False, **kwargs):
         """
         Put an object into the warehouse.
 
@@ -117,7 +117,7 @@ class Warehouse(Runtime):
         if publish:
             await self.publish(sender_id, uid)
 
-    async def get_remote(self, sender_id, uid, warehouse_id=None, node_id=None):
+    async def get_remote(self, sender_id, uid, warehouse_id=None, node_id=None, **kwargs):
         """
         Retrieve an object from the warehouse.
 
@@ -167,7 +167,42 @@ class Warehouse(Runtime):
 
         return obj
 
-    async def drop_remote(self, sender_id, uid):
+    async def exec_remote(self, sender_id, uid, func, func_args=None, func_kwargs=None, **kwargs):
+        """
+        Retrieve an object from the warehouse and execute function on it.
+
+        Parameters
+        ----------
+        sender_id
+        uid
+        func
+        func_args
+        func_kwargs
+
+        Returns
+        -------
+
+        """
+        if isinstance(uid, WarehouseObject):
+            obj_id = uid.uid
+        else:
+            obj_id = uid
+
+        try:
+            obj = self._local_warehouse[obj_id]
+        except KeyError:
+            obj = None
+
+        func_args = func_args or ()
+        func_kwargs = func_kwargs or {}
+        obj = await func(obj, *func_args, **func_kwargs)
+
+        self._local_warehouse[obj_id] = obj
+
+        warehouse_obj = WarehouseObject(obj, uid=obj_id)
+        return warehouse_obj
+
+    async def drop_remote(self, sender_id, uid, propagate=False, **kwargs):
         """
         Delete an object from the warehouse.
 
@@ -175,16 +210,27 @@ class Warehouse(Runtime):
         ----------
         sender_id
         uid
+        propagate
 
         Returns
         -------
 
         """
         if isinstance(uid, WarehouseObject):
-            uid = uid.uid
+            obj_id = uid.uid
 
-        if uid in self._local_warehouse:
-            del self._local_warehouse[uid]
+            if propagate:
+                node_id = uid.node_id
+                warehouse_id = uid.warehouse_id
+
+                if node_id is not None and warehouse_id is not None:
+                    if node_id not in self._warehouses:
+                        self._warehouses[node_id] = self.proxy(uid=warehouse_id)
+
+                    await self._warehouses[node_id].drop_remote(uid=uid)
+
+        if obj_id in self._local_warehouse:
+            del self._local_warehouse[obj_id]
 
     async def push_remote(self, sender_id, __dict__,
                           uid=None, warehouse_id=None, node_id=None,
