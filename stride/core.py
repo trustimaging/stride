@@ -347,6 +347,8 @@ class Variable:
         except AttributeError:
             self_uid = None
         for node in self.graph.toposort(self.prev_op):
+            print('Node')
+            print(node)
             kwargs_ = kwargs.copy()
 
             if node.method == '__noop__':
