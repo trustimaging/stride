@@ -428,15 +428,44 @@ class Monitor(Runtime):
             if self.mode == 'dynamic':
                 self._comms.start_heartbeat(sender_id)
                 worker_ids = list(sub_resources.get('workers', {}).keys())
+                active_indices = set()
+                for uid in self._monitored_nodes:
+                    if uid not in self._disconnected_runtimes:
+                        parts = uid.split(':')
+                        active_indices.add(parts[1] if len(parts) >= 2 else uid)
+                active_nodes = len(active_indices)
                 self.logger.info(
                     'NODE-CONNECTED: %s joined (dynamic mode) — '
-                    'bringing %d workers: %s — total nodes now: %d'
+                    'bringing %d workers: %s — active nodes: %d'
                     % (sender_id, len(worker_ids), worker_ids,
-                       len(self._monitored_nodes)))
+                       active_nodes))
 
         node = self._monitored_nodes[sender_id]
         node.update(update, **sub_resources)
         self._monitor_strategy.update_node(node)
+
+    def check_node_status(self, sender_id, worker_uids):
+        """Check whether nodes for the given workers have completed their
+        initial ``update_node`` handshake (present in ``_monitored_nodes``).
+
+        Parameters
+        ----------
+        sender_id : str
+        worker_uids : list of str
+            Worker UIDs like ``'worker:0:0:a1b2c3d4'``.
+
+        Returns
+        -------
+        dict
+            ``{node_uid: bool}`` for each derived node UID.
+        """
+        result = {}
+        for wuid in worker_uids:
+            parts = wuid.split(':')
+            if len(parts) == 4 and parts[0] == 'worker':
+                node_uid = 'node:%s:%s' % (parts[1], parts[3])
+                result[node_uid] = node_uid in self._monitored_nodes
+        return result
 
     def add_tessera_event(self, sender_id, msgs):
         if sender_id in self._disconnected_runtimes:

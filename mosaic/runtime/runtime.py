@@ -412,7 +412,23 @@ class Runtime(BaseRPC):
 
             available_workers = self.num_workers
             if available_workers <= 0:
-                raise RuntimeError('No workers available to complete async workload')
+                self.logger.info('ASYNC-FOR: 0 workers available, waiting for at least 1')
+                event = asyncio.Event()
+                cb = event.set
+                self._on_worker_count_changed.append(cb)
+                try:
+                    while self.num_workers < 1:
+                        await asyncio.wait_for(event.wait(), timeout=300)
+                        event.clear()
+                except asyncio.TimeoutError:
+                    raise RuntimeError('No workers available to complete async workload')
+                finally:
+                    try:
+                        self._on_worker_count_changed.remove(cb)
+                    except ValueError:
+                        pass
+                available_workers = self.num_workers
+                self.logger.info('ASYNC-FOR: %d worker(s) now available, proceeding' % available_workers)
 
             worker_queue = asyncio.Queue()
             worker_uids = []
@@ -477,7 +493,8 @@ class Runtime(BaseRPC):
         try:
             yield proxy
         finally:
-            await queue.put(proxy)
+            if proxy.uid not in self._disconnected_runtimes:
+                await queue.put(proxy)
 
     @property
     def address(self):
@@ -1006,6 +1023,15 @@ class Runtime(BaseRPC):
         """
         self._disconnected_runtimes.add(uid)
 
+        # Fail all pending RPC reply futures for this UID immediately so
+        # that in-flight RPCs unblock with RuntimeDisconnectedError instead
+        # of hanging until the deferred comms.disconnect task runs.
+        if self._comms is not None:
+            send_conn = getattr(self._comms, '_send_conn', {})
+            conn = send_conn.get(uid)
+            if conn is not None and getattr(conn, 'state', None) == 'connected':
+                conn.disconnect()
+
         # deregister if remote uid held a proxy to a local tessera
         for obj in self._tessera.values():
             obj.deregister_proxy(uid)
@@ -1153,12 +1179,7 @@ class Runtime(BaseRPC):
         return obj
 
     async def cancel_and_reset_tasks(self, sender_id):
-        """Cancel all running tessera tasks and clear operator state."""
-        cancelled = 0
-        for tessera in self._tessera.values():
-            if hasattr(tessera, 'cancel_running_task') and tessera.cancel_running_task():
-                cancelled += 1
-
+        """Wait for all running tessera tasks to finish."""
         for tessera in self._tessera.values():
             if hasattr(tessera, '_running_exec') and tessera._running_exec is not None:
                 try:
@@ -1166,13 +1187,8 @@ class Runtime(BaseRPC):
                 except (asyncio.CancelledError, Exception):
                     pass
 
-        for tessera in self._tessera.values():
-            if hasattr(tessera, 'inputs'):
-                tessera.inputs = None
-                tessera.num_outputs = None
-
-        self.logger.info('CANCEL-AND-RESET: cancelled %d tasks, cleared operator state' % cancelled)
-        return cancelled
+        self.logger.info('RESET-TASKS: all tessera tasks finished')
+        return 0
 
     async def exec(self, uid, func, func_args=None, func_kwargs=None):
         """

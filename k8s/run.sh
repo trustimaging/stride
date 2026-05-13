@@ -118,8 +118,12 @@ deploy_minio() {
     # Expose MinIO via NodePort so it's accessible from the host
     kubectl patch svc minio -n argo -p '{"spec":{"type":"NodePort"}}'
 
-    # The stride-data bucket is created automatically by ensure_bucket()
-    # in the ArtifactWarehouse and GradientAccumulator on startup.
+    # Create buckets: stride-data for app artifacts, argo-artifacts for Argo log archiving
+    kubectl exec -n "$ARGO_NAMESPACE" minio-0 -- mkdir -p /data/stride-data /data/argo-artifacts
+
+    # Point Argo's artifact repository at the dedicated bucket
+    kubectl patch configmap workflow-controller-configmap -n "$ARGO_NAMESPACE" --type merge \
+        -p '{"data":{"artifactRepository":"s3:\n  bucket: argo-artifacts\n  endpoint: minio:9000\n  insecure: true\n  accessKeySecret:\n    name: my-minio-cred\n    key: accesskey\n  secretKeySecret:\n    name: my-minio-cred\n    key: secretkey\n"}}'
 
     log "MinIO is ready (API: minio.argo.svc.cluster.local:9000)"
     log "  Console: minikube service minio -n argo --url"
@@ -227,6 +231,26 @@ if not found:
 " || warn "No plots found in MinIO"
 }
 
+# Remove finished workflows, stale MinIO data, and Docker build cache
+tidy() {
+    log "Tidying up stale resources..."
+
+    # Delete completed/failed/errored Argo workflows (keeps running ones)
+    argo delete --completed -n "$ARGO_NAMESPACE" 2>/dev/null || true
+    argo delete --status Error -n "$ARGO_NAMESPACE" 2>/dev/null || true
+    argo delete --status Failed -n "$ARGO_NAMESPACE" 2>/dev/null || true
+
+    # Clear old run data from MinIO
+    kubectl exec -n "$ARGO_NAMESPACE" minio-0 -- \
+        sh -c 'rm -rf /data/stride-data/stride-*' 2>/dev/null || true
+
+    # Prune Docker build cache and dangling images
+    minikube ssh "docker builder prune -a -f" 2>/dev/null || true
+    minikube ssh "docker image prune -f" 2>/dev/null || true
+
+    log "Tidy complete"
+}
+
 # Remove all workflows and RBAC
 cleanup() {
     log "Cleaning up..."
@@ -286,11 +310,15 @@ case "${1:-}" in
         check_minikube
         export_plots
         ;;
+    tidy)
+        check_minikube
+        tidy
+        ;;
     cleanup)
         cleanup
         ;;
     *)
-        echo "Usage: $0 {setup|build|start|logs|status|stop|plots|cleanup}"
+        echo "Usage: $0 {setup|build|start|logs|status|stop|plots|tidy|cleanup}"
         echo ""
         echo "Commands:"
         echo "  setup    - First-time setup (install Argo, build image, create RBAC)"
@@ -300,6 +328,7 @@ case "${1:-}" in
         echo "  status   - Check status of all components"
         echo "  stop     - Delete active workflows"
         echo "  plots    - Export result plots from minikube to misc/plots/"
+        echo "  tidy     - Remove finished workflows, stale MinIO data, Docker cache"
         echo "  cleanup  - Remove all workflows and RBAC"
         echo ""
         echo "Environment variables:"

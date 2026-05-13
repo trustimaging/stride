@@ -260,6 +260,34 @@ async def _wait_for_workers(runtime, target, timeout=300.0, heartbeat=30.0):
         except ValueError:
             pass
 
+    # Phase 2: confirm each worker's node has completed init (NODE-CONNECTED).
+    monitor = runtime.get_monitor()
+    if monitor is not None:
+        node_wait_tic = asyncio.get_event_loop().time()
+        node_timeout = max(0, tic + timeout - node_wait_tic)
+        node_end = node_wait_tic + node_timeout
+        while True:
+            worker_uids = [w.uid for w in runtime.workers]
+            try:
+                status = await monitor.check_node_status(
+                    worker_uids=worker_uids, reply=True)
+            except Exception:
+                logger.warning('WAIT-FOR-WORKERS: check_node_status RPC failed, proceeding')
+                break
+            missing = [nid for nid, ready in status.items() if not ready]
+            if not missing:
+                logger.info('WAIT-FOR-WORKERS: all %d node(s) confirmed ready'
+                            % len(status))
+                break
+            remaining = node_end - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                logger.warning(
+                    'WAIT-FOR-WORKERS: node readiness timed out — '
+                    'still missing: %s' % sorted(missing))
+                break
+            logger.info('WAIT-FOR-WORKERS: waiting for node(s): %s' % sorted(missing))
+            await asyncio.sleep(min(1.0, remaining))
+
     elapsed = asyncio.get_event_loop().time() - tic
     logger.info('WAIT-FOR-WORKERS: done after %.0fs — proceeding with %d workers '
                 '(target was %d, present: %s)'

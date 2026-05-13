@@ -2674,7 +2674,11 @@ class CommsManager:
                 raise RuntimeDisconnectedError('Remote runtime %s became disconnected '
                                                'before reply could be received' % send_uid)
 
-            result = await future
+            try:
+                result = await asyncio.wait_for(future, timeout=20.0)
+            except asyncio.TimeoutError:
+                raise RuntimeDisconnectedError(
+                    'Remote runtime %s did not reply within 20s' % send_uid)
             return result
 
         if sync:

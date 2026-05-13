@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: stride-single-drop-rj-
+  generateName: stride-rolling-drop-nr-
 spec:
   entrypoint: stride-dag
   serviceAccountName: stride-workflow
@@ -19,18 +19,22 @@ spec:
       - name: image
         value: stride-k8s:latest
       - name: exp-name
-        value: single-drop-rejoin-test
+        value: rolling-drop-no-rejoin-test
       - name: num-iters
         value: "4"
 
       - name: drop-threshold
-        value: "0.5"
+        value: "0"
 
-      # Node 7 drops during adjoint; replacement joins shortly after.
-      - name: drop-delay
-        value: "185"
-      - name: join-delay
-        value: "215"
+      # Nodes 4-7 drop in sequence; no replacements join.
+      - name: drop-delay-1
+        value: "180"
+      - name: drop-delay-2
+        value: "200"
+      - name: drop-delay-3
+        value: "220"
+      - name: drop-delay-4
+        value: "240"
 
   templates:
     # ── DAG ──────────────────────────────────────────────────────────────────
@@ -44,7 +48,7 @@ spec:
             template: head
             dependencies: [create-service]
 
-          # 7 permanent nodes (indices 0-6)
+          # 4 permanent nodes (indices 0-3)
           - name: workers
             template: worker
             dependencies: [create-service]
@@ -53,9 +57,42 @@ spec:
                 - name: index
                   value: "{{item}}"
             withSequence:
-              count: "7"
+              count: "4"
 
-          # Node 7 — drops after drop-delay
+          # Node 4 — drops first
+          - name: node-4-mortal
+            template: mortal-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "4"
+                - name: drop-delay
+                  value: "{{workflow.parameters.drop-delay-1}}"
+
+          # Node 5 — drops second
+          - name: node-5-mortal
+            template: mortal-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "5"
+                - name: drop-delay
+                  value: "{{workflow.parameters.drop-delay-2}}"
+
+          # Node 6 — drops third
+          - name: node-6-mortal
+            template: mortal-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "6"
+                - name: drop-delay
+                  value: "{{workflow.parameters.drop-delay-3}}"
+
+          # Node 7 — drops fourth
           - name: node-7-mortal
             template: mortal-worker
             dependencies: [create-service]
@@ -63,15 +100,8 @@ spec:
               parameters:
                 - name: index
                   value: "7"
-
-          # Replacement node 7 — joins after join-delay
-          - name: node-7-replacement
-            template: late-worker
-            dependencies: [create-service]
-            arguments:
-              parameters:
-                - name: index
-                  value: "7"
+                - name: drop-delay
+                  value: "{{workflow.parameters.drop-delay-4}}"
 
           - name: gradient-accumulator
             template: gradient-accumulator
@@ -166,7 +196,7 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Permanent nodes (indices 0-6) ─────────────────────────────────────────
+    # ── Permanent nodes (indices 0-3) ─────────────────────────────────────────
     - name: worker
       daemon: true
       inputs:
@@ -224,12 +254,13 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Node 7 — drops after drop-delay ───────────────────────────────────────
+    # ── Mortal worker (parameterised drop delay) ──────────────────────────────
     - name: mortal-worker
       daemon: true
       inputs:
         parameters:
           - name: index
+          - name: drop-delay
       metadata:
         labels:
           role: worker
@@ -245,7 +276,7 @@ spec:
               sleep 2
             done
             export MONITOR_HOST=$MONITOR_IP
-            echo "Node {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay}}s)"
+            echo "Node {{inputs.parameters.index}} starting (drops after {{inputs.parameters.drop-delay}}s)"
 
             python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
@@ -253,74 +284,12 @@ spec:
               -i {{inputs.parameters.index}} 2>&1 &
             MRUN_PID=$!
 
-            sleep {{workflow.parameters.drop-delay}}
+            sleep {{inputs.parameters.drop-delay}}
             echo "=== Simulating node drop: killing node {{inputs.parameters.index}} ==="
             kill $MRUN_PID
             wait $MRUN_PID 2>/dev/null || true
             echo "Node {{inputs.parameters.index}} dropped."
             exit 0
-        env:
-          - name: OMP_NUM_THREADS
-            value: "2"
-          - name: PYTHONUNBUFFERED
-            value: "1"
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
-          - name: MONITOR_DNS
-            value: "monitor-svc-{{workflow.name}}"
-          - name: MONITOR_PORT
-            value: "{{workflow.parameters.monitor-port}}"
-          - name: PUBSUB_PORT
-            value: "{{workflow.parameters.pubsub-port}}"
-          - name: ARTIFACT_ENDPOINT
-            value: "minio.argo.svc.cluster.local:9000"
-          - name: ARTIFACT_ACCESS_KEY
-            value: "admin"
-          - name: ARTIFACT_SECRET_KEY
-            value: "password"
-          - name: ARTIFACT_BUCKET
-            value: "stride-data"
-          - name: ARTIFACT_BACKEND
-            value: "minio"
-          - name: ARTIFACT_RUN_ID
-            value: "{{workflow.name}}"
-        resources:
-          requests:
-            cpu: "500m"
-            memory: 2Gi
-
-    # ── Replacement node 7 — joins after join-delay ───────────────────────────
-    - name: late-worker
-      daemon: true
-      inputs:
-        parameters:
-          - name: index
-      metadata:
-        labels:
-          role: worker
-          workflow: "{{workflow.name}}"
-      container:
-        image: "{{workflow.parameters.image}}"
-        imagePullPolicy: Never
-        command: [bash, -c]
-        args:
-          - |
-            echo "Replacement node {{inputs.parameters.index}} waiting {{workflow.parameters.join-delay}}s before connecting..."
-            sleep {{workflow.parameters.join-delay}}
-
-            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
-              echo "Waiting for monitor DNS..."
-              sleep 2
-            done
-            export MONITOR_HOST=$MONITOR_IP
-            echo "=== Replacement node {{inputs.parameters.index}} connecting: POD_IP=$POD_IP ==="
-
-            python3 -u -m mosaic.cli.mrun --node --phone-home \
-              --address $POD_IP --port 3000 \
-              -nw {{workflow.parameters.workers-per-node}} \
-              -i {{inputs.parameters.index}} 2>&1
         env:
           - name: OMP_NUM_THREADS
             value: "2"

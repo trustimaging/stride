@@ -28,9 +28,9 @@ spec:
 
       # Nodes 6 and 7 drop during adjoint; no replacements join.
       - name: drop-delay-1
-        value: "180"
+        value: "210"
       - name: drop-delay-2
-        value: "185"
+        value: "220"
 
   templates:
     # ── DAG ──────────────────────────────────────────────────────────────────

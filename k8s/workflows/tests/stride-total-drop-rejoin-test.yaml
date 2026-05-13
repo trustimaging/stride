@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: stride-single-drop-rj-
+  generateName: stride-total-drop-rj-
 spec:
   entrypoint: stride-dag
   serviceAccountName: stride-workflow
@@ -19,18 +19,19 @@ spec:
       - name: image
         value: stride-k8s:latest
       - name: exp-name
-        value: single-drop-rejoin-test
+        value: total-drop-rejoin-test
       - name: num-iters
         value: "4"
 
       - name: drop-threshold
-        value: "0.5"
+        value: "0"
 
-      # Node 7 drops during adjoint; replacement joins shortly after.
+      # All 4 nodes drop after drop-delay, then rejoin after blackout-delay
+      # more seconds. Rejoin is staggered per node via rejoin-extra.
       - name: drop-delay
-        value: "185"
-      - name: join-delay
-        value: "215"
+        value: "200"
+      - name: blackout-delay
+        value: "30"
 
   templates:
     # ── DAG ──────────────────────────────────────────────────────────────────
@@ -44,34 +45,45 @@ spec:
             template: head
             dependencies: [create-service]
 
-          # 7 permanent nodes (indices 0-6)
-          - name: workers
-            template: worker
+          - name: node-0
+            template: drop-rejoin-worker
             dependencies: [create-service]
             arguments:
               parameters:
                 - name: index
-                  value: "{{item}}"
-            withSequence:
-              count: "7"
+                  value: "0"
+                - name: rejoin-extra
+                  value: "0"
 
-          # Node 7 — drops after drop-delay
-          - name: node-7-mortal
-            template: mortal-worker
+          - name: node-1
+            template: drop-rejoin-worker
             dependencies: [create-service]
             arguments:
               parameters:
                 - name: index
-                  value: "7"
+                  value: "1"
+                - name: rejoin-extra
+                  value: "10"
 
-          # Replacement node 7 — joins after join-delay
-          - name: node-7-replacement
-            template: late-worker
+          - name: node-2
+            template: drop-rejoin-worker
             dependencies: [create-service]
             arguments:
               parameters:
                 - name: index
-                  value: "7"
+                  value: "2"
+                - name: rejoin-extra
+                  value: "20"
+
+          - name: node-3
+            template: drop-rejoin-worker
+            dependencies: [create-service]
+            arguments:
+              parameters:
+                - name: index
+                  value: "3"
+                - name: rejoin-extra
+                  value: "30"
 
           - name: gradient-accumulator
             template: gradient-accumulator
@@ -118,6 +130,7 @@ spec:
           - -m
           - mosaic.cli.mrun
           - --dynamic
+          - --debug
           - --address
           - "0.0.0.0"
           - --port
@@ -134,7 +147,7 @@ spec:
               fieldRef:
                 fieldPath: status.podIP
           - name: NUM_WORKERS
-            value: "8"
+            value: "4"
           - name: NUM_ITERS
             value: "{{workflow.parameters.num-iters}}"
           - name: DROP_THRESHOLD
@@ -166,12 +179,13 @@ spec:
             cpu: "500m"
             memory: 2Gi
 
-    # ── Permanent nodes (indices 0-6) ─────────────────────────────────────────
-    - name: worker
+    # ── Drop-rejoin worker (single pod: start → kill → wait → restart) ────────
+    - name: drop-rejoin-worker
       daemon: true
       inputs:
         parameters:
           - name: index
+          - name: rejoin-extra
       metadata:
         labels:
           role: worker
@@ -187,139 +201,31 @@ spec:
               sleep 2
             done
             export MONITOR_HOST=$MONITOR_IP
-            echo "Node {{inputs.parameters.index}} starting: POD_IP=$POD_IP MONITOR_HOST=$MONITOR_HOST"
+            echo "Node {{inputs.parameters.index}} starting (drop after ${DROP_DELAY}s, rejoin after ${BLACKOUT_DELAY}+{{inputs.parameters.rejoin-extra}}s)"
+
+            # Phase 1: run normally
             python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
-              -nw {{workflow.parameters.workers-per-node}} \
-              -i {{inputs.parameters.index}} 2>&1
-        env:
-          - name: OMP_NUM_THREADS
-            value: "2"
-          - name: PYTHONUNBUFFERED
-            value: "1"
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
-          - name: MONITOR_DNS
-            value: "monitor-svc-{{workflow.name}}"
-          - name: MONITOR_PORT
-            value: "{{workflow.parameters.monitor-port}}"
-          - name: PUBSUB_PORT
-            value: "{{workflow.parameters.pubsub-port}}"
-          - name: ARTIFACT_ENDPOINT
-            value: "minio.argo.svc.cluster.local:9000"
-          - name: ARTIFACT_ACCESS_KEY
-            value: "admin"
-          - name: ARTIFACT_SECRET_KEY
-            value: "password"
-          - name: ARTIFACT_BUCKET
-            value: "stride-data"
-          - name: ARTIFACT_BACKEND
-            value: "minio"
-          - name: ARTIFACT_RUN_ID
-            value: "{{workflow.name}}"
-        resources:
-          requests:
-            cpu: "500m"
-            memory: 2Gi
-
-    # ── Node 7 — drops after drop-delay ───────────────────────────────────────
-    - name: mortal-worker
-      daemon: true
-      inputs:
-        parameters:
-          - name: index
-      metadata:
-        labels:
-          role: worker
-          workflow: "{{workflow.name}}"
-      container:
-        image: "{{workflow.parameters.image}}"
-        imagePullPolicy: Never
-        command: [bash, -c]
-        args:
-          - |
-            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
-              echo "Waiting for monitor DNS..."
-              sleep 2
-            done
-            export MONITOR_HOST=$MONITOR_IP
-            echo "Node {{inputs.parameters.index}} starting (drops after {{workflow.parameters.drop-delay}}s)"
-
-            python3 -u -m mosaic.cli.mrun --node --phone-home \
-              --address $POD_IP --port 3000 \
-              -nw {{workflow.parameters.workers-per-node}} \
+              -nw $WORKERS_PER_NODE \
               -i {{inputs.parameters.index}} 2>&1 &
             MRUN_PID=$!
 
-            sleep {{workflow.parameters.drop-delay}}
+            sleep $DROP_DELAY
             echo "=== Simulating node drop: killing node {{inputs.parameters.index}} ==="
             kill $MRUN_PID
             wait $MRUN_PID 2>/dev/null || true
             echo "Node {{inputs.parameters.index}} dropped."
-            exit 0
-        env:
-          - name: OMP_NUM_THREADS
-            value: "2"
-          - name: PYTHONUNBUFFERED
-            value: "1"
-          - name: POD_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.podIP
-          - name: MONITOR_DNS
-            value: "monitor-svc-{{workflow.name}}"
-          - name: MONITOR_PORT
-            value: "{{workflow.parameters.monitor-port}}"
-          - name: PUBSUB_PORT
-            value: "{{workflow.parameters.pubsub-port}}"
-          - name: ARTIFACT_ENDPOINT
-            value: "minio.argo.svc.cluster.local:9000"
-          - name: ARTIFACT_ACCESS_KEY
-            value: "admin"
-          - name: ARTIFACT_SECRET_KEY
-            value: "password"
-          - name: ARTIFACT_BUCKET
-            value: "stride-data"
-          - name: ARTIFACT_BACKEND
-            value: "minio"
-          - name: ARTIFACT_RUN_ID
-            value: "{{workflow.name}}"
-        resources:
-          requests:
-            cpu: "500m"
-            memory: 2Gi
 
-    # ── Replacement node 7 — joins after join-delay ───────────────────────────
-    - name: late-worker
-      daemon: true
-      inputs:
-        parameters:
-          - name: index
-      metadata:
-        labels:
-          role: worker
-          workflow: "{{workflow.name}}"
-      container:
-        image: "{{workflow.parameters.image}}"
-        imagePullPolicy: Never
-        command: [bash, -c]
-        args:
-          - |
-            echo "Replacement node {{inputs.parameters.index}} waiting {{workflow.parameters.join-delay}}s before connecting..."
-            sleep {{workflow.parameters.join-delay}}
+            # Phase 2: blackout + staggered rejoin
+            REJOIN_WAIT=$((BLACKOUT_DELAY + {{inputs.parameters.rejoin-extra}}))
+            echo "Node {{inputs.parameters.index}} waiting ${REJOIN_WAIT}s before rejoining..."
+            sleep $REJOIN_WAIT
 
-            until MONITOR_IP=$(python3 -c "import socket; print(socket.gethostbyname('$MONITOR_DNS'))" 2>/dev/null); do
-              echo "Waiting for monitor DNS..."
-              sleep 2
-            done
-            export MONITOR_HOST=$MONITOR_IP
-            echo "=== Replacement node {{inputs.parameters.index}} connecting: POD_IP=$POD_IP ==="
-
+            # Phase 3: rejoin
+            echo "=== Node {{inputs.parameters.index}} rejoining ==="
             python3 -u -m mosaic.cli.mrun --node --phone-home \
               --address $POD_IP --port 3000 \
-              -nw {{workflow.parameters.workers-per-node}} \
+              -nw $WORKERS_PER_NODE \
               -i {{inputs.parameters.index}} 2>&1
         env:
           - name: OMP_NUM_THREADS
@@ -336,6 +242,12 @@ spec:
             value: "{{workflow.parameters.monitor-port}}"
           - name: PUBSUB_PORT
             value: "{{workflow.parameters.pubsub-port}}"
+          - name: DROP_DELAY
+            value: "{{workflow.parameters.drop-delay}}"
+          - name: BLACKOUT_DELAY
+            value: "{{workflow.parameters.blackout-delay}}"
+          - name: WORKERS_PER_NODE
+            value: "{{workflow.parameters.workers-per-node}}"
           - name: ARTIFACT_ENDPOINT
             value: "minio.argo.svc.cluster.local:9000"
           - name: ARTIFACT_ACCESS_KEY
