@@ -54,7 +54,7 @@ class Warehouse(Runtime):
         warehouse_memory = memory_limit() * warehouse_memory_fraction
 
         self._local_warehouse = SpillBuffer(self._spill_directory, warehouse_memory)
-    
+
     @staticmethod
     def _warehouse_uid_from_node(node):
         """Derive the warehouse UID from the node."""

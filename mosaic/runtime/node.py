@@ -53,7 +53,7 @@ class Node(Runtime):
         -------
 
         """
-        # Generate a per-boot instance ID so every spawn of this node produces globally 
+        # Generate a per-boot instance ID so every spawn of this node produces globally
         # unique runtime UIDs eliminating UID collisions in an elastic cluster environment
         self._instance_id = uuid.uuid4().hex[:8]
         self._uid_override = f'node:{self.indices[0]}:{self._instance_id}'
@@ -70,24 +70,24 @@ class Node(Runtime):
         await self.init_workers(**kwargs)
 
     def init_phone_home(self, config):
-            """Read monitor address from environment variables and inject into kwargs.
+        """Read monitor address from environment variables and inject into kwargs.
 
-            Called when the node starts in phone-home mode.
-            The monitor's address, RPC port, and pub-sub port must be provided
-            via ``MONITOR_HOST``, ``MONITOR_PORT``, and ``PUBSUB_PORT``
-            environment variables.
-            """
-            monitor_host = os.environ.get('MONITOR_HOST')
-            monitor_port = os.environ.get('MONITOR_PORT')
-            pubsub_port = os.environ.get('PUBSUB_PORT')
-            if not (monitor_host and monitor_port and pubsub_port):
-                raise RuntimeError(
-                    'phone_home=True but MONITOR_HOST, MONITOR_PORT, '
-                    'and PUBSUB_PORT environment variables are not set'
-                )
-            config['monitor_address'] = monitor_host
-            config['monitor_port'] = int(monitor_port)
-            config['pubsub_port'] = int(pubsub_port)
+        Called when the node starts in phone-home mode.
+        The monitor's address, RPC port, and pub-sub port must be provided
+        via ``MONITOR_HOST``, ``MONITOR_PORT``, and ``PUBSUB_PORT``
+        environment variables.
+        """
+        monitor_host = os.environ.get('MONITOR_HOST')
+        monitor_port = os.environ.get('MONITOR_PORT')
+        pubsub_port = os.environ.get('PUBSUB_PORT')
+        if not (monitor_host and monitor_port and pubsub_port):
+            raise RuntimeError(
+                'phone_home=True but MONITOR_HOST, MONITOR_PORT, '
+                'and PUBSUB_PORT environment variables are not set'
+            )
+        config['monitor_address'] = monitor_host
+        config['monitor_port'] = int(monitor_port)
+        config['pubsub_port'] = int(pubsub_port)
 
     async def init_workers(self, **kwargs):
         """

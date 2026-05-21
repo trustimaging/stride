@@ -110,7 +110,7 @@ class BaseRPC:
         """
         if self._uid_override is not None:
             return self._uid_override
-        
+
         if len(self.indices):
             indices = ':'.join([str(each) for each in self.indices])
             return '%s:%s' % (self.name, indices)

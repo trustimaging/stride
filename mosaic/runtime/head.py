@@ -87,7 +87,7 @@ class Head(Runtime):
         -------
         RuntimeError
             If the specified number of workers do not connect within the timeout period.
-        
+
         """
         tic = time.time()
         while len(self.workers) < num_workers:

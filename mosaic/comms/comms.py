@@ -408,7 +408,7 @@ class InboundConnection(Connection):
                     s.close()
             except OSError:
                 pass
-            
+
             # Now fall back to hostname
             if self._address is None:
                 self._address = get_hostname()
@@ -2261,8 +2261,8 @@ class CommsManager:
         """
         Start handshake with remote ``uid``, located at a certain ``address`` and ``port``.
 
-        Sends a ``hand`` and waits for a ``shake`` reply. 
-        The recv task persists across retries (pyzmq loses messages on cancellation). 
+        Sends a ``hand`` and waits for a ``shake`` reply.
+        The recv task persists across retries (pyzmq loses messages on cancellation).
         Messages arriving before the shake completes are buffered and dispatched afterwards.
 
         Parameters
@@ -2298,7 +2298,7 @@ class CommsManager:
         await self.send_async(uid,
                               method='hand',
                               address=self.address, port=self.port)
-        
+
         # Buffer any RPC messages that arrive before the shake completed
         pending = []
 
@@ -2313,14 +2313,14 @@ class CommsManager:
                                           method='hand',
                                           address=self.address, port=self.port)
                     continue
-                
+
                 sender_id, response = recv_task.result()
 
                 if uid == sender_id and response.method == 'shake':
                     break
                 elif response.method not in ('shake', 'hand', 'reply'):
                     pending.append((sender_id, response))
-                
+
                 # Message processed, start waiting for the next one
                 recv_task = asyncio.ensure_future(self.recv_async())
         finally:
@@ -2362,13 +2362,13 @@ class CommsManager:
         """
         if self._state == 'disconnected':
             return
-        
+
         existing = self._send_conn.get(sender_id)
 
         # Cleanup stale socket
         if existing is not None and existing.state == 'connected':
             existing.disconnect()
-        
+
         self.connect_send(sender_id, address, port)
 
         # zmq.ROUTER messages will be dropped if endpoint not yet connected

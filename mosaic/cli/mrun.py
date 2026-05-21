@@ -49,7 +49,6 @@ from ..utils.logger import _stdout, _stderr
               help='run monitor in dynamic mode, waiting for nodes to phone home')
 @click.option('--phone-home', is_flag=True, default=False, show_default=True,
               help='connect to monitor address from MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT env vars')
-
 # log level
 @click.option('--perf', 'log_level', flag_value='perf', default='perf', show_default=True,
               help='set log level to PERF')
@@ -67,7 +66,7 @@ def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)
-    dynamic = kwargs.get('dynamic', False)  
+    dynamic = kwargs.get('dynamic', False)
     phone_home = kwargs.get('phone_home', False)
     reuse_head = kwargs.get('reuse_head', False)
 
@@ -110,10 +109,10 @@ def go(cmd=None, **kwargs):
 
         if node_list is not None and num_nodes != len(node_list):
             node_list = node_list[:num_nodes]
-    
+
     if local:
         mode = 'local'
-    elif dynamic: 
+    elif dynamic:
         mode = 'dynamic'
     else:
         mode = 'cluster'

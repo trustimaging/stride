@@ -246,14 +246,14 @@ class Monitor(Runtime):
         """
         Init in dynamic mode, waiting for nodes to phone-home.
 
-        In dynamic mode, the Monitor doesn't spawn nodes. Instead, it waits 
+        In dynamic mode, the Monitor doesn't spawn nodes. Instead, it waits
         for nodes to connect independently. Nodes can be added at runtime
         by starting them with the --phone-home flag.
 
         Parameters
         ----------
         kwargs
-        
+
         Returns
         ----------
 
@@ -270,7 +270,7 @@ class Monitor(Runtime):
                 if (time.time() - tic) > timeout:
                     raise RuntimeError(f'Timed out while waiting for {num_workers} workers to phone home')
                 await asyncio.sleep(0.1)
-            
+
             self.logger.debug(f'Dynamic mesh ready with {self._get_total_workers()} workers connected')
 
     def _get_total_workers(self):
@@ -283,7 +283,7 @@ class Monitor(Runtime):
     @property
     def num_workers(self):
         return self._get_total_workers()
-    
+
     @property
     def workers(self):
         result = []
@@ -292,7 +292,7 @@ class Monitor(Runtime):
                 for uid in node.sub_resources['workers']:
                     result.append(RuntimeProxy(uid=uid))
         return result
-                
+
     async def register_node(self, sender_id, node_uid, num_workers):
         """
         Register a node that has phoned home in dynamic mode.
@@ -323,7 +323,6 @@ class Monitor(Runtime):
         self._comms.start_heartbeat(node_uid)
 
         return {'status': 'registered'}
-
 
     def init_file(self, runtime_config):
         runtime_id = self.uid
