@@ -36,6 +36,8 @@ class Node(Runtime):
         self._num_workers = num_workers
         self._num_threads = None
         self._memory_limit = memory_limit()
+        self._instance_id = None
+        self._warehouse_uid = None
 
         self._monitored_node = MonitoredResource(self.uid)
         self._monitor_interval = None
@@ -181,9 +183,10 @@ class Node(Runtime):
                 kwargs.update(extra_kwargs)
                 kwargs['runtime_indices'] = indices
                 kwargs['runtime_uid'] = worker_uid
-                kwargs['local_warehouse_uid'] = self._warehouse_uid
                 kwargs['num_workers'] = num_workers
                 kwargs['num_threads'] = num_threads
+                if self._warehouse_uid is not None:
+                    kwargs['local_warehouse_uid'] = self._warehouse_uid
 
                 mosaic.init('worker', *args, **kwargs, wait=True)
 
