@@ -2325,7 +2325,7 @@ class CommsManager:
                 recv_task = asyncio.ensure_future(self.recv_async())
         finally:
             # Cleanup any pending messages
-            if not self.recv.done():
+            if not recv_task.done():
                 recv_task.cancel()
                 try:
                     await recv_task
