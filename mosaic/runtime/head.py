@@ -69,12 +69,8 @@ class Head(Runtime):
         # In dynamic mode, num_workers is the minimum to wait for (0 means don't wait)
         num_workers = kwargs.pop('num_workers', 0)
         if num_workers > 0:
-            tic = time.time()
             timeout = kwargs.get('timeout', 180)
-            while len(self.workers) < num_workers:
-                if timeout is not None and (time.time() - tic) > timeout:
-                    raise RuntimeError('Timed out while waiting for %d workers to connect' % num_workers)
-                await asyncio.sleep(0.1)
+            await self.wait_for_workers(num_workers, timeout=timeout)
 
     async def init_monitor(self, **kwargs):
         """

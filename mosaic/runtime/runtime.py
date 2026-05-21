@@ -42,6 +42,13 @@ class BaseRPC:
     A name ``runtime`` and indices ``(0, 0)`` will result in a UID ``runtime:0:0``,
     while the same name with no indices will result in a UID ``runtime``.
 
+    In cloud deployments, UIDs include a per-boot instance ID to avoid
+    collisions when a pod is replaced at the same index. For example,
+    ``worker:0:0:a3f7b2c1``. The instance ID is not part of the indices —
+    it is a non-numeric suffix. When a UID contains an instance ID, the
+    full string is stored as an override and returned verbatim by the
+    ``uid`` property.
+
     Parameters
     ----------
     name : str, optional
@@ -59,16 +66,14 @@ class BaseRPC:
         if uid is not None:
             parts = uid.split(':')
             name = parts[0]
-            numeric_indices = []
+            indices = []
             for part in parts[1:]:
-                try:
-                    numeric_indices.append(int(part))
-                except ValueError:
-                    # Non-numeric part (e.g. instance UUID) — store full UID as
-                    # override and stop parsing indices here.
+                if part.isdigit():
+                    indices.append(int(part))
+                else:
                     self._uid_override = uid
                     break
-            indices = tuple(numeric_indices)
+            indices = tuple(indices)
 
         elif name is None:
             raise ValueError('Either name and indices or UID are required to instantiate the RPC')
@@ -284,13 +289,11 @@ class Runtime(BaseRPC):
         warehouse_uid = kwargs.pop('warehouse_uid', None)
         if warehouse_uid is not None:
             warehouse_proxy = RuntimeProxy(uid=warehouse_uid)
-            indices = warehouse_proxy.indices
         elif warehouse_indices < 0:
             warehouse_proxy = RuntimeProxy(name='warehouse')
-            indices = warehouse_proxy.indices
         else:
             warehouse_proxy = RuntimeProxy(name='warehouse', indices=warehouse_indices)
-            indices = warehouse_proxy.indices
+        indices = warehouse_proxy.indices
 
         def start_warehouse(*args, **extra_kwargs):
             kwargs.update(extra_kwargs)

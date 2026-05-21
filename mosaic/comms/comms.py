@@ -386,18 +386,14 @@ class InboundConnection(Connection):
 
     @property
     def address(self):
-        """
-        Connection address.
+        """Routable IP address for this connection.
 
-        If no address is set, it will try to discover it.
-
+        Auto-detects if not set or set to ``0.0.0.0`` (bind-all, not
+        routable). Tries a UDP probe first, then hostname, then localhost.
         """
         if self._address is None or self._address == '0.0.0.0':
-            # 0.0.0.0 is valid for binding but not routable — auto-detect
             self._address = None
 
-            # Try to find a routable IP via UDP probe first (works in K8s
-            # where hostname may not be resolvable from other pods)
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 try:
@@ -408,7 +404,6 @@ class InboundConnection(Connection):
             except OSError:
                 pass
 
-            # Fall back to hostname
             if self._address is None:
                 self._address = get_hostname()
                 try:
@@ -881,18 +876,14 @@ class Publication(Connection):
 
     @property
     def address(self):
-        """
-        Connection address.
+        """Routable IP address for this connection.
 
-        If no address is set, it will try to discover it.
-
+        Auto-detects if not set or set to ``0.0.0.0`` (bind-all, not
+        routable). Tries a UDP probe first, then hostname, then localhost.
         """
         if self._address is None or self._address == '0.0.0.0':
-            # 0.0.0.0 is valid for binding but not routable — auto-detect
             self._address = None
 
-            # Try to find a routable IP via UDP probe first (works in K8s
-            # where hostname may not be resolvable from other pods)
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 try:
@@ -903,7 +894,6 @@ class Publication(Connection):
             except OSError:
                 pass
 
-            # Fall back to hostname
             if self._address is None:
                 self._address = get_hostname()
                 try:
