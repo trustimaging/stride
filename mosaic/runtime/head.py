@@ -65,9 +65,31 @@ class Head(Runtime):
         await super().init(**kwargs)
 
         # Wait for workers to be ready
+        num_workers = kwargs.pop('num_workers', 0)
+        timeout = kwargs.pop('timeout', 180)
+        if num_workers > 0:
+            await self.wait_for_workers(num_workers, timeout=timeout)
+
+    async def wait_for_workers(self, num_workers, timeout=180):
+        """
+        Wait for a specific number of workers to be available.
+
+        Useful in dynamic mode where workers connect at runtime.
+
+        Parameters
+        ----------
+        num_workers : int
+            Number of workers to wait for.
+        timeout : int or None
+            Maximum time to wait in seconds. If None, wait indefinitely.
+
+        Raises
+        -------
+        RuntimeError
+            If the specified number of workers do not connect within the timeout period.
+        
+        """
         tic = time.time()
-        num_workers = kwargs.pop('num_workers')
-        timeout = 180
         while len(self.workers) < num_workers:
             if timeout is not None and (time.time() - tic) > timeout:
                 raise RuntimeError('Timed out while waiting for %d workers to connect' % num_workers)

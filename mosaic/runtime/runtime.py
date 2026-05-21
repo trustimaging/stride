@@ -42,6 +42,13 @@ class BaseRPC:
     A name ``runtime`` and indices ``(0, 0)`` will result in a UID ``runtime:0:0``,
     while the same name with no indices will result in a UID ``runtime``.
 
+    In dynamic mode (cloud deployment), UIDs include a per-boot instance ID to avoid
+    collisions when a node is replaced at the same index. For example,
+    ``worker:0:0:a3f7b2c1``. The instance ID is not part of the indices -
+    it is a non-numeric suffix. When a UID contains an instance ID, the
+    full string is stored as an override and returned via the
+    ``uid`` property.
+
     Parameters
     ----------
     name : str, optional
@@ -55,14 +62,18 @@ class BaseRPC:
     """
 
     def __init__(self, name=None, indices=(), uid=None):
+        self._uid_override = None
         if uid is not None:
-            uid = uid.split(':')
-            name = uid[0]
-
-            if len(uid) > 1:
-                indices = tuple([int(each) for each in uid[1:]])
-            else:
-                indices = ()
+            parts = uid.split(':')
+            name = parts[0]
+            indices = []
+            for part in parts[1:]:
+                if part.isdigit():
+                    indices.append(int(part))
+                else:
+                    self._uid_override = uid
+                    break
+            indices = tuple(indices)
 
         elif name is None:
             raise ValueError('Either name and indices or UID are required to instantiate the RPC')
@@ -97,6 +108,9 @@ class BaseRPC:
         Runtime UID.
 
         """
+        if self._uid_override is not None:
+            return self._uid_override
+        
         if len(self.indices):
             indices = ':'.join([str(each) for each in self.indices])
             return '%s:%s' % (self.name, indices)
@@ -142,8 +156,11 @@ class Runtime(BaseRPC):
     is_warehouse = False
 
     def __init__(self, **kwargs):
+        runtime_uid = kwargs.pop('runtime_uid', None)
         runtime_indices = kwargs.pop('runtime_indices', ())
         super().__init__(name=self.__class__.__name__.lower(), indices=runtime_indices)
+        if runtime_uid is not None:
+            self._uid_override = runtime_uid
 
         self.mode = kwargs.get('mode', 'local')
         self.reuse_head = kwargs.get('reuse_head', False)
@@ -185,7 +202,7 @@ class Runtime(BaseRPC):
 
         if self.uid == 'warehouse':
             self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.85))
-        elif 'worker' in self.uid:
+        elif self.uid.startswith('worker:'):
             self._mem_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.85))
         else:
             self._mem_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.85))
@@ -211,8 +228,11 @@ class Runtime(BaseRPC):
         self.set_logger()
 
         # Start warehouse
+        local_warehouse_uid = kwargs.pop('local_warehouse_uid', None)
         self._remote_warehouse = self.proxy('warehouse')
-        if len(self.indices):
+        if local_warehouse_uid is not None:
+            self._local_warehouse = self.proxy(uid=local_warehouse_uid)
+        elif len(self.indices):
             self._local_warehouse = self.proxy('warehouse', indices=self.indices[0])
         else:
             self._local_warehouse = self._remote_warehouse
@@ -264,7 +284,10 @@ class Runtime(BaseRPC):
 
         """
         warehouse_indices = kwargs.pop('indices', -1)
-        if warehouse_indices < 0:
+        warehouse_uid = kwargs.pop('uid', None)
+        if warehouse_uid is not None:
+            warehouse_proxy = RuntimeProxy(name='warehouse', uid=warehouse_uid)
+        elif warehouse_indices < 0:
             warehouse_proxy = RuntimeProxy(name='warehouse')
         else:
             warehouse_proxy = RuntimeProxy(name='warehouse', indices=warehouse_indices)
@@ -273,6 +296,8 @@ class Runtime(BaseRPC):
         def start_warehouse(*args, **extra_kwargs):
             kwargs.update(extra_kwargs)
             kwargs['runtime_indices'] = indices
+            if warehouse_uid is not None:
+                kwargs['runtime_uid'] = warehouse_uid
             mosaic.init('warehouse', *args, **kwargs, wait=True)
 
         warehouse_subprocess = subprocess(start_warehouse)(name=warehouse_proxy.uid, daemon=False)

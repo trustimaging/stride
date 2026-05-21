@@ -1,4 +1,7 @@
 
+import os
+import uuid
+
 import psutil
 
 import mosaic
@@ -50,11 +53,41 @@ class Node(Runtime):
         -------
 
         """
+        # Generate a per-boot instance ID so every spawn of this node produces globally 
+        # unique runtime UIDs eliminating UID collisions in an elastic cluster environment
+        self._instance_id = uuid.uuid4().hex[:8]
+        self._uid_override = f'node:{self.indices[0]}:{self._instance_id}'
+
+        # If phone-home mode is enabled, inject monitor address into kwargs
+        self._phone_home = kwargs.pop('phone_home', False)
+        if self._phone_home:
+            self.init_phone_home(config=kwargs)
+
         await super().init(**kwargs)
 
         # Start local cluster
         await self.init_warehouse(indices=self.indices[0], **kwargs)
         await self.init_workers(**kwargs)
+
+    def init_phone_home(self, config):
+            """Read monitor address from environment variables and inject into kwargs.
+
+            Called when the node starts in phone-home mode.
+            The monitor's address, RPC port, and pub-sub port must be provided
+            via ``MONITOR_HOST``, ``MONITOR_PORT``, and ``PUBSUB_PORT``
+            environment variables.
+            """
+            monitor_host = os.environ.get('MONITOR_HOST')
+            monitor_port = os.environ.get('MONITOR_PORT')
+            pubsub_port = os.environ.get('PUBSUB_PORT')
+            if not (monitor_host and monitor_port and pubsub_port):
+                raise RuntimeError(
+                    'phone_home=True but MONITOR_HOST, MONITOR_PORT, '
+                    'and PUBSUB_PORT environment variables are not set'
+                )
+            config['monitor_address'] = monitor_host
+            config['monitor_port'] = int(monitor_port)
+            config['pubsub_port'] = int(pubsub_port)
 
     async def init_workers(self, **kwargs):
         """
@@ -142,15 +175,19 @@ class Node(Runtime):
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
 
+            worker_uid = f'worker:{self.indices[0]}:{worker_index}:{self._instance_id}'
+
             def start_worker(*args, **extra_kwargs):
                 kwargs.update(extra_kwargs)
                 kwargs['runtime_indices'] = indices
+                kwargs['runtime_uid'] = worker_uid
+                kwargs['local_warehouse_uid'] = self._warehouse_uid
                 kwargs['num_workers'] = num_workers
                 kwargs['num_threads'] = num_threads
 
                 mosaic.init('worker', *args, **kwargs, wait=True)
 
-            worker_proxy = RuntimeProxy(name='worker', indices=indices)
+            worker_proxy = RuntimeProxy(name='worker', uid=worker_uid)
             worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
                                                          daemon=False,
                                                          cpu_affinity=worker_cpus.get(worker_index, None))

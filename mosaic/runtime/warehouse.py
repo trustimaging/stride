@@ -54,6 +54,11 @@ class Warehouse(Runtime):
         warehouse_memory = memory_limit() * warehouse_memory_fraction
 
         self._local_warehouse = SpillBuffer(self._spill_directory, warehouse_memory)
+    
+    @staticmethod
+    def _warehouse_uid_from_node(node):
+        """Derive the warehouse UID from the node."""
+        return f'warehouse:{node.uid[len("node:"):]}'
 
     def set_logger(self):
         """
@@ -273,9 +278,9 @@ class Warehouse(Runtime):
             tasks = []
 
             for node in self._nodes.values():
-                if node.uid not in self._warehouses:
-                    self._warehouses[node.uid] = self.proxy('warehouse',
-                                                            indices=node.indices[0])
+                warehouse_uid = self._warehouse_uid_from_node(node)
+                if node.uid not in self._warehouses or self._warehouses[node.uid].uid != warehouse_uid:
+                    self._warehouses[node.uid] = self.proxy('warehouse', uid=warehouse_uid)
                 tasks.append(self._warehouses[node.uid].push_remote(__dict__=__dict__, uid=uid, reply=True))
 
             if len(self.indices):
@@ -365,9 +370,9 @@ class Warehouse(Runtime):
         tasks = []
 
         for node in self._nodes.values():
-            if node.uid not in self._warehouses:
-                self._warehouses[node.uid] = self.proxy('warehouse',
-                                                        indices=node.indices[0])
+            warehouse_uid = self._warehouse_uid_from_node(node)
+            if node.uid not in self._warehouses or self._warehouses[node.uid].uid != warehouse_uid:
+                self._warehouses[node.uid] = self.proxy('warehouse', uid=warehouse_uid)
             tasks.append(self._warehouses[node.uid].put_remote(obj=obj, uid=obj_id, reply=True))
 
         if len(self.indices):

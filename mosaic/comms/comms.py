@@ -387,38 +387,35 @@ class InboundConnection(Connection):
     @property
     def address(self):
         """
-        Connection address.
+        Routable IP address for this connection.
 
-        If no address is set, it will try to discover it.
-
+        Auto-detects if not set or set to ``0.0.0.0`` (binding, non-routable).
+        Tries UDP probe first, then hostname, then localhost.
         """
-        if self._address is None:
-            # Try using a hostname first
-            self._address = get_hostname()
+        # 0.0.0.0 is valid for binding but not routable for pods in K8s - we need to auto-detect
+        if self._address is None or self._address == '0.0.0.0':
 
+            self._address = None
+
+            # Try to find routable IP via UDP probe first
             try:
-                validate_address(self._address)
-            except ValueError:
-                # Try to find an IP address otherwise
-                address, port = '8.8.8.8', '53'
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                address, port = '8.8.8.8', '53'
                 try:
-                    # This command will raise an exception if there is no internet
-                    # connection.
                     s.connect((address, int(port)))
                     self._address = s.getsockname()[0]
-                except OSError as e:
-                    self._address = '127.0.0.1'
-                    # [Errno 101] Network is unreachable
-                    if e.errno == errno.ENETUNREACH:
-                        try:
-                            # try get node ip address from host name
-                            host_name = get_hostname()
-                            self._address = socket.gethostbyname(host_name)
-                        except Exception:
-                            pass
                 finally:
                     s.close()
+            except OSError:
+                pass
+            
+            # Now fall back to hostname
+            if self._address is None:
+                self._address = get_hostname()
+                try:
+                    validate_address(self._address)
+                except ValueError:
+                    self._address = '127.0.0.1'
 
         return self._address
 
@@ -1531,6 +1528,9 @@ class CommsManager:
         Create and connect outbound connection for a remote runtime,
         with a given address and port.
 
+        If uid already has a connection but address changed,
+        the stale socket is torn down and replaced.
+
         Parameters
         ----------
         uid : str
@@ -1546,7 +1546,16 @@ class CommsManager:
         """
         validate_address(address, port)
 
-        if uid not in self._send_conn.keys() and uid != self._runtime.uid:
+        existing = self._send_conn.get(uid, None)
+        address_changed = existing is not None and (existing.address != address or existing.port != port)
+
+        # Create new connection if: first contact, previous died or address changed
+        if uid != self._runtime.uid and (existing is None or address_changed or existing.state == 'disconnected'):
+
+            # Tear down stale socket before new connection is made
+            if existing is not None and existing.state == 'connected':
+                existing.disconnect()
+
             self._send_conn[uid] = OutboundConnection(uid, address, port,
                                                       socket=self._send_socket,
                                                       runtime=self._runtime,
@@ -2242,7 +2251,7 @@ class CommsManager:
                                       method='disconnect',
                                       uid=uid)
 
-            if 'node' in uid and uid in self._runtime._nodes:
+            if uid.startswith('node:') and uid in self._runtime._nodes:
                 node_index = self._runtime._nodes[uid].indices[0]
                 for worker in self._runtime.workers:
                     if worker.indices[0] == node_index:
@@ -2251,6 +2260,10 @@ class CommsManager:
     async def handshake(self, uid, address, port, pubsub_port=None):
         """
         Start handshake with remote ``uid``, located at a certain ``address`` and ``port``.
+
+        Sends a ``hand`` and waits for a ``shake`` reply. 
+        The recv task persists across retries (pyzmq loses messages on cancellation). 
+        Messages arriving before the shake completes are buffered and dispatched afterwards.
 
         Parameters
         ----------
@@ -2285,16 +2298,39 @@ class CommsManager:
         await self.send_async(uid,
                               method='hand',
                               address=self.address, port=self.port)
+        
+        # Buffer any RPC messages that arrive before the shake completed
+        pending = []
 
-        while True:
-            try:
-                sender_id, response = await asyncio.wait_for(self.recv_async(), timeout=60)
-                if (uid == sender_id and response.method == 'shake') or self.shaken(uid):
+        # Keep recv task alive across multiple handshakes to avoid lost messages and potential deadlocks
+        recv_task = asyncio.ensure_future(self.recv_async())
+        try:
+            while True:
+                done, _ = await asyncio.wait([recv_task], timeout=10)
+                if not done:
+                    # Timeout - retry hand keeping recv_task alive
+                    await self.send_async(uid,
+                                          method='hand',
+                                          address=self.address, port=self.port)
+                    continue
+                
+                sender_id, response = recv_task.result()
+
+                if uid == sender_id and response.method == 'shake':
                     break
-            except asyncio.TimeoutError:
-                await self.send_async(uid,
-                                      method='hand',
-                                      address=self.address, port=self.port)
+                elif response.method not in ('shake', 'hand', 'reply'):
+                    pending.append((sender_id, response))
+                
+                # Message processed, start waiting for the next one
+                recv_task = asyncio.ensure_future(self.recv_async())
+        finally:
+            # Cleanup any pending messages
+            if not self.recv.done():
+                recv_task.cancel()
+                try:
+                    await recv_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
         self._send_conn[uid].shake()
         if pubsub_port is not None:
@@ -2302,6 +2338,10 @@ class CommsManager:
 
         await self.shake(sender_id, **response.kwargs)
         await self._loop.run(self._runtime.shake, sender_id, **response.kwargs)
+
+        # Dispatch any pending messages that arrived before the shake completed
+        for buffer_sender_id, buffer_response in pending:
+            await self.process_msg(buffer_sender_id, buffer_response)
 
     async def hand(self, sender_id, address, port):
         """
@@ -2322,7 +2362,13 @@ class CommsManager:
         """
         if self._state == 'disconnected':
             return
+        
+        existing = self._send_conn.get(sender_id)
 
+        # Cleanup stale socket
+        if existing is not None and existing.state == 'connected':
+            existing.disconnect()
+        
         self.connect_send(sender_id, address, port)
 
         # zmq.ROUTER messages will be dropped if endpoint not yet connected
@@ -2331,7 +2377,9 @@ class CommsManager:
         network = {}
         if self._runtime.uid == 'monitor':
             for connected_id, connection in self._send_conn.items():
-                network[connected_id] = (connection.address, connection.port)
+                # Only include live connections
+                if connection.state == 'connected':
+                    network[connected_id] = (connection.address, connection.port)
 
         await self.send_async(sender_id,
                               method='shake',

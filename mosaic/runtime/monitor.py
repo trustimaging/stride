@@ -113,7 +113,8 @@ class Monitor(Runtime):
 
         if self.mode in ['local', 'interactive']:
             await self.init_local(**kwargs)
-
+        elif self.mode == 'dynamic':
+            await self.init_dynamic(**kwargs)
         else:
             await self.init_cluster(**kwargs)
 
@@ -241,6 +242,89 @@ class Monitor(Runtime):
                          'WORKER:0-%d address=%s>' % (0, num_nodes, num_workers,
                                                       ', '.join(node_list)))
 
+    async def init_dynamic(self, **kwargs):
+        """
+        Init in dynamic mode, waiting for nodes to phone-home.
+
+        In dynamic mode, the Monitor doesn't spawn nodes. Instead, it waits 
+        for nodes to connect independently. Nodes can be added at runtime
+        by starting them with the --phone-home flag.
+
+        Parameters
+        ----------
+        kwargs
+        
+        Returns
+        ----------
+
+        """
+        num_workers = kwargs.get('num_workers', 0)
+
+        self.logger.info('Waiting for nodes to phone home (dynamic mode)')
+
+        # Wait for at least the requested number of workers if specified
+        if num_workers > 0:
+            timeout = kwargs.pop('timeout', 300)
+            tic = time.time()
+            while self._get_total_workers() < num_workers:
+                if (time.time() - tic) > timeout:
+                    raise RuntimeError(f'Timed out while waiting for {num_workers} workers to phone home')
+                await asyncio.sleep(0.1)
+            
+            self.logger.debug(f'Dynamic mesh ready with {self._get_total_workers()} workers connected')
+
+    def _get_total_workers(self):
+        total = 0
+        for node in self._monitored_nodes.values():
+            if hasattr(node, 'sub_resources') and 'workers' in node.sub_resources:
+                total += len(node.sub_resources['workers'])
+        return total
+
+    @property
+    def num_workers(self):
+        return self._get_total_workers()
+    
+    @property
+    def workers(self):
+        result = []
+        for node in self._monitored_nodes.values():
+            if hasattr(node, 'sub_resources') and 'workers' in node.sub_resources:
+                for uid in node.sub_resources['workers']:
+                    result.append(RuntimeProxy(uid=uid))
+        return result
+                
+    async def register_node(self, sender_id, node_uid, num_workers):
+        """
+        Register a node that has phoned home in dynamic mode.
+
+        Parameters
+        ----------
+        sender_id : str
+        node_uid : str
+        num_workers : int
+
+        Returns
+        -------
+        dict[str, str]
+            Registration confirmation with status
+
+        """
+        if node_uid in self._nodes:
+            self.logger.info(f"Node {node_uid} already registered, ignoring duplicate phone home")
+            return {'status': 'already_registered'}
+
+        # Create proxy for the new node
+        node_proxy = RuntimeProxy(uid=node_uid)
+        node_proxy.subprocess = None  # No subprocess since we didn't spawn it
+
+        self._nodes[node_uid] = node_proxy
+        self.logger.info(f"Node {node_uid} registered with {num_workers} workers")
+
+        self._comms.start_heartbeat(node_uid)
+
+        return {'status': 'registered'}
+
+
     def init_file(self, runtime_config):
         runtime_id = self.uid
         runtime_address = self.address
@@ -306,8 +390,21 @@ class Monitor(Runtime):
     def update_node(self, sender_id, update, sub_resources):
         if sender_id in self._disconnected_runtimes:
             return
-        if sender_id not in self._monitored_nodes:
+
+        is_new_node = sender_id not in self._monitored_nodes
+        if is_new_node:
             self._monitored_nodes[sender_id] = MonitoredResource(sender_id)
+
+            if self.mode == 'dynamic':
+                self._comms.start_heartbeat(sender_id)
+                worker_ids = list(sub_resources.get('workers', {}).keys())
+                active_indices = set()
+                for uid in self._monitored_nodes:
+                    if uid not in self._disconnected_runtimes:
+                        parts = uid.split(':')
+                        active_indices.add(parts[1] if len(parts) > 2 else uid)
+                active_nodes = len(active_indices)
+                self.logger.info(f"Node {sender_id} connected with {len(worker_ids)} workers and {active_nodes} active nodes")
 
         node = self._monitored_nodes[sender_id]
         node.update(update, **sub_resources)

@@ -45,6 +45,11 @@ from ..utils.logger import _stdout, _stderr
               help='whether to run mosaic locally or in a cluster system')
 @click.option('--reuse-head/--free-head', '-rh/-fh', default=False, required=True, show_default=True,
               help='whether to create workers in the head node')
+@click.option('--dynamic', is_flag=True, default=False, show_default=True,
+              help='run monitor in dynamic mode, waiting for nodes to phone home')
+@click.option('--phone-home', is_flag=True, default=False, show_default=True,
+              help='connect to monitor address from MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT env vars')
+
 # log level
 @click.option('--perf', 'log_level', flag_value='perf', default='perf', show_default=True,
               help='set log level to PERF')
@@ -62,6 +67,8 @@ def go(cmd=None, **kwargs):
     runtime_type = kwargs.get('runtime_type', None)
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)
+    dynamic = kwargs.get('dynamic', False)  
+    phone_home = kwargs.get('phone_home', False)
     reuse_head = kwargs.get('reuse_head', False)
 
     if runtime_indices is not None:
@@ -103,6 +110,13 @@ def go(cmd=None, **kwargs):
 
         if node_list is not None and num_nodes != len(node_list):
             node_list = node_list[:num_nodes]
+    
+    if local:
+        mode = 'local'
+    elif dynamic: 
+        mode = 'dynamic'
+    else:
+        mode = 'cluster'
 
     runtime_config = {
         'runtime_indices': runtime_indices,
@@ -114,11 +128,12 @@ def go(cmd=None, **kwargs):
         'num_nodes': num_nodes,
         'num_workers': num_workers,
         'num_threads': num_threads,
-        'mode': 'local' if local is True else 'cluster',
+        'mode': mode,
         'reuse_head': reuse_head,
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,
+        'phone_home': phone_home
     }
 
     # Initialise the runtime
