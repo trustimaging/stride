@@ -55,15 +55,16 @@ class Node(Runtime):
         -------
 
         """
-        # Generate a per-boot instance ID so every spawn of this node produces globally
-        # unique runtime UIDs eliminating UID collisions in an elastic cluster environment
-        self._instance_id = uuid.uuid4().hex[:8]
-        self._uid_override = f'node:{self.indices[0]}:{self._instance_id}'
-
         # If phone-home mode is enabled, inject monitor address into kwargs
         self._phone_home = kwargs.pop('phone_home', False)
         if self._phone_home:
             self.init_phone_home(config=kwargs)
+
+        # Per-boot instance ID only in elastic environments where nodes can be replaced
+        # in local/cluster mode the monitor pre-allocates proxies by index-based UID
+        if self.mode == 'dynamic' or self._phone_home:
+            self._instance_id = uuid.uuid4().hex[:8]
+            self._uid_override = f'node:{self.indices[0]}:{self._instance_id}'
 
         await super().init(**kwargs)
 
@@ -177,20 +178,26 @@ class Node(Runtime):
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
 
-            worker_uid = f'worker:{self.indices[0]}:{worker_index}:{self._instance_id}'
+            if self._instance_id is not None:
+                worker_uid = f'worker:{self.indices[0]}:{worker_index}:{self._instance_id}'
+                worker_proxy = RuntimeProxy(name='worker', uid=worker_uid)
+            else:
+                worker_proxy = RuntimeProxy(name='worker', indices=indices)
+                worker_uid = worker_proxy.uid
 
             def start_worker(*args, **extra_kwargs):
                 kwargs.update(extra_kwargs)
                 kwargs['runtime_indices'] = indices
-                kwargs['runtime_uid'] = worker_uid
                 kwargs['num_workers'] = num_workers
                 kwargs['num_threads'] = num_threads
+
+                if self._instance_id is not None:
+                    kwargs['runtime_uid'] = worker_uid
                 if self._warehouse_uid is not None:
                     kwargs['local_warehouse_uid'] = self._warehouse_uid
 
                 mosaic.init('worker', *args, **kwargs, wait=True)
 
-            worker_proxy = RuntimeProxy(name='worker', uid=worker_uid)
             worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
                                                          daemon=False,
                                                          cpu_affinity=worker_cpus.get(worker_index, None))
