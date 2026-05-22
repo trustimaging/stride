@@ -1,4 +1,3 @@
-
 import os
 import sys
 import uuid
@@ -6,7 +5,6 @@ import asyncio
 import zmq
 import zmq.asyncio
 import tblib
-import errno
 import psutil
 import socket
 import warnings
@@ -62,6 +60,45 @@ def validate_address(address, port=False):
 
 def get_hostname():
     return socket.getfqdn(socket.gethostname())
+
+
+def discover_routable_address(current=None):
+    """
+    Return a routable IP address for binding/advertising.
+
+    Discovery order:
+      1. Hostname — used if ``validate_address`` accepts it (either an IP
+         literal or resolvable via DNS).
+      2. UDP probe to a public IP - picks the outgoing interface address.
+      3. Explicit DNS lookup of the hostname — last resort when the probe
+         also fails.
+      4. ``127.0.0.1`` if everything fails.
+
+    """
+    if current is not None and current != '0.0.0.0':
+        return current
+
+    # Try the hostname first
+    address = get_hostname()
+    try:
+        validate_address(address)
+    except ValueError:
+        # Hostname not usable — fall through to UDP probe
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(('8.8.8.8', 53))
+                address = s.getsockname()[0]
+            finally:
+                s.close()
+        except OSError:
+            address = '127.0.0.1'
+            try:
+                address = socket.gethostbyname(get_hostname())
+            except (socket.gaierror, OSError):
+                pass
+
+    return address
 
 
 class CMD:
@@ -390,33 +427,8 @@ class InboundConnection(Connection):
         Routable IP address for this connection.
 
         Auto-detects if not set or set to ``0.0.0.0`` (binding, non-routable).
-        Tries UDP probe first, then hostname, then localhost.
         """
-        # 0.0.0.0 is valid for binding but not routable for pods in K8s - we need to auto-detect
-        if self._address is None or self._address == '0.0.0.0':
-
-            self._address = None
-
-            # Try to find routable IP via UDP probe first
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                address, port = '8.8.8.8', '53'
-                try:
-                    s.connect((address, int(port)))
-                    self._address = s.getsockname()[0]
-                finally:
-                    s.close()
-            except OSError:
-                pass
-
-            # Now fall back to hostname
-            if self._address is None:
-                self._address = get_hostname()
-                try:
-                    validate_address(self._address)
-                except ValueError:
-                    self._address = '127.0.0.1'
-
+        self._address = discover_routable_address(self._address)
         return self._address
 
     def connect(self):
@@ -852,39 +864,11 @@ class Publication(Connection):
     @property
     def address(self):
         """
-        Connection address.
+        Routable IP address for this connection.
 
-        If no address is set, it will try to discover it.
-
+        Auto-detects if not set or set to ``0.0.0.0`` (binding, non-routable).
         """
-        if self._address is None:
-            # Try using a hostname first
-            self._address = get_hostname()
-
-            try:
-                validate_address(self._address)
-            except ValueError:
-                # Try to find an IP address otherwise
-                address, port = '8.8.8.8', '53'
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                try:
-                    # This command will raise an exception if there is no internet
-                    # connection.
-                    s.connect((address, int(port)))
-                    self._address = s.getsockname()[0]
-                except OSError as e:
-                    self._address = '127.0.0.1'
-                    # [Errno 101] Network is unreachable
-                    if e.errno == errno.ENETUNREACH:
-                        try:
-                            # try get node ip address from host name
-                            host_name = get_hostname()
-                            self._address = socket.gethostbyname(host_name)
-                        except Exception:
-                            pass
-                finally:
-                    s.close()
-
+        self._address = discover_routable_address(self._address)
         return self._address
 
     def connect(self):
@@ -2251,7 +2235,7 @@ class CommsManager:
                                       method='disconnect',
                                       uid=uid)
 
-            if uid.startswith('node:') and uid in self._runtime._nodes:
+            if uid.startswith('node') and uid in self._runtime._nodes:
                 node_index = self._runtime._nodes[uid].indices[0]
                 for worker in self._runtime.workers:
                     if worker.indices[0] == node_index:

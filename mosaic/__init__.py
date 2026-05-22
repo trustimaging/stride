@@ -30,7 +30,7 @@ def init(runtime_type='head', runtime_indices=(),
          num_workers=1, num_threads=None,
          mode='local', reuse_head=False, monitor_strategy='round-robin',
          log_level='perf', profile=False, node_list=None,
-         phone_home=False, timeout=None, 
+         timeout=None,
          asyncio_loop=None, dump_init=False, wait=False,
          runtime_uid=None, local_warehouse_uid=None,
          **kwargs):
@@ -69,7 +69,10 @@ def init(runtime_type='head', runtime_indices=(),
         available cores over ``num_workers``.
     mode : str, optional
         Mode of the runtime: ``local``, ``cluster``, or ``dynamic``.
-        In ``dynamic`` mode, the monitor waits for nodes to phone home.
+        In ``dynamic`` mode, the monitor waits for nodes to connect at
+        runtime and nodes read the monitor's address from
+        ``MOSAIC_MONITOR_HOST``, ``MOSAIC_MONITOR_PORT`` and
+        ``MOSAIC_PUBSUB_PORT`` environment variables.
     reuse_head : bool, optional
         Whether to set up workers in the head node, defaults to False.
     monitor_strategy : str, optional
@@ -80,9 +83,6 @@ def init(runtime_type='head', runtime_indices=(),
         Whether to start the profiler, defaults to False.
     node_list : list, optional
         List of available node addresses to connect to.
-    phone_home : bool, optional
-        If True, read monitor address from MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT
-        environment variables and connect to the monitor (phone-home mode).
     timeout : float, optional
         Timeout in seconds for waiting for workers to connect.
     asyncio_loop: object, optional
@@ -91,6 +91,10 @@ def init(runtime_type='head', runtime_indices=(),
         Whether to dump initialisation file.
     wait : bool, optional
         Whether or not to return control to calling frame, defaults to False.
+    runtime_uid : str, optional
+        Explicit UID for this runtime; overrides the index-derived default.
+    local_warehouse_uid : str, optional
+        UID of the warehouse to use as this runtime's local warehouse.
     kwargs : optional
         Extra keyword arguments.
 
@@ -116,7 +120,6 @@ def init(runtime_type='head', runtime_indices=(),
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,
-        'phone_home': phone_home,
         'dump_init': dump_init,
     }
 

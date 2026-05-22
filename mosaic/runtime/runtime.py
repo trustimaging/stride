@@ -61,7 +61,7 @@ class BaseRPC:
 
     """
 
-    def __init__(self, name=None, indices=(), uid=None):
+    def __init__(self, name=None, indices=(), uid=None, instance_id=None):
         self._uid_override = None
         if uid is not None:
             parts = uid.split(':')
@@ -83,8 +83,19 @@ class BaseRPC:
         if type(indices) is not tuple:
             indices = (indices,)
 
+        if instance_id is not None:
+            self._uid_override = self._build_uid(name, indices, instance_id)
+
         self._name = name
         self._indices = indices
+
+    @staticmethod
+    def _build_uid(name, indices, instance_id=None):
+        """Construct a UID from a name, indices and an optional instance ID."""
+        parts = [name] + [str(i) for i in indices]
+        if instance_id is not None:
+            parts.append(instance_id)
+        return ':'.join(parts)
 
     @property
     def name(self):
@@ -111,12 +122,7 @@ class BaseRPC:
         if self._uid_override is not None:
             return self._uid_override
 
-        if len(self.indices):
-            indices = ':'.join([str(each) for each in self.indices])
-            return '%s:%s' % (self.name, indices)
-
-        else:
-            return self.name
+        return self._build_uid(self._name, self._indices)
 
     @property
     def address(self):
@@ -202,7 +208,7 @@ class Runtime(BaseRPC):
 
         if self.uid == 'warehouse':
             self._mem_fraction = float(os.environ.get('MOSAIC_WAREHOUSE_MEM', 0.85))
-        elif self.uid.startswith('worker:'):
+        elif self.uid.startswith('worker'):
             self._mem_fraction = float(os.environ.get('MOSAIC_WORKER_MEM', 0.85))
         else:
             self._mem_fraction = float(os.environ.get('MOSAIC_RUNTIME_MEM', 0.85))
@@ -1571,8 +1577,10 @@ class RuntimeProxy(BaseRPC):
 
     """
 
-    def __init__(self, name=None, indices=(), uid=None, comms=None):
-        super().__init__(name=name, indices=indices, uid=uid)
+    def __init__(self, name=None, indices=(), uid=None, comms=None,
+                 instance_id=None):
+        super().__init__(name=name, indices=indices, uid=uid,
+                         instance_id=instance_id)
 
         self._subprocess = None
 

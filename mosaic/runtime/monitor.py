@@ -260,7 +260,7 @@ class Monitor(Runtime):
         """
         num_workers = kwargs.get('num_workers', 0)
 
-        self.logger.info('Waiting for nodes to phone home (dynamic mode)')
+        self.logger.debug('Waiting for nodes to phone home (dynamic mode)')
 
         # Wait for at least the requested number of workers if specified
         if num_workers > 0:
@@ -292,37 +292,6 @@ class Monitor(Runtime):
                 for uid in node.sub_resources['workers']:
                     result.append(RuntimeProxy(uid=uid))
         return result
-
-    async def register_node(self, sender_id, node_uid, num_workers):
-        """
-        Register a node that has phoned home in dynamic mode.
-
-        Parameters
-        ----------
-        sender_id : str
-        node_uid : str
-        num_workers : int
-
-        Returns
-        -------
-        dict[str, str]
-            Registration confirmation with status
-
-        """
-        if node_uid in self._nodes:
-            self.logger.info(f"Node {node_uid} already registered, ignoring duplicate phone home")
-            return {'status': 'already_registered'}
-
-        # Create proxy for the new node
-        node_proxy = RuntimeProxy(uid=node_uid)
-        node_proxy.subprocess = None  # No subprocess since we didn't spawn it
-
-        self._nodes[node_uid] = node_proxy
-        self.logger.info(f"Node {node_uid} registered with {num_workers} workers")
-
-        self._comms.start_heartbeat(node_uid)
-
-        return {'status': 'registered'}
 
     def init_file(self, runtime_config):
         runtime_id = self.uid
@@ -402,8 +371,7 @@ class Monitor(Runtime):
                     if uid not in self._disconnected_runtimes:
                         parts = uid.split(':')
                         active_indices.add(parts[1] if len(parts) > 2 else uid)
-                active_nodes = len(active_indices)
-                self.logger.info(f"Node {sender_id} connected with {len(worker_ids)} workers and {active_nodes} active nodes")
+                self.logger.debug(f"Node {sender_id} connected with {len(worker_ids)} workers")
 
         node = self._monitored_nodes[sender_id]
         node.update(update, **sub_resources)

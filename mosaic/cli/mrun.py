@@ -46,9 +46,7 @@ from ..utils.logger import _stdout, _stderr
 @click.option('--reuse-head/--free-head', '-rh/-fh', default=False, required=True, show_default=True,
               help='whether to create workers in the head node')
 @click.option('--dynamic', is_flag=True, default=False, show_default=True,
-              help='run monitor in dynamic mode, waiting for nodes to phone home')
-@click.option('--phone-home', is_flag=True, default=False, show_default=True,
-              help='connect to monitor address from MONITOR_HOST/MONITOR_PORT/PUBSUB_PORT env vars')
+              help='enable dynamic mode (monitor waits for nodes; nodes read monitor address from env vars)')
 # log level
 @click.option('--perf', 'log_level', flag_value='perf', default='perf', show_default=True,
               help='set log level to PERF')
@@ -67,7 +65,6 @@ def go(cmd=None, **kwargs):
     runtime_indices = kwargs.get('indices', None)
     local = kwargs.get('local', False)
     dynamic = kwargs.get('dynamic', False)
-    phone_home = kwargs.get('phone_home', False)
     reuse_head = kwargs.get('reuse_head', False)
 
     if runtime_indices is not None:
@@ -132,7 +129,6 @@ def go(cmd=None, **kwargs):
         'log_level': log_level,
         'profile': profile,
         'node_list': node_list,
-        'phone_home': phone_home
     }
 
     # Initialise the runtime
