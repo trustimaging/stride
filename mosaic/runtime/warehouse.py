@@ -55,6 +55,19 @@ class Warehouse(Runtime):
 
         self._local_warehouse = SpillBuffer(self._spill_directory, warehouse_memory)
 
+    @staticmethod
+    def _warehouse_uid_from_node(node):
+        """Derive the warehouse UID from the node."""
+        return f'warehouse:{node.uid[len("node:"):]}'
+
+    def _ensure_warehouse_proxy(self, node):
+        """Return a proxy to the given node's warehouse, refreshing if its UID changed."""
+        warehouse_uid = self._warehouse_uid_from_node(node)
+        if (node.uid not in self._warehouses
+                or self._warehouses[node.uid].uid != warehouse_uid):
+            self._warehouses[node.uid] = self.proxy('warehouse', uid=warehouse_uid)
+        return self._warehouses[node.uid]
+
     def set_logger(self):
         """
         Set up logging.
@@ -273,10 +286,8 @@ class Warehouse(Runtime):
             tasks = []
 
             for node in self._nodes.values():
-                if node.uid not in self._warehouses:
-                    self._warehouses[node.uid] = self.proxy('warehouse',
-                                                            indices=node.indices[0])
-                tasks.append(self._warehouses[node.uid].push_remote(__dict__=__dict__, uid=uid, reply=True))
+                proxy = self._ensure_warehouse_proxy(node)
+                tasks.append(proxy.push_remote(__dict__=__dict__, uid=uid, reply=True))
 
             if len(self.indices):
                 if 'head' not in self._warehouses:
@@ -365,10 +376,8 @@ class Warehouse(Runtime):
         tasks = []
 
         for node in self._nodes.values():
-            if node.uid not in self._warehouses:
-                self._warehouses[node.uid] = self.proxy('warehouse',
-                                                        indices=node.indices[0])
-            tasks.append(self._warehouses[node.uid].put_remote(obj=obj, uid=obj_id, reply=True))
+            proxy = self._ensure_warehouse_proxy(node)
+            tasks.append(proxy.put_remote(obj=obj, uid=obj_id, reply=True))
 
         if len(self.indices):
             if 'head' not in self._warehouses:

@@ -1,4 +1,6 @@
 
+import os
+import uuid
 import psutil
 
 import mosaic
@@ -33,6 +35,7 @@ class Node(Runtime):
         self._num_workers = num_workers
         self._num_threads = None
         self._memory_limit = memory_limit()
+        self._instance_id = None
 
         self._monitored_node = MonitoredResource(self.uid)
         self._monitor_interval = None
@@ -50,11 +53,42 @@ class Node(Runtime):
         -------
 
         """
+        # In dynamic mode the node reads the monitor address from env vars
+        # rather than receiving it from a parent that spawned it
+        if self.mode == 'dynamic':
+            self.init_phone_home(config=kwargs)
+
+            # Per-boot instance ID so a replacement at the same index doesn't
+            # collide with the dead pod's UIDs in the monitor's bookkeeping
+            self._instance_id = uuid.uuid4().hex[:8]
+            self._uid_override = self._build_uid(self._name, self._indices,
+                                                 self._instance_id)
+
         await super().init(**kwargs)
 
         # Start local cluster
         await self.init_warehouse(indices=self.indices[0], **kwargs)
         await self.init_workers(**kwargs)
+
+    def init_phone_home(self, config):
+        """Read monitor address from environment variables and inject into kwargs.
+
+        Called when the node starts in dynamic mode. The monitor's address,
+        RPC port, and pub-sub port must be provided via ``MOSAIC_MONITOR_HOST``,
+        ``MOSAIC_MONITOR_PORT``, and ``MOSAIC_PUBSUB_PORT`` environment
+        variables.
+        """
+        monitor_host = os.environ.get('MOSAIC_MONITOR_HOST')
+        monitor_port = os.environ.get('MOSAIC_MONITOR_PORT')
+        pubsub_port = os.environ.get('MOSAIC_PUBSUB_PORT')
+        if not (monitor_host and monitor_port and pubsub_port):
+            raise RuntimeError(
+                'dynamic mode requires MOSAIC_MONITOR_HOST, MOSAIC_MONITOR_PORT '
+                'and MOSAIC_PUBSUB_PORT environment variables to be set'
+            )
+        config['monitor_address'] = monitor_host
+        config['monitor_port'] = int(monitor_port)
+        config['pubsub_port'] = int(pubsub_port)
 
     async def init_workers(self, **kwargs):
         """
@@ -142,15 +176,30 @@ class Node(Runtime):
         for worker_index in range(self._num_workers):
             indices = self.indices + (worker_index,)
 
+            worker_proxy = RuntimeProxy(name='worker', indices=indices,
+                                        instance_id=self._instance_id)
+            worker_uid = worker_proxy.uid
+
+            # Hoist into locals so start_worker's closure doesn't capture self
+            instance_id = self._instance_id
+            local_warehouse_uid = (
+                self._local_warehouse.uid
+                if self._local_warehouse is not None else None
+            )
+
             def start_worker(*args, **extra_kwargs):
                 kwargs.update(extra_kwargs)
                 kwargs['runtime_indices'] = indices
                 kwargs['num_workers'] = num_workers
                 kwargs['num_threads'] = num_threads
 
+                if instance_id is not None:
+                    kwargs['runtime_uid'] = worker_uid
+                if local_warehouse_uid is not None:
+                    kwargs['local_warehouse_uid'] = local_warehouse_uid
+
                 mosaic.init('worker', *args, **kwargs, wait=True)
 
-            worker_proxy = RuntimeProxy(name='worker', indices=indices)
             worker_subprocess = subprocess(start_worker)(name=worker_proxy.uid,
                                                          daemon=False,
                                                          cpu_affinity=worker_cpus.get(worker_index, None))
