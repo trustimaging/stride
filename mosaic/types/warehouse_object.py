@@ -129,3 +129,22 @@ class WarehouseObject:
 
     def __repr__(self):
         return "<%s object uid=%s>" % (self.warehouse_id, self.uid)
+
+    """
+    Lightweight handle pointing to data stored in the artifact warehouse.
+
+    Parameters
+    ----------
+    key : str
+        Object key within the bucket.
+    bucket : str
+        Bucket name.
+
+    """
+
+    def __init__(self, key, bucket):
+        self.key = key
+        self.bucket = bucket
+
+    def __repr__(self):
+        return f'<ArtifactWarehouseObject key={self.key} bucket={self.bucket}>'
