@@ -18,6 +18,7 @@ from ..comms import CommsManager
 from ..core import Task, TaskArray, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
 from ..utils.utils import cpu_count
+from .artifact_warehouse import artifact_warehouse
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -1135,6 +1136,11 @@ class Runtime(BaseRPC):
         """
         Retrieve an object from the warehouse.
 
+        If an :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`
+        is configured, the call is routed there instead of the local
+        :class:`SpillBuffer` warehouse. The partial gradient is uploaded
+        to artifact storage.
+
         Parameters
         ----------
         uid
@@ -1146,6 +1152,12 @@ class Runtime(BaseRPC):
         -------
 
         """
+        warehouse = artifact_warehouse()
+        if warehouse is not None:
+            return await warehouse.exec_remote(
+                uid, func, func_args=func_args, func_kwargs=func_kwargs
+            )
+
         ret = await self._local_warehouse.exec_remote(uid=uid, func=func,
                                                       func_args=func_args, func_kwargs=func_kwargs,
                                                       reply=True)

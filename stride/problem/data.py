@@ -19,6 +19,7 @@ import mosaic
 from mosaic.core.tessera import PickleClass
 from mosaic.comms.compression import maybe_compress, decompress
 from mosaic.file_manipulation import h5
+from mosaic.runtime.artifact_warehouse import artifact_warehouse
 
 from .base import GriddedSaved
 from ..core import Variable
@@ -26,7 +27,7 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'DiskTraces', 'SparseField', 'SparseCoordinates']
+           'DiskTraces', 'ArtifactTraces', 'SparseField', 'SparseCoordinates']
 
 
 def inv_transform(x):
@@ -1805,6 +1806,120 @@ class DiskTraces(Traces):
     def __reduce__(self):
         state = self._serialisation_helper()
         return self._deserialisation_helper, (state,)
+
+
+
+@mosaic.tessera
+class ArtifactTraces(Traces):
+    """
+    Objects of this type describe a set of time traces that are lazily fetched
+    from the artifact store (MinIO / S3-compatible) on demand via the process-wide
+    :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`.
+
+    Parameters
+    ----------
+    artifact_key : str
+        Object key within the bucket (e.g. ``'shots/0/observed.npy'``).
+    
+    """
+
+    def __init__(self, **kwargs):
+        self._artifact_key = kwargs.pop('artifact_key', None)
+        kwargs.pop('data', None)
+        super().__init__(**kwargs)
+    
+    @property
+    def _data(self):
+        return None
+    
+    @_data.setter
+    def _data(self, value):
+        pass
+
+    def load(self, **kwargs):
+        """
+        Download array from the artifact store and return a real ``Traces`` object.
+
+        Returns
+        -------
+        Traces
+            Real in-memory ``Traces`` with the downloaded array. The
+            ``ArtifactTraces`` itself is unchanged.                                                                                                                                                                                                            
+    
+        Raises
+        ------
+        RuntimeError
+            If no artifact warehouse is configured.
+
+        """
+        wh = artifact_warehouse()
+        if wh is None:
+            raise RuntimeError(
+                'No ArtifactWarehouse configured, cannot load ArtifactTraces'
+            )
+        
+        data = wh.pull_remote(self._artifact_key)
+        return Traces(
+            data=data,
+            transducer_ids=self.transducer_ids,
+            grid=self.grid
+        )
+    
+    def get(self, id):
+        return self.load().get(id)
+    
+    def get_extended(self, id):
+        return self.load().get_extended(id)
+
+    def plot(self, **kwargs):
+        return self.load().plot(**kwargs)
+
+    def plot_one(self, id, **kwargs):
+        return self.load().plot_one(id, **kwargs)
+    
+    def __get_desc__(self, **kwargs):
+        return self.load().__get_desc__(**kwargs)
+    
+    def __set_desc__(self, description, **kwargs):                                                                                                                                                                                                         
+        del description.data
+        super().__set_desc__(description, **kwargs)
+
+    _serialisation_attrs = [
+        'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',                                                                                                                                                                              
+        '_dtype', 'needs_grad', '_compressed', '_compression',
+        'transform', 'grad', 'prec', '_transducer_ids', '_grid',
+        '_artifact_key',
+    ]
+
+    def _serialisation_helper(self):
+        return {attr: getattr(self, attr) for attr in self._serialisation_attrs}
+
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        """
+        Reconstruct on the receiving side: download from the artifact store
+        and return a plain :class:`Traces` with real data in memory.
+        """
+        key = state.pop('_artifact_key')
+
+        wh = artifact_warehouse()
+        try:
+            data = wh.pull_remote(key) if wh is not None else None
+        except Exception:
+            data = None
+        
+        instance = Traces.__new__(Traces)
+        instance._data = data
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+        return instance
+    
+    def __reduce__(self):
+        return self._deserialisation_helper, (self._serialisation_helper(),)
+
+
+
 
 
 @mosaic.tessera

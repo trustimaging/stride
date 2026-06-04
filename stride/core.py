@@ -9,6 +9,7 @@ import mosaic
 from mosaic import types
 from mosaic.core.base import CMDBase
 from mosaic.core import TesseraProxy, TaskProxy
+from mosaic.runtime.artifact_warehouse import artifact_warehouse
 
 
 __all__ = ['Variable', 'Operator']
@@ -366,7 +367,17 @@ class Variable:
                 is_proxy = isinstance(node.op.obj, TesseraProxy)
 
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
-                redux_grad = await runtime.exec('redux-%s' % node.op.uid, redux, output_grads)
+                _func_kwargs = {}
+                _abs_iteration = kwargs_.pop('_abs_iteration', None)
+                _shot_id = kwargs_.pop('_shot_id', None)
+                if _abs_iteration is not None:
+                    _func_kwargs['iteration'] = _abs_iteration
+                if _shot_id is not None:
+                    _func_kwargs['shot_id'] = _shot_id
+                
+                redux_grad = await runtime.exec(
+                    'redux-%s' % node.op.uid, redux, output_grads, func_kwargs=_func_kwargs or None
+                )
                 ret = method((redux_grad,), **{**kwargs_, **{'eager': True, 'redux': True}})
 
             else:
@@ -577,6 +588,9 @@ class Variable:
 
         """
         if redux:
+            if artifact_warehouse() is not None:
+                return
+
             self._redux_grads[grad[0].warehouse_id] = grad[0]
 
             if not self._redux_task:

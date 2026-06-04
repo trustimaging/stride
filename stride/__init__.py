@@ -42,6 +42,7 @@ if multiprocessing.get_start_method() == 'fork':
 
 import mosaic
 from mosaic.utils import gpu_count
+from mosaic.runtime.artifact_warehouse import artifact_warehouse
 
 from .core import *
 from .problem import *
@@ -86,7 +87,11 @@ async def forward(problem, pde, *args, **kwargs):
     deallocate = kwargs.pop('deallocate', False)
     safe = kwargs.pop('safe', True)
 
-    if dump is True:
+    warehouse = artifact_warehouse()
+    if warehouse is not None:
+        warehouse.ensure_bucket()
+
+    if dump is True and warehouse is None:
         try:
             problem.acquisitions.load(path=problem.output_folder,
                                       project_name=problem.name, version=0)
@@ -157,7 +162,20 @@ async def forward(problem, pde, *args, **kwargs):
         if np.any(np.isnan(shot.observed.data)) or np.any(np.isinf(shot.observed.data)):
             raise ValueError('Nan or inf detected in shot %d' % shot_id)
 
-        if dump is True:
+        if warehouse is not None:
+            key_obs = f'{warehouse.shot_prefix}/{shot_id}/observed.npy'
+            key_wav = f'{warehouse.shot_prefix}/{shot_id}/wavelets.npy'
+            warehouse.push_remote(key_obs, shot.observed.data)
+            warehouse.push_remote(key_wav, shot.wavelets.data)
+            shot.observed = ArtifactTraces(
+                name=shot.observed.name,
+                transducer_ids=shot.observed.transducer_ids,
+                grid=shot.observed.grid,
+                artifact_key=key_obs,
+            )
+            logger.perf(f'Uploaded observed traces and wavelets for shot {shot_id} to artifact store')
+
+        if dump is True and warehouse is None:
             shot.append_observed(path=problem.output_folder,
                                  project_name=problem.name)
 
@@ -215,6 +233,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     logger = mosaic.logger()
     runtime = mosaic.runtime()
 
+    warehouse = artifact_warehouse()
+
     block = optimisation_loop.current_block
     num_iters = kwargs.pop('num_iters', 1)
     select_shots = kwargs.pop('select_shots', {})
@@ -267,6 +287,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     for iteration in block.iterations(num_iters):
         optimiser.clear_grad()
 
+        if warehouse is not None:
+            warehouse.set_iteration(iteration.abs_id)
+
         if optimiser.reset_iteration:
             optimiser.reset()
 
@@ -299,12 +322,19 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
 
+        if warehouse is not None:
+            warehouse.write_shot_list(iteration.abs_id, shot_ids)
+
         if lazy_loading:
             problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False, fast=True)
 
         @runtime.async_for(shot_ids, safe=safe)
         async def loop(worker, shot_id):
             _kwargs = kwargs.copy()
+
+            if warehouse is not None:
+                _kwargs['_abs_iteration'] = iteration.abs_id
+                _kwargs['_shot_id'] = shot_id
 
             logger.perf('\n')
             logger.perf('Giving shot %d to %s (%d out of %d)'
