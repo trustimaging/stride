@@ -301,6 +301,24 @@ class GridDevito(Gridded):
                                        dtype=self.dtype,
                                        **grid_kwargs)
 
+    def scale_grid(self, scale):
+        for k in ['extent', 'spacing', 'spacing_map']:
+            try:
+                del self.devito_grid.__dict__[k]
+            except KeyError:
+                pass
+
+        space = self.space
+        spacing = tuple(np.float32(np.array(space.spacing) / scale))
+        space_origin = tuple(np.array(space.origin) / np.array(space.spacing) * np.array(spacing))
+        origin = tuple([np.float32(each_origin - each_spacing * each_extra)
+                        for each_origin, each_spacing, each_extra in zip(space_origin, spacing, space.extra)])
+        extended_extent = tuple(np.float32(np.array(spacing) * (np.array(space.extended_shape) - 1)))
+
+        self.devito_grid._spacing = spacing
+        self.devito_grid._origin = origin
+        self.devito_grid._extent = extended_extent
+
     @_cached
     def symbol(self, name, dtype=np.float32, **kwargs):
         """
@@ -322,7 +340,7 @@ class GridDevito(Gridded):
 
         """
         fun = devito.Symbol(name=name,
-                            dtype=dtype,
+                            dtype=kwargs.pop('dtype', dtype),
                             **kwargs)
 
         return fun
@@ -613,6 +631,7 @@ class GridDevito(Gridded):
         time_bounds = kwargs.pop('time_bounds', (0, self.time.extended_num))
         time_bounds = (time_bounds[0] or 0, time_bounds[1] or self.time.extended_num - 1)
         smooth = kwargs.pop('smooth', False)
+        scale = kwargs.pop('scale', 1.0)
 
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
@@ -640,7 +659,7 @@ class GridDevito(Gridded):
         elif interpolation_type == 'hicks':
             r = sparse_kwargs.pop('r', 7)
 
-            reference_gridpoints, coefficients = self._calculate_hicks(coordinates, smooth=smooth)
+            reference_gridpoints, coefficients = self._calculate_hicks(coordinates, smooth=smooth, scale=scale)
 
             fun = devito.PrecomputedSparseTimeFunction(r=r+1,
                                                        gridpoints=reference_gridpoints,
@@ -670,7 +689,7 @@ class GridDevito(Gridded):
             Spatial coordinates of the sparse points (num points, dimensions), only
             needed when interpolation is not linear.
         interpolation_type : str, optional
-            Type of interpolation to perform (``linear`` or ``hicks``), defaults
+            Type of interpolation to perform (``linear``, ``sinc`` or ``hicks``), defaults
             to ``linear``, computationally more efficient but less accurate.
         kwargs
             Additional arguments for the Devito constructor.
@@ -682,6 +701,7 @@ class GridDevito(Gridded):
 
         """
         space_order = self.space_order if space_order is None else space_order
+        scale = kwargs.pop('scale', 1.0)
 
         # Define variables
         p_dim = kwargs.pop('p_dim', devito.Dimension(name='p_%s' % name))
@@ -697,10 +717,16 @@ class GridDevito(Gridded):
         if interpolation_type == 'linear':
             fun = devito.SparseFunction(**sparse_kwargs)
 
+        elif interpolation_type == 'sinc':
+            r = sparse_kwargs.pop('r', 7)
+            fun = devito.SparseFunction(interpolation='sinc', r=r,
+                                        coordinates=coordinates,
+                                        **sparse_kwargs)
+
         elif interpolation_type == 'hicks':
             r = sparse_kwargs.pop('r', 7)
 
-            reference_gridpoints, coefficients = self._calculate_hicks(coordinates)
+            reference_gridpoints, coefficients = self._calculate_hicks(coordinates, scale=scale)
 
             fun = devito.PrecomputedSparseFunction(r=r+1,
                                                    gridpoints=reference_gridpoints,
@@ -840,11 +866,14 @@ class GridDevito(Gridded):
         else:
             return np.pad(data, pad_widths, mode='constant', constant_values=value)
 
-    def _calculate_hicks(self, coordinates, smooth=False):
+    def _calculate_hicks(self, coordinates, smooth=False, scale=1.0):
         space = self.space
 
+        spacing = np.array(space.spacing) / scale
+        pml_origin = np.array(space.pml_origin) / np.array(space.spacing) * spacing
+
         # Calculate the reference gridpoints and offsets
-        grid_coordinates = (coordinates - np.array(space.pml_origin)) / np.array(space.spacing)
+        grid_coordinates = (coordinates - pml_origin) / spacing
         reference_gridpoints = np.floor(grid_coordinates).astype(np.int32)
         offsets = grid_coordinates - reference_gridpoints
 
@@ -857,7 +886,7 @@ class GridDevito(Gridded):
         # Calculate coefficients
         r = 2*kaiser_half_width+1
         num = coordinates.shape[0]
-        coefficients = np.zeros((num, space.dim, r+1))
+        coefficients = np.zeros((num, space.dim, r+1), dtype=self.dtype)
 
         for grid_point in range(-kaiser_half_width, kaiser_half_width+1):
             index = kaiser_half_width + grid_point
@@ -924,14 +953,14 @@ class OperatorDevito:
         from mosaic.utils.logger import log_level
 
         platform = kwargs.pop('platform', None)
-        devito_config = kwargs.pop('devito_config', {})
+        devito_config = kwargs.pop('devito_config', {}).copy()
 
-        subs = self.grid.devito_grid.spacing_map
+        subs = devito_config.pop('subs', self.grid.devito_grid.spacing_map)
 
         if self.grid.time_dim:
             time = self.grid.time_dim
             time_spacing = self.grid.devito_grid.time_dim.spacing
-            subs = {**subs, **{time_spacing: devito_config.get('dt', time.step)}}
+            subs = {**subs, **{time_spacing: devito_config.pop('dt', time.step)}}
 
         if platform is None or platform == 'cpu':
             default_config = {

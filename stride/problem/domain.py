@@ -90,7 +90,7 @@ class Space:
         return self.extended_limit
 
     def resample(self, new_spacing, new_extra=None, new_absorbing=None):
-        '''
+        """
         Method updates Space to the properties of the domain after resampling.
 
         Parameters
@@ -106,7 +106,7 @@ class Space:
         Returns
         -------
 
-        '''
+        """
 
         if isinstance(new_spacing, float):
             new_spacing = (new_spacing,)*self.dim
@@ -140,7 +140,7 @@ class Space:
         self._clear_cache('extended_grid')
 
     def _clear_cache(self, cached_property):
-        '''
+        """
         Clear a cached property
 
         Parameters
@@ -150,10 +150,10 @@ class Space:
 
         Returns
         -------
-        '''
+        """
         try:
             del self.__dict__[cached_property]
-        except:
+        except KeyError:
             pass
 
     @property
@@ -352,7 +352,7 @@ class Time:
 
         new_start = 0.  # Calculate new parameters
 
-        interp_num = int((num)*(dt_in/new_step))
+        interp_num = int(num*(dt_in/new_step))
         interp_stop = new_start + new_step*(interp_num - 1)
 
         if new_num is not None:  # Do we need to pad the array or not?
@@ -373,7 +373,7 @@ class Time:
         self._clear_cache('extended_grid')
 
     def _clear_cache(self, cached_property):
-        '''
+        """
         Clear a cached property
 
         Parameters
@@ -383,10 +383,10 @@ class Time:
 
         Returns
         -------
-        '''
+        """
         try:
             del self.__dict__[cached_property]
-        except:
+        except KeyError:
             pass
 
     @property

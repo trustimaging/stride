@@ -1,13 +1,14 @@
 
 from stride import *
-from stride.utils import fetch, wavelets
+from stride_private import *
+from stride.utils import wavelets
 
 
 async def main(runtime):
     # Create the grid
-    shape = (356, 385)
-    extra = (50, 50)
-    absorbing = (40, 40)
+    shape = (500, 370)
+    extra = (10, 10)
+    absorbing = (7, 7)
     spacing = (0.5e-3, 0.5e-3)
 
     space = Space(shape=shape,
@@ -24,13 +25,12 @@ async def main(runtime):
                 num=num)
 
     # Create problem
-    problem = Problem(name='anastasio2D',
+    problem = Problem(name='alpha2D',
                       space=space, time=time)
 
     # Create medium
     vp = ScalarField(name='vp', grid=problem.grid)
-    fetch('anastasio2D', dest='data/anastasio2D-TrueModel.h5')
-    vp.load('data/anastasio2D-TrueModel.h5')
+    vp.load('../alpha2D/data/alpha2D-TrueModel.h5')
 
     problem.medium.add(vp)
 
@@ -56,10 +56,31 @@ async def main(runtime):
     problem.plot()
 
     # Create the PDE
-    pde = IsoAcousticDevito.remote(grid=problem.grid, len=runtime.num_workers)
+    pde = IsoAcousticDevito.remote(grid=problem.grid, dtype=np.float32, len=runtime.num_workers)
 
     # Run
-    await forward(problem, pde, vp)
+    await forward(problem, pde, vp, dump=False, deallocate=False,
+                  scale=False, shot_ids=[0], save_wavefield=True, save_undersampling=4, kernel='OT4',
+                  interpolation_type='hicks', drp=True)
+    _, ax = problem.acquisitions.shots[0].observed.plot(colour='k', plot=False)
+    obs = problem.acquisitions.shots[0].observed.data.copy()
+    problem.acquisitions.shots[0].observed.deallocate()
+
+    # Create the PDE
+    pde = IsoAcousticDevito.remote(grid=problem.grid, dtype=np.float16, len=runtime.num_workers)
+
+    # Run
+    await forward(problem, pde, vp, dump=False, deallocate=False,
+                  scale=True, shot_ids=[0], save_wavefield=True, save_undersampling=4, kernel='OT4',
+                  interpolation_type='hicks', drp=True)
+    problem.acquisitions.shots[0].observed.plot(colour='r', axis=ax)
+    dat = problem.acquisitions.shots[0].observed.data.copy()
+
+    print('before', np.min(obs), np.max(obs))
+    print('after', np.min(dat), np.max(dat))
+    print('rel', np.min(obs)/np.min(dat), np.max(obs)/np.max(dat))
+
+    print('Error:', np.linalg.norm(dat - obs) / num_locations)
 
 
 if __name__ == '__main__':
