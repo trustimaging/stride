@@ -3,10 +3,12 @@ import functools
 import numpy as np
 from cached_property import cached_property
 
+import mosaic
 import mosaic.types
 from mosaic.file_manipulation import h5
+from mosaic.runtime.artifact_warehouse import artifact_warehouse
 
-from .data import Traces, DiskTraces
+from .data import Traces, DiskTraces, ArtifactTraces
 from .base import ProblemBase
 from .. import plotting
 
@@ -1303,6 +1305,10 @@ class Acquisitions(ProblemBase):
 
         See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
 
+        When ``MOSAIC_ARTIFACT_ENDPOINT`` is set in the environment, this
+        method routes to :meth:`attach_artifacts` instead — observed
+        traces stay in the artifact store as lazy proxies.
+
         Parameters
         ----------
         shot_ids : list, optional
@@ -1313,6 +1319,16 @@ class Acquisitions(ProblemBase):
 
         """
         shot_ids = kwargs.pop('shot_ids', None)
+
+        warehouse = artifact_warehouse()
+        if warehouse is not None:
+            mosaic.logger().perf(
+                'Cloud mode active: load() routed to attach_artifacts(); '
+                'path/project_name arguments ignored.'
+            )
+            self.attach_artifacts(shot_ids=shot_ids)
+            return
+
         fast = kwargs.pop('fast', False)
 
         prev_args, prev_kwargs = self._prev_load
@@ -1355,6 +1371,49 @@ class Acquisitions(ProblemBase):
                         pass
 
         self._prev_load = args, kwargs
+
+    def attach_artifacts(self, shot_ids=None):
+        """
+        Wire each shot's observed field to an :class:`ArtifactTraces` proxy
+        pointing at the corresponding key in the artifact store. Wavelets
+        are downloaded eagerly into the shot's existing wavelet buffer.
+
+        Parameters
+        ----------
+        shot_ids : list of int, optional
+            Shots to wire up. Defaults to every shot in the acquisitions.
+
+        Raises
+        ------
+        RuntimeError
+            If no :class:`ArtifactWarehouse` is configured.
+
+        """
+        warehouse = artifact_warehouse()
+        if warehouse is None:
+            raise RuntimeError(
+                'No ArtifactWarehouse configured; cannot call attach_artifacts'
+            )
+
+        if shot_ids is None:
+            shot_ids = list(self._shots.keys())
+
+        for shot_id in shot_ids:
+            shot = self._shots[shot_id]
+
+            if isinstance(shot.observed, ArtifactTraces):
+                continue
+
+            key_wav = '%s/%d/wavelets.npy' % (warehouse.shot_prefix, shot_id)
+            shot.wavelets.data[:] = warehouse.pull_remote(key_wav)
+
+            key_obs = '%s/%d/observed.npy' % (warehouse.shot_prefix, shot_id)
+            shot.observed = ArtifactTraces(
+                name='observed',
+                transducer_ids=shot.receiver_ids,
+                grid=shot.grid,
+                artifact_key=key_obs,
+            )
 
     def __get_desc__(self, **kwargs):
         legacy = kwargs.pop('legacy', False)
