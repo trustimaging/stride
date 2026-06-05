@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 __all__ = ['ArtifactConfig', 'ArtifactBackend']
 
+
 @dataclass
 class ArtifactConfig:
     """
@@ -44,7 +45,7 @@ class ArtifactConfig:
     gradient_prefix: str = 'gradients'
 
     @classmethod
-    def from_env(cls, prefix = 'MOSAIC_ARTIFACT'):
+    def from_env(cls, prefix='MOSAIC_ARTIFACT'):
         """
         Create an ArtifactConfig from environment variables.
 
@@ -74,7 +75,7 @@ class ArtifactConfig:
 
 class ArtifactBackend(ABC):
     """
-    Interface for object-store backends, e.g. MinIO or S3. 
+    Interface for object-store backends, e.g. MinIO or S3.
     """
     backend_name: str
     _registry: dict = {}
@@ -83,7 +84,7 @@ class ArtifactBackend(ABC):
         super().__init_subclass__(**kwargs)
         if hasattr(cls, 'backend_name'):
             ArtifactBackend._registry[cls.backend_name] = cls
-    
+
     @classmethod
     def from_config(cls, config):
         """
@@ -155,7 +156,7 @@ class MinioBackend(ArtifactBackend):
     def ensure_bucket(self, bucket):
         if not self._client.bucket_exists(bucket):
             self._client.make_bucket(bucket)
-    
+
     def put(self, bucket, key, data):
         buf = BytesIO(data)
         self._client.put_object(
@@ -175,7 +176,7 @@ class MinioBackend(ArtifactBackend):
         finally:
             response.close()
             response.release_conn()
-    
+
     def list_keys(self, bucket, prefix):
         return [
             obj.object_name for obj in self._client.list_objects(
@@ -196,7 +197,7 @@ class MinioBackend(ArtifactBackend):
 
 
 class S3Backend(ArtifactBackend):
-    
+
     backend_name = 's3'
 
     def __init__(self, config):
@@ -215,7 +216,7 @@ class S3Backend(ArtifactBackend):
             self._client.head_bucket(Bucket=bucket)
         except ClientError:
             self._client.create_bucket(Bucket=bucket)
-    
+
     def put(self, bucket, key, data):
         self._client.put_object(
             Bucket=bucket,
@@ -258,7 +259,7 @@ def upload_array(client, bucket, key, array):
 
     Parameters
     ----------
-    client : ArtifactBackend  
+    client : ArtifactBackend
         Backend instance to upload through.
     bucket : str
         Bucket name.

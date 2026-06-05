@@ -1808,7 +1808,6 @@ class DiskTraces(Traces):
         return self._deserialisation_helper, (state,)
 
 
-
 @mosaic.tessera
 class ArtifactTraces(Traces):
     """
@@ -1820,18 +1819,18 @@ class ArtifactTraces(Traces):
     ----------
     artifact_key : str
         Object key within the bucket (e.g. ``'shots/0/observed.npy'``).
-    
+
     """
 
     def __init__(self, **kwargs):
         self._artifact_key = kwargs.pop('artifact_key', None)
         kwargs.pop('data', None)
         super().__init__(**kwargs)
-    
+
     @property
     def _data(self):
         return None
-    
+
     @_data.setter
     def _data(self, value):
         pass
@@ -1844,8 +1843,8 @@ class ArtifactTraces(Traces):
         -------
         Traces
             Real in-memory ``Traces`` with the downloaded array. The
-            ``ArtifactTraces`` itself is unchanged.                                                                                                                                                                                                            
-    
+            ``ArtifactTraces`` itself is unchanged.
+
         Raises
         ------
         RuntimeError
@@ -1857,17 +1856,17 @@ class ArtifactTraces(Traces):
             raise RuntimeError(
                 'No ArtifactWarehouse configured, cannot load ArtifactTraces'
             )
-        
+
         data = wh.pull_remote(self._artifact_key)
         return Traces(
             data=data,
             transducer_ids=self.transducer_ids,
             grid=self.grid
         )
-    
+
     def get(self, id):
         return self.load().get(id)
-    
+
     def get_extended(self, id):
         return self.load().get_extended(id)
 
@@ -1876,16 +1875,16 @@ class ArtifactTraces(Traces):
 
     def plot_one(self, id, **kwargs):
         return self.load().plot_one(id, **kwargs)
-    
+
     def __get_desc__(self, **kwargs):
         return self.load().__get_desc__(**kwargs)
-    
-    def __set_desc__(self, description, **kwargs):                                                                                                                                                                                                         
+
+    def __set_desc__(self, description, **kwargs):
         del description.data
         super().__set_desc__(description, **kwargs)
 
     _serialisation_attrs = [
-        'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',                                                                                                                                                                              
+        'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
         '_dtype', 'needs_grad', '_compressed', '_compression',
         'transform', 'grad', 'prec', '_transducer_ids', '_grid',
         '_artifact_key',
@@ -1893,7 +1892,6 @@ class ArtifactTraces(Traces):
 
     def _serialisation_helper(self):
         return {attr: getattr(self, attr) for attr in self._serialisation_attrs}
-
 
     @classmethod
     def _deserialisation_helper(cls, state):
@@ -1908,18 +1906,15 @@ class ArtifactTraces(Traces):
             data = wh.pull_remote(key) if wh is not None else None
         except Exception:
             data = None
-        
+
         instance = Traces.__new__(Traces)
         instance._data = data
         for attr, value in state.items():
             setattr(instance, attr, value)
         return instance
-    
+
     def __reduce__(self):
         return self._deserialisation_helper, (self._serialisation_helper(),)
-
-
-
 
 
 @mosaic.tessera

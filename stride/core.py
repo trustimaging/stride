@@ -374,7 +374,7 @@ class Variable:
                     _func_kwargs['iteration'] = _abs_iteration
                 if _shot_id is not None:
                     _func_kwargs['shot_id'] = _shot_id
-                
+
                 redux_grad = await runtime.exec(
                     'redux-%s' % node.op.uid, redux, output_grads, func_kwargs=_func_kwargs or None
                 )

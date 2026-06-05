@@ -289,7 +289,7 @@ class ArtifactWarehouse:
             self._upload_bytes(key, pickle.dumps(grad))
 
         return key
-    
+
 
 def artifact_warehouse():
     """
