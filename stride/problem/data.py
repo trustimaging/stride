@@ -19,7 +19,6 @@ import mosaic
 from mosaic.core.tessera import PickleClass
 from mosaic.comms.compression import maybe_compress, decompress
 from mosaic.file_manipulation import h5
-from mosaic.runtime.artifact_warehouse import artifact_warehouse
 
 from .base import GriddedSaved
 from ..core import Variable
@@ -1811,19 +1810,24 @@ class DiskTraces(Traces):
 @mosaic.tessera
 class ArtifactTraces(Traces):
     """
-    Objects of this type describe a set of time traces that are lazily fetched
-    from the artifact store (MinIO / S3-compatible) on demand via the process-wide
-    :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`.
+    Objects of this type describe a set of time traces lazily fetched from
+    a single Acquisitions HDF5 file in the artifact store via byte-range
+    reads. The proxy carries only the shot group path
+    (e.g. ``'shots/5'``); the trace's own ``name`` determines which dataset
+    inside the shot group is read (``observed``, ``wavelets``, ...).
 
     Parameters
     ----------
-    artifact_key : str
-        Object key within the bucket (e.g. ``'shots/0/observed.npy'``).
+    h5_path : str
+        HDF5 group path of the shot this trace belongs to
+        (e.g. ``'shots/5'``). The dataset ``{h5_path}/{name}/data`` is
+        read on demand via the process-wide artifact warehouse's
+        :meth:`~ArtifactWarehouse.open_h5`.
 
     """
 
     def __init__(self, **kwargs):
-        self._artifact_key = kwargs.pop('artifact_key', None)
+        self._h5_path = kwargs.pop('h5_path', None)
         kwargs.pop('data', None)
         super().__init__(**kwargs)
 
@@ -1837,13 +1841,13 @@ class ArtifactTraces(Traces):
 
     def load(self, **kwargs):
         """
-        Download array from the artifact store and return a real ``Traces`` object.
+        Byte-range-read the trace's data from the artifact warehouse's
+        configured HDF5 and return a real in-memory :class:`Traces`. The
+        ``ArtifactTraces`` itself is unchanged.
 
         Returns
         -------
         Traces
-            Real in-memory ``Traces`` with the downloaded array. The
-            ``ArtifactTraces`` itself is unchanged.
 
         Raises
         ------
@@ -1851,13 +1855,14 @@ class ArtifactTraces(Traces):
             If no artifact warehouse is configured.
 
         """
-        wh = artifact_warehouse()
-        if wh is None:
+        artifact_warehouse = mosaic.get_artifact_warehouse()
+        if artifact_warehouse is None:
             raise RuntimeError(
                 'No ArtifactWarehouse configured, cannot load ArtifactTraces'
             )
 
-        data = wh.pull_remote(self._artifact_key)
+        with artifact_warehouse.open_h5() as file:
+            data = file[f'{self._h5_path}/{self.name}/data'][()]
         return Traces(
             data=data,
             transducer_ids=self.transducer_ids,
@@ -1880,14 +1885,15 @@ class ArtifactTraces(Traces):
         return self.load().__get_desc__(**kwargs)
 
     def __set_desc__(self, description, **kwargs):
-        del description.data
-        super().__set_desc__(description, **kwargs)
+        # Trace data lives in S3 and is byte-range read on demand by load();
+        # nothing to populate from the local description.
+        pass
 
     _serialisation_attrs = [
         'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
         '_dtype', 'needs_grad', '_compressed', '_compression',
         'transform', 'grad', 'prec', '_transducer_ids', '_grid',
-        '_artifact_key',
+        '_h5_path',
     ]
 
     def _serialisation_helper(self):
@@ -1896,15 +1902,27 @@ class ArtifactTraces(Traces):
     @classmethod
     def _deserialisation_helper(cls, state):
         """
-        Reconstruct on the receiving side: download from the artifact store
-        and return a plain :class:`Traces` with real data in memory.
+        Reconstruct on the receiving side: byte-range read the trace's data
+        from the artifact warehouse's configured h5 and return a plain
+        :class:`Traces` with real data in memory.
         """
-        key = state.pop('_artifact_key')
+        h5_path = state.pop('_h5_path')
+        name = state.get('name')
 
-        wh = artifact_warehouse()
+        artifact_warehouse = mosaic.get_artifact_warehouse()
         try:
-            data = wh.pull_remote(key) if wh is not None else None
-        except Exception:
+            if artifact_warehouse is not None:
+                with artifact_warehouse.open_h5() as file:
+                    path = f'{h5_path}/{name}/data'
+                    data = file[path][()] if path in file else None
+            else:
+                data = None
+        except Exception as e:
+            import traceback
+            mosaic.logger().warn(
+                f'ArtifactTraces deserialisation failed for {h5_path}/{name}: '
+                f'{type(e).__name__}: {e}\n{traceback.format_exc()}'
+            )
             data = None
 
         instance = Traces.__new__(Traces)

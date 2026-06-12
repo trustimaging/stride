@@ -1,10 +1,9 @@
-import os
-import numpy as np
-import pickle
 
+import os
 from io import BytesIO
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+
 
 __all__ = ['ArtifactConfig', 'ArtifactBackend']
 
@@ -29,10 +28,11 @@ class ArtifactConfig:
     backend : str, optional
         Storage backend. ``'minio'`` (default) uses the MinIO Python client,
         ``'s3'`` uses the boto3 Python client.
-    shot_prefix : str, optional
-        Object key prefix for shot data, defaults to ``'shots'``.
-    gradient_prefix : str, optional
-        Object key prefix for gradient data, defaults to ``'gradients'``.
+    task_prefix : str, optional
+        Object key prefix for per-task data, defaults to ``'tasks'``.
+    result_prefix : str, optional
+        Object key prefix for per-task and accumulated result data,
+        defaults to ``'results'``.
 
     """
     endpoint: str
@@ -41,8 +41,8 @@ class ArtifactConfig:
     bucket: str
     secure: bool = False
     backend: str = 'minio'
-    shot_prefix: str = 'shots'
-    gradient_prefix: str = 'gradients'
+    task_prefix: str = 'tasks'
+    result_prefix: str = 'results'
 
     @classmethod
     def from_env(cls, prefix='MOSAIC_ARTIFACT'):
@@ -202,12 +202,14 @@ class S3Backend(ArtifactBackend):
 
     def __init__(self, config):
         import boto3
+        from botocore.config import Config
         scheme = 'https' if config.secure else 'http'
         self._client = boto3.client(
             's3',
             endpoint_url=f'{scheme}://{config.endpoint}',
             aws_access_key_id=config.access_key,
             aws_secret_access_key=config.secret_key,
+            config=Config(signature_version='s3v4'),
         )
 
     def ensure_bucket(self, bucket):
@@ -251,87 +253,3 @@ class S3Backend(ArtifactBackend):
             return True
         except ClientError:
             return False
-
-
-def upload_array(client, bucket, key, array):
-    """
-    Serialise a numpy array and upload it as a ``.npy`` object.
-
-    Parameters
-    ----------
-    client : ArtifactBackend
-        Backend instance to upload through.
-    bucket : str
-        Bucket name.
-    key : str
-        Object key (path within the bucket).
-    array : np.ndarray
-        Numpy array to upload.
-
-    """
-    buf = BytesIO()
-    np.save(buf, array)
-    client.put(bucket, key, buf.getvalue())
-
-
-def download_array(client, bucket, key):
-    """
-    Download ``.npy`` object and deserialise it back to a numpy array.
-
-    Parameters
-    ----------
-    client : ArtifactBackend
-        Backend instance to download through.
-    bucket : str
-        Bucket name.
-    key : str
-        Object key (path within the bucket).
-
-    Returns
-    -------
-    np.ndarray
-        Reconstructed numpy array.
-
-    """
-    return np.load(BytesIO(client.get(bucket, key)))
-
-
-def upload_pickle(client, bucket, key, obj):
-    """
-    Pickle arbitrary Python object and upload bytes.
-
-    Parameters
-    ----------
-    client : ArtifactBackend
-        Backend instance to upload through.
-    bucket : str
-        Bucket name.
-    key : str
-        Object key (path within the bucket).
-    obj : object
-        Any picklable Python object.
-
-    """
-    client.put(bucket, key, pickle.dumps(obj))
-
-
-def download_pickle(client, bucket, key):
-    """
-    Download pickled object.
-
-    Parameters
-    ----------
-    client : ArtifactBackend
-        Backend instance to download through.
-    bucket : str
-        Bucket name.
-    key : str
-        Object key (path within the bucket).
-
-    Returns
-    -------
-    object
-        Unpickled object.
-
-    """
-    return pickle.loads(client.get(bucket, key))

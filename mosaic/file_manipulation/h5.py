@@ -259,6 +259,14 @@ class HDF5:
     def __init__(self, *args, **kwargs):
         self._mode = kwargs.pop('mode')
 
+        # Allow callers to pass an already-open h5py.File (e.g. backed by
+        # s3fs for byte-range reads against object storage).
+        file_obj = kwargs.pop('file_obj', None)
+        if file_obj is not None:
+            self._filename = None
+            self._file = file_obj
+            return
+
         if len(args) > 0:
             filename = args[0]
         else:

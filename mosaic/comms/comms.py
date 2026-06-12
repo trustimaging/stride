@@ -67,38 +67,41 @@ def discover_routable_address(current=None):
     Return a routable IP address for binding/advertising.
 
     Discovery order:
-      1. Hostname — used if ``validate_address`` accepts it (either an IP
-         literal or resolvable via DNS).
-      2. UDP probe to a public IP - picks the outgoing interface address.
-      3. Explicit DNS lookup of the hostname — last resort when the probe
-         also fails.
-      4. ``127.0.0.1`` if everything fails.
+      1. UDP probe — picks the outgoing-interface IP, routable by other
+         peers (in K8s this is the pod IP; on a server, the LAN IP).
+      2. Hostname — only if the probe fails (e.g. no default route) and
+         ``validate_address`` accepts it.
+      3. ``127.0.0.1`` if everything fails.
 
     """
     if current is not None and current != '0.0.0.0':
         return current
 
-    # Try the hostname first
+    # UDP probe first — gives the routable interface IP without sending any
+    # packet (the kernel picks the source IP for the route).
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 53))
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError:
+        pass
+
+    # Hostname fallback — only useful if it resolves to a routable IP
     address = get_hostname()
     try:
         validate_address(address)
+        return address
     except ValueError:
-        # Hostname not usable — fall through to UDP probe
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(('8.8.8.8', 53))
-                address = s.getsockname()[0]
-            finally:
-                s.close()
-        except OSError:
-            address = '127.0.0.1'
-            try:
-                address = socket.gethostbyname(get_hostname())
-            except (socket.gaierror, OSError):
-                pass
+        pass
 
-    return address
+    # Last resort
+    try:
+        return socket.gethostbyname(get_hostname())
+    except (socket.gaierror, OSError):
+        return '127.0.0.1'
 
 
 class CMD:

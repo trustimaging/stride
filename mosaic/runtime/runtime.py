@@ -18,7 +18,6 @@ from ..comms import CommsManager
 from ..core import Task, TaskArray, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
 from ..utils.utils import cpu_count
-from .artifact_warehouse import artifact_warehouse
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -183,6 +182,7 @@ class Runtime(BaseRPC):
         self._loop = None
         self._remote_warehouse = None
         self._local_warehouse = None
+        self._artifact_warehouse = None
 
         cache_fraction = float(os.environ.get('MOSAIC_RUNTIME_CACHE_MEM', 0.01))
         cache_size = min(cache_fraction*memory_limit(), 1*1024**3)
@@ -598,6 +598,30 @@ class Runtime(BaseRPC):
 
         """
         return self._local_warehouse
+
+    def get_artifact_warehouse(self):
+        """
+        Access the artifact warehouse if configured.
+
+        On first call, constructs an
+        :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`
+        from environment variables if ``MOSAIC_ARTIFACT_ENDPOINT`` is set,
+        otherwise returns ``None``. Cached for subsequent calls.
+
+        Returns
+        -------
+        ArtifactWarehouse or None
+
+        """
+        if self._artifact_warehouse is None and os.environ.get('MOSAIC_ARTIFACT_ENDPOINT'):
+            from .artifact_warehouse import ArtifactWarehouse
+            try:
+                self._artifact_warehouse = ArtifactWarehouse.from_env()
+            except Exception as e:
+                import warnings
+                warnings.warn('Failed to initialise artifact warehouse: %s' % e)
+
+        return self._artifact_warehouse
 
     def get_local_warehouse(self):
         """
@@ -1132,14 +1156,14 @@ class Runtime(BaseRPC):
 
         return obj
 
-    async def exec(self, uid, func, func_args=None, func_kwargs=None):
+    async def exec(self, uid, func, func_args=None, func_kwargs=None, serialise=None):
         """
         Retrieve an object from the warehouse.
 
         If an :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse`
         is configured, the call is routed there instead of the local
-        :class:`SpillBuffer` warehouse. The partial gradient is uploaded
-        to artifact storage.
+        :class:`SpillBuffer` warehouse and the result is uploaded to
+        artifact storage.
 
         Parameters
         ----------
@@ -1147,15 +1171,19 @@ class Runtime(BaseRPC):
         func
         func_args
         func_kwargs
+        serialise : callable, optional
+            Forwarded to :meth:`ArtifactWarehouse.exec_remote` when the
+            artifact warehouse is configured; ignored on the local path.
 
         Returns
         -------
 
         """
-        warehouse = artifact_warehouse()
+        warehouse = mosaic.get_artifact_warehouse()
         if warehouse is not None:
             return await warehouse.exec_remote(
-                uid, func, func_args=func_args, func_kwargs=func_kwargs
+                uid, func, func_args=func_args, func_kwargs=func_kwargs,
+                serialise=serialise,
             )
 
         ret = await self._local_warehouse.exec_remote(uid=uid, func=func,

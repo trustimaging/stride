@@ -499,24 +499,14 @@ class ParameterMixin:
         if self.has_tessera:
             await self
 
-            from mosaic.runtime.artifact_warehouse import artifact_warehouse
-            warehouse = artifact_warehouse()
-            if warehouse is not None and attr == 'grad':
-                key = f'{warehouse.gradient_prefix}/iter_{warehouse.iteration}/final.pkl'
-                data = warehouse.pull_remote(key, poll=True)
-                self.grad.data[:] = data
-
-                prec_key = f'{warehouse.gradient_prefix}/iter_{warehouse.iteration}/final_prec.pkl'
-                try:
-                    prec_data = warehouse.pull_remote(prec_key, poll=False)
-                    if self.grad.prec is not None:
-                        self.grad.prec.data[:] = prec_data
-                except Exception:
-                    pass
-                return
-
-            local_warehouse = mosaic.get_warehouse()
-            __dict__ = await local_warehouse.pull_remote(uid=self.ref, attr=attr, reply=True)
+            warehouse = mosaic.get_artifact_warehouse()
+            if warehouse is not None:
+                __dict__ = warehouse.pull_remote(uid=self.ref, attr=attr)
+            else:
+                local_warehouse = mosaic.get_warehouse()
+                __dict__ = await local_warehouse.pull_remote(
+                    uid=self.ref, attr=attr, reply=True,
+                )
 
             for key, value in __dict__.items():
                 setattr(self, key, value)

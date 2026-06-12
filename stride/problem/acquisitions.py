@@ -1,4 +1,5 @@
 
+import os
 import functools
 import numpy as np
 from cached_property import cached_property
@@ -6,7 +7,6 @@ from cached_property import cached_property
 import mosaic
 import mosaic.types
 from mosaic.file_manipulation import h5
-from mosaic.runtime.artifact_warehouse import artifact_warehouse
 
 from .data import Traces, DiskTraces, ArtifactTraces
 from .base import ProblemBase
@@ -14,6 +14,9 @@ from .. import plotting
 
 
 __all__ = ['Shot', 'Sequence', 'Acquisitions']
+
+
+_loading_from_artifact_store = False
 
 
 def _select_slice(selection, init_ids,
@@ -444,11 +447,14 @@ class Shot(ProblemBase):
             self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
     def _traces(self, *args, **kwargs):
+        if _loading_from_artifact_store:
+            return ArtifactTraces(
+                *args, h5_path=f'shots/{self.id}', **kwargs,
+            )
         if kwargs.pop('lazy_loading', False):
             return DiskTraces(*args, **kwargs,
                               path='/shots/%d/%s' % (self.id, kwargs.get('name')))
-        else:
-            return Traces(*args, **kwargs)
+        return Traces(*args, **kwargs)
 
     def __get_desc__(self, **kwargs):
         description = {
@@ -1305,9 +1311,11 @@ class Acquisitions(ProblemBase):
 
         See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
 
-        When ``MOSAIC_ARTIFACT_ENDPOINT`` is set in the environment, this
-        method routes to :meth:`attach_artifacts` instead — observed
-        traces stay in the artifact store as lazy proxies.
+        When ``MOSAIC_ARTIFACT_ENDPOINT`` is set in the environment, the
+        Acquisitions HDF5 is downloaded once from the artifact store for
+        geometry parsing; per-shot ``observed`` and ``wavelets`` are wired
+        to :class:`ArtifactTraces` proxies that byte-range-read from the
+        same h5 in S3 on demand.
 
         Parameters
         ----------
@@ -1320,13 +1328,9 @@ class Acquisitions(ProblemBase):
         """
         shot_ids = kwargs.pop('shot_ids', None)
 
-        warehouse = artifact_warehouse()
-        if warehouse is not None:
-            mosaic.logger().perf(
-                'Cloud mode active: load() routed to attach_artifacts(); '
-                'path/project_name arguments ignored.'
-            )
-            self.attach_artifacts(shot_ids=shot_ids)
+        artifact_warehouse = mosaic.get_artifact_warehouse()
+        if artifact_warehouse is not None:
+            self._load_from_artifact_store(shot_ids=shot_ids, **kwargs)
             return
 
         fast = kwargs.pop('fast', False)
@@ -1372,48 +1376,41 @@ class Acquisitions(ProblemBase):
 
         self._prev_load = args, kwargs
 
-    def attach_artifacts(self, shot_ids=None):
+    def _load_from_artifact_store(self, shot_ids=None, **kwargs):
         """
-        Wire each shot's observed field to an :class:`ArtifactTraces` proxy
-        pointing at the corresponding key in the artifact store. Wavelets
-        are downloaded eagerly into the shot's existing wavelet buffer.
-
-        Parameters
-        ----------
-        shot_ids : list of int, optional
-            Shots to wire up. Defaults to every shot in the acquisitions.
-
-        Raises
-        ------
-        RuntimeError
-            If no :class:`ArtifactWarehouse` is configured.
+        Download the Acquisitions HDF5 from the artifact
+        store, parse geometry, and wire each shot's traces to
+        :class:`ArtifactTraces` proxies. Trace data stays in the artifact
+        store and is byte-range read on demand by workers.
 
         """
-        warehouse = artifact_warehouse()
-        if warehouse is None:
+        artifact_warehouse = mosaic.get_artifact_warehouse()
+
+        project_name = kwargs.get('project_name', None)
+        if project_name is None:
             raise RuntimeError(
-                'No ArtifactWarehouse configured; cannot call attach_artifacts'
+                'project_name is required for artifact store acquisitions loading'
             )
+        h5_key = os.environ.get(
+            'MOSAIC_ARTIFACT_ACQUISITIONS_KEY',
+            f'{project_name}-Acquisitions.h5',
+        )
+        artifact_warehouse.set_h5_key(h5_key)
 
-        if shot_ids is None:
-            shot_ids = list(self._shots.keys())
+        mosaic.logger().perf(
+            f'Artifact store: byte-range reading geometry from {h5_key}'
+        )
 
-        for shot_id in shot_ids:
-            shot = self._shots[shot_id]
-
-            if isinstance(shot.observed, ArtifactTraces):
-                continue
-
-            key_wav = '%s/%d/wavelets.npy' % (warehouse.shot_prefix, shot_id)
-            shot.wavelets.data[:] = warehouse.pull_remote(key_wav)
-
-            key_obs = '%s/%d/observed.npy' % (warehouse.shot_prefix, shot_id)
-            shot.observed = ArtifactTraces(
-                name='observed',
-                transducer_ids=shot.receiver_ids,
-                grid=shot.grid,
-                artifact_key=key_obs,
-            )
+        # Byte-range reads via s3fs
+        filter = kwargs.pop('filter',
+                            {'shots': shot_ids} if shot_ids is not None else None)
+        global _loading_from_artifact_store
+        _loading_from_artifact_store = True
+        try:
+            with artifact_warehouse.open_h5() as remote:
+                super().load(file_obj=remote, filter=filter, **kwargs)
+        finally:
+            _loading_from_artifact_store = False
 
     def __get_desc__(self, **kwargs):
         legacy = kwargs.pop('legacy', False)

@@ -42,7 +42,6 @@ if multiprocessing.get_start_method() == 'fork':
 
 import mosaic
 from mosaic.utils import gpu_count
-from mosaic.runtime.artifact_warehouse import artifact_warehouse
 
 from .core import *
 from .problem import *
@@ -64,6 +63,10 @@ async def forward(problem, pde, *args, **kwargs):
         PDE operator to run for each shot in the problem.
     dump : bool, optional
         Whether or not to wave to disk the result of the forward run, defaults to True.
+    upload_acquisitions : bool, optional
+        Whether to upload the assembled Acquisitions HDF5 to the
+        artifact store after the forward loop completes, defaults to False.
+        Requires the env-configured artifact warehouse.
     deallocate : bool, optional
         Whether or not to deallocate the resulting traces after running forward, defaults to False.
     shot_ids : list, optional
@@ -83,15 +86,29 @@ async def forward(problem, pde, *args, **kwargs):
     runtime = mosaic.runtime()
 
     dump = kwargs.pop('dump', True)
+    upload_acquisitions = kwargs.pop('upload_acquisitions', False)
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
     safe = kwargs.pop('safe', True)
 
-    warehouse = artifact_warehouse()
-    if warehouse is not None:
-        warehouse.ensure_bucket()
+    if upload_acquisitions:
+        artifact_warehouse = mosaic.get_artifact_warehouse()
+        if artifact_warehouse is None:
+            raise RuntimeError(
+                'upload_acquisitions=True requires an artifact warehouse; '
+                'set MOSAIC_ARTIFACT_ENDPOINT and friends.'
+            )
+        artifact_warehouse.ensure_bucket()
+        
+        # Force local dump so we can upload the assembled h5 at the end.
+        dump = True
+        h5_key = os.environ.get(
+            'MOSAIC_ARTIFACT_ACQUISITIONS_KEY',
+            f'{problem.name}-Acquisitions.h5',
+        )
+        artifact_warehouse.set_h5_key(h5_key)
 
-    if dump is True and warehouse is None:
+    if dump is True and not upload_acquisitions:
         try:
             problem.acquisitions.load(path=problem.output_folder,
                                       project_name=problem.name, version=0)
@@ -162,20 +179,7 @@ async def forward(problem, pde, *args, **kwargs):
         if np.any(np.isnan(shot.observed.data)) or np.any(np.isinf(shot.observed.data)):
             raise ValueError('Nan or inf detected in shot %d' % shot_id)
 
-        if warehouse is not None:
-            key_obs = f'{warehouse.shot_prefix}/{shot_id}/observed.npy'
-            key_wav = f'{warehouse.shot_prefix}/{shot_id}/wavelets.npy'
-            warehouse.push_remote(key_obs, shot.observed.data)
-            warehouse.push_remote(key_wav, shot.wavelets.data)
-            shot.observed = ArtifactTraces(
-                name=shot.observed.name,
-                transducer_ids=shot.observed.transducer_ids,
-                grid=shot.observed.grid,
-                artifact_key=key_obs,
-            )
-            logger.perf(f'Uploaded observed traces and wavelets for shot {shot_id} to artifact store')
-
-        if dump is True and warehouse is None:
+        if dump is True:
             shot.append_observed(path=problem.output_folder,
                                  project_name=problem.name)
 
@@ -185,6 +189,14 @@ async def forward(problem, pde, *args, **kwargs):
             shot.observed.deallocate()
 
     await loop
+
+    if upload_acquisitions:
+        local_h5 = os.path.join(
+            problem.output_folder,
+            f'{problem.name}-Acquisitions.h5',
+        )
+        artifact_warehouse.upload_h5(local_h5)
+        logger.perf(f'Uploaded {problem.name}-Acquisitions.h5 to artifact store')
 
 
 async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwargs):
@@ -233,7 +245,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     logger = mosaic.logger()
     runtime = mosaic.runtime()
 
-    warehouse = artifact_warehouse()
+    artifact_warehouse = mosaic.get_artifact_warehouse()
 
     block = optimisation_loop.current_block
     num_iters = kwargs.pop('num_iters', 1)
@@ -287,8 +299,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
     for iteration in block.iterations(num_iters):
         optimiser.clear_grad()
 
-        if warehouse is not None:
-            warehouse.set_iteration(iteration.abs_id)
+        if artifact_warehouse is not None:
+            artifact_warehouse.set_counter(iteration.abs_id)
 
         if optimiser.reset_iteration:
             optimiser.reset()
@@ -322,8 +334,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
 
-        if warehouse is not None:
-            warehouse.write_shot_list(iteration.abs_id, shot_ids)
+        if artifact_warehouse is not None:
+            artifact_warehouse.write_task_list(iteration.abs_id, shot_ids)
 
         if lazy_loading:
             problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False, fast=True)
@@ -332,7 +344,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         async def loop(worker, shot_id):
             _kwargs = kwargs.copy()
 
-            if warehouse is not None:
+            if artifact_warehouse is not None:
                 _kwargs['_abs_iteration'] = iteration.abs_id
                 _kwargs['_shot_id'] = shot_id
 
