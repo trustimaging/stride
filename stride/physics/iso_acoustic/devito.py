@@ -306,7 +306,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             t_c, h_c, vp_c, w_c = 1., 1., 1., 1.
         else:
             self.dev_grid.scale_grid(h_c)
-        p_scale = h_c**2 / w_c
+        p_scale = h_c**2 / w_c * 1. / wavelets.shape[0]
 
         scales = t_c, h_c, vp_c, w_c
         if any(s0 != s1 for s0, s1 in zip(scales, self._scales)):
@@ -432,7 +432,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                 else:
                     p_saved_expr = self._forward_save(p)
                 abox, full, interior, boundary = self.subdomains
-                update_saved = [devito.Eq(p_saved, p_saved_expr * p_scale, subdomain=abox)]
+                update_saved = [devito.Eq(p_saved, p_saved_expr, subdomain=abox)]
                 devicecreate = (self.dev_grid.vars.p, self.dev_grid.vars.p_saved,)
 
                 if dump_forward_wavefield:
@@ -624,7 +624,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         shot = problem.shot
 
         _, h_c, _, w_c = self._scales
-        p_scale = 1. / (h_c**2 / w_c)
+        p_scale = 1. / (h_c**2 / w_c) * wavelets.shape[0]
 
         dump_forward_wavefield = kwargs.pop('dump_forward_wavefield', False)
         dump_wavefield_id = kwargs.pop('dump_wavefield_id', shot.id)
@@ -635,8 +635,6 @@ class IsoAcousticDevito(ProblemTypeBase):
                 save_wavefield |= rho.needs_grad
             if alpha is not None:
                 save_wavefield |= alpha.needs_grad
-
-        print('wav', np.min(self._wavefield.data), np.max(self._wavefield.data))
 
         if save_wavefield:
             if dump_forward_wavefield:
@@ -738,6 +736,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         num_receivers = shot.num_points_receivers
 
         t_c, h_c, vp_c, w_c = self._scales
+        p_scale = h_c**2 / w_c * 1. / adjoint_source.shape[0]
 
         eps_coords = 1e-3 * np.array(self.space.spacing).reshape((1, -1))
         source_coordinates = (shot.source_coordinates + eps_coords) / h_c
@@ -762,20 +761,18 @@ class IsoAcousticDevito(ProblemTypeBase):
                                                      interpolation_type=self.interpolation_type,
                                                      smooth=False)
 
-            p_a = self.dev_grid.time_function('p_a', coefficients='symbolic' if self.drp else 'standard')
+            p_a = self.dev_grid.time_function('p_a', coefficients='symbolic' if self.drp else 'standard',
+                                              dtype=np.float32)
             devicecreate = (self.dev_grid.vars.p_a,)
 
             # Create stencil
             stencil = self._stencil(p_a, wavelets, vp, rho=rho, alpha=alpha, direction='backward', **kwargs)
 
             # Define the source injection function to generate the corresponding code
-            t = rec.time_dim
-            dt = self.dev_grid.devito_grid.time_dim.spacing
-            vp2 = self.dev_grid.vars.vp**2
             if not fw3d_mode:
-                rec_term = rec.inject(field=p_a, expr=-rec.subs({t: t-1}) * dt**2 * vp2)
+                rec_term = rec.inject(field=p_a, expr=-rec.subs({t: t-1}))
             else:
-                rec_term = rec.inject(field=p_a.backward, expr=-rec * dt**2 * vp2)
+                rec_term = rec.inject(field=p_a.backward, expr=-rec)
 
             if wavelets.needs_grad:
                 src_term = src.interpolate(expr=-p_a)
@@ -886,7 +883,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.vars.alpha.data_with_halo[:] = alpha_with_halo
 
         # Set geometry and adjoint source
-        adjoint_source = adjoint_source.data * h_c**2 / w_c
+        adjoint_source = adjoint_source.data * p_scale
 
         window = scipy.signal.get_window(('tukey', 0.001), time_bounds[1]-time_bounds[0], False)
         window = np.pad(window, ((time_bounds[0], self.time.num-time_bounds[1]),), mode='constant', constant_values=0.)
@@ -973,7 +970,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         shot = problem.shot
 
         _, h_c, _, w_c = self._scales
-        p_scale = 1. / (h_c**2 / w_c)
+        p_scale = 1. / (h_c**2 / w_c) * adjoint_source.shape[0]
 
         dump_adjoint_wavefield = kwargs.pop('dump_adjoint_wavefield', False)
         dump_wavefield_id = kwargs.pop('dump_wavefield_id', shot.id)
@@ -985,7 +982,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
             iteration = kwargs.get('iteration', None)
             version = iteration.abs_id+1 if iteration is not None else 0
-            p_dump_data = np.asarray(self.dev_grid.vars.p_a_dump.data, dtype=np.float32)  # * p_scale
+            p_dump_data = np.asarray(self.dev_grid.vars.p_a_dump.data, dtype=np.float32) * p_scale
             p_dump = StructuredData(name='adjoint_wavefield-Shot%05d' % shot.id,
                                     data=p_dump_data, shape=None, extended_shape=None, inner=None,
                                     grid=self.grid)
@@ -1042,14 +1039,12 @@ class IsoAcousticDevito(ProblemTypeBase):
             p_dt_update = ()
 
         w = self._time_weights(**kwargs)
-        _, h_c, _, w_c = self._scales
-        p_scale = h_c ** 2 / w_c
 
         grad = self.dev_grid.function('grad_vp', space_order=0)
-        grad_update = devito.Inc(grad, w * p_dt_fun * p_a * p_scale**2, subdomain=subdomain)
+        grad_update = devito.Inc(grad, w * p_dt_fun * p_a, subdomain=subdomain)
 
         prec = self.dev_grid.function('prec_vp', space_order=0)
-        prec_update = devito.Inc(prec, w * p_dt_fun * p_dt_fun * p_scale**2, subdomain=subdomain)
+        prec_update = devito.Inc(prec, w * p_dt_fun * p_dt_fun, subdomain=subdomain)
 
         return p_dt_update + (grad_update, prec_update)
 
@@ -1089,13 +1084,14 @@ class IsoAcousticDevito(ProblemTypeBase):
             Gradient wrt Vp.
 
         """
+        t_c, h_c, _, w_c = self._scales
+        p_scale = 1. / t_c * 1. / (h_c**2 / w_c) * self.dev_grid.vars.rec.shape[1]
+
         variable_grad = self.dev_grid.vars.grad_vp
-        variable_grad = np.asarray(variable_grad.data[self.space.inner], dtype=np.float32)
-        print('grad', np.min(variable_grad), np.max(variable_grad))
+        variable_grad = np.asarray(variable_grad.data[self.space.inner], dtype=np.float32) * p_scale**2
 
         variable_prec = self.dev_grid.vars.prec_vp
-        variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
-        print('prec', np.min(variable_prec), np.max(variable_prec))
+        variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32) * p_scale**2
 
         is_slowness = False
         if vp.transform is not None:
