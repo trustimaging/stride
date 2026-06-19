@@ -499,8 +499,14 @@ class ParameterMixin:
         if self.has_tessera:
             await self
 
-            warehouse = mosaic.get_warehouse()
-            __dict__ = await warehouse.pull_remote(uid=self.ref, attr=attr, reply=True)
+            warehouse = mosaic.get_artifact_warehouse()
+            if warehouse is not None:
+                __dict__ = warehouse.pull_remote(uid=self.ref, attr=attr)
+            else:
+                local_warehouse = mosaic.get_warehouse()
+                __dict__ = await local_warehouse.pull_remote(uid=self.ref,
+                                                             attr=attr,
+                                                             reply=True)
 
             for key, value in __dict__.items():
                 setattr(self, key, value)

@@ -1,12 +1,14 @@
 
+import os
 import functools
 import numpy as np
 from cached_property import cached_property
 
+import mosaic
 import mosaic.types
 from mosaic.file_manipulation import h5
 
-from .data import Traces, DiskTraces
+from .data import Traces, DiskTraces, ArtifactTraces
 from .base import ProblemBase
 from .. import plotting
 
@@ -442,11 +444,15 @@ class Shot(ProblemBase):
             self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
     def _traces(self, *args, **kwargs):
+        h5_key = kwargs.pop('h5_key', None)
+        if h5_key is not None:
+            return ArtifactTraces(*args, **kwargs,
+                                  h5_path=f'shots/{self.id}',
+                                  h5_key=h5_key)
         if kwargs.pop('lazy_loading', False):
             return DiskTraces(*args, **kwargs,
                               path='/shots/%d/%s' % (self.id, kwargs.get('name')))
-        else:
-            return Traces(*args, **kwargs)
+        return Traces(*args, **kwargs)
 
     def __get_desc__(self, **kwargs):
         description = {
@@ -491,11 +497,13 @@ class Shot(ProblemBase):
             self._receiver_ids.append(receiver_id)
 
         lazy_loading = kwargs.pop('lazy_loading', False)
+        h5_key = kwargs.pop('h5_key', None)
 
         self.wavelets = self._traces(
             name='wavelets', transducer_ids=self.source_ids,
             grid=self.grid,
             lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+            h5_key=h5_key,
         )
         if not lazy_loading and 'wavelets' in description:
             self.wavelets.__set_desc__(description.wavelets, **kwargs)
@@ -504,6 +512,7 @@ class Shot(ProblemBase):
             name='observed', transducer_ids=self.receiver_ids,
             compressed=compressed, grid=self.grid,
             lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+            h5_key=h5_key,
         )
         if not lazy_loading and 'observed' in description:
             self.observed.__set_desc__(description.observed, **kwargs)
@@ -512,6 +521,7 @@ class Shot(ProblemBase):
             name='delays', transducer_ids=self.source_ids,
             shape=(len(self.source_ids), 1), grid=self.grid,
             lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+            h5_key=h5_key,
         )
         if not lazy_loading and 'delays' in description:
             self.delays.__set_desc__(description.delays, **kwargs)
@@ -1303,6 +1313,12 @@ class Acquisitions(ProblemBase):
 
         See :class:`~mosaic.file_manipulation.h5.HDF5` for more information on the parameters of this method.
 
+        When ``MOSAIC_ARTIFACT_ENDPOINT`` is set in the environment, the
+        Acquisitions HDF5 is downloaded once from the artifact store for
+        geometry parsing; per-shot ``observed`` and ``wavelets`` are wired
+        to :class:`ArtifactTraces` proxies that byte-range-read from the
+        same h5 in S3 on demand.
+
         Parameters
         ----------
         shot_ids : list, optional
@@ -1313,6 +1329,12 @@ class Acquisitions(ProblemBase):
 
         """
         shot_ids = kwargs.pop('shot_ids', None)
+
+        artifact_warehouse = mosaic.get_artifact_warehouse()
+        if artifact_warehouse is not None:
+            self._load_from_artifact_store(shot_ids=shot_ids, **kwargs)
+            return
+
         fast = kwargs.pop('fast', False)
 
         prev_args, prev_kwargs = self._prev_load
@@ -1355,6 +1377,40 @@ class Acquisitions(ProblemBase):
                         pass
 
         self._prev_load = args, kwargs
+
+    def _load_from_artifact_store(self, shot_ids=None, **kwargs):
+        """
+        Download the Acquisitions HDF5 from the artifact
+        store, parse geometry, and wire each shot's traces to
+        :class:`ArtifactTraces` proxies. Trace data stays in the artifact
+        store and is byte-range read on demand by workers.
+
+        """
+
+        project_name = kwargs.get('project_name', None)
+        if project_name is None:
+            raise RuntimeError(
+                'project_name is required for artifact store acquisitions loading'
+            )
+        h5_key = os.environ.get(
+            'STRIDE_ARTIFACT_ACQUISITIONS_KEY',
+            f'{project_name}-Acquisitions.h5',
+        )
+
+        mosaic.logger().perf(
+            f'Artifact store: byte-range reading geometry from {h5_key}'
+        )
+
+        # Byte-range reads via s3fs
+        filter = kwargs.pop('filter',
+                            {'shots': shot_ids} if shot_ids is not None else None)
+        try:
+            super().load(h5_key=h5_key, filter=filter, **kwargs)
+        except Exception as exc:
+            raise RuntimeError(
+                f'Failed to load acquisitions from artifact store '
+                f'(h5_key={h5_key}): {exc}'
+            ) from exc
 
     def __get_desc__(self, **kwargs):
         legacy = kwargs.pop('legacy', False)

@@ -67,7 +67,12 @@ class Node(Runtime):
         await super().init(**kwargs)
 
         # Start local cluster
-        await self.init_warehouse(indices=self.indices[0], **kwargs)
+        warehouse_uid = None
+        if self._instance_id is not None:
+            warehouse_uid = self._build_uid('warehouse', (self.indices[0],),
+                                            self._instance_id)
+        await self.init_warehouse(indices=self.indices[0],
+                                  uid=warehouse_uid, **kwargs)
         await self.init_workers(**kwargs)
 
     def init_phone_home(self, config):

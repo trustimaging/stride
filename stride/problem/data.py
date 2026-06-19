@@ -26,7 +26,7 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'DiskTraces', 'SparseField', 'SparseCoordinates']
+           'DiskTraces', 'ArtifactTraces', 'SparseField', 'SparseCoordinates']
 
 
 def inv_transform(x):
@@ -1805,6 +1805,128 @@ class DiskTraces(Traces):
     def __reduce__(self):
         state = self._serialisation_helper()
         return self._deserialisation_helper, (state,)
+
+
+@mosaic.tessera
+class ArtifactTraces(Traces):
+    """
+    Objects of this type describe a set of time traces lazily fetched from
+    a single Acquisitions HDF5 file in the artifact store via byte-range
+    reads. The proxy carries only the shot group path
+    (e.g. ``'shots/5'``); the trace's own ``name`` determines which dataset
+    inside the shot group is read (``observed``, ``wavelets``, ...).
+
+    Parameters
+    ----------
+    h5_path : str
+        HDF5 group path of the shot this trace belongs to
+        (e.g. ``'shots/5'``). The dataset ``{h5_path}/{name}/data`` is
+        read on demand via the process-wide artifact warehouse's
+        :meth:`~ArtifactWarehouse.open_h5`.
+
+    """
+
+    def __init__(self, **kwargs):
+        self._h5_path = kwargs.pop('h5_path', None)
+        self._h5_key = kwargs.pop('h5_key', None)
+        kwargs.pop('data', None)
+        super().__init__(**kwargs)
+
+    @property
+    def _data(self):
+        return None
+
+    @_data.setter
+    def _data(self, value):
+        pass
+
+    def load(self, **kwargs):
+        """
+        Byte-range-read the trace's data from the artifact warehouse's
+        configured HDF5 and return a real in-memory :class:`Traces`. The
+        ``ArtifactTraces`` itself is unchanged.
+
+        Returns
+        -------
+        Traces
+
+        Raises
+        ------
+        RuntimeError
+            If no artifact warehouse is configured.
+
+        """
+        with h5.HDF5(h5_key=self._h5_key, mode='r') as file:
+            file = file.file
+            data = file[f'{self._h5_path}/{self.name}/data'][()]
+        return Traces(
+            data=data,
+            transducer_ids=self.transducer_ids,
+            grid=self.grid
+        )
+
+    def get(self, id):
+        return self.load().get(id)
+
+    def get_extended(self, id):
+        return self.load().get_extended(id)
+
+    def plot(self, **kwargs):
+        return self.load().plot(**kwargs)
+
+    def plot_one(self, id, **kwargs):
+        return self.load().plot_one(id, **kwargs)
+
+    def __get_desc__(self, **kwargs):
+        return self.load().__get_desc__(**kwargs)
+
+    def __set_desc__(self, description, **kwargs):
+        # Trace data lives in S3 and is byte-range read on demand by load();
+        # nothing to populate from the local description.
+        pass
+
+    _serialisation_attrs = [
+        'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
+        '_dtype', 'needs_grad', '_compressed', '_compression',
+        'transform', 'grad', 'prec', '_transducer_ids', '_grid',
+        '_h5_path', '_h5_key',
+    ]
+
+    def _serialisation_helper(self):
+        return {attr: getattr(self, attr) for attr in self._serialisation_attrs}
+
+    @classmethod
+    def _deserialisation_helper(cls, state):
+        """
+        Reconstruct on the receiving side: byte-range read the trace's data
+        from the artifact warehouse's configured h5 and return a plain
+        :class:`Traces` with real data in memory.
+        """
+        h5_path = state.pop('_h5_path')
+        h5_key = state.pop('_h5_key')
+        name = state.get('name')
+
+        try:
+            with h5.HDF5(h5_key=h5_key, mode='r') as file:
+                file = file.file
+                path = f'{h5_path}/{name}/data'
+                data = file[path][()] if path in file else None
+        except Exception as e:
+            import traceback
+            mosaic.logger().warn(
+                f'ArtifactTraces deserialisation failed for {h5_path}/{name}: '
+                f'{type(e).__name__}: {e}\n{traceback.format_exc()}'
+            )
+            data = None
+
+        instance = Traces.__new__(Traces)
+        instance._data = data
+        for attr, value in state.items():
+            setattr(instance, attr, value)
+        return instance
+
+    def __reduce__(self):
+        return self._deserialisation_helper, (self._serialisation_helper(),)
 
 
 @mosaic.tessera

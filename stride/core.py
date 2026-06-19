@@ -1,5 +1,6 @@
 
 import uuid
+import pickle
 import asyncio
 import inspect
 from abc import abstractmethod
@@ -35,6 +36,23 @@ async def _maybe_sum(a, b):
         elif isinstance(a, tuple) and isinstance(b, tuple):
             return a[0] + b[0], a[1] + b[1]
         return a + b
+
+
+def _serialise_grad(result):
+    """
+    Turn a redux closure's result into a ``{suffix: bytes}`` dict for the
+    :class:`~mosaic.runtime.artifact_warehouse.ArtifactWarehouse` to upload.
+
+    Pickles the whole gradient object (data + any prec sub-object). The
+    accumulator daemon sums the unpickled objects directly via their own
+    ``__iadd__``.
+    """
+    grad = result[0] if isinstance(result, (list, tuple)) else result
+    if isinstance(grad, tuple):
+        grad = grad[0]
+    if grad is None:
+        return {}
+    return {'grad': pickle.dumps(grad)}
 
 
 class no_grad:
@@ -366,7 +384,19 @@ class Variable:
                 is_proxy = isinstance(node.op.obj, TesseraProxy)
 
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
-                redux_grad = await runtime.exec('redux-%s' % node.op.uid, redux, output_grads)
+                _func_kwargs = {}
+                _counter = kwargs_.pop('mosaic_counter', None)
+                _task_id = kwargs_.pop('mosaic_task_id', None)
+                if _counter is not None:
+                    _func_kwargs['mosaic_counter'] = _counter
+                if _task_id is not None:
+                    _func_kwargs['mosaic_task_id'] = _task_id
+
+                redux_grad = await runtime.exec(
+                    'redux-%s' % node.op.uid, redux, output_grads,
+                    func_kwargs=_func_kwargs or None,
+                    serialise=_serialise_grad,
+                )
                 ret = method((redux_grad,), **{**kwargs_, **{'eager': True, 'redux': True}})
 
             else:
@@ -577,6 +607,9 @@ class Variable:
 
         """
         if redux:
+            if mosaic.get_artifact_warehouse() is not None:
+                return
+
             self._redux_grads[grad[0].warehouse_id] = grad[0]
 
             if not self._redux_task:
