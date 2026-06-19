@@ -35,7 +35,6 @@ class ArtifactWarehouse:
     def __init__(
         self, backend, bucket, run_prefix='',
         result_prefix='results', task_prefix='tasks',
-        h5_key=None,
     ):
         self._backend = backend
         self._bucket = bucket
@@ -43,7 +42,6 @@ class ArtifactWarehouse:
         self._result_prefix = result_prefix
         self._task_prefix = task_prefix
         self._counter = 0
-        self._h5_key = h5_key
 
     @classmethod
     def from_env(cls, prefix='MOSAIC_ARTIFACT'):
@@ -68,7 +66,6 @@ class ArtifactWarehouse:
             run_prefix=os.environ.get(f'{prefix}_RUN_ID', ''),
             result_prefix=os.environ.get(f'{prefix}_RESULT_PREFIX', 'results'),
             task_prefix=os.environ.get(f'{prefix}_TASK_PREFIX', 'tasks'),
-            h5_key=os.environ.get(f'{prefix}_ACQUISITIONS_KEY'),
         )
 
     @property
@@ -110,19 +107,16 @@ class ArtifactWarehouse:
     def _key_exists(self, key):
         return self._backend.exists(self._bucket, key)
 
-    @property
-    def h5_key(self):
-        return self._h5_key
-
-    def set_h5_key(self, key):
-        """Set the S3 key of the Acquisitions HDF5 file for this process."""
-        self._h5_key = key
-
-    def _s3fs(self):
+    @staticmethod
+    def get_fs():
         """
-        Construct an ``s3fs`` filesystem from the same env vars
-        as :meth:`from_env`. Works against any S3-compatible endpoint
-        (MinIO, AWS).
+        Return an ``s3fs`` filesystem for direct byte-range access to the
+        bucket. Callers wrap this in their own file-opening logic
+
+        Returns
+        -------
+        s3fs.S3FileSystem
+
         """
         import s3fs
         prefix = 'MOSAIC_ARTIFACT'
@@ -137,52 +131,20 @@ class ArtifactWarehouse:
             skip_instance_cache=True,
         )
 
-    def open_h5(self):
+    def upload_file(self, local_path, key):
         """
-        Open the configured Acquisitions HDF5 file for read-only byte-range
-        access. Only the bytes for accessed datasets are fetched from S3.
-
-        Returns
-        -------
-        h5py.File
-            Open file handle. Use as a context manager.
-
-        Raises
-        ------
-        RuntimeError
-            If no h5 key has been configured for this artifact warehouse.
-
-        """
-        if self._h5_key is None:
-            raise RuntimeError(
-                'No h5_key configured on the artifact warehouse; call set_h5_key first.'
-            )
-        import h5py
-        fs = self._s3fs()
-        remote = fs.open(f'{self._bucket}/{self._h5_key}', 'rb')
-        return h5py.File(remote, 'r')
-
-    def upload_h5(self, local_path):
-        """
-        Upload a local HDF5 file to the configured ``h5_key`` in the bucket.
+        Upload a local file to ``key`` in the bucket.
 
         Parameters
         ----------
         local_path : str
             Path to the local HDF5 file to upload.
-
-        Raises
-        ------
-        RuntimeError
-            If no h5 key has been configured.
+        key : str
+            Object key within the bucket.
 
         """
-        if self._h5_key is None:
-            raise RuntimeError(
-                'No h5_key configured on the artifact warehouse; call set_h5_key first.'
-            )
         with open(local_path, 'rb') as f:
-            self._upload_bytes(self._h5_key, f.read())
+            self._upload_bytes(key, f.read())
 
     def push_remote(self, key, data):
         """
@@ -339,8 +301,8 @@ class ArtifactWarehouse:
             Keyword arguments to pass to ``func``. Two special keys are
             popped before forwarding:
 
-            - ``counter`` — overrides ``self.counter`` for key construction.
-            - ``task_id`` — required; identifies the task this result is for.
+            - ``mosaic_counter`` — overrides ``self.counter`` for key construction.
+            - ``mosaic_task_id`` — required; identifies the task this result is for.
         serialise : callable, optional
             Called as ``serialise(result)`` after *func* returns. Must
             return a ``dict[str, bytes]`` mapping suffix → payload. The
@@ -356,16 +318,16 @@ class ArtifactWarehouse:
         Raises
         ------
         ValueError
-            If ``task_id`` is not provided in ``func_kwargs``.
+            If ``mosaic_task_id`` is not provided in ``func_kwargs``.
 
         """
         func_args = func_args or ()
         func_kwargs = dict(func_kwargs) if func_kwargs else {}
-        counter = func_kwargs.pop('counter', self._counter)
-        task_id = func_kwargs.pop('task_id', None)
+        counter = func_kwargs.pop('mosaic_counter', self._counter)
+        task_id = func_kwargs.pop('mosaic_task_id', None)
 
         if task_id is None:
-            raise ValueError('exec_remote requires task_id in func_kwargs')
+            raise ValueError('exec_remote requires mosaic_task_id in func_kwargs')
 
         # Run the redux closure
         result = await func(None, *func_args, **func_kwargs)

@@ -1,5 +1,6 @@
 
 import os
+import warnings
 import zmq
 import zmq.asyncio
 import psutil
@@ -18,6 +19,7 @@ from ..comms import CommsManager
 from ..core import Task, TaskArray, RuntimeDisconnectedError
 from ..profile import profiler, global_profiler
 from ..utils.utils import cpu_count
+from .artifact_warehouse import ArtifactWarehouse
 
 
 __all__ = ['Runtime', 'RuntimeProxy']
@@ -614,11 +616,9 @@ class Runtime(BaseRPC):
 
         """
         if self._artifact_warehouse is None and os.environ.get('MOSAIC_ARTIFACT_ENDPOINT'):
-            from .artifact_warehouse import ArtifactWarehouse
             try:
                 self._artifact_warehouse = ArtifactWarehouse.from_env()
             except Exception as e:
-                import warnings
                 warnings.warn('Failed to initialise artifact warehouse: %s' % e)
 
         return self._artifact_warehouse

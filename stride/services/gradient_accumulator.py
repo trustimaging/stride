@@ -87,11 +87,11 @@ class GradientAccumulator:
         prefix = f'{result_prefix}/counter_{counter}'
         tasks_key = f'{prefix}/tasks.json'
 
-        logger.info(f'Counter {counter} - waiting for tasks.json')
+        logger.debug(f'Counter {counter} - waiting for tasks.json')
         raw = self._poll_json(tasks_key)
         task_ids = raw['task_ids']
         expected = {f'{prefix}/task_{s}_grad.pkl' for s in task_ids}
-        logger.info(f'Counter {counter} - expecting {len(expected)} task(s)')
+        logger.debug(f'Counter {counter} - expecting {len(expected)} task(s)')
 
         accumulated = None
         folded = set()
@@ -107,14 +107,14 @@ class GradientAccumulator:
                 else:
                     accumulated += obj
                 folded.add(key)
-                logger.info(f"Counter {counter} - folded {key} ({len(folded)}/{len(expected)})")
+                logger.debug(f"Counter {counter} - folded {key} ({len(folded)}/{len(expected)})")
 
             if folded < expected:
                 time.sleep(self._shots_poll_interval)
 
         final_key = f'{prefix}/final_grad.pkl'
         self._artifact_warehouse._upload_bytes(final_key, pickle.dumps(accumulated))
-        logger.info(f'Counter {counter} - final_grad.pkl written.')
+        logger.debug(f'Counter {counter} - final_grad.pkl written.')
 
         # Per-task gradients are now folded into final_grad.pkl; delete them
         # so the bucket doesn't accumulate ~N MB of dead weight per counter.
@@ -127,10 +127,10 @@ class GradientAccumulator:
 
     def run(self):
         """Loop over all counters sequentially."""
-        logger.info(f'Started - {self._num_iters} counter(s)')
+        logger.debug(f'Started - {self._num_iters} counter(s)')
         for i in range(self._num_iters):
             self.accumulate_counter(i)
-        logger.info(f'All {self._num_iters} counter(s) complete. Exiting.')
+        logger.debug(f'All {self._num_iters} counter(s) complete. Exiting.')
 
 
 if __name__ == '__main__':

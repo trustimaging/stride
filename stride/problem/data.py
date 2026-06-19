@@ -1828,6 +1828,7 @@ class ArtifactTraces(Traces):
 
     def __init__(self, **kwargs):
         self._h5_path = kwargs.pop('h5_path', None)
+        self._h5_key = kwargs.pop('h5_key', None)
         kwargs.pop('data', None)
         super().__init__(**kwargs)
 
@@ -1855,13 +1856,8 @@ class ArtifactTraces(Traces):
             If no artifact warehouse is configured.
 
         """
-        artifact_warehouse = mosaic.get_artifact_warehouse()
-        if artifact_warehouse is None:
-            raise RuntimeError(
-                'No ArtifactWarehouse configured, cannot load ArtifactTraces'
-            )
-
-        with artifact_warehouse.open_h5() as file:
+        with h5.HDF5(h5_key=self._h5_key, mode='r') as file:
+            file = file.file
             data = file[f'{self._h5_path}/{self.name}/data'][()]
         return Traces(
             data=data,
@@ -1893,7 +1889,7 @@ class ArtifactTraces(Traces):
         'name', 'uname', '_init_name', '_shape', '_extended_shape', '_inner',
         '_dtype', 'needs_grad', '_compressed', '_compression',
         'transform', 'grad', 'prec', '_transducer_ids', '_grid',
-        '_h5_path',
+        '_h5_path', '_h5_key',
     ]
 
     def _serialisation_helper(self):
@@ -1907,16 +1903,14 @@ class ArtifactTraces(Traces):
         :class:`Traces` with real data in memory.
         """
         h5_path = state.pop('_h5_path')
+        h5_key = state.pop('_h5_key')
         name = state.get('name')
 
-        artifact_warehouse = mosaic.get_artifact_warehouse()
         try:
-            if artifact_warehouse is not None:
-                with artifact_warehouse.open_h5() as file:
-                    path = f'{h5_path}/{name}/data'
-                    data = file[path][()] if path in file else None
-            else:
-                data = None
+            with h5.HDF5(h5_key=h5_key, mode='r') as file:
+                file = file.file
+                path = f'{h5_path}/{name}/data'
+                data = file[path][()] if path in file else None
         except Exception as e:
             import traceback
             mosaic.logger().warn(

@@ -385,12 +385,12 @@ class Variable:
 
             if hasattr(node.op, 'is_parameter') and node.op.is_parameter:
                 _func_kwargs = {}
-                _counter = kwargs_.pop('_abs_iteration', None)
-                _task_id = kwargs_.pop('_shot_id', None)
+                _counter = kwargs_.pop('mosaic_counter', None)
+                _task_id = kwargs_.pop('mosaic_task_id', None)
                 if _counter is not None:
-                    _func_kwargs['counter'] = _counter
+                    _func_kwargs['mosaic_counter'] = _counter
                 if _task_id is not None:
-                    _func_kwargs['task_id'] = _task_id
+                    _func_kwargs['mosaic_task_id'] = _task_id
 
                 redux_grad = await runtime.exec(
                     'redux-%s' % node.op.uid, redux, output_grads,

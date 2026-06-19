@@ -16,9 +16,6 @@ from .. import plotting
 __all__ = ['Shot', 'Sequence', 'Acquisitions']
 
 
-_loading_from_artifact_store = False
-
-
 def _select_slice(selection, init_ids,
                   start=None, end=None, num=None, every=1, randomly=False):
 
@@ -447,10 +444,11 @@ class Shot(ProblemBase):
             self._acquisitions.dump(*args, shot_ids=[self.id], **kwargs)
 
     def _traces(self, *args, **kwargs):
-        if _loading_from_artifact_store:
-            return ArtifactTraces(
-                *args, h5_path=f'shots/{self.id}', **kwargs,
-            )
+        h5_key = kwargs.pop('h5_key', None)
+        if h5_key is not None:
+            return ArtifactTraces(*args, **kwargs,
+                                  h5_path=f'shots/{self.id}',
+                                  h5_key=h5_key)
         if kwargs.pop('lazy_loading', False):
             return DiskTraces(*args, **kwargs,
                               path='/shots/%d/%s' % (self.id, kwargs.get('name')))
@@ -499,11 +497,13 @@ class Shot(ProblemBase):
             self._receiver_ids.append(receiver_id)
 
         lazy_loading = kwargs.pop('lazy_loading', False)
+        h5_key = kwargs.pop('h5_key', None)
 
         self.wavelets = self._traces(
             name='wavelets', transducer_ids=self.source_ids,
             grid=self.grid,
             lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+            h5_key=h5_key,
         )
         if not lazy_loading and 'wavelets' in description:
             self.wavelets.__set_desc__(description.wavelets, **kwargs)
@@ -512,6 +512,7 @@ class Shot(ProblemBase):
             name='observed', transducer_ids=self.receiver_ids,
             compressed=compressed, grid=self.grid,
             lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+            h5_key=h5_key,
         )
         if not lazy_loading and 'observed' in description:
             self.observed.__set_desc__(description.observed, **kwargs)
@@ -520,6 +521,7 @@ class Shot(ProblemBase):
             name='delays', transducer_ids=self.source_ids,
             shape=(len(self.source_ids), 1), grid=self.grid,
             lazy_loading=lazy_loading, filename=kwargs.get('filename', None),
+            h5_key=h5_key,
         )
         if not lazy_loading and 'delays' in description:
             self.delays.__set_desc__(description.delays, **kwargs)
@@ -1384,7 +1386,6 @@ class Acquisitions(ProblemBase):
         store and is byte-range read on demand by workers.
 
         """
-        artifact_warehouse = mosaic.get_artifact_warehouse()
 
         project_name = kwargs.get('project_name', None)
         if project_name is None:
@@ -1392,10 +1393,9 @@ class Acquisitions(ProblemBase):
                 'project_name is required for artifact store acquisitions loading'
             )
         h5_key = os.environ.get(
-            'MOSAIC_ARTIFACT_ACQUISITIONS_KEY',
+            'STRIDE_ARTIFACT_ACQUISITIONS_KEY',
             f'{project_name}-Acquisitions.h5',
         )
-        artifact_warehouse.set_h5_key(h5_key)
 
         mosaic.logger().perf(
             f'Artifact store: byte-range reading geometry from {h5_key}'
@@ -1404,13 +1404,13 @@ class Acquisitions(ProblemBase):
         # Byte-range reads via s3fs
         filter = kwargs.pop('filter',
                             {'shots': shot_ids} if shot_ids is not None else None)
-        global _loading_from_artifact_store
-        _loading_from_artifact_store = True
         try:
-            with artifact_warehouse.open_h5() as remote:
-                super().load(file_obj=remote, filter=filter, **kwargs)
-        finally:
-            _loading_from_artifact_store = False
+            super().load(h5_key=h5_key, filter=filter, **kwargs)
+        except Exception as exc:
+            raise RuntimeError(
+                f'Failed to load acquisitions from artifact store '
+                f'(h5_key={h5_key}): {exc}'
+            ) from exc
 
     def __get_desc__(self, **kwargs):
         legacy = kwargs.pop('legacy', False)

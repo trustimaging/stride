@@ -6,6 +6,7 @@ from datetime import datetime
 
 from ..utils.change_case import camel_case
 from ..types import Struct
+import mosaic
 
 
 __all__ = ['HDF5', 'file_exists']
@@ -259,12 +260,18 @@ class HDF5:
     def __init__(self, *args, **kwargs):
         self._mode = kwargs.pop('mode')
 
-        # Allow callers to pass an already-open h5py.File (e.g. backed by
-        # s3fs for byte-range reads against object storage).
-        file_obj = kwargs.pop('file_obj', None)
-        if file_obj is not None:
-            self._filename = None
-            self._file = file_obj
+        # artifact storage branch
+        h5_key = kwargs.pop('h5_key', None)
+        if h5_key is not None:
+            warehouse = mosaic.get_artifact_warehouse()
+            if warehouse is None:
+                raise RuntimeError(
+                    'h5_key= requires a configured artifact warehouse '
+                    '(MOSAIC_ARTIFACT_ENDPOINT)'
+                )
+            fs = warehouse.get_fs()
+            self._filename = f'{warehouse.bucket}/{h5_key}'
+            self._file = h5py.File(fs.open(self._filename, 'rb'), self._mode)
             return
 
         if len(args) > 0:

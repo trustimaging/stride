@@ -504,9 +504,9 @@ class ParameterMixin:
                 __dict__ = warehouse.pull_remote(uid=self.ref, attr=attr)
             else:
                 local_warehouse = mosaic.get_warehouse()
-                __dict__ = await local_warehouse.pull_remote(
-                    uid=self.ref, attr=attr, reply=True,
-                )
+                __dict__ = await local_warehouse.pull_remote(uid=self.ref,
+                                                             attr=attr,
+                                                             reply=True)
 
             for key, value in __dict__.items():
                 setattr(self, key, value)

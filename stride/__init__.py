@@ -86,27 +86,29 @@ async def forward(problem, pde, *args, **kwargs):
     runtime = mosaic.runtime()
 
     dump = kwargs.pop('dump', True)
-    upload_acquisitions = kwargs.pop('upload_acquisitions', False)
+    upload_acquisitions = kwargs.pop('upload_acquisitions', None)
     shot_ids = kwargs.pop('shot_ids', None)
     deallocate = kwargs.pop('deallocate', False)
     safe = kwargs.pop('safe', True)
 
+    artifact_warehouse = mosaic.get_artifact_warehouse()
+    if upload_acquisitions is None:
+        upload_acquisitions = artifact_warehouse is not None
+    
     if upload_acquisitions:
-        artifact_warehouse = mosaic.get_artifact_warehouse()
         if artifact_warehouse is None:
             raise RuntimeError(
                 'upload_acquisitions=True requires an artifact warehouse; '
                 'set MOSAIC_ARTIFACT_ENDPOINT and friends.'
             )
         artifact_warehouse.ensure_bucket()
-        
+
         # Force local dump so we can upload the assembled h5 at the end.
         dump = True
         h5_key = os.environ.get(
-            'MOSAIC_ARTIFACT_ACQUISITIONS_KEY',
+            'STRIDE_ARTIFACT_ACQUISITIONS_KEY',
             f'{problem.name}-Acquisitions.h5',
         )
-        artifact_warehouse.set_h5_key(h5_key)
 
     if dump is True and not upload_acquisitions:
         try:
@@ -195,7 +197,7 @@ async def forward(problem, pde, *args, **kwargs):
             problem.output_folder,
             f'{problem.name}-Acquisitions.h5',
         )
-        artifact_warehouse.upload_h5(local_h5)
+        artifact_warehouse.upload_file(local_h5, key=h5_key)
         logger.perf(f'Uploaded {problem.name}-Acquisitions.h5 to artifact store')
 
 
@@ -345,8 +347,8 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             _kwargs = kwargs.copy()
 
             if artifact_warehouse is not None:
-                _kwargs['_abs_iteration'] = iteration.abs_id
-                _kwargs['_shot_id'] = shot_id
+                _kwargs['mosaic_counter'] = iteration.abs_id
+                _kwargs['mosaic_task_id'] = shot_id
 
             logger.perf('\n')
             logger.perf('Giving shot %d to %s (%d out of %d)'
