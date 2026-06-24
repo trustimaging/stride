@@ -208,6 +208,18 @@ def runtime():
     return _runtime
 
 
+def get_artifact_warehouse():
+    """
+    Return the configured artifact warehouse, or ``None`` if no runtime
+    has been initialised yet (e.g. when called from a notebook or plain
+    script before ``mosaic.run()`` / ``mrun`` bootstrap) or no warehouse
+    is configured.
+
+    Safe to call from any context.
+    """
+    return _runtime.get_artifact_warehouse() if _runtime is not None else None
+
+
 def logger():
     """
     Access the runtime logger.
