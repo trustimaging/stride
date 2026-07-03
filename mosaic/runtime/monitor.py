@@ -592,8 +592,6 @@ class Monitor(Runtime):
         # ensure runtime marked as disconnected
         self._disconnected_runtimes.add(uid)
 
-        # remove from scheduling strategy so no new work is dispatched
-        # to this uid after the disconnect
         self._monitor_strategy.remove_worker(uid)
 
         # disconnect associated workers
@@ -669,12 +667,7 @@ class Monitor(Runtime):
         while pending_tasks:
             await asyncio.sleep(0.1)
 
-            # Drop tasks that reached a final state OR were deleted from
-            # ``_monitored_tasks`` — e.g. because the worker hosting them
-            # disconnected and ``Monitor.disconnect`` removed the entry.
-            # Without the second check, a task orphaned on a dead worker
-            # holds the barrier forever (it never transitions to a final
-            # state because the worker is gone).
+            # drop finalised and orphaned tasks otherwise the barrier hangs forever.
             tracked_uids = set(self._monitored_tasks.keys())
             for task in list(pending_tasks):
                 if task.state in ['done', 'failed', 'collected'] \

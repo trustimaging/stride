@@ -474,9 +474,10 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 artifact_warehouse.write_task_list(
                     iteration.abs_id, completed_ids, attempt=iteration._attempt,
                 )
-                logger.perf('FAULT-TOLERANCE: iteration %d partial accept '
-                            '%d/%d' % (iteration.abs_id, iteration.num_completed,
-                                       num_shots))
+                logger.perf(
+                    f'Iteration {iteration.abs_id} partial accept '
+                    f'{iteration.num_completed}/{num_shots}'
+                )
         else:
             await make_loop()
 

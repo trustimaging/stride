@@ -63,11 +63,6 @@ class GradientAccumulator:
         """
         Build a ``GradientAccumulator`` from environment variables.
 
-        Reads the same ``MOSAIC_ARTIFACT_*`` variables as
-        :meth:`ArtifactWarehouse.from_env`, plus:
-
-        - ``STRIDE_NUM_ITERS`` — total number of counters to process (required).
-
         Returns
         -------
         GradientAccumulator
@@ -90,14 +85,10 @@ class GradientAccumulator:
         """
         Re-read ``tasks.json`` and react to head-side updates.
 
-        Mutates *state* in place:
-
         - If ``attempt`` bumped (head rolled back and re-dispatched), reset
           ``accumulated`` and ``folded`` so we start over for this counter.
         - If the task list shrunk (partial-accept) or otherwise changed,
           update ``expected``.
-
-        Silently no-op if ``tasks.json`` is momentarily unreadable.
 
         Parameters
         ----------
@@ -195,9 +186,6 @@ class GradientAccumulator:
                         self._artifact_warehouse._download_bytes(key)
                     )
                 except Exception as exc:
-                    # Key deleted by rollback between list_keys and
-                    # download. Next _refresh_tasks call resets state
-                    # to the new attempt.
                     logger.warning(
                         f'Counter {counter} - download failed for {key} '
                         f'({type(exc).__name__}: {exc}) — skipping'
@@ -214,8 +202,6 @@ class GradientAccumulator:
                 )
 
             if state.folded < state.expected:
-                # Heartbeat every 10s so we can see the accumulator is alive
-                # even when nothing new is arriving.
                 now = time.time()
                 if now - last_heartbeat > 10.0:
                     logger.info(
@@ -240,8 +226,7 @@ class GradientAccumulator:
             f'({len(payload)} bytes) to {final_key}'
         )
 
-        # Per-task gradients are now folded into final_grad.pkl; delete them
-        # so the bucket doesn't accumulate ~N MB of dead weight per counter.
+        # delete partial gradients
         deleted = 0
         for key in state.folded:
             try:

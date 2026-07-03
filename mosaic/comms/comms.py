@@ -590,8 +590,12 @@ class OutboundConnection(Connection):
 
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
-        self._heartbeat_max_attempts = 2
-        self._heartbeat_interval = 3
+        self._heartbeat_max_attempts = int(
+            os.environ.get('MOSAIC_HEARTBEAT_ATTEMPTS', 5)
+        )
+        self._heartbeat_interval = float(
+            os.environ.get('MOSAIC_HEARTBEAT_INTERVAL', 15)
+        )
 
         self._shaken = False
         self._pending_reply_futures = []
@@ -840,7 +844,6 @@ class OutboundConnection(Connection):
             return
 
         # fail pending RPC reply futures to avoid hanging on a dead socket
-        # (local import to dodge an import cycle with mosaic.core.base)
         from ..core.base import RuntimeDisconnectedError
         pending, self._pending_reply_futures = self._pending_reply_futures, []
         for future in pending:

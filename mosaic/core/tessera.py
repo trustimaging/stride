@@ -1077,19 +1077,18 @@ class ArrayProxy(CMDBase):
         return params
 
     def deregister_runtime(self, uid):
-        import mosaic as _mosaic
         removed = [p for p in self._proxies if p.runtime_id == uid]
         for p in removed:
             task = getattr(p, '_pending_init_task', None)
             if task is not None and not task.done():
                 task.cancel()
-                _mosaic.logger().debug(
+                mosaic.logger().debug(
                     'tessera: cancelled pending init for %s on %s'
                     % (self.uid, uid))
 
         self._proxies = [p for p in self._proxies if p.runtime_id != uid]
         if removed:
-            _mosaic.logger().debug(
+            mosaic.logger().debug(
                 'tessera: deregistered %d array proxy for %s (remaining %d)'
                 % (len(removed), uid, len(self._proxies)))
 
@@ -1147,8 +1146,7 @@ class ArrayProxy(CMDBase):
 
                 if task_proxies is None:
                     # slow path - lazy-init tessera on a replacement worker
-                    import mosaic as _mosaic
-                    _mosaic.logger().debug(
+                    mosaic.logger().debug(
                         'tessera: slow-path init of %s on new worker %s'
                         % (self_ref()._cls.cls.__name__, runtime))
                     proxy = TesseraProxy(self_ref()._cls.cls,

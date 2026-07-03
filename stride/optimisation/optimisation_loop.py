@@ -236,35 +236,16 @@ class Iteration:
 
     async def rollback(self, runtime, optimiser, artifact_warehouse, shot_ids):
         """
-        Reset iteration state for a fresh dispatch attempt.
+        Reset iteration state for a fresh dispatch attempt: bump
+        ``self._attempt``, drain workers, clear local state, and rewrite
+        tasks.json so the accumulator resets on its next poll.
 
-        Called by ``Watchdog.dispatch`` as its ``on_rollback`` callback
-        when a dispatch attempt exceeded the drop threshold and did not
-        complete enough shots to accept partial. Bumps ``self._attempt``,
-        drains in-flight tasks on all workers, clears iteration state and
-        the accumulated gradient on the head, and rewrites the
-        artifact-warehouse tasks.json with the new attempt counter so the
-        accumulator resets its accumulation on next poll.
-
-        Parameters
-        ----------
-        runtime : Runtime
-            Mosaic runtime whose workers are hosting the in-flight tasks.
-        optimiser : LocalOptimiser
-            Optimiser whose accumulated gradient must be reset.
-        artifact_warehouse : ArtifactWarehouse
-            Warehouse holding this counter's partial gradient uploads.
-        shot_ids : list of int
-            The full shot-id list to re-dispatch.
-
-        Returns
-        -------
-
+        Called by ``Watchdog.dispatch`` as its ``on_rollback`` callback.
         """
         self._attempt += 1
         mosaic.logger().debug(
-            'FAULT-TOLERANCE: iteration %d attempt %d - rolling back'
-            % (self.abs_id, self._attempt)
+            f'Iteration {self.abs_id} attempt {self._attempt} '
+            f'- rolling back'
         )
 
         drains = []
