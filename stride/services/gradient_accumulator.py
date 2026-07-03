@@ -4,6 +4,7 @@ import json
 import time
 import pickle
 import logging
+from dataclasses import dataclass, field
 
 from mosaic.runtime.artifact_warehouse import ArtifactWarehouse
 
@@ -11,6 +12,20 @@ from mosaic.runtime.artifact_warehouse import ArtifactWarehouse
 __all__ = ['GradientAccumulator']
 
 logger = logging.getLogger(__name__)
+
+
+def _shot_id_from_key(key):
+    """Extract numeric shot id from '..../task_<N>_grad.pkl' for sort ordering."""
+    return int(key.rsplit('/', 1)[-1].split('_')[1])
+
+
+@dataclass
+class _CounterState:
+    """Per-counter accumulation state mutated by the poll loop."""
+    attempt: int
+    expected: set
+    accumulated: object = None
+    folded: set = field(default_factory=set)
 
 
 class GradientAccumulator:
@@ -22,6 +37,11 @@ class GradientAccumulator:
     listing the expected task IDs. The accumulator polls that file, then
     polls for each listed ``task_{S}_grad.pkl`` and folds it into a running
     sum as it arrives.
+
+    If the head shrinks ``tasks.json`` mid-counter (partial-accept after a
+    sub-threshold worker drop) or bumps its ``attempt`` field (retry
+    rollback), the accumulator detects the change on its next poll and
+    updates its expected set or resets accumulation accordingly.
 
     Parameters
     ----------
@@ -66,6 +86,57 @@ class GradientAccumulator:
             except Exception:
                 time.sleep(self._tasks_poll_interval)
 
+    def _refresh_tasks(self, counter, tasks_key, prefix, state):
+        """
+        Re-read ``tasks.json`` and react to head-side updates.
+
+        Mutates *state* in place:
+
+        - If ``attempt`` bumped (head rolled back and re-dispatched), reset
+          ``accumulated`` and ``folded`` so we start over for this counter.
+        - If the task list shrunk (partial-accept) or otherwise changed,
+          update ``expected``.
+
+        Silently no-op if ``tasks.json`` is momentarily unreadable.
+
+        Parameters
+        ----------
+        counter : int
+            Zero-based counter index (used for log lines).
+        tasks_key : str
+            Artifact-store key for the counter's ``tasks.json``.
+        prefix : str
+            Counter prefix used to build per-task gradient keys.
+        state : _CounterState
+            Loop state to mutate in place.
+
+        """
+        try:
+            updated = json.loads(
+                self._artifact_warehouse._download_bytes(tasks_key)
+            )
+        except Exception:
+            return
+
+        new_attempt = updated.get('attempt', 0)
+        if new_attempt != state.attempt:
+            logger.info(
+                f'Counter {counter} - attempt changed '
+                f'({state.attempt} -> {new_attempt}), resetting accumulation.'
+            )
+            state.attempt = new_attempt
+            state.accumulated = None
+            state.folded = set()
+
+        new_expected = {f'{prefix}/task_{s}_grad.pkl'
+                        for s in updated['task_ids']}
+        if new_expected != state.expected:
+            logger.info(
+                f'Counter {counter} - tasks.json changed '
+                f'({len(state.expected)} -> {len(new_expected)} task(s)).'
+            )
+            state.expected = new_expected
+
     def accumulate_counter(self, counter):
         """
         Wait for ``tasks.json``, poll for per-task gradient files,
@@ -90,47 +161,116 @@ class GradientAccumulator:
         logger.debug(f'Counter {counter} - waiting for tasks.json')
         raw = self._poll_json(tasks_key)
         task_ids = raw['task_ids']
-        expected = {f'{prefix}/task_{s}_grad.pkl' for s in task_ids}
-        logger.debug(f'Counter {counter} - expecting {len(expected)} task(s)')
 
-        accumulated = None
-        folded = set()
+        state = _CounterState(
+            attempt=raw.get('attempt', 0),
+            expected={f'{prefix}/task_{s}_grad.pkl' for s in task_ids},
+        )
+        logger.debug(
+            f'Counter {counter} - expecting {len(state.expected)} task(s) '
+            f'(attempt {state.attempt})'
+        )
 
-        while folded < expected:
-            existing = set(self._artifact_warehouse._backend.list_keys(bucket, prefix))
-            newly_available = (existing & expected) - folded
+        last_heartbeat = time.time()
+        while state.folded < state.expected:
+            self._refresh_tasks(counter, tasks_key, prefix, state)
 
-            for key in sorted(newly_available):
-                obj = pickle.loads(self._artifact_warehouse._download_bytes(key))
-                if accumulated is None:
-                    accumulated = obj
+            existing = set(
+                self._artifact_warehouse._backend.list_keys(bucket, prefix)
+            )
+            newly_available = (existing & state.expected) - state.folded
+
+            logger.debug(
+                f'Counter {counter} - poll: '
+                f'folded={len(state.folded)}/{len(state.expected)}, '
+                f'attempt={state.attempt}, '
+                f'existing_keys={len(existing)}, '
+                f'newly_available={len(newly_available)}'
+            )
+
+            for key in sorted(newly_available, key=_shot_id_from_key):
+                logger.debug(f'Counter {counter} - downloading {key}')
+                try:
+                    obj = pickle.loads(
+                        self._artifact_warehouse._download_bytes(key)
+                    )
+                except Exception as exc:
+                    # Key deleted by rollback between list_keys and
+                    # download. Next _refresh_tasks call resets state
+                    # to the new attempt.
+                    logger.warning(
+                        f'Counter {counter} - download failed for {key} '
+                        f'({type(exc).__name__}: {exc}) — skipping'
+                    )
+                    continue
+                if state.accumulated is None:
+                    state.accumulated = obj
                 else:
-                    accumulated += obj
-                folded.add(key)
-                logger.debug(f"Counter {counter} - folded {key} ({len(folded)}/{len(expected)})")
+                    state.accumulated += obj
+                state.folded.add(key)
+                logger.debug(
+                    f"Counter {counter} - folded {key} "
+                    f"({len(state.folded)}/{len(state.expected)})"
+                )
 
-            if folded < expected:
+            if state.folded < state.expected:
+                # Heartbeat every 10s so we can see the accumulator is alive
+                # even when nothing new is arriving.
+                now = time.time()
+                if now - last_heartbeat > 10.0:
+                    logger.info(
+                        f'Counter {counter} - heartbeat: still waiting '
+                        f'({len(state.folded)}/{len(state.expected)} folded, '
+                        f'attempt={state.attempt})'
+                    )
+                    last_heartbeat = now
                 time.sleep(self._shots_poll_interval)
 
+        logger.info(
+            f'Counter {counter} - fold complete '
+            f'({len(state.folded)}/{len(state.expected)}), '
+            f'writing final_grad.pkl'
+        )
+
         final_key = f'{prefix}/final_grad.pkl'
-        self._artifact_warehouse._upload_bytes(final_key, pickle.dumps(accumulated))
-        logger.debug(f'Counter {counter} - final_grad.pkl written.')
+        payload = pickle.dumps(state.accumulated)
+        self._artifact_warehouse._upload_bytes(final_key, payload)
+        logger.info(
+            f'Counter {counter} - final_grad.pkl written '
+            f'({len(payload)} bytes) to {final_key}'
+        )
 
         # Per-task gradients are now folded into final_grad.pkl; delete them
         # so the bucket doesn't accumulate ~N MB of dead weight per counter.
-        for key in folded:
+        deleted = 0
+        for key in state.folded:
             try:
-                self._artifact_warehouse._backend.delete(self._artifact_warehouse._bucket, key)
-            except Exception:
-                pass
-        logger.info(f'Counter {counter} - cleaned up {len(folded)} per-task gradient files.')
+                self._artifact_warehouse._backend.delete(
+                    self._artifact_warehouse._bucket, key
+                )
+                deleted += 1
+            except Exception as exc:
+                logger.warning(
+                    f'Counter {counter} - delete failed for {key} '
+                    f'({type(exc).__name__}: {exc})'
+                )
+        logger.info(
+            f'Counter {counter} - cleaned up {deleted}/{len(state.folded)} '
+            f'per-task gradient files.'
+        )
 
     def run(self):
         """Loop over all counters sequentially."""
-        logger.debug(f'Started - {self._num_iters} counter(s)')
+        logger.info(
+            f'Started - {self._num_iters} counter(s), '
+            f'bucket={self._artifact_warehouse.bucket}, '
+            f'result_prefix={self._artifact_warehouse.result_prefix}'
+        )
         for i in range(self._num_iters):
+            logger.info(f'==== Starting counter {i} ====')
             self.accumulate_counter(i)
-        logger.debug(f'All {self._num_iters} counter(s) complete. Exiting.')
+            logger.info(f'==== Counter {i} done ====')
+        logger.info(f'All {self._num_iters} counter(s) complete. Exiting.')
 
 
 if __name__ == '__main__':

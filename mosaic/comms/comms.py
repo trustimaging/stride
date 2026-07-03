@@ -590,10 +590,11 @@ class OutboundConnection(Connection):
 
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
-        self._heartbeat_max_attempts = 5
-        self._heartbeat_interval = 15
+        self._heartbeat_max_attempts = 2
+        self._heartbeat_interval = 3
 
         self._shaken = False
+        self._pending_reply_futures = []
 
     @property
     def shaken(self):
@@ -767,6 +768,7 @@ class OutboundConnection(Connection):
         if reply is True:
             reply_future = Reply(name=method)
             self._comms.register_reply_future(reply_future)
+            self._pending_reply_futures.append(reply_future)
             reply = reply_future.uid
 
         else:
@@ -831,8 +833,21 @@ class OutboundConnection(Connection):
         return reply_future, msg_size, multipart_msg
 
     def disconnect(self):
+        # cancel heartbeat to avoid stale timer outliving the state transition
+        self.stop_heartbeat()
+
         if self._state != 'connected':
             return
+
+        # fail pending RPC reply futures to avoid hanging on a dead socket
+        # (local import to dodge an import cycle with mosaic.core.base)
+        from ..core.base import RuntimeDisconnectedError
+        pending, self._pending_reply_futures = self._pending_reply_futures, []
+        for future in pending:
+            if not future.done():
+                future.set_exception(RuntimeDisconnectedError(
+                    f'Remote runtime {self.uid} disconnected before reply could be received'
+                ))
 
         self._socket.disconnect(self.connect_address)
         super().disconnect()

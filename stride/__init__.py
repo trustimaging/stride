@@ -8,6 +8,8 @@ import warnings
 from pytools import prefork
 import multiprocess as multiprocessing
 
+from mosaic.utils.watchdog import Watchdog
+
 
 # pre-fork before importing anything else
 if multiprocessing.get_start_method() == 'fork':
@@ -235,6 +237,21 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         is applied.
     safe : bool, optional
         Whether to discard workers that fail during execution.
+    drop_threshold : float, optional
+        Fraction of gradients we'll accept losing during a single
+        iteration. Used by ``Watchdog.dispatch`` both to decide when to
+        cancel mid-flight and whether to accept the partial result.
+        Defaults to ``None`` (retry disabled — a single dispatch attempt,
+        identical to local mode).
+    min_workers : int, optional
+        Pool floor below which the watchdog waits for replacements
+        before retrying. Defaults to 1 (only wait if the pool fully
+        empties — silent-hang guard).
+    desired_workers : int, optional
+        Ideal pool size to dispatch with. Iteration start waits up to
+        ``timeout`` for this many workers, then proceeds if at least
+        ``min_workers`` are present (otherwise raises). Defaults to
+        ``min_workers`` (strict — no over-waiting).
     args : optional
         Extra positional arguments for the operators.
     kwargs : optional
@@ -259,6 +276,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     f_min = kwargs.pop('f_min', None)
     f_max = kwargs.pop('f_max', None)
+    drop_threshold = kwargs.pop('drop_threshold', None)
+    min_workers = kwargs.pop('min_workers', 1)
+    desired_workers = kwargs.pop('desired_workers', min_workers)
 
     filter_traces = kwargs.pop('filter_traces', True)
     filter_wavelets = kwargs.pop('filter_wavelets', filter_traces)
@@ -297,9 +317,23 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
     if optimiser.reset_block:
         optimiser.reset()
+    
+    watchdog = Watchdog(
+        runtime=runtime,
+        drop_threshold=drop_threshold,
+        min_workers=min_workers,
+        desired_workers=desired_workers,
+    )
 
     for iteration in block.iterations(num_iters):
         optimiser.clear_grad()
+
+        if runtime.mode == 'dynamic':
+            await Watchdog.wait_for_workers(
+                runtime,
+                desired_workers=desired_workers,
+                min_workers=min_workers,
+            )
 
         if artifact_warehouse is not None:
             artifact_warehouse.set_counter(iteration.abs_id)
@@ -307,8 +341,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if optimiser.reset_iteration:
             optimiser.reset()
 
-        published_args = [runtime.put(each, publish=True) for each in args]
-        published_args = await asyncio.gather(*published_args)
+        published_args = await watchdog.broadcast(args, label='broadcast')
 
         logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
@@ -342,93 +375,115 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if lazy_loading:
             problem.acquisitions.load(shot_ids=shot_ids, lazy_loading=False, fast=True)
 
-        @runtime.async_for(shot_ids, safe=safe)
-        async def loop(worker, shot_id):
-            _kwargs = kwargs.copy()
+        def make_loop():
+            @runtime.async_for(shot_ids, safe=safe)
+            async def loop(worker, shot_id):
+                _kwargs = kwargs.copy()
 
-            if artifact_warehouse is not None:
-                _kwargs['mosaic_counter'] = iteration.abs_id
-                _kwargs['mosaic_task_id'] = shot_id
+                if artifact_warehouse is not None:
+                    _kwargs['mosaic_counter'] = iteration.abs_id
+                    _kwargs['mosaic_task_id'] = shot_id
 
-            logger.perf('\n')
-            logger.perf('Giving shot %d to %s (%d out of %d)'
-                        % (shot_id, worker.uid,
-                           iteration.num_submitted, num_shots))
+                logger.perf('\n')
+                logger.perf('Giving shot %d to %s (%d out of %d)'
+                            % (shot_id, worker.uid,
+                            iteration.num_submitted, num_shots))
 
-            sub_problem = problem.sub_problem(shot_id)
-            iteration.add_submitted(sub_problem.shot)
-            wavelets = sub_problem.shot.wavelets
-            observed = sub_problem.shot.observed
+                sub_problem = problem.sub_problem(shot_id)
+                iteration.add_submitted(sub_problem.shot)
+                wavelets = sub_problem.shot.wavelets
+                observed = sub_problem.shot.observed
 
-            if wavelets is None:
-                raise RuntimeError('Shot %d has no wavelet data' % shot_id)
+                if wavelets is None:
+                    raise RuntimeError('Shot %d has no wavelet data' % shot_id)
 
-            if observed is None:
-                raise RuntimeError('Shot %d has no observed data' % shot_id)
+                if observed is None:
+                    raise RuntimeError('Shot %d has no observed data' % shot_id)
 
-            if using_gpu:
-                deviceid = devices[worker.indices[1] % num_gpus]
-                if platform in ['nvidia-acc', 'nvidia-cuda']:
-                    devito_args = _kwargs.get('devito_args', {}).copy()
-                    devito_args['deviceid'] = deviceid
-                    _kwargs['devito_args'] = devito_args
-                elif platform == 'gpu':
-                    _kwargs['deviceid'] = deviceid
-                else:
-                    raise ValueError('Unknown platform %s' % platform)
+                if using_gpu:
+                    deviceid = devices[worker.indices[1] % num_gpus]
+                    if platform in ['nvidia-acc', 'nvidia-cuda']:
+                        devito_args = _kwargs.get('devito_args', {}).copy()
+                        devito_args['deviceid'] = deviceid
+                        _kwargs['devito_args'] = devito_args
+                    elif platform == 'gpu':
+                        _kwargs['deviceid'] = deviceid
+                    else:
+                        raise ValueError('Unknown platform %s' % platform)
 
-            # pre-process wavelets and observed traces
-            wavelets = process_wavelets(wavelets,
+                # pre-process wavelets and observed traces
+                wavelets = process_wavelets(wavelets,
+                                            iteration=iteration, problem=sub_problem,
+                                            runtime=worker, **_kwargs)
+                observed = process_observed(observed,
+                                            iteration=iteration, problem=sub_problem,
+                                            runtime=worker, **_kwargs)
+                processed = process_wavelets_observed(wavelets, observed,
+                                                    iteration=iteration, problem=sub_problem,
+                                                    runtime=worker, **_kwargs)
+                wavelets = processed.outputs[0]
+                observed = processed.outputs[1]
+
+                # run PDE
+                modelled = pde(wavelets, *published_args,
+                            iteration=iteration, problem=sub_problem,
+                            runtime=worker, **_kwargs)
+
+                # post-process modelled and observed traces
+                scale_to = sub_problem.shot.observed.copy(compressed=False) \
+                    if sub_problem.shot.observed.compressed else sub_problem.shot.observed
+                traces = process_traces(modelled, observed,
+                                        scale_to=scale_to,
                                         iteration=iteration, problem=sub_problem,
                                         runtime=worker, **_kwargs)
-            observed = process_observed(observed,
-                                        iteration=iteration, problem=sub_problem,
-                                        runtime=worker, **_kwargs)
-            processed = process_wavelets_observed(wavelets, observed,
-                                                  iteration=iteration, problem=sub_problem,
-                                                  runtime=worker, **_kwargs)
-            wavelets = processed.outputs[0]
-            observed = processed.outputs[1]
+                modelled = traces.outputs[0]
+                observed = traces.outputs[1]
 
-            # run PDE
-            modelled = pde(wavelets, *published_args,
-                           iteration=iteration, problem=sub_problem,
-                           runtime=worker, **_kwargs)
+                # calculate loss
+                fun = loss(modelled, observed,
+                        keep_residual=keep_residual,
+                        iteration=iteration, problem=sub_problem,
+                        runtime=worker, **_kwargs)
 
-            # post-process modelled and observed traces
-            scale_to = sub_problem.shot.observed.copy(compressed=False) \
-                if sub_problem.shot.observed.compressed else sub_problem.shot.observed
-            traces = process_traces(modelled, observed,
-                                    scale_to=scale_to,
-                                    iteration=iteration, problem=sub_problem,
-                                    runtime=worker, **_kwargs)
-            modelled = traces.outputs[0]
-            observed = traces.outputs[1]
+                # run adjoint
+                fun_value = await fun.remote.adjoint(**_kwargs).result()
 
-            # calculate loss
-            fun = loss(modelled, observed,
-                       keep_residual=keep_residual,
-                       iteration=iteration, problem=sub_problem,
-                       runtime=worker, **_kwargs)
+                iteration.add_loss(fun_value)
+                logger.perf('Functional value for shot %d: %s' % (shot_id, fun_value))
 
-            # run adjoint
-            fun_value = await fun.remote.adjoint(**_kwargs).result()
+                iteration.add_completed(sub_problem.shot)
+                logger.perf('Retrieved gradient for shot %d (%d out of %d)'
+                            % (sub_problem.shot_id,
+                            iteration.num_completed, num_shots))
+            
+            return loop
 
-            iteration.add_loss(fun_value)
-            logger.perf('Functional value for shot %d: %s' % (shot_id, fun_value))
-
-            iteration.add_completed(sub_problem.shot)
-            logger.perf('Retrieved gradient for shot %d (%d out of %d)'
-                        % (sub_problem.shot_id,
-                           iteration.num_completed, num_shots))
-
-        await loop
+        if runtime.mode == 'dynamic':
+            status, _ = await watchdog.dispatch(
+                make_coro=make_loop,
+                get_completion=lambda: (
+                    iteration.num_completed / num_shots if num_shots > 0 else 1.0
+                ),
+                on_rollback=lambda: iteration.rollback(
+                    runtime, optimiser, artifact_warehouse, shot_ids,
+                ),
+                label='iter-%d' % iteration.abs_id,
+            )
+            if status == 'partial':
+                completed_ids = list(iteration.curr_run.completed_shots)
+                artifact_warehouse.write_task_list(
+                    iteration.abs_id, completed_ids, attempt=iteration._attempt,
+                )
+                logger.perf('FAULT-TOLERANCE: iteration %d partial accept '
+                            '%d/%d' % (iteration.abs_id, iteration.num_completed,
+                                       num_shots))
+        else:
+            await make_loop()
 
         async def step_loop():
             iteration.next_run()
 
-            published_args = [runtime.put(each, publish=True) for each in args]
-            published_args = await asyncio.gather(*published_args)
+            published_args = await watchdog.broadcast(args, label='step-broadcast')
 
             @runtime.async_for(shot_ids, safe=safe)
             async def loop(worker, shot_id):

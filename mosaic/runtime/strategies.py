@@ -66,6 +66,25 @@ class MonitorStrategy:
         """
         pass
 
+    def remove_worker(self, uid):
+        """
+        Remove a worker from the strategy's pool.
+
+        Called by :meth:`Monitor.disconnect` so subsequent
+        :meth:`select_worker` calls will not pick a disconnected worker.
+        Base implementation is a no-op — subclasses override.
+
+        Parameters
+        ----------
+        uid : str
+            UID of the worker to remove.
+
+        Returns
+        -------
+
+        """
+        pass
+
 
 class RoundRobin(MonitorStrategy):
     """
@@ -110,3 +129,12 @@ class RoundRobin(MonitorStrategy):
         self._last_worker = (self._last_worker + 1) % self._num_workers
 
         return list(self._worker_list)[self._last_worker]
+
+    def remove_worker(self, uid):
+        if uid in self._worker_list:
+            self._worker_list.discard(uid)
+            self._num_workers = len(self._worker_list)
+            if self._num_workers > 0:
+                self._last_worker = self._last_worker % self._num_workers
+            else:
+                self._last_worker = -1
