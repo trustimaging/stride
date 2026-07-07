@@ -664,19 +664,28 @@ class Monitor(Runtime):
         num_tasks = len(self._monitored_tasks)
 
         tic = time.time()
+        dropped_task_uids = set()
         while pending_tasks:
             await asyncio.sleep(0.1)
 
-            # drop finalised and orphaned tasks otherwise the barrier hangs forever.
+            # Drop finalised, orphaned, or dead-owner tasks.
             tracked_uids = set(self._monitored_tasks.keys())
+            send_conns = getattr(self._comms, '_send_conn', {})
             for task in list(pending_tasks):
                 if task.state in ['done', 'failed', 'collected'] \
                         or task.uid not in tracked_uids:
                     pending_tasks.remove(task)
+                    continue
+                conn = send_conns.get(task.runtime_id)
+                if conn is not None and conn.state == 'disconnected':
+                    dropped_task_uids.add(task.uid)
+                    pending_tasks.remove(task)
 
             if len(self._monitored_tasks) > num_tasks:
                 for task in self._monitored_tasks.values():
-                    if task.state not in ['done', 'failed', 'collected'] and task not in pending_tasks:
+                    if task.state not in ['done', 'failed', 'collected'] \
+                            and task not in pending_tasks \
+                            and task.uid not in dropped_task_uids:
                         pending_tasks.append(task)
 
             if timeout is not None and (time.time() - tic) > timeout:

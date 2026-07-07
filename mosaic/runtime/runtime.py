@@ -480,8 +480,7 @@ class Runtime(BaseRPC):
                     await asyncio.gather(*pending, return_exceptions=True)
                 raise
 
-            # Bounded so a retry can't hang on stale tasks from a cancelled attempt.
-            await self.barrier(timeout=30.0)
+            await self.barrier()
 
             self._inside_async_for = False
 

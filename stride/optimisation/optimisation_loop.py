@@ -7,6 +7,8 @@ import mosaic
 import mosaic.types
 from mosaic.file_manipulation import h5
 
+from ..services.gradient_accumulator import has_final_grad
+
 from ..problem.base import Saved
 from .loss.functional import FunctionalValue
 
@@ -208,6 +210,19 @@ class Iteration:
 
         """
         return len(self.curr_run.completed_shots)
+
+    def completion(self, num_shots, artifact_warehouse=None):
+        """
+        Fraction of the iteration's work that's resolved.
+        Returns 1.0 if the accumulator has finalised,
+        else ``num_completed / num_shots``.
+        """
+        if artifact_warehouse is not None \
+                and has_final_grad(artifact_warehouse, self.abs_id):
+            return 1.0
+        if num_shots <= 0:
+            return 1.0
+        return self.num_completed / num_shots
 
     def next_run(self):
         """

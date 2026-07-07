@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from mosaic.runtime.artifact_warehouse import ArtifactWarehouse
 
 
-__all__ = ['GradientAccumulator']
+__all__ = ['GradientAccumulator', 'has_final_grad']
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 def _shot_id_from_key(key):
     """Extract numeric shot id from '..../task_<N>_grad.pkl' for sort ordering."""
     return int(key.rsplit('/', 1)[-1].split('_')[1])
+
+
+def has_final_grad(artifact_warehouse, counter):
+    """True if the accumulator has written final_grad.pkl for this counter."""
+    key = f'{artifact_warehouse.result_prefix}/counter_{counter}/final_grad.pkl'
+    return artifact_warehouse._key_exists(key)
 
 
 @dataclass
