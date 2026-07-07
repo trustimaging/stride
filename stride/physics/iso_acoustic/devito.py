@@ -52,6 +52,8 @@ class IsoAcousticDevito(ProblemTypeBase):
             Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
+        scale_pde : str, optional
+            Whether to non-dimensionalise the PDE, defaults to ``False``.
         save_wavefield : bool, optional
             Whether or not to solve the forward wavefield, defaults to True when
             a gradient is expected, and to False otherwise.
@@ -234,6 +236,8 @@ class IsoAcousticDevito(ProblemTypeBase):
             Attenuation coefficient of the medium, defaults to 0, in [dB/cm].
         problem : Problem
             Sub-problem being solved by the PDE.
+        scale_pde : str, optional
+            Whether to non-dimensionalise the PDE, defaults to ``False``.
         save_wavefield : bool, optional
             Whether or not to solve the forward wavefield, defaults to True when
             a gradient is expected, and to False otherwise.
@@ -302,7 +306,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         t_c, h_c, vp_c = self._check_problem(wavelets, vp, rho=rho, alpha=alpha, **kwargs)
         w_c = np.max(np.abs(wavelets.data)) * 1e-6
-        if not kwargs.pop('scale', True):
+        if not kwargs.pop('scale_pde', False):
             t_c, h_c, vp_c, w_c = 1., 1., 1., 1.
         else:
             self.dev_grid.scale_grid(h_c)
