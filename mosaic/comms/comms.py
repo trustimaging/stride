@@ -679,6 +679,8 @@ class OutboundConnection(Connection):
         self._heartbeat_attempts -= 1
 
         if self._heartbeat_attempts == 0:
+            # Detach so stop_heartbeat() in the cleanup chain can't cancel us.
+            self._heartbeat_timeout = None
             await self._comms.disconnect(self.uid, self.uid, notify=True)
             await self._loop.run(self._runtime.disconnect, self.uid, self.uid)
             return
