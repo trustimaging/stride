@@ -15,6 +15,9 @@ from concurrent.futures import CancelledError
 import mosaic
 from .compression import maybe_compress, decompress
 from .serialisation import serialise, deserialise
+# module import (not name import) to tolerate the circular import via
+# utils.spill_buffer -> comms; the attribute is resolved at call time
+from ..core import base as core_base
 from ..utils import Future
 from ..utils.utils import sizeof
 
@@ -598,7 +601,7 @@ class OutboundConnection(Connection):
         )
 
         self._shaken = False
-        self._pending_reply_futures = []
+        self._pending_reply_futures = weakref.WeakSet()
 
     @property
     def shaken(self):
@@ -774,7 +777,7 @@ class OutboundConnection(Connection):
         if reply is True:
             reply_future = Reply(name=method)
             self._comms.register_reply_future(reply_future)
-            self._pending_reply_futures.append(reply_future)
+            self._pending_reply_futures.add(reply_future)
             reply = reply_future.uid
 
         else:
@@ -846,11 +849,10 @@ class OutboundConnection(Connection):
             return
 
         # fail pending RPC reply futures to avoid hanging on a dead socket
-        from ..core.base import RuntimeDisconnectedError
-        pending, self._pending_reply_futures = self._pending_reply_futures, []
+        pending, self._pending_reply_futures = list(self._pending_reply_futures), weakref.WeakSet()
         for future in pending:
             if not future.done():
-                future.set_exception(RuntimeDisconnectedError(
+                future.set_exception(core_base.RuntimeDisconnectedError(
                     f'Remote runtime {self.uid} disconnected before reply could be received'
                 ))
 

@@ -78,6 +78,7 @@ class Tessera(RemoteBase):
         self._task_queue = asyncio.Queue()
         self._run_queue = asyncio.Queue()
         self._task_lock = asyncio.Lock()
+        self._running_exec = None
 
         self._cls = cls
         self._obj = None
@@ -320,7 +321,16 @@ class Tessera(RemoteBase):
 
             await asyncio.sleep(0)
             await self.logger.send()
-            await self.call_safe(sender_id, method, task)
+
+            # track the in-flight execution so drain_pending_tasks can await it
+            self._running_exec = asyncio.ensure_future(
+                self.call_safe(sender_id, method, task))
+            try:
+                await self._running_exec
+            except asyncio.CancelledError:
+                task.state_changed('failed')
+            finally:
+                self._running_exec = None
 
             del task
             del method

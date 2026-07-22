@@ -1033,12 +1033,6 @@ class Runtime(BaseRPC):
         """
         self._disconnected_runtimes.add(uid)
 
-        # force-close the socket to unblock any pending gather() awaiting a reply
-        if self._comms is not None:
-            conn = getattr(self._comms, '_send_conn', {}).get(uid)
-            if conn is not None and getattr(conn, 'state', None) == 'connected':
-                conn.disconnect()
-
         # deregister if remote uid held a proxy to a local tessera
         for obj in self._tessera.values():
             obj.deregister_proxy(uid)
@@ -1615,10 +1609,8 @@ class Runtime(BaseRPC):
 
         Returns
         -------
-        int
-            ``0`` on completion.
-        """
 
+        """
         for tessera in list(self._tessera.values()):
             running = getattr(tessera, '_running_exec', None)
             if running is not None:
@@ -1626,7 +1618,6 @@ class Runtime(BaseRPC):
                     await running
                 except Exception:
                     pass
-        return 0
 
     def inc_pending_tasks(self):
         self._pending_tasks += 1

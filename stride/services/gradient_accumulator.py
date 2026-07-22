@@ -117,7 +117,7 @@ class GradientAccumulator:
 
         new_attempt = updated.get('attempt', 0)
         if new_attempt != state.attempt:
-            logger.info(
+            logger.debug(
                 f'Counter {counter} - attempt changed '
                 f'({state.attempt} -> {new_attempt}), resetting accumulation.'
             )
@@ -128,7 +128,7 @@ class GradientAccumulator:
         new_expected = {f'{prefix}/task_{s}_grad.pkl'
                         for s in updated['task_ids']}
         if new_expected != state.expected:
-            logger.info(
+            logger.debug(
                 f'Counter {counter} - tasks.json changed '
                 f'({len(state.expected)} -> {len(new_expected)} task(s)).'
             )
@@ -210,7 +210,7 @@ class GradientAccumulator:
             if state.folded < state.expected:
                 now = time.time()
                 if now - last_heartbeat > 10.0:
-                    logger.info(
+                    logger.debug(
                         f'Counter {counter} - heartbeat: still waiting '
                         f'({len(state.folded)}/{len(state.expected)} folded, '
                         f'attempt={state.attempt})'
@@ -218,7 +218,7 @@ class GradientAccumulator:
                     last_heartbeat = now
                 time.sleep(self._shots_poll_interval)
 
-        logger.info(
+        logger.debug(
             f'Counter {counter} - fold complete '
             f'({len(state.folded)}/{len(state.expected)}), '
             f'writing final_grad.pkl'
@@ -227,7 +227,7 @@ class GradientAccumulator:
         final_key = f'{prefix}/final_grad.pkl'
         payload = pickle.dumps(state.accumulated)
         self._artifact_warehouse._upload_bytes(final_key, payload)
-        logger.info(
+        logger.debug(
             f'Counter {counter} - final_grad.pkl written '
             f'({len(payload)} bytes) to {final_key}'
         )
@@ -245,28 +245,28 @@ class GradientAccumulator:
                     f'Counter {counter} - delete failed for {key} '
                     f'({type(exc).__name__}: {exc})'
                 )
-        logger.info(
+        logger.debug(
             f'Counter {counter} - cleaned up {deleted}/{len(state.folded)} '
             f'per-task gradient files.'
         )
 
     def run(self):
         """Loop over all counters sequentially."""
-        logger.info(
+        logger.debug(
             f'Started - {self._num_iters} counter(s), '
             f'bucket={self._artifact_warehouse.bucket}, '
             f'result_prefix={self._artifact_warehouse.result_prefix}'
         )
         for i in range(self._num_iters):
-            logger.info(f'==== Starting counter {i} ====')
+            logger.debug(f'==== Starting counter {i} ====')
             self.accumulate_counter(i)
-            logger.info(f'==== Counter {i} done ====')
-        logger.info(f'All {self._num_iters} counter(s) complete. Exiting.')
+            logger.debug(f'==== Counter {i} done ====')
+        logger.debug(f'All {self._num_iters} counter(s) complete. Exiting.')
 
 
 if __name__ == '__main__':
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.debug,
         format='[%(name)s %(asctime)s] %(message)s',
         datefmt='%H:%M:%S',
     )

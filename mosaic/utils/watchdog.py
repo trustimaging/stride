@@ -38,8 +38,6 @@ class Watchdog:
 
     Parameters
     ----------
-    runtime : Runtime
-        Runtime whose worker pool to monitor.
     drop_threshold : float or None
         Loss tolerance during dispatch. ``None`` disables protection.
     min_workers : int, optional
@@ -51,7 +49,7 @@ class Watchdog:
 
     """
 
-    def __init__(self, runtime, drop_threshold, min_workers=1,
+    def __init__(self, drop_threshold, min_workers=1,
                  desired_workers=None, max_attempts=5):
         if min_workers < 1:
             raise ValueError('min_workers must be >= 1')
@@ -62,29 +60,20 @@ class Watchdog:
                 f'desired_workers ({desired_workers}) must be >= '
                 f'min_workers ({min_workers})'
             )
-        self.runtime = runtime
+        self.runtime = mosaic.runtime()
         self.drop_threshold = drop_threshold
         self.min_workers = min_workers
         self.desired_workers = desired_workers
         self.max_attempts = max_attempts
 
-    @staticmethod
-    async def wait_for_workers(runtime, desired_workers, min_workers=None,
-                               timeout=300.0, heartbeat=30.0):
+    async def wait_for_workers(self, timeout=300.0, heartbeat=30.0):
         """
         Wait up to ``timeout`` for ``desired_workers`` workers to appear
         and their nodes to report ready. On timeout, proceed if
-        ``num_workers >= min_workers`` (default ``desired_workers``),
-        else raise ``RuntimeError``. Static — callable without a
-        Watchdog instance.
+        ``num_workers >= min_workers``, else raise ``RuntimeError``.
 
         Parameters
         ----------
-        runtime : Runtime
-        desired_workers : int
-            Target count; return as soon as reached.
-        min_workers : int, optional
-            Hard floor. Defaults to ``desired_workers`` (strict).
         timeout : float, optional
             Total seconds across both phases. Defaults to 300.
         heartbeat : float, optional
@@ -96,8 +85,9 @@ class Watchdog:
             Pool below ``min_workers`` after ``timeout``.
 
         """
-        if min_workers is None:
-            min_workers = desired_workers
+        runtime = self.runtime
+        desired_workers = self.desired_workers
+        min_workers = self.min_workers
 
         present_uids = set(w.uid for w in runtime.workers)
         if runtime.num_workers >= desired_workers:
@@ -116,9 +106,9 @@ class Watchdog:
         tic = asyncio.get_event_loop().time()
         end_time = tic + timeout
 
-        await Watchdog._wait_for_worker_count(runtime, desired_workers,
-                                              end_time, heartbeat)
-        await Watchdog._wait_for_nodes_ready(runtime, end_time)
+        await self._wait_for_worker_count(runtime, desired_workers,
+                                          end_time, heartbeat)
+        await self._wait_for_nodes_ready(runtime, end_time)
 
         elapsed = asyncio.get_event_loop().time() - tic
 
@@ -162,7 +152,10 @@ class Watchdog:
 
         """
         async def _broadcast():
-            proxies = [self.runtime.put(each, publish=False) for each in args]
+            # dynamic mode: warehouse + lazy pull, so drops and rejoining
+            # workers self-serve; otherwise eager publish as on master
+            publish = self.runtime.mode != 'dynamic'
+            proxies = [self.runtime.put(each, publish=publish) for each in args]
             return await asyncio.gather(*proxies)
 
         if self.drop_threshold is None:
@@ -376,11 +369,7 @@ class Watchdog:
             f'{self.desired_workers}, min {self.min_workers}), '
             f'waiting for replacements'
         )
-        await Watchdog.wait_for_workers(
-            self.runtime,
-            desired_workers=self.desired_workers,
-            min_workers=self.min_workers,
-        )
+        await self.wait_for_workers()
 
     @staticmethod
     async def _wait_for_worker_count(runtime, target, end_time, heartbeat):

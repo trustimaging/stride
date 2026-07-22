@@ -319,7 +319,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         optimiser.reset()
     
     watchdog = Watchdog(
-        runtime=runtime,
         drop_threshold=drop_threshold,
         min_workers=min_workers,
         desired_workers=desired_workers,
@@ -329,11 +328,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         optimiser.clear_grad()
 
         if runtime.mode == 'dynamic':
-            await Watchdog.wait_for_workers(
-                runtime,
-                desired_workers=desired_workers,
-                min_workers=min_workers,
-            )
+            await watchdog.wait_for_workers()
 
         if artifact_warehouse is not None:
             artifact_warehouse.set_counter(iteration.abs_id)
@@ -461,7 +456,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if runtime.mode == 'dynamic':
             status, _ = await watchdog.dispatch(
                 make_coro=make_loop,
-                get_completion=lambda: iteration.completion(
+                get_completion=lambda: iteration.finalise(
                     num_shots, artifact_warehouse
                 ),
                 on_rollback=lambda: iteration.rollback(
@@ -481,7 +476,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         else:
             await make_loop()
 
-        async def step_loop():
+        async def make_step_loop():
             iteration.next_run()
 
             published_args = await watchdog.broadcast(args, label='step-broadcast')
@@ -564,6 +559,21 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                                iteration.num_completed, num_shots))
 
             await loop
+
+        async def step_loop():
+            if runtime.mode == 'dynamic':
+                status, _ = await watchdog.dispatch(
+                    make_coro=make_step_loop,
+                    get_completion=lambda: iteration.finalise(num_shots),
+                    on_rollback=lambda: iteration.rollback(runtime),
+                    label='step-%d' % iteration.abs_id,
+                )
+                if status == 'partial':
+                    logger.perf(
+                        f'Step evaluation partial accept '
+                        f'{iteration.num_completed}/{num_shots}')
+            else:
+                await make_step_loop()
 
         await optimiser.step(iteration=iteration, problem=problem,
                              f_min=f_min, f_max=f_max,

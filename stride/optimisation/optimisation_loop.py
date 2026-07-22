@@ -211,7 +211,7 @@ class Iteration:
         """
         return len(self.curr_run.completed_shots)
 
-    def completion(self, num_shots, artifact_warehouse=None):
+    def finalise(self, num_shots, artifact_warehouse=None):
         """
         Fraction of the iteration's work that's resolved.
         Returns 1.0 if the accumulator has finalised,
@@ -249,20 +249,21 @@ class Iteration:
         }
         self._curr_run_idx = 0
 
-    async def rollback(self, runtime, optimiser, artifact_warehouse, shot_ids):
+    async def rollback(self, runtime, optimiser=None,
+                       artifact_warehouse=None, shot_ids=None):
         """
-        Reset iteration state for a fresh dispatch attempt: bump
-        ``self._attempt``, drain workers, clear local state, and rewrite
-        tasks.json so the accumulator resets on its next poll.
+        Reset iteration state for a fresh dispatch attempt.
+
+        With only ``runtime``, performs a line-search (step) rollback:
+        drain in-flight work on surviving workers, preserving the gradient
+        and the iteration's run history. With ``optimiser`` (and
+        ``artifact_warehouse``/``shot_ids``), performs a full gradient
+        rollback: additionally bump ``self._attempt``, clear runs and
+        gradients, and rewrite tasks.json so the accumulator resets on
+        its next poll.
 
         Called by ``Watchdog.dispatch`` as its ``on_rollback`` callback.
         """
-        self._attempt += 1
-        mosaic.logger().debug(
-            f'Iteration {self.abs_id} attempt {self._attempt} '
-            f'- rolling back'
-        )
-
         drains = []
         for worker in runtime.workers:
             try:
@@ -272,6 +273,15 @@ class Iteration:
 
         if drains:
             await asyncio.gather(*drains, return_exceptions=True)
+
+        if optimiser is None:
+            return
+
+        self._attempt += 1
+        mosaic.logger().debug(
+            f'Iteration {self.abs_id} attempt {self._attempt} '
+            f'- rolling back'
+        )
 
         self.clear()
         optimiser.clear_grad()
