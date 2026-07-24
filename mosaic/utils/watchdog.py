@@ -175,19 +175,19 @@ class Watchdog:
             f'{label} exhausted {self.max_attempts} retry attempts'
         )
 
-    async def dispatch(self, make_coro, get_completion, on_rollback,
+    async def dispatch(self, make_coro, on_completion, on_rollback,
                        label='dispatch'):
         """
         Run ``make_coro()`` under drop protection with partial-accept.
         Cancels mid-flight if drop fraction > ``drop_threshold``; accepts
-        the result when ``get_completion() >= 1 - drop_threshold``,
+        the result when ``on_completion() >= 1 - drop_threshold``,
         otherwise rolls back and retries.
 
         Parameters
         ----------
         make_coro : callable
             Zero-arg dispatch-coroutine factory.
-        get_completion : callable
+        on_completion : callable
             Returns completion fraction in ``[0, 1]``.
         on_rollback : callable
             Sync or async, run before each retry (bump attempt, clear
@@ -216,20 +216,20 @@ class Watchdog:
             try:
                 await self._guarded(make_coro(),
                                     threshold=self.drop_threshold)
-                completion = get_completion()
+                completion = on_completion()
                 if completion >= 1.0:
                     return ('full', None)
             except WatchdogCancelled:
                 # clear async_for's re-entrancy guard for new attempt
                 self.runtime._inside_async_for = False
-                completion = get_completion()
+                completion = on_completion()
             except Exception as exc:
                 self.runtime._inside_async_for = False
                 logger.warning(
                     f'{label} attempt {attempt + 1}/{self.max_attempts}'
                     f' failed ({type(exc).__name__}: {exc})'
                 )
-                completion = get_completion()
+                completion = on_completion()
 
             if completion >= accept_threshold:
                 logger.perf(

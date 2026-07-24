@@ -1611,7 +1611,7 @@ class Runtime(BaseRPC):
         -------
 
         """
-        for tessera in list(self._tessera.values()):
+        for tessera in self._tessera.values():
             running = getattr(tessera, '_running_exec', None)
             if running is not None:
                 try:
