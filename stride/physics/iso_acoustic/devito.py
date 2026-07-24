@@ -332,8 +332,9 @@ class IsoAcousticDevito(ProblemTypeBase):
                                       'bitcomp' if self.space.dim > 2 else None)
         save_compression = save_compression if (is_nvidia or is_nvc) and devito.pro_available else None
 
-        # If there's no previous operator, generate one
-        if self.state_operator.devito_operator is None:
+        # if no previous operator (or the save variant is needed but not yet compiled), generate one
+        if self.state_operator.devito_operator is None \
+                or (save_wavefield and self.state_operator_save.devito_operator is None):
             # Define variables
             src = self.dev_grid.sparse_time_function('src', num=num_sources,
                                                      coordinates=source_coordinates,

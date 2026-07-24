@@ -78,6 +78,7 @@ class Tessera(RemoteBase):
         self._task_queue = asyncio.Queue()
         self._run_queue = asyncio.Queue()
         self._task_lock = asyncio.Lock()
+        self._running_exec = None
 
         self._cls = cls
         self._obj = None
@@ -320,7 +321,16 @@ class Tessera(RemoteBase):
 
             await asyncio.sleep(0)
             await self.logger.send()
-            await self.call_safe(sender_id, method, task)
+
+            # track the in-flight execution so drain_pending_tasks can await it
+            self._running_exec = asyncio.ensure_future(
+                self.call_safe(sender_id, method, task))
+            try:
+                await self._running_exec
+            except asyncio.CancelledError:
+                task.state_changed('failed')
+            finally:
+                self._running_exec = None
 
             del task
             del method
@@ -949,6 +959,8 @@ class ArrayProxy(CMDBase):
         self._cls = PickleClass(cls)
         self._len = kwargs.pop('len', 1)
         self._cls_attr_names = None
+        self._init_args = args
+        self._init_kwargs = dict(kwargs)
 
         self._proxies = []
         self._runtime_id = []
@@ -1074,6 +1086,22 @@ class ArrayProxy(CMDBase):
 
         return params
 
+    def deregister_runtime(self, uid):
+        removed = [p for p in self._proxies if p.runtime_id == uid]
+        for p in removed:
+            task = getattr(p, '_pending_init_task', None)
+            if task is not None and not task.done():
+                task.cancel()
+                mosaic.logger().debug(
+                    'tessera: cancelled pending init for %s on %s'
+                    % (self.uid, uid))
+
+        self._proxies = [p for p in self._proxies if p.runtime_id != uid]
+        if removed:
+            mosaic.logger().debug(
+                'tessera: deregistered %d array proxy for %s (remaining %d)'
+                % (len(removed), uid, len(self._proxies)))
+
     def get_attr(self, item):
         """
         Get at attribute from the remote tessera.
@@ -1127,7 +1155,20 @@ class ArrayProxy(CMDBase):
                         break
 
                 if task_proxies is None:
-                    raise RuntimeError('Runtime %s is no contained in the ArrayProxy' % runtime)
+                    # slow path - lazy-init tessera on a replacement worker
+                    mosaic.logger().debug(
+                        'tessera: slow-path init of %s on new worker %s'
+                        % (self_ref()._cls.cls.__name__, runtime))
+                    proxy = TesseraProxy(self_ref()._cls.cls,
+                                         *self_ref()._init_args,
+                                         runtime=runtime,
+                                         **self_ref()._init_kwargs)
+                    self_ref()._proxies.append(proxy)
+                    proxy._pending_init_task = asyncio.ensure_future(
+                        proxy.__init_async__(*self_ref()._init_args,
+                                              **self_ref()._init_kwargs))
+
+                    task_proxies = proxy[item](*args, **kwargs)
 
             return task_proxies
 

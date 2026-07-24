@@ -1,8 +1,13 @@
 
+import asyncio
+
 import numpy as np
 
+import mosaic
 import mosaic.types
 from mosaic.file_manipulation import h5
+
+from ..services.gradient_accumulator import has_final_grad
 
 from ..problem.base import Saved
 from .loss.functional import FunctionalValue
@@ -132,6 +137,7 @@ class Iteration:
             0: IterationRun(0, self),
         }
         self._curr_run_idx = 0
+        self._attempt = 0
 
     @property
     def curr_run(self):
@@ -205,6 +211,19 @@ class Iteration:
         """
         return len(self.curr_run.completed_shots)
 
+    def finalise(self, num_shots, artifact_warehouse=None):
+        """
+        Fraction of the iteration's work that's resolved.
+        Returns 1.0 if the accumulator has finalised,
+        else ``num_completed / num_shots``.
+        """
+        if artifact_warehouse is not None \
+                and has_final_grad(artifact_warehouse, self.abs_id):
+            return 1.0
+        if num_shots <= 0:
+            return 1.0
+        return self.num_completed / num_shots
+
     def next_run(self):
         """
         Set up next iteration run.
@@ -229,6 +248,47 @@ class Iteration:
             0: IterationRun(0, self),
         }
         self._curr_run_idx = 0
+
+    async def rollback(self, runtime, optimiser=None,
+                       artifact_warehouse=None, shot_ids=None):
+        """
+        Reset iteration state for a fresh dispatch attempt.
+
+        With only ``runtime``, performs a line-search (step) rollback:
+        drain in-flight work on surviving workers, preserving the gradient
+        and the iteration's run history. With ``optimiser`` (and
+        ``artifact_warehouse``/``shot_ids``), performs a full gradient
+        rollback: additionally bump ``self._attempt``, clear runs and
+        gradients, and rewrite tasks.json so the accumulator resets on
+        its next poll.
+
+        Called by ``Watchdog.dispatch`` as its ``on_rollback`` callback.
+        """
+        drains = []
+        for worker in runtime.workers:
+            try:
+                drains.append(worker.drain_pending_tasks(reply=True))
+            except Exception:
+                pass
+
+        if drains:
+            await asyncio.gather(*drains, return_exceptions=True)
+
+        if optimiser is None:
+            return
+
+        self._attempt += 1
+        mosaic.logger().debug(
+            f'Iteration {self.abs_id} attempt {self._attempt} '
+            f'- rolling back'
+        )
+
+        self.clear()
+        optimiser.clear_grad()
+        artifact_warehouse.clear_results(self.abs_id)
+        artifact_warehouse.write_task_list(
+            self.abs_id, shot_ids, attempt=self._attempt,
+        )
 
     def clear_run(self):
         """
@@ -271,7 +331,8 @@ class Iteration:
 
     def add_completed(self, shot):
         """
-        Add a completed shot.
+        Add a completed shot. Idempotent per shot ID so a stray completion
+        from a cancelled attempt can't double-count against the current run.
 
         Parameters
         ----------
@@ -281,7 +342,8 @@ class Iteration:
         -------
 
         """
-        self.curr_run.completed_shots.append(shot.id)
+        if shot.id not in self.curr_run.completed_shots:
+            self.curr_run.completed_shots.append(shot.id)
 
     def append_iteration(self, *args, **kwargs):
         """

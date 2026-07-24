@@ -15,6 +15,9 @@ from concurrent.futures import CancelledError
 import mosaic
 from .compression import maybe_compress, decompress
 from .serialisation import serialise, deserialise
+# module import (not name import) to tolerate the circular import via
+# utils.spill_buffer -> comms; the attribute is resolved at call time
+from ..core import base as core_base
 from ..utils import Future
 from ..utils.utils import sizeof
 
@@ -590,10 +593,15 @@ class OutboundConnection(Connection):
 
         self._heartbeat_timeout = None
         self._heartbeat_attempts = 0
-        self._heartbeat_max_attempts = 5
-        self._heartbeat_interval = 15
+        self._heartbeat_max_attempts = int(
+            os.environ.get('MOSAIC_HEARTBEAT_ATTEMPTS', 5)
+        )
+        self._heartbeat_interval = float(
+            os.environ.get('MOSAIC_HEARTBEAT_INTERVAL', 15)
+        )
 
         self._shaken = False
+        self._pending_reply_futures = weakref.WeakSet()
 
     @property
     def shaken(self):
@@ -674,6 +682,8 @@ class OutboundConnection(Connection):
         self._heartbeat_attempts -= 1
 
         if self._heartbeat_attempts == 0:
+            # Detach so stop_heartbeat() in the cleanup chain can't cancel us.
+            self._heartbeat_timeout = None
             await self._comms.disconnect(self.uid, self.uid, notify=True)
             await self._loop.run(self._runtime.disconnect, self.uid, self.uid)
             return
@@ -767,6 +777,7 @@ class OutboundConnection(Connection):
         if reply is True:
             reply_future = Reply(name=method)
             self._comms.register_reply_future(reply_future)
+            self._pending_reply_futures.add(reply_future)
             reply = reply_future.uid
 
         else:
@@ -831,8 +842,19 @@ class OutboundConnection(Connection):
         return reply_future, msg_size, multipart_msg
 
     def disconnect(self):
+        # cancel heartbeat to avoid stale timer outliving the state transition
+        self.stop_heartbeat()
+
         if self._state != 'connected':
             return
+
+        # fail pending RPC reply futures to avoid hanging on a dead socket
+        pending, self._pending_reply_futures = list(self._pending_reply_futures), weakref.WeakSet()
+        for future in pending:
+            if not future.done():
+                future.set_exception(core_base.RuntimeDisconnectedError(
+                    f'Remote runtime {self.uid} disconnected before reply could be received'
+                ))
 
         self._socket.disconnect(self.connect_address)
         super().disconnect()

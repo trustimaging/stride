@@ -1,4 +1,5 @@
 
+import asyncio
 import time
 
 import mosaic
@@ -79,7 +80,19 @@ class CMDBase(Base):
         self.is_async = False
 
     async def __init_async__(self, *args, **kwargs):
-        await self.init(*args, **kwargs)
+
+        # shield init so outer cancellation (iteration retry) doesn't abort proxy setup mid-flight
+        try:
+            await asyncio.shield(self.init(*args, **kwargs))
+        except asyncio.CancelledError:
+            await self.init(*args, **kwargs)
+        except RuntimeDisconnectedError as exc:
+            if (hasattr(self, '_done_future')
+                    and hasattr(self._done_future, 'done')
+                    and not self._done_future.done()):
+                self._done_future.set_exception(exc)
+                self._done_future.exception()
+            raise
 
         if self._init_future.done():
             exc = self._init_future.exception()

@@ -377,6 +377,32 @@ class Monitor(Runtime):
         node.update(update, **sub_resources)
         self._monitor_strategy.update_node(node)
 
+    def check_node_status(self, sender_id, worker_uids):
+        """
+        Check whether nodes for the given workers have completed their
+        initial registration handshake.
+
+        Parameters
+        ----------
+        sender_id : str
+        worker_uids : list of str
+            Worker UIDs in the form ``worker:<node_idx>:<worker_idx>:<instance_id>``.
+
+        Returns
+        -------
+        dict
+            ``{node_uid: bool}`` for each derived node UID. Workers from the
+            same node collapse to a single entry. Malformed worker UIDs are
+            skipped silently.
+        """
+        result = {}
+        for worker_uid in worker_uids:
+            parts = worker_uid.split(':')
+            if len(parts) == 4 and parts[0] == 'worker':
+                node_uid = f'node:{parts[1]}:{parts[3]}'
+                result[node_uid] = node_uid in self._monitored_nodes
+        return result
+
     def add_tessera_event(self, sender_id, msgs):
         if sender_id in self._disconnected_runtimes:
             return
@@ -566,6 +592,8 @@ class Monitor(Runtime):
         # ensure runtime marked as disconnected
         self._disconnected_runtimes.add(uid)
 
+        self._monitor_strategy.remove_worker(uid)
+
         # disconnect associated workers
         if uid in self._monitored_nodes:
             for worker_id in self._monitored_nodes[uid].sub_resources['workers'].keys():
@@ -639,13 +667,17 @@ class Monitor(Runtime):
         while pending_tasks:
             await asyncio.sleep(0.1)
 
-            for task in pending_tasks:
-                if task.state in ['done', 'failed', 'collected']:
+            # drop tasks Monitor.disconnect has pruned out of _monitored_tasks
+            tracked_uids = set(self._monitored_tasks.keys())
+            for task in list(pending_tasks):
+                if task.state in ['done', 'failed', 'collected'] \
+                        or task.uid not in tracked_uids:
                     pending_tasks.remove(task)
 
             if len(self._monitored_tasks) > num_tasks:
                 for task in self._monitored_tasks.values():
-                    if task.state not in ['done', 'failed', 'collected'] and task not in pending_tasks:
+                    if task.state not in ['done', 'failed', 'collected'] \
+                            and task not in pending_tasks:
                         pending_tasks.append(task)
 
             if timeout is not None and (time.time() - tic) > timeout:

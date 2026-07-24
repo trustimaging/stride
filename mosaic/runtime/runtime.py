@@ -185,6 +185,8 @@ class Runtime(BaseRPC):
         self._remote_warehouse = None
         self._local_warehouse = None
         self._artifact_warehouse = None
+        self._disconnected_runtimes = set()
+        self._on_worker_count_changed = []
 
         cache_fraction = float(os.environ.get('MOSAIC_RUNTIME_CACHE_MEM', 0.01))
         cache_size = min(cache_fraction*memory_limit(), 1*1024**3)
@@ -438,34 +440,45 @@ class Runtime(BaseRPC):
 
             tasks = [asyncio.create_task(call(*each)) for each in zip(*iterables)]
 
-            gather = []
-            for task in asyncio.as_completed(tasks, timeout=timeout):
-                try:
-                    res = await task
-                    gather.append(res)
-                except RuntimeDisconnectedError as exc:
-                    if safe:
-                        self.logger.warn('Runtime failed, retiring worker: %s' % exc)
-                        available_workers -= 1
-                        if available_workers <= 0:
-                            for other_task in tasks:
-                                other_task.cancel()
-                                try:
-                                    await other_task
-                                except (RuntimeDisconnectedError, asyncio.CancelledError):
-                                    pass
-                            raise RuntimeError('No workers available to complete async workload')
-                    else:
-                        raise
+            try:
+                gather = []
+                for task in asyncio.as_completed(tasks, timeout=timeout):
+                    try:
+                        res = await task
+                        gather.append(res)
+                    except RuntimeDisconnectedError as exc:
+                        if safe:
+                            self.logger.warn('Runtime failed, retiring worker: %s' % exc)
+                            available_workers -= 1
+                            if available_workers <= 0:
+                                for other_task in tasks:
+                                    other_task.cancel()
+                                    try:
+                                        await other_task
+                                    except (RuntimeDisconnectedError, asyncio.CancelledError):
+                                        pass
+                                raise RuntimeError('No workers available to complete async workload')
+                        else:
+                            raise
 
-                if max_await is not None and len(gather) > max_await:
-                    for other_task in tasks:
-                        other_task.cancel()
-                        try:
-                            await other_task
-                        except (RuntimeDisconnectedError, asyncio.CancelledError):
-                            pass
-                    break
+                    if max_await is not None and len(gather) > max_await:
+                        for other_task in tasks:
+                            other_task.cancel()
+                            try:
+                                await other_task
+                            except (RuntimeDisconnectedError, asyncio.CancelledError):
+                                pass
+                        break
+            except (Exception, asyncio.CancelledError):
+                # Consume exceptions from any child task still in flight so
+                # asyncio doesn't surface them at shutdown as "Task exception
+                # was never retrieved" tracebacks.
+                pending = [t for t in tasks if not t.done()]
+                for t in pending:
+                    t.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+                raise
 
             await self.barrier()
 
@@ -794,6 +807,10 @@ class Runtime(BaseRPC):
             elif hasattr(self, '_' + proxy.name):
                 setattr(self, '_' + proxy.name, proxy)
 
+            if proxy.name == 'worker':
+                for cb in list(self._on_worker_count_changed):
+                    cb()
+
             return proxy
 
         else:
@@ -822,6 +839,10 @@ class Runtime(BaseRPC):
 
         elif hasattr(self, '_' + proxy.name):
             setattr(self, '_' + proxy.name, None)
+
+        if proxy.name == 'worker':
+            for cb in list(self._on_worker_count_changed):
+                cb()
 
     @staticmethod
     def proxy(name=None, indices=(), uid=None):
@@ -1010,6 +1031,8 @@ class Runtime(BaseRPC):
         -------
 
         """
+        self._disconnected_runtimes.add(uid)
+
         # deregister if remote uid held a proxy to a local tessera
         for obj in self._tessera.values():
             obj.deregister_proxy(uid)
@@ -1571,6 +1594,30 @@ class Runtime(BaseRPC):
 
         for tessera, task in zip(task.tesseras, task.tasks):
             tessera.queue_task((sender_id, task))
+
+    async def drain_pending_tasks(self, sender_id):
+        """
+        Wait for any running task on this runtime to finish.
+
+        Called by the head before retrying an iteration, so surviving
+        workers finish their in-flight work before the head re-dispatches.
+
+        Parameters
+        ----------
+        sender_id : str
+            UID of the calling runtime
+
+        Returns
+        -------
+
+        """
+        for tessera in self._tessera.values():
+            running = getattr(tessera, '_running_exec', None)
+            if running is not None:
+                try:
+                    await running
+                except Exception:
+                    pass
 
     def inc_pending_tasks(self):
         self._pending_tasks += 1
