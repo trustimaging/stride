@@ -456,7 +456,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if runtime.mode == 'dynamic':
             status, _ = await watchdog.dispatch(
                 make_coro=make_loop,
-                get_completion=lambda: iteration.finalise(
+                on_completion=lambda: iteration.finalise(
                     num_shots, artifact_warehouse
                 ),
                 on_rollback=lambda: iteration.rollback(
@@ -564,7 +564,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             if runtime.mode == 'dynamic':
                 status, _ = await watchdog.dispatch(
                     make_coro=make_step_loop,
-                    get_completion=lambda: iteration.finalise(num_shots),
+                    on_completion=lambda: iteration.finalise(num_shots),
                     on_rollback=lambda: iteration.rollback(runtime),
                     label='step-%d' % iteration.abs_id,
                 )
