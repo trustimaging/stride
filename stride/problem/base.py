@@ -4,7 +4,7 @@ from mosaic import h5
 from .domain import Space, Time, SlowTime, Grid
 
 
-__all__ = ['Gridded', 'Saved', 'GriddedSaved', 'ProblemBase']
+__all__ = ['Gridded', 'Meshed', 'Saved', 'GriddedSaved', 'MeshedSaved', 'ProblemBase']
 
 
 class Gridded:
@@ -245,12 +245,16 @@ class GriddedSaved(Saved, Gridded):
         with h5.HDF5(*args, **kwargs, mode='r') as file:
             description = file.load(filter=kwargs.pop('filter', None), only=kwargs.pop('only', None))
 
-            # TODO If there's already a grid and they don't match, resample instead
             if 'space' in description and self._grid.space is None:
-                space = Space(shape=description.space.shape,
-                              spacing=description.space.spacing,
-                              extra=description.space.extra,
-                              absorbing=description.space.absorbing)
+                if 'shape' in description:
+                    space = Space(shape=description.space.shape,
+                                spacing=description.space.spacing,
+                                extra=description.space.extra,
+                                absorbing=description.space.absorbing)
+                elif 'nodes' in description:
+                    space = MeshedSpace(nodes=description.space.nodes)
+                else:
+                    raise Exception
 
                 self._grid.space = space
 
@@ -289,12 +293,20 @@ class GriddedSaved(Saved, Gridded):
 
         if self.space is not None:
             space = self.space
-            grid_description['space'] = {
-                'shape': space.shape,
-                'spacing': space.spacing,
-                'extra': space.extra,
-                'absorbing': space.absorbing,
-            }
+            if isinstance(space, Space):
+                grid_description['space'] = {
+                    'shape': space.shape,
+                    'spacing': space.spacing,
+                    'extra': space.extra,
+                    'absorbing': space.absorbing,
+                }
+            elif isinstance(space, MeshedSpace):
+                #stand-in attribute
+                grid_description['space'] = {
+                    'nodes': space.nodes
+                }
+            else:
+                raise Exception
 
         if self.time is not None:
             time = self.time

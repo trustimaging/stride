@@ -3,7 +3,7 @@ import numpy as np
 from cached_property import cached_property
 
 
-__all__ = ['Space', 'Time', 'SlowTime', 'Grid']
+__all__ = ['Space', 'MeshedSpace', 'Time', 'SlowTime', 'Grid']
 
 
 class Space:
@@ -259,6 +259,8 @@ class Space:
                 for dim in range(self.dim)]
         return tuple(axes)
 
+class MeshedSpace:
+    pass
 
 class Time:
     """

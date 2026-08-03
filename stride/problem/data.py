@@ -26,7 +26,8 @@ from .. import plotting
 
 
 __all__ = ['Data', 'StructuredData', 'Scalar', 'ScalarField', 'VectorField', 'Traces',
-           'DiskTraces', 'ArtifactTraces', 'SparseField', 'SparseCoordinates']
+           'DiskTraces', 'ArtifactTraces', 'SparseField', 'SparseCoordinates',
+           'MeshedData', 'MeshedField']
 
 
 def inv_transform(x):
@@ -778,6 +779,14 @@ class StructuredData(Data):
 
         self._set_data(self.pad_data(data))
 
+
+@mosaic.tessera
+class MeshedData(StructuredData, GriddedSaved):
+    pass
+
+@mosaic.tessera
+class MeshedField(MeshedData):
+    pass
 
 @mosaic.tessera
 class Scalar(StructuredData):
