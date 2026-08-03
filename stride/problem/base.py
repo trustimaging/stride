@@ -4,7 +4,7 @@ from mosaic import h5
 from .domain import Space, Time, SlowTime, Grid
 
 
-__all__ = ['Gridded', 'Meshed', 'Saved', 'GriddedSaved', 'MeshedSaved', 'ProblemBase']
+__all__ = ['Gridded', 'Saved', 'GriddedSaved', 'ProblemBase']
 
 
 class Gridded:
