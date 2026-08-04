@@ -1,7 +1,7 @@
 
 from mosaic import h5
 
-from .domain import Space, Time, SlowTime, Grid
+from .domain import Space, MeshedSpace, Time, SlowTime, Grid
 
 
 __all__ = ['Gridded', 'Saved', 'GriddedSaved', 'ProblemBase']
@@ -246,15 +246,27 @@ class GriddedSaved(Saved, Gridded):
             description = file.load(filter=kwargs.pop('filter', None), only=kwargs.pop('only', None))
 
             if 'space' in description and self._grid.space is None:
-                if 'shape' in description:
-                    space = Space(shape=description.space.shape,
-                                spacing=description.space.spacing,
-                                extra=description.space.extra,
-                                absorbing=description.space.absorbing)
-                elif 'nodes' in description:
-                    space = MeshedSpace(nodes=description.space.nodes)
+                # NOTE the discriminator has to be the keys of description.space, not those of
+                # description: StructuredData.__get_desc__ also writes a top-level 'shape', so
+                # testing the outer description would send every field down the structured branch
+                space_description = description.space
+
+                if 'shape' in space_description:
+                    space = Space(shape=space_description.shape,
+                                  spacing=space_description.spacing,
+                                  extra=space_description.extra,
+                                  absorbing=space_description.absorbing)
+
+                elif 'nodes' in space_description:
+                    space = MeshedSpace(
+                        nodes=self._materialise(space_description.nodes),
+                        cells=self._materialise(space_description.get('cells', None)),
+                        cell_tags=self._materialise(space_description.get('cell_tags', None)),
+                    )
+
                 else:
-                    raise Exception
+                    raise ValueError('Unrecognised space description with keys %s'
+                                     % sorted(space_description.keys()))
 
                 self._grid.space = space
 
@@ -279,6 +291,31 @@ class GriddedSaved(Saved, Gridded):
             kwargs['filename'] = kwargs.pop('filename', file.filename)
             self.__set_desc__(description, **kwargs)
 
+    @staticmethod
+    def _materialise(value):
+        """
+        Read a lazily-loaded description entry into memory.
+
+        Loading a description defaults to being lazy, which yields the open dataset with a
+        ``load`` attribute attached rather than an ndarray. Anything that has to outlive the
+        open file must be materialised explicitly.
+
+        Parameters
+        ----------
+        value : object
+            Entry of a loaded description.
+
+        Returns
+        -------
+        object
+            The entry, read into memory if it was lazy.
+
+        """
+        if hasattr(value, 'load'):
+            return value.load()
+
+        return value
+
     def grid_description(self):
         """
         Get a description of the grid of the object.
@@ -300,13 +337,24 @@ class GriddedSaved(Saved, Gridded):
                     'extra': space.extra,
                     'absorbing': space.absorbing,
                 }
+
             elif isinstance(space, MeshedSpace):
-                #stand-in attribute
-                grid_description['space'] = {
-                    'nodes': space.nodes
-                }
+                # the connectivity travels with the nodes: a node table on its own is not a mesh
+                # and cannot be handed back to a solver. Facet tags are deliberately left out,
+                # being meaningless without the facet connectivity, which is not stored either
+                space_description = {'nodes': space.nodes}
+
+                if space.cells is not None:
+                    space_description['cells'] = space.cells
+
+                if space.cell_tags is not None:
+                    space_description['cell_tags'] = space.cell_tags
+
+                grid_description['space'] = space_description
+
             else:
-                raise Exception
+                raise TypeError('Cannot serialise a grid with space of type %s'
+                                % type(space).__name__)
 
         if self.time is not None:
             time = self.time

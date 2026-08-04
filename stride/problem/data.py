@@ -21,6 +21,7 @@ from mosaic.comms.compression import maybe_compress, decompress
 from mosaic.file_manipulation import h5
 
 from .base import GriddedSaved
+from .domain import MeshedSpace
 from ..core import Variable
 from .. import plotting
 
@@ -781,12 +782,447 @@ class StructuredData(Data):
 
 
 @mosaic.tessera
-class MeshedData(StructuredData, GriddedSaved):
-    pass
+class MeshedData(StructuredData):
+    """
+    Objects of this type represent data defined over an unstructured mesh.
+
+    This is the mesh counterpart of StructuredData: the buffer is flat, one value per mesh entity,
+    and there is no inner/extended domain because a mesh has no padding.
+
+    The shape is derived from the :class:`~stride.problem.domain.MeshedSpace` of the grid rather
+    than from a ``space.shape``, in the same way that :class:`SparseField` derives it from ``num``.
+
+    Parameters
+    ----------
+    name : str
+        Name of the data.
+    location : str, optional
+        Mesh entity the data lives on, ``nodal`` (one value per node) or ``cell`` (one value per
+        cell, the discontinuous piecewise-constant case), defaults to ``nodal``.
+    shape : tuple, optional
+        Shape of the data, derived from the grid if not given.
+    dtype : data-type, optional
+        Data type of the data, defaults to float32.
+    data : ndarray, optional
+        Data with which to initialise the internal buffer.
+    grid : Grid or any of MeshedSpace or Time
+        Grid on which the Problem is defined.
+
+    """
+
+    def __init__(self, **kwargs):
+        if kwargs.get('compressed', False):
+            # maybe_compress crashes for buffers of 2.5k-10k float32 elements (byte_sample uses
+            # len() where it means nbytes), and above that window the decompressed buffer is a
+            # read-only np.frombuffer view, so in-place assignment fails
+            raise ValueError('Compression is not supported for meshed data')
+
+        location = kwargs.pop('location', 'nodal')
+        if location not in ('nodal', 'cell'):
+            raise ValueError('Location must be "nodal" or "cell", got %s' % location)
+
+        self._location = location
+
+        data = kwargs.get('data', None)
+
+        super().__init__(**kwargs)
+
+        if self._shape is None and isinstance(self.space, MeshedSpace):
+            self._init_shape()
+
+        if data is not None and isinstance(self.space, MeshedSpace):
+            expected = self.num_entities
+            given = np.asarray(data).shape[0]
+
+            # this has to be explicit: the inherited pad_data floors its pad widths, so an
+            # off-by-two would otherwise be silently edge-padded to the right length
+            if given != expected:
+                raise ValueError('Data has %d values but the mesh has %d %s entities'
+                                 % (given, expected, self._location))
+
+    def _init_shape(self, fill_shape=True):
+        shape = (self.num_entities,)
+
+        if fill_shape:
+            self._shape = shape
+        self._extended_shape = shape
+        self._inner = (slice(0, None),)
+
+    @property
+    def location(self):
+        """
+        Mesh entity the data lives on, ``nodal`` or ``cell``.
+
+        """
+        return self._location
+
+    @property
+    def num_entities(self):
+        """
+        Number of mesh entities the data is defined over.
+
+        """
+        return self.num_cells if self._location == 'cell' else self.num_nodes
+
+    @property
+    def num_nodes(self):
+        """
+        Number of nodes in the mesh.
+
+        """
+        return self.space.num_nodes
+
+    @property
+    def num_cells(self):
+        """
+        Number of cells in the mesh.
+
+        """
+        return self.space.num_cells
+
+    def alike(self, *args, **kwargs):
+        """
+        Create a data object that shares its characteristics with this object.
+
+        Returns
+        -------
+        MeshedData
+            Newly created MeshedData.
+
+        """
+        kwargs['location'] = kwargs.pop('location', self._location)
+
+        return super().alike(*args, **kwargs)
+
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original graph.
+
+        Returns
+        -------
+        MeshedData
+            Detached variable.
+
+        """
+        kwargs['location'] = kwargs.pop('location', self._location)
+
+        return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable, detached and re-initialised as a parameter.
+
+        Returns
+        -------
+        MeshedData
+            Detached variable.
+
+        """
+        kwargs['location'] = kwargs.pop('location', self._location)
+
+        return super().as_parameter(*args, **kwargs)
+
+    def pad_data(self, data, smooth=False):
+        """
+        Padding is a no-op on a mesh, which has no extended domain.
+
+        Parameters
+        ----------
+        data : ndarray
+            Array to pad.
+        smooth : bool, optional
+            Unused.
+
+        Returns
+        -------
+        ndarray
+            The input, unchanged.
+
+        """
+        return data
+
+    def plot(self, **kwargs):
+        """
+        Plotting meshed data is not implemented, so that Medium.plot does not fail on a
+        medium made of meshed fields.
+
+        Returns
+        -------
+
+        """
+        pass
+
+    def __get_desc__(self, **kwargs):
+        description = super().__get_desc__(**kwargs)
+        description['location'] = self._location
+
+        return description
+
+    def __set_desc__(self, description, **kwargs):
+        super().__set_desc__(description, **kwargs)
+
+        location = description.get('location', 'nodal')
+        self._location = location.decode() if isinstance(location, bytes) else location
+
 
 @mosaic.tessera
 class MeshedField(MeshedData):
-    pass
+    """
+    Objects of this type describe a field defined over an unstructured mesh. Meshed fields
+    can also be time-dependent, and can carry a vector value per entity.
+
+    Parameters
+    ----------
+    name : str
+        Name of the data.
+    dim : int, optional
+        Number of components at every mesh entity, defaults to 1.
+    time_dependent : bool, optional
+        Whether or not the field is time-dependent, defaults to False.
+    slow_time_dependent : bool, optional
+        Whether or not the field is slow-time dependent, defaults to False.
+    location : str, optional
+        Mesh entity the field lives on, ``nodal`` or ``cell``, defaults to ``nodal``.
+    dtype : data-type, optional
+        Data type of the data, defaults to float32.
+    grid : Grid or any of MeshedSpace or Time
+        Grid on which the Problem is defined.
+
+    """
+
+    def __init__(self, **kwargs):
+        # these have to be in place before MeshedData.__init__ calls _init_shape
+        self._dim = kwargs.pop('dim', 1)
+        self._time_dependent = kwargs.pop('time_dependent', False)
+        self._slow_time_dependent = kwargs.pop('slow_time_dependent', False)
+
+        super().__init__(**kwargs)
+
+    def _init_shape(self, fill_shape=True):
+        shape = ()
+        inner = ()
+
+        if self._time_dependent:
+            shape += (self.time.num,)
+            inner += (self.time.inner,)
+
+        if self._slow_time_dependent:
+            shape += (self.slow_time.num,)
+            inner += (self.slow_time.inner,)
+
+        if self._dim > 1:
+            shape += (self.num_entities, self._dim)
+            inner += (slice(0, None), slice(0, None))
+        else:
+            shape += (self.num_entities,)
+            inner += (slice(0, None),)
+
+        if fill_shape:
+            self._shape = shape
+        self._extended_shape = shape
+        self._inner = inner
+
+    @property
+    def dim(self):
+        """
+        Number of components at every mesh entity.
+
+        """
+        return self._dim
+
+    @property
+    def time_dependent(self):
+        """
+        Whether or not the field is time dependent.
+
+        """
+        return self._time_dependent
+
+    @property
+    def slow_time_dependent(self):
+        """
+        Whether or not the field is slow-time dependent.
+
+        """
+        return self._slow_time_dependent
+
+    def alike(self, *args, **kwargs):
+        """
+        Create a data object that shares its characteristics with this object.
+
+        Returns
+        -------
+        MeshedField
+            Newly created MeshedField.
+
+        """
+        kwargs['dim'] = kwargs.pop('dim', self._dim)
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self._time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent',
+                                                   self._slow_time_dependent)
+
+        return super().alike(*args, **kwargs)
+
+    def detach(self, *args, **kwargs):
+        """
+        Create a copy of the variable that is detached from the original graph.
+
+        Returns
+        -------
+        MeshedField
+            Detached variable.
+
+        """
+        kwargs['dim'] = kwargs.pop('dim', self._dim)
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self._time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent',
+                                                   self._slow_time_dependent)
+
+        return super().detach(*args, **kwargs)
+
+    def as_parameter(self, *args, **kwargs):
+        """
+        Create a copy of the variable, detached and re-initialised as a parameter.
+
+        Returns
+        -------
+        MeshedField
+            Detached variable.
+
+        """
+        kwargs['dim'] = kwargs.pop('dim', self._dim)
+        kwargs['time_dependent'] = kwargs.pop('time_dependent', self._time_dependent)
+        kwargs['slow_time_dependent'] = kwargs.pop('slow_time_dependent',
+                                                   self._slow_time_dependent)
+
+        return super().as_parameter(*args, **kwargs)
+
+    @staticmethod
+    def values_from_labels(labels, lut):
+        """
+        Map an integer label array through a lookup table.
+
+        This is how a segmentation becomes a material property: ``labels`` comes from sampling a
+        label volume, and ``lut`` maps each label to a conductivity or permittivity.
+
+        Parameters
+        ----------
+        labels : ndarray
+            Integer labels, one per mesh entity.
+        lut : ndarray or dict
+            Value per label, either indexable by label or a mapping.
+
+        Returns
+        -------
+        ndarray
+            Value for every entry of ``labels``.
+
+        """
+        labels = np.asarray(labels)
+        unique = np.unique(labels)
+
+        if isinstance(lut, dict):
+            missing = [int(each) for each in unique if int(each) not in lut]
+
+            if len(missing):
+                raise KeyError('No value provided for labels %s' % missing)
+
+            return np.asarray([lut[int(each)] for each in labels])
+
+        lut = np.asarray(lut)
+
+        # an array lut would otherwise raise IndexError past the end and, worse, silently index
+        # from the end for a negative label, which segmentations do use as a sentinel
+        out_of_range = [int(each) for each in unique if each < 0 or each >= lut.shape[0]]
+
+        if len(out_of_range):
+            raise KeyError('Labels %s fall outside a lookup table of size %d'
+                           % (out_of_range, lut.shape[0]))
+
+        return lut[labels]
+
+    @classmethod
+    def from_labels(cls, labels, lut, **kwargs):
+        """
+        Create a nodal field by mapping sampled labels through a lookup table.
+
+        Note that, being a classmethod, this always builds a local instance. To create a parameter
+        or a remote instance, use :meth:`values_from_labels` and pass the result as ``data``.
+
+        Parameters
+        ----------
+        labels : ndarray
+            Integer label per node, as returned by ``MeshedSpace.sample_labels``.
+        lut : ndarray or dict
+            Value per label.
+
+        Returns
+        -------
+        MeshedField
+            Newly created MeshedField.
+
+        """
+        labels = np.asarray(labels)
+        field = cls(**kwargs)
+
+        if labels.shape != (field.num_entities,):
+            raise ValueError('Expected %d labels, one per %s entity, got shape %s'
+                             % (field.num_entities, field.location, (labels.shape,)))
+
+        field.allocate()
+        field.data[:] = cls.values_from_labels(labels, lut)
+
+        return field
+
+    @classmethod
+    def from_cell_tags(cls, mapping, **kwargs):
+        """
+        Create a per-cell field by mapping the cell tags of the mesh through a value mapping.
+
+        This is the discontinuous piecewise-constant medium: one value per cell, taken from the
+        material tag the mesh generator assigned to it. Unlike the fields built by
+        :meth:`from_labels`, the resulting shape is ``(num_cells,)``.
+
+        Parameters
+        ----------
+        mapping : dict or ndarray
+            Value per cell tag. Must cover every tag present in the mesh.
+
+        Returns
+        -------
+        MeshedField
+            Newly created MeshedField.
+
+        """
+        grid = kwargs.get('grid', None)
+        space = kwargs.get('space', None) if grid is None else grid.space
+
+        if space is None or space.cell_tags is None:
+            raise ValueError('Creating a field from cell tags needs a space carrying cell tags')
+
+        kwargs['location'] = 'cell'
+        field = cls(**kwargs)
+
+        field.allocate()
+        field.data[:] = cls.values_from_labels(space.cell_tags, mapping)
+
+        return field
+
+    def __get_desc__(self, **kwargs):
+        description = super().__get_desc__(**kwargs)
+        description['dim'] = self._dim
+        description['time_dependent'] = self._time_dependent
+        description['slow_time_dependent'] = self._slow_time_dependent
+
+        return description
+
+    def __set_desc__(self, description, **kwargs):
+        super().__set_desc__(description, **kwargs)
+
+        self._dim = description.get('dim', 1)
+        self._time_dependent = description.get('time_dependent', False)
+        self._slow_time_dependent = description.get('slow_time_dependent', False)
+
 
 @mosaic.tessera
 class Scalar(StructuredData):

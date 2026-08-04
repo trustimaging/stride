@@ -1,4 +1,5 @@
 
+import warnings
 import numpy as np
 from cached_property import cached_property
 
@@ -259,8 +260,263 @@ class Space:
                 for dim in range(self.dim)]
         return tuple(axes)
 
+
 class MeshedSpace:
-    pass
+    """
+    This defines an unstructured spatial mesh over which the problem is defined.
+
+    Where a :class:`Space` is fully determined by a ``shape`` and a ``spacing``, a MeshedSpace is
+    determined by an explicit table of ``nodes`` and, optionally, the ``cells`` that connect them.
+    It is the counterpart used by finite-element physics, and is a sibling of Space rather than a
+    subclass of it.
+
+    A MeshedSpace deliberately has no ``shape``, ``extended_shape``, ``extra``, ``absorbing``,
+    ``spacing``, ``inner`` or ``grid``. Those describe a regular grid and a mesh has no analogue of
+    any of them, so code that requires a structured grid fails immediately when handed a mesh
+    instead of silently producing a plausible but meaningless result.
+
+    Note also that, unlike Space, ``size`` is not an alias for ``limit``: the mesh origin need not
+    be at zero, so the extent and the upper bound differ.
+
+    Parameters
+    ----------
+    nodes : ndarray
+        Node coordinates, of shape ``(num_nodes, dim)``, in metres.
+    cells : ndarray, optional
+        Node indices making up each cell, of shape ``(num_cells, nodes_per_cell)``. The number of
+        nodes per cell is not fixed: linear tetrahedra have 4, quadratic tetrahedra have 10.
+    cell_tags : ndarray, optional
+        Material tag for every cell, of shape ``(num_cells,)``. Tags are opaque integers as far as
+        the MeshedSpace is concerned, and are only meaningful against the label table of whoever
+        generated the mesh.
+    facet_tags : optional
+        Boundary tags, stored as given and not interpreted. These are not serialised, because a
+        facet tag is meaningless without the facet connectivity, which is not stored either.
+
+    """
+
+    def __init__(self, nodes=None, cells=None, cell_tags=None, facet_tags=None):
+        nodes = np.asarray(nodes, dtype=np.float64)
+
+        if nodes.ndim != 2:
+            raise ValueError('Nodes must be a (num_nodes, dim) array, got shape %s'
+                             % (nodes.shape,))
+
+        dim = nodes.shape[1]
+        if dim not in (2, 3):
+            raise ValueError('Only 2 or 3 dimensions are supported, got %d' % dim)
+
+        if cells is not None:
+            cells = np.asarray(cells, dtype=np.int32)
+
+            if cells.ndim != 2:
+                raise ValueError('Cells must be a (num_cells, nodes_per_cell) array, got shape %s'
+                                 % (cells.shape,))
+
+            if cells.size and (cells.min() < 0 or cells.max() >= nodes.shape[0]):
+                raise ValueError('Cells reference node indices outside [0, %d)' % nodes.shape[0])
+
+        if cell_tags is not None:
+            cell_tags = np.asarray(cell_tags)
+
+            if cells is None:
+                raise ValueError('Cell tags were given without any cells')
+
+            if cell_tags.shape != (cells.shape[0],):
+                raise ValueError('Cell tags must have one entry per cell, expected %d '
+                                 'but got shape %s' % (cells.shape[0], (cell_tags.shape,)))
+
+        self.dim = dim
+        self.nodes = nodes
+        self.cells = cells
+        self.cell_tags = cell_tags
+        self.facet_tags = facet_tags
+
+        # eagerly, as plain tuples: a cached_property would end up in __dict__ and be pickled
+        # along with the space every time a field travels to a worker
+        self.origin = tuple(nodes.min(axis=0))
+        self.limit = tuple(nodes.max(axis=0))
+
+    @property
+    def num_nodes(self):
+        """
+        Number of nodes in the mesh.
+
+        """
+        return int(self.nodes.shape[0])
+
+    @property
+    def num_cells(self):
+        """
+        Number of cells in the mesh, zero if no connectivity is defined.
+
+        """
+        return 0 if self.cells is None else int(self.cells.shape[0])
+
+    @property
+    def size(self):
+        """
+        Axis-wise extent of the mesh, as a tuple.
+
+        """
+        return tuple(each_limit - each_origin
+                     for each_limit, each_origin in zip(self.limit, self.origin))
+
+    def contains_box(self, lower, upper, atol=1e-9):
+        """
+        Whether the mesh covers an axis-aligned box.
+
+        This is the check needed before evaluating a finite-element solution onto a structured
+        grid: every point of the grid has to be owned by some cell of the mesh.
+
+        Parameters
+        ----------
+        lower : tuple or ndarray
+            Lower corner of the box, in metres.
+        upper : tuple or ndarray
+            Upper corner of the box, in metres.
+        atol : float, optional
+            Absolute tolerance, to absorb round-off in the node coordinates, defaults to 1e-9.
+
+        Returns
+        -------
+        bool
+            Whether the mesh covers the box.
+
+        """
+        lower = np.asarray(lower, dtype=np.float64)
+        upper = np.asarray(upper, dtype=np.float64)
+
+        return bool((self.nodes.min(axis=0) <= lower + atol).all()
+                    and (self.nodes.max(axis=0) >= upper - atol).all())
+
+    def sample_labels(self, volume, affine=None):
+        """
+        Sample a voxelised label volume at the mesh nodes, using nearest-neighbour lookup.
+
+        This is how a segmentation is transferred onto a mesh in order to build a medium. Nodes
+        that fall outside the volume are clipped to the nearest in-range voxel rather than raising.
+
+        Parameters
+        ----------
+        volume : ndarray
+            Label volume, with as many dimensions as the mesh.
+        affine : ndarray, optional
+            Homogeneous ``(dim+1, dim+1)`` matrix mapping voxel indices to node coordinates. If
+            not given, the node coordinates are taken to be voxel indices already.
+
+        Returns
+        -------
+        ndarray
+            Label at every node, of shape ``(num_nodes,)``.
+
+        """
+        volume = np.asarray(volume)
+
+        if volume.ndim != self.dim:
+            raise ValueError('Volume has %d dimensions but the mesh has %d'
+                             % (volume.ndim, self.dim))
+
+        if affine is None:
+            indices = self.nodes
+        else:
+            affine = np.asarray(affine, dtype=np.float64)
+
+            if affine.shape != (self.dim + 1, self.dim + 1):
+                raise ValueError('Affine must have shape (%d, %d), got %s'
+                                 % (self.dim + 1, self.dim + 1, (affine.shape,)))
+
+            homogeneous = np.hstack([self.nodes, np.ones((self.num_nodes, 1))])
+            indices = (np.linalg.inv(affine) @ homogeneous.T).T[:, :self.dim]
+
+        indices = np.rint(indices).astype(np.int64)
+        for axis in range(self.dim):
+            indices[:, axis] = np.clip(indices[:, axis], 0, volume.shape[axis] - 1)
+
+        # rint before astype: label volumes read from NIfTI are floats, and truncating turns a
+        # stored 2.9999 into 2
+        return np.rint(volume[tuple(indices.T)]).astype(np.int64)
+
+    def resample(self, *args, **kwargs):
+        """
+        Not available for a MeshedSpace.
+
+        A mesh has no spacing to resample onto, and generating a new mesh is a separate operation
+        that must not be silently approximated here.
+
+        Returns
+        -------
+
+        """
+        raise NotImplementedError('A MeshedSpace cannot be resampled, it has no spacing. '
+                                  'Generate a new mesh instead.')
+
+    @classmethod
+    def from_dolfinx(cls, mesh, cell_tags=None, facet_tags=None):
+        """
+        Create a MeshedSpace from an in-memory DOLFINx mesh.
+
+        This is only correct for a serial mesh. Under MPI, DOLFINx node coordinates and the cell
+        dofmap are rank-local and include ghost entities, so the resulting MeshedSpace describes
+        one partition rather than the whole mesh: node and cell counts under-report, ``origin`` and
+        ``limit`` bound a sub-box, and nodes shared between ranks appear more than once. A warning
+        is issued in that case rather than an error, so that experimentation is still possible.
+
+        Parameters
+        ----------
+        mesh : dolfinx.mesh.Mesh
+            Mesh to adapt.
+        cell_tags : dolfinx.mesh.MeshTags, optional
+            Cell tags, which are sparse and get densified to one entry per cell. Cells that carry
+            no tag are filled with -1.
+        facet_tags : optional
+            Facet tags, stored as given.
+
+        Returns
+        -------
+        MeshedSpace
+            Newly created MeshedSpace.
+
+        """
+        if mesh.comm.size > 1:
+            warnings.warn('MeshedSpace.from_dolfinx is building from rank-local arrays, so the '
+                          'resulting space describes this rank\'s partition and not the whole '
+                          'mesh. Build the mesh on MPI.COMM_SELF, or gather it, to avoid this.')
+
+        # geometry.x is always padded to three columns, whatever the geometric dimension
+        dim = mesh.geometry.dim
+        nodes = np.asarray(mesh.geometry.x)[:, :dim]
+
+        topology_dim = mesh.topology.dim
+        num_cells = mesh.topology.index_map(topology_dim).size_local
+
+        # the geometry dofmap, not the topology connectivity, is what indexes geometry.x
+        dofmap = mesh.geometry.dofmap
+
+        if hasattr(dofmap, 'offsets'):
+            # DOLFINx <= 0.7 exposes a flat array plus offsets. Cells of a single mesh are all
+            # of the same type, so the first offset step gives the nodes per cell
+            offsets = np.asarray(dofmap.offsets)
+            nodes_per_cell = int(offsets[1] - offsets[0])
+            cells = np.asarray(dofmap.array).reshape(-1, nodes_per_cell)
+
+        else:
+            cells = np.asarray(dofmap).reshape(num_cells, -1)
+
+        cells = cells[:num_cells]
+
+        tags = None
+        if cell_tags is not None:
+            # MeshTags are a sparse (indices, values) pair, so densify to one entry per cell
+            tags = np.full(num_cells, -1, dtype=np.int32)
+            indices = np.asarray(cell_tags.indices)
+            values = np.asarray(cell_tags.values)
+
+            owned = indices < num_cells
+            tags[indices[owned]] = values[owned]
+
+        return cls(nodes=nodes, cells=cells, cell_tags=tags, facet_tags=facet_tags)
+
 
 class Time:
     """
