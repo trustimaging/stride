@@ -164,6 +164,24 @@ class TestMeshedSpaceIsNotAGrid:
         with pytest.raises(AttributeError):
             ScalarField(name='sigma', grid=Grid(meshed_space, None, None))
 
+    def test_meshed_field_rejects_a_structured_space(self, structured_space):
+        from stride.problem.data import MeshedField
+        from stride.problem.domain import Grid
+
+        # The reverse direction needs an explicit check: MeshedData sizes itself behind an
+        # isinstance test, which would otherwise skip and leave a field with no shape that
+        # still allocates and fills without complaint.
+        with pytest.raises(ValueError, match='MeshedSpace'):
+            MeshedField(name='sigma', grid=Grid(structured_space, None, None))
+
+    def test_no_space_is_still_allowed(self):
+        from stride.problem.data import MeshedField
+
+        # This is what an instance about to be loaded from file looks like.
+        field = MeshedField(name='sigma')
+
+        assert field.space is None
+
 
 class TestMeshedSpaceBounds:
     """Port of the mesh-covers-the-grid assertions in ae_modelling attach_mesh."""

@@ -827,10 +827,18 @@ class MeshedData(StructuredData):
 
         super().__init__(**kwargs)
 
-        if self._shape is None and isinstance(self.space, MeshedSpace):
+        # a space of the wrong kind has to be caught here. Everything downstream is guarded by
+        # isinstance checks that would silently skip instead, leaving a field with no shape that
+        # allocates and fills without complaint. A space of None is valid, and is what an
+        # instance about to be loaded from file looks like
+        if self.space is not None and not isinstance(self.space, MeshedSpace):
+            raise ValueError('Meshed data needs a MeshedSpace, got %s'
+                             % type(self.space).__name__)
+
+        if self._shape is None and self.space is not None:
             self._init_shape()
 
-        if data is not None and isinstance(self.space, MeshedSpace):
+        if data is not None and self.space is not None:
             expected = self.num_entities
             given = np.asarray(data).shape[0]
 
