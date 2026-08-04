@@ -251,6 +251,22 @@ class TestMeshedRoundTrip:
         # GriddedSaved.load only builds a space when the instance has none.
         assert loaded.space is meshed_space
 
+    def test_cell_location_round_trip(self, tagged_meshed_space, project):
+        from stride.problem.data import MeshedField
+
+        field = MeshedField.from_cell_tags({1: 0.1, 2: 0.5}, name='sigma',
+                                           grid=Grid(tagged_meshed_space, None, None))
+        field.dump(**project)
+
+        loaded = MeshedField(name='sigma')
+        loaded.load(**project)
+
+        # Without `location` on the description the reloaded field would default to nodal
+        # and disagree with its own shape.
+        assert loaded.location == 'cell'
+        assert tuple(loaded.shape) == (48,)
+        np.testing.assert_allclose(loaded.data, field.data)
+
     def test_time_dependent_round_trip(self, meshed_space, project):
         from stride.problem.data import MeshedField
         from stride.problem.domain import Time

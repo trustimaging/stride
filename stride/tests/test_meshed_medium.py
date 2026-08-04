@@ -208,6 +208,28 @@ class TestFieldFromLabels:
                                     name='sigma',
                                     grid=Grid(meshed_space, None, None))
 
+    def test_label_past_the_end_of_an_array_lut_raises(self, meshed_space, tissue_properties):
+        from stride.problem.data import MeshedField
+
+        labels = np.full(meshed_space.num_nodes, 9, dtype=np.int64)
+
+        # An array lut would raise IndexError here rather than KeyError; normalise it so both
+        # lut forms report an unmapped label the same way.
+        with pytest.raises(KeyError):
+            MeshedField.from_labels(labels, sigma_lut(tissue_properties), name='sigma',
+                                    grid=Grid(meshed_space, None, None))
+
+    def test_negative_label_raises(self, meshed_space, tissue_properties):
+        from stride.problem.data import MeshedField
+
+        labels = np.full(meshed_space.num_nodes, -1, dtype=np.int64)
+
+        # Segmentations do use -1 as a sentinel, and a negative index would otherwise
+        # silently read from the end of the lookup table.
+        with pytest.raises(KeyError):
+            MeshedField.from_labels(labels, sigma_lut(tissue_properties), name='sigma',
+                                    grid=Grid(meshed_space, None, None))
+
 
 class TestFieldFromCellTags:
     """The dict branch of ae_modelling.fem.interpolate.interpolate_medium."""

@@ -140,24 +140,29 @@ class TestMeshedSpaceGeometry:
         assert len(meshed_space_2d.size) == 2
 
 
-class TestMeshedSpaceFieldShape:
-    """A scalar nodal field is flat, one value per node, with no padding."""
+class TestMeshedSpaceIsNotAGrid:
+    """
+    A MeshedSpace must not masquerade as a structured grid.
 
-    def test_shape_is_node_count(self, meshed_space):
-        assert tuple(meshed_space.shape) == (27,)
+    An earlier version of this class asserted the opposite: that MeshedSpace exposed
+    ``shape``/``extended_shape``/``extra``/``absorbing``/``inner`` as a compatibility surface. That
+    was wrong. Nothing meshed reads them — MeshedData derives its shape from ``num_nodes``, the way
+    SparseField uses ``num`` — and their only effect was to let a structured field accept a mesh and
+    then produce plausible nonsense when plotted or resampled.
+    """
 
-    def test_extended_shape_matches_shape(self, meshed_space):
-        assert tuple(meshed_space.extended_shape) == tuple(meshed_space.shape)
+    @pytest.mark.parametrize('attribute', ['shape', 'extended_shape', 'extra',
+                                           'absorbing', 'inner', 'spacing', 'grid'])
+    def test_has_no_grid_attributes(self, meshed_space, attribute):
+        assert not hasattr(meshed_space, attribute)
 
-    def test_no_extra_or_absorbing_padding(self, meshed_space):
-        assert tuple(meshed_space.extra) == (0, 0, 0)
-        assert tuple(meshed_space.absorbing) == (0, 0, 0)
+    def test_structured_field_rejects_a_mesh(self, meshed_space):
+        from stride.problem.data import ScalarField
+        from stride.problem.domain import Grid
 
-    def test_inner_covers_every_node(self, meshed_space):
-        assert meshed_space.inner == (slice(0, None),)
-
-        values = np.arange(meshed_space.num_nodes)
-        np.testing.assert_array_equal(values[meshed_space.inner], values)
+        # Fails on the first grid attribute it reaches for, rather than silently constructing.
+        with pytest.raises(AttributeError):
+            ScalarField(name='sigma', grid=Grid(meshed_space, None, None))
 
 
 class TestMeshedSpaceBounds:

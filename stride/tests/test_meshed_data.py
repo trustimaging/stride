@@ -57,14 +57,25 @@ class TestMeshedDataShape:
         assert tuple(data.shape) == (27,)
         np.testing.assert_array_equal(data.data, values)
 
-    def test_mismatched_data_length_rejected(self, meshed_space):
+    @pytest.mark.parametrize('num_values', [25, 26, 29])
+    def test_mismatched_data_length_rejected(self, meshed_space, num_values):
         from stride.problem.data import MeshedData
 
         # A nodal field with the wrong number of values cannot be interpolated
         # onto the mesh, so this has to fail loudly rather than at solve time.
+        # 25 is the case that matters: the inherited StructuredData.pad_data floors its
+        # pad widths, so an off-by-two would otherwise be silently edge-padded to 27.
         with pytest.raises(ValueError):
-            MeshedData(name='raw', data=np.zeros(26, dtype=np.float32),
+            MeshedData(name='raw', data=np.zeros(num_values, dtype=np.float32),
                        grid=nodal_grid(meshed_space))
+
+    def test_compression_is_rejected(self, meshed_space):
+        from stride.problem.data import MeshedData
+
+        # maybe_compress crashes outright for buffers of 2.5k-10k float32 elements, and
+        # above that window the decompressed buffer is read-only.
+        with pytest.raises(ValueError, match='[Cc]ompression'):
+            MeshedData(name='raw', compressed=True, grid=nodal_grid(meshed_space))
 
     def test_default_dtype_is_float32(self, meshed_space):
         from stride.problem.data import MeshedData
@@ -169,6 +180,55 @@ class TestMeshedFieldShape:
         field = MeshedField(name='sigma', shape=(5,), grid=nodal_grid(meshed_space))
 
         assert tuple(field.shape) == (5,)
+
+
+class TestMeshedFieldLocation:
+    """
+    A meshed field is either nodal or per-cell, and `shape` alone does not say which,
+    so `location` is what keeps the two apart.
+    """
+
+    def test_defaults_to_nodal(self, meshed_space):
+        from stride.problem.data import MeshedField
+
+        field = MeshedField(name='sigma', grid=nodal_grid(meshed_space))
+
+        assert field.location == 'nodal'
+        assert field.num_entities == meshed_space.num_nodes
+
+    def test_cell_location_sizes_from_cells(self, tagged_meshed_space):
+        from stride.problem.data import MeshedField
+
+        field = MeshedField(name='sigma', location='cell',
+                            grid=nodal_grid(tagged_meshed_space))
+
+        assert field.location == 'cell'
+        assert field.num_entities == tagged_meshed_space.num_cells
+        assert tuple(field.shape) == (48,)
+
+    def test_from_cell_tags_reports_cell_location(self, tagged_meshed_space):
+        from stride.problem.data import MeshedField
+
+        field = MeshedField.from_cell_tags({1: 0.1, 2: 0.5}, name='sigma',
+                                           grid=nodal_grid(tagged_meshed_space))
+
+        assert field.location == 'cell'
+
+    def test_invalid_location_rejected(self, meshed_space):
+        from stride.problem.data import MeshedField
+
+        with pytest.raises(ValueError):
+            MeshedField(name='sigma', location='facet', grid=nodal_grid(meshed_space))
+
+    def test_alike_preserves_location(self, tagged_meshed_space):
+        from stride.problem.data import MeshedField
+
+        field = MeshedField.from_cell_tags({1: 0.1, 2: 0.5}, name='sigma',
+                                           grid=nodal_grid(tagged_meshed_space))
+        other = field.alike(name='eps')
+
+        assert other.location == 'cell'
+        assert tuple(other.shape) == (48,)
 
 
 class TestMeshedFieldCopying:
