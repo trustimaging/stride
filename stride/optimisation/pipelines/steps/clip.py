@@ -32,6 +32,8 @@ class Clip(Operator):
             out_field.extended_data[:] = np.clip(field.extended_data,
                                                  self.min, self.max)
 
+        print('Clip max {} min {}'.format(self.max, self.min))
+
         return out_field
 
     def adjoint(self, d_field, field, **kwargs):
