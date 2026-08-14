@@ -59,4 +59,4 @@ jobs:
     - name: Pytest
       shell: bash -l {0}
       run: |
-        python -m pytest stride/tests/ -v
+        python -m pytest tests/ -v
