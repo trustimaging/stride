@@ -4,13 +4,13 @@ Shared fixtures for the FEM/meshed tests.
 The reference mesh is a Kuhn (Freudenthal) tetrahedralisation of a structured
 box: every hexahedral cell of an ``(nx, ny, nz)`` node grid is split into six
 tetrahedra. This gives a genuine unstructured mesh (flat node list, explicit
-connectivity) without needing DOLFINx or gmsh to be installed, which mirrors
-what ``ae_modelling.fem.mesh.make_mesh`` produces via
-``dolfinx.mesh.create_box``.
+connectivity) without needing DOLFINx or gmsh to be installed, mirroring what
+``dolfinx.mesh.create_box`` produces.
 """
 
 import numpy as np
 import pytest
+from stride.problem.domain import MeshedSpace, Space
 
 
 # Local corner index within a hexahedron is 4*i + 2*j + k, so the six tets of
@@ -112,8 +112,6 @@ def tri_mesh():
 @pytest.fixture
 def meshed_space(tetra_mesh):
     """A 3D MeshedSpace over the reference tetrahedral mesh."""
-    from stride.problem.domain import MeshedSpace
-
     nodes, cells = tetra_mesh
     return MeshedSpace(nodes=nodes, cells=cells)
 
@@ -121,8 +119,6 @@ def meshed_space(tetra_mesh):
 @pytest.fixture
 def meshed_space_2d(tri_mesh):
     """A 2D MeshedSpace over the reference triangular mesh."""
-    from stride.problem.domain import MeshedSpace
-
     nodes, cells = tri_mesh
     return MeshedSpace(nodes=nodes, cells=cells)
 
@@ -133,10 +129,8 @@ def tagged_meshed_space(tetra_mesh):
     A MeshedSpace whose cells carry two material tags.
 
     Cells in the lower half of the box (in z) are tagged ``1``, the rest ``2``,
-    mirroring the ``cell_tags`` that ``ae_modelling`` reads out of a gmsh file.
+    mirroring the ``cell_tags`` that come out of a gmsh file.
     """
-    from stride.problem.domain import MeshedSpace
-
     nodes, cells = tetra_mesh
     centroids = nodes[cells].mean(axis=1)
     cell_tags = np.where(centroids[:, 2] < 1e-3, 1, 2).astype(np.int32)
@@ -147,26 +141,27 @@ def tagged_meshed_space(tetra_mesh):
 @pytest.fixture
 def structured_space():
     """A conventional structured Space, used for the serialisation regressions."""
-    from stride.problem.domain import Space
-
     return Space(shape=(6, 8), spacing=(1e-3, 1e-3), extra=(2, 2), absorbing=(1, 1))
 
 
 @pytest.fixture
-def tissue_properties():
+def material_properties():
     """
-    Label -> (conductivity, relative permittivity) map.
+    Label -> material property map.
 
-    Values are the defaults from ``ae_modelling.tissue.properties``.
+    Each label carries two independent scalar properties, ``alpha`` and
+    ``beta``, so that tests can build more than one field from the same set of
+    labels. The names and values are arbitrary: what matters is that a label
+    indexes a set of physical values.
 
     """
     return {
-        0: {'name': 'background', 'sigma': 1e-6, 'eps_r': 1e0},
-        1: {'name': 'grey_matter', 'sigma': 1.52e-1, 'eps_r': 2.19e3},
-        2: {'name': 'white_matter', 'sigma': 9.47e-2, 'eps_r': 7.12e2},
-        3: {'name': 'csf', 'sigma': 2e0, 'eps_r': 1.09e2},
-        4: {'name': 'skull', 'sigma': 2.22e-2, 'eps_r': 1.75e2},
-        5: {'name': 'skin', 'sigma': 4.36e-3, 'eps_r': 1.06e3},
+        0: {'name': 'material_0', 'alpha': 1e-6, 'beta': 1e0},
+        1: {'name': 'material_1', 'alpha': 1e-1, 'beta': 2e3},
+        2: {'name': 'material_2', 'alpha': 2e-1, 'beta': 7e2},
+        3: {'name': 'material_3', 'alpha': 5e-1, 'beta': 1e2},
+        4: {'name': 'material_4', 'alpha': 8e-1, 'beta': 3e2},
+        5: {'name': 'material_5', 'alpha': 1e0, 'beta': 5e2},
     }
 
 

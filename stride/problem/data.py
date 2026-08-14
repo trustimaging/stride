@@ -797,8 +797,8 @@ class MeshedData(StructuredData):
     name : str
         Name of the data.
     location : str, optional
-        Mesh entity the data lives on, ``nodal`` (one value per node) or ``cell`` (one value per
-        cell, the discontinuous piecewise-constant case), defaults to ``nodal``.
+        Mesh entity the data lives on, ``node`` (one value per node) or ``cell`` (one value per
+        cell, the discontinuous piecewise-constant case), defaults to ``node``.
     shape : tuple, optional
         Shape of the data, derived from the grid if not given.
     dtype : data-type, optional
@@ -817,9 +817,9 @@ class MeshedData(StructuredData):
             # read-only np.frombuffer view, so in-place assignment fails
             raise ValueError('Compression is not supported for meshed data')
 
-        location = kwargs.pop('location', 'nodal')
-        if location not in ('nodal', 'cell'):
-            raise ValueError('Location must be "nodal" or "cell", got %s' % location)
+        location = kwargs.pop('location', 'node')
+        if location not in ('node', 'cell'):
+            raise ValueError('Location must be "node" or "cell", got %s' % location)
 
         self._location = location
 
@@ -859,7 +859,7 @@ class MeshedData(StructuredData):
     @property
     def location(self):
         """
-        Mesh entity the data lives on, ``nodal`` or ``cell``.
+        Mesh entity the data lives on, ``node`` or ``cell``.
 
         """
         return self._location
@@ -969,7 +969,7 @@ class MeshedData(StructuredData):
     def __set_desc__(self, description, **kwargs):
         super().__set_desc__(description, **kwargs)
 
-        location = description.get('location', 'nodal')
+        location = description.get('location', 'node')
         self._location = location.decode() if isinstance(location, bytes) else location
 
 
@@ -990,7 +990,7 @@ class MeshedField(MeshedData):
     slow_time_dependent : bool, optional
         Whether or not the field is slow-time dependent, defaults to False.
     location : str, optional
-        Mesh entity the field lives on, ``nodal`` or ``cell``, defaults to ``nodal``.
+        Mesh entity the field lives on, ``node`` or ``cell``, defaults to ``node``.
     dtype : data-type, optional
         Data type of the data, defaults to float32.
     grid : Grid or any of MeshedSpace or Time
@@ -1111,7 +1111,7 @@ class MeshedField(MeshedData):
         Map an integer label array through a lookup table.
 
         This is how a segmentation becomes a material property: ``labels`` comes from sampling a
-        label volume, and ``lut`` maps each label to a conductivity or permittivity.
+        label volume, and ``lut`` maps each label to a value.
 
         Parameters
         ----------
@@ -1152,7 +1152,7 @@ class MeshedField(MeshedData):
     @classmethod
     def from_labels(cls, labels, lut, **kwargs):
         """
-        Create a nodal field by mapping sampled labels through a lookup table.
+        Create a node field by mapping sampled labels through a lookup table.
 
         Note that, being a classmethod, this always builds a local instance. To create a parameter
         or a remote instance, use :meth:`values_from_labels` and pass the result as ``data``.
@@ -1177,7 +1177,6 @@ class MeshedField(MeshedData):
             raise ValueError('Expected %d labels, one per %s entity, got shape %s'
                              % (field.num_entities, field.location, (labels.shape,)))
 
-        field.allocate()
         field.data[:] = cls.values_from_labels(labels, lut)
 
         return field
@@ -1211,7 +1210,6 @@ class MeshedField(MeshedData):
         kwargs['location'] = 'cell'
         field = cls(**kwargs)
 
-        field.allocate()
         field.data[:] = cls.values_from_labels(space.cell_tags, mapping)
 
         return field

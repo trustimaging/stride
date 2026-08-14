@@ -332,11 +332,6 @@ class MeshedSpace:
         self.cell_tags = cell_tags
         self.facet_tags = facet_tags
 
-        # eagerly, as plain tuples: a cached_property would end up in __dict__ and be pickled
-        # along with the space every time a field travels to a worker
-        self.origin = tuple(nodes.min(axis=0))
-        self.limit = tuple(nodes.max(axis=0))
-
     @property
     def num_nodes(self):
         """
@@ -361,6 +356,14 @@ class MeshedSpace:
         """
         return tuple(each_limit - each_origin
                      for each_limit, each_origin in zip(self.limit, self.origin))
+
+    @cached_property
+    def origin(self):
+        return tuple(self.nodes.min(axis=0))
+
+    @cached_property
+    def limit(self):
+        return tuple(self.nodes.max(axis=0))
 
     def contains_box(self, lower, upper, atol=1e-9):
         """

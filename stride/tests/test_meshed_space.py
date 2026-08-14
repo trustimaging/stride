@@ -2,8 +2,7 @@
 Tests for MeshedSpace (stride/problem/domain.py).
 
 MeshedSpace is the unstructured counterpart to Space: instead of a shape and a
-spacing it is defined by an explicit node list and cell connectivity, ported
-from ``ae_modelling.fem.mesh.MeshDomain`` and ``ae_modelling.fem.space``.
+spacing it is defined by an explicit node list and cell connectivity.
 
 Contract under test:
 
@@ -12,12 +11,12 @@ Contract under test:
 - ``num_nodes`` / ``num_cells``
 - ``origin`` / ``limit`` / ``size`` come from the node bounding box, the
   analogue of Space's origin/limit/size
-- ``shape`` is ``(num_nodes,)`` -- the shape of a scalar nodal field -- with
+- ``shape`` is ``(num_nodes,)`` -- the shape of a scalar node field -- with
   ``extended_shape == shape``, ``extra`` and ``absorbing`` all-zero and
   ``inner == (slice(0, None),)``, so that the StructuredData and GriddedSaved
   machinery that reads those attributes keeps working
-- ``contains_box(lower, upper)`` is the mesh-covers-the-grid check that
-  ``ae_modelling.fem.mesh.attach_mesh`` performs with assertions
+- ``contains_box(lower, upper)`` is the mesh-covers-the-grid check performed
+  when a mesh is attached to a problem grid
 - ``resample`` raises, because a mesh has no spacing to resample onto
 - ``from_dolfinx`` adapts an in-memory DOLFINx mesh (skipped without DOLFINx)
 """
@@ -26,6 +25,10 @@ import numpy as np
 import pytest
 
 from .conftest import box_tetra_mesh
+
+from stride.problem.domain import MeshedSpace
+from stride.problem.data import MeshedField, ScalarField
+
 
 
 try:
@@ -52,8 +55,6 @@ class TestMeshedSpaceConstruction:
         assert meshed_space.num_cells == 48
 
     def test_num_cells_is_zero_without_connectivity(self, tetra_mesh):
-        from stride.problem.domain import MeshedSpace
-
         nodes, _ = tetra_mesh
         space = MeshedSpace(nodes=nodes)
 
@@ -62,8 +63,6 @@ class TestMeshedSpaceConstruction:
         assert space.num_nodes == 27
 
     def test_nodes_stored_as_float64(self, tetra_mesh):
-        from stride.problem.domain import MeshedSpace
-
         nodes, cells = tetra_mesh
         space = MeshedSpace(nodes=nodes.astype(np.float32), cells=cells)
 
@@ -83,21 +82,15 @@ class TestMeshedSpaceConstruction:
         assert meshed_space.facet_tags is None
 
     def test_ragged_nodes_rejected(self):
-        from stride.problem.domain import MeshedSpace
-
         with pytest.raises(ValueError):
             MeshedSpace(nodes=np.zeros(10))
 
     def test_unsupported_dimensionality_rejected(self):
-        from stride.problem.domain import MeshedSpace
-
-        # ae_modelling.fem.mesh.make_mesh only handles dim 2 and 3.
+        # Only 2D and 3D meshes are supported.
         with pytest.raises(ValueError):
             MeshedSpace(nodes=np.zeros((10, 4)))
 
     def test_out_of_range_cell_indices_rejected(self, tetra_mesh):
-        from stride.problem.domain import MeshedSpace
-
         nodes, cells = tetra_mesh
         broken = cells.copy()
         broken[0, 0] = len(nodes)
@@ -106,8 +99,6 @@ class TestMeshedSpaceConstruction:
             MeshedSpace(nodes=nodes, cells=broken)
 
     def test_cell_tags_length_must_match_cells(self, tetra_mesh):
-        from stride.problem.domain import MeshedSpace
-
         nodes, cells = tetra_mesh
 
         with pytest.raises(ValueError):
@@ -124,8 +115,6 @@ class TestMeshedSpaceGeometry:
         np.testing.assert_allclose(meshed_space.size, (2e-3, 2e-3, 2e-3))
 
     def test_offset_origin_is_respected(self):
-        from stride.problem.domain import MeshedSpace
-
         nodes, cells = box_tetra_mesh(shape=(3, 3, 3), spacing=(1e-3, 1e-3, 1e-3),
                                       origin=(-5e-3, 1e-3, 0.))
         space = MeshedSpace(nodes=nodes, cells=cells)
@@ -157,34 +146,27 @@ class TestMeshedSpaceIsNotAGrid:
         assert not hasattr(meshed_space, attribute)
 
     def test_structured_field_rejects_a_mesh(self, meshed_space):
-        from stride.problem.data import ScalarField
-        from stride.problem.domain import Grid
 
         # Fails on the first grid attribute it reaches for, rather than silently constructing.
         with pytest.raises(AttributeError):
-            ScalarField(name='sigma', grid=Grid(meshed_space, None, None))
+            ScalarField(name='alpha', space=meshed_space)
 
     def test_meshed_field_rejects_a_structured_space(self, structured_space):
-        from stride.problem.data import MeshedField
-        from stride.problem.domain import Grid
-
         # The reverse direction needs an explicit check: MeshedData sizes itself behind an
         # isinstance test, which would otherwise skip and leave a field with no shape that
         # still allocates and fills without complaint.
         with pytest.raises(ValueError, match='MeshedSpace'):
-            MeshedField(name='sigma', grid=Grid(structured_space, None, None))
+            MeshedField(name='alpha', space=structured_space)
 
     def test_no_space_is_still_allowed(self):
-        from stride.problem.data import MeshedField
-
         # This is what an instance about to be loaded from file looks like.
-        field = MeshedField(name='sigma')
+        field = MeshedField(name='alpha')
 
         assert field.space is None
 
 
 class TestMeshedSpaceBounds:
-    """Port of the mesh-covers-the-grid assertions in ae_modelling attach_mesh."""
+    """The mesh-covers-the-grid assertions made when attaching a mesh to a grid."""
 
     def test_contains_its_own_bounds(self, meshed_space):
         assert meshed_space.contains_box(meshed_space.origin, meshed_space.limit)
@@ -227,8 +209,6 @@ class TestMeshedSpaceFromDolfinx:
         )
 
     def test_nodes_come_from_mesh_geometry(self):
-        from stride.problem.domain import MeshedSpace
-
         mesh = self._dolfinx_box()
         space = MeshedSpace.from_dolfinx(mesh)
 
@@ -237,8 +217,6 @@ class TestMeshedSpaceFromDolfinx:
         assert space.num_nodes == mesh.geometry.x.shape[0]
 
     def test_bounds_match_the_dolfinx_mesh(self):
-        from stride.problem.domain import MeshedSpace
-
         mesh = self._dolfinx_box()
         space = MeshedSpace.from_dolfinx(mesh)
 
@@ -246,8 +224,6 @@ class TestMeshedSpaceFromDolfinx:
         np.testing.assert_allclose(space.limit, mesh.geometry.x.max(axis=0))
 
     def test_cells_come_from_topology(self):
-        from stride.problem.domain import MeshedSpace
-
         mesh = self._dolfinx_box()
         space = MeshedSpace.from_dolfinx(mesh)
 
