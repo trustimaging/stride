@@ -1,0 +1,62 @@
+name: Pytest
+
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the master branch
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  examples:
+    name: Pytest
+    runs-on: ubuntu-latest
+
+    env:
+      DEVITO_COMPILER: gcc
+      DEVITO_LANGUAGE: openmp
+      PYTHON_VERSION: 3.11.12
+
+    strategy:
+      # Prevent all build to stop if a single one fails
+      fail-fast: false
+
+    steps:
+    - name: Checkout stride
+      uses: actions/checkout@v3
+      with:
+        path: stride
+
+    - name: Checkout devito
+      uses: actions/checkout@v3
+      with:
+        repository: devitocodes/devito
+        path: devito
+
+    - name: Setup conda
+      uses: mamba-org/setup-micromamba@v2
+      with:
+        environment-file: stride/environment.yml
+        init-shell: bash
+        cache-environment: true
+        post-cleanup: 'all'
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        cd stride
+        pip install -e .
+
+    - name: Install devito
+      shell: bash -l {0}
+      run: |
+        cd devito
+        pip install -e .
+
+    - name: Pytest
+      shell: bash -l {0}
+      run: |
+        python -m pytest stride/tests/ -v
