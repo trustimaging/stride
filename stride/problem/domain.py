@@ -6,6 +6,24 @@ from cached_property import cached_property
 
 __all__ = ['Space', 'MeshedSpace', 'Time', 'SlowTime', 'Grid']
 
+# Topological dimension of every supported cell type. Simplices only for now: adding
+# quadrilateral or hexahedron here is most of what supporting them takes.
+CELL_TOPOLOGICAL_DIM = {
+    'triangle': 2,
+    'tetrahedron': 3,
+}
+
+# Cell type implied by (nodes per cell, geometry degree). Within simplices this is unique, so a
+# cell type that is not given can be inferred rather than demanded. It stops being unique as soon
+# as non-simplices are supported -- six nodes at degree one is a prism, not a triangle -- which is
+# why anything not in here raises instead of guessing.
+CELL_TYPE_BY_NODES = {
+    (3, 1): 'triangle',
+    (6, 2): 'triangle',
+    (4, 1): 'tetrahedron',
+    (10, 2): 'tetrahedron',
+}
+
 
 class Space:
     """
@@ -292,10 +310,22 @@ class MeshedSpace:
     facet_tags : optional
         Boundary tags, stored as given and not interpreted. These are not serialised, because a
         facet tag is meaningless without the facet connectivity, which is not stored either.
+    cell_type : str, optional
+        Cell type of the mesh, either ``triangle`` or ``tetrahedron``. Only simplices are
+        supported. The spelling is the one DOLFINx and basix use, so that it can be handed to
+        either without translation. This fixes the *topological* dimension, which need not equal
+        ``dim``: a triangle mesh with three-dimensional nodes is a surface embedded in 3D, so a
+        cell may live in a space of higher dimension than its own but never a lower one. If not
+        given, it is inferred from the nodes per cell and the geometry degree, and a combination
+        that is not unambiguous raises rather than being guessed at.
+    geometry_degree : int, optional
+        Degree of the coordinate element: 1 for straight-sided cells, 2 for curved ones.
+        Defaults to 1. This describes the mesh geometry only, and is unrelated to the degree of
+        any function space later defined over it.
 
     """
 
-    def __init__(self, nodes=None, cells=None, cell_tags=None, facet_tags=None):
+    def __init__(self, nodes=None, cells=None, cell_tags=None, facet_tags=None, cell_type=None, geometry_degree=1):
         nodes = np.asarray(nodes, dtype=np.float64)
 
         if nodes.ndim != 2:
@@ -316,6 +346,14 @@ class MeshedSpace:
             if cells.size and (cells.min() < 0 or cells.max() >= nodes.shape[0]):
                 raise ValueError('Cells reference node indices outside [0, %d)' % nodes.shape[0])
 
+            if cell_type is None:
+                cell_type = CELL_TYPE_BY_NODES.get((cells.shape[1], geometry_degree))
+
+                if cell_type is None:
+                    raise ValueError('Cannot infer the cell type from %d nodes per cell at '
+                                     'geometry degree %s. Pass cell_type explicitly.'
+                                     % (cells.shape[1], geometry_degree))
+
         if cell_tags is not None:
             cell_tags = np.asarray(cell_tags)
 
@@ -326,11 +364,31 @@ class MeshedSpace:
                 raise ValueError('Cell tags must have one entry per cell, expected %d '
                                  'but got shape %s' % (cells.shape[0], (cell_tags.shape,)))
 
+        if not isinstance(geometry_degree, int):
+            raise TypeError('geometry_degree must be an int')
+        if geometry_degree < 1:
+            raise ValueError('geometry degree must be a positive int')
+
+        if cell_type is not None:
+            if not isinstance(cell_type, str):
+                raise TypeError('cell_type must be str')
+            elif cell_type not in CELL_TOPOLOGICAL_DIM:
+                raise ValueError('Only simplex cells are supported (%s), got %r'
+                                 % (', '.join(sorted(CELL_TOPOLOGICAL_DIM)), cell_type))
+
+            # a cell can be embedded in a space of higher dimension than its own, but not lower:
+            # a triangle mesh may be a surface in 3D, a tetrahedron cannot live in 2D
+            if dim < CELL_TOPOLOGICAL_DIM[cell_type]:
+                raise ValueError('A %s is %d-dimensional and cannot be embedded in %d dimensions'
+                                 % (cell_type, CELL_TOPOLOGICAL_DIM[cell_type], dim))
+
         self.dim = dim
         self.nodes = nodes
         self.cells = cells
         self.cell_tags = cell_tags
         self.facet_tags = facet_tags
+        self.cell_type = cell_type
+        self.geometry_degree = geometry_degree
 
     @property
     def num_nodes(self):
@@ -518,7 +576,83 @@ class MeshedSpace:
             owned = indices < num_cells
             tags[indices[owned]] = values[owned]
 
-        return cls(nodes=nodes, cells=cells, cell_tags=tags, facet_tags=facet_tags)
+        return cls(nodes=nodes, cells=cells, cell_tags=tags, facet_tags=facet_tags,
+                   cell_type=mesh.topology.cell_name(),
+                   geometry_degree=mesh.geometry.cmap.degree)
+
+    def to_dolfinx(self, comm=None):
+        """
+        Create an in-memory DOLFINx mesh from this MeshedSpace.
+
+        This is the inverse of :meth:`from_dolfinx`, and is only correct in serial. The node and
+        cell tables stored here describe a whole mesh, so building on a communicator of more
+        than one rank would partition it into something this space does not describe. Unlike
+        ``from_dolfinx``, which warns, that case raises.
+
+        DOLFINx is an optional dependency of stride, so it is imported here rather than at
+        module level.
+
+        Parameters
+        ----------
+        comm : MPI.Intracomm, optional
+            Communicator on which to build the mesh, defaults to ``MPI.COMM_SELF``.
+
+        Returns
+        -------
+        dolfinx.mesh.Mesh
+            Newly created mesh.
+        dolfinx.mesh.MeshTags or None
+            Cell tags on the new cell ordering, or None if this space carries no tags. Cells
+            marked -1, which is what ``from_dolfinx`` fills in for untagged cells, are left out
+            rather than handed back as a label of -1.
+
+        """
+        try:
+            import ufl
+            import basix.ufl
+            import dolfinx
+            from mpi4py import MPI
+
+        except ImportError:
+            raise ImportError('to_dolfinx needs dolfinx, basix, ufl and mpi4py, which are '
+                              'optional dependencies of stride. Install them into the '
+                              'environment, for instance with the fenics-dolfinx conda '
+                              'package.') from None
+
+        if comm is None:
+            comm = MPI.COMM_SELF
+
+        if self.cells is None:
+            raise ValueError('Cannot build a mesh without cells, a node table is not a mesh')
+
+        if comm.size > 1:
+            raise ValueError('to_dolfinx is serial only, got a communicator of size %d. Build '
+                             'on MPI.COMM_SELF and partition afterwards if needed.' % comm.size)
+
+        topology_dim = CELL_TOPOLOGICAL_DIM[self.cell_type]
+
+        element = ufl.Mesh(basix.ufl.element('Lagrange', self.cell_type, self.geometry_degree,
+                                             shape=(self.dim,)))
+
+        mesh = dolfinx.mesh.create_mesh(comm, self.cells, element, self.nodes)
+
+        num_cells = mesh.topology.index_map(topology_dim).size_local
+        if num_cells != self.num_cells:
+            raise RuntimeError('The rebuilt mesh has %d cells but this space has %d, so the '
+                               'cell ordering cannot be recovered' % (num_cells, self.num_cells))
+
+        cell_tags = None
+        if self.cell_tags is not None:
+            original_index = np.asarray(mesh.topology.original_cell_index)
+            values = np.asarray(self.cell_tags)[original_index]
+
+            tagged = values != -1
+
+            cell_tags = dolfinx.mesh.meshtags(mesh, topology_dim,
+                                              np.arange(num_cells, dtype=np.int32)[tagged],
+                                              values[tagged])
+
+        return mesh, cell_tags
 
 
 class Time:

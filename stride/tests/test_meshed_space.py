@@ -18,6 +18,12 @@ Contract under test:
 - ``contains_box(lower, upper)`` is the mesh-covers-the-grid check performed
   when a mesh is attached to a problem grid
 - ``resample`` raises, because a mesh has no spacing to resample onto
+- ``cell_type`` / ``geometry_degree`` describe the discretisation, are inferred
+  from the nodes per cell when not given, and fix the topological dimension,
+  which may be lower than ``dim`` for a surface mesh
+- ``to_dolfinx`` is the inverse of ``from_dolfinx``: it rebuilds a mesh, maps
+  the cell tags onto whatever ordering ``create_mesh`` chose, and re-sparsifies
+  the ``-1`` fill that ``from_dolfinx`` introduced
 - ``from_dolfinx`` adapts an in-memory DOLFINx mesh (skipped without DOLFINx)
 """
 
@@ -233,3 +239,246 @@ class TestMeshedSpaceFromDolfinx:
         assert space.num_cells == num_cells
         assert space.cells.shape[1] == 4
         assert space.cells.max() < space.num_nodes
+
+
+class TestMeshedSpaceCellType:
+    """cell_type / geometry_degree, and the inference that fills them in."""
+
+    def test_triangle_inferred_from_three_nodes(self, meshed_space_2d):
+        assert meshed_space_2d.cell_type == 'triangle'
+        assert meshed_space_2d.geometry_degree == 1
+
+    def test_tetrahedron_inferred_from_four_nodes(self, meshed_space):
+        assert meshed_space.cell_type == 'tetrahedron'
+        assert meshed_space.geometry_degree == 1
+
+    def test_explicit_cell_type_is_kept(self, tri_mesh):
+        nodes, cells = tri_mesh
+        space = MeshedSpace(nodes=nodes, cells=cells, cell_type='triangle')
+
+        assert space.cell_type == 'triangle'
+
+    def test_cell_type_is_none_without_cells(self, tri_mesh):
+        nodes, _ = tri_mesh
+
+        assert MeshedSpace(nodes=nodes).cell_type is None
+
+    def test_unsupported_cell_type_names_the_limit(self, tri_mesh):
+        nodes, cells = tri_mesh
+
+        with pytest.raises(ValueError, match='simplex'):
+            MeshedSpace(nodes=nodes, cells=cells, cell_type='hexahedron')
+
+    def test_uninferrable_cell_asks_for_an_explicit_type(self, tri_mesh):
+        nodes, _ = tri_mesh
+        # five nodes per cell is not a simplex at any supported degree
+        cells = np.zeros((2, 5), dtype=np.int32)
+
+        with pytest.raises(ValueError, match='infer'):
+            MeshedSpace(nodes=nodes, cells=cells)
+
+    def test_a_triangle_may_be_a_surface_in_three_dimensions(self):
+        nodes = np.array([[0., 0., 0.], [1e-3, 0., 0.],
+                          [0., 1e-3, 1e-3], [1e-3, 1e-3, 1e-3]])
+        cells = np.array([[0, 1, 2], [1, 3, 2]], dtype=np.int32)
+        space = MeshedSpace(nodes=nodes, cells=cells, cell_type='triangle')
+
+        assert space.cell_type == 'triangle'
+        assert space.dim == 3
+
+    def test_a_tetrahedron_cannot_live_in_two_dimensions(self, tri_mesh):
+        nodes, _ = tri_mesh
+        cells = np.zeros((2, 4), dtype=np.int32)
+
+        with pytest.raises(ValueError, match='cannot be embedded'):
+            MeshedSpace(nodes=nodes, cells=cells, cell_type='tetrahedron')
+
+    def test_degree_must_be_a_positive_int(self, tri_mesh):
+        nodes, cells = tri_mesh
+
+        with pytest.raises(ValueError):
+            MeshedSpace(nodes=nodes, cells=cells, cell_type='triangle', geometry_degree=0)
+
+        with pytest.raises(TypeError):
+            MeshedSpace(nodes=nodes, cells=cells, cell_type='triangle', geometry_degree=1.0)
+
+
+@pytest.mark.skipif(not HAS_DOLFINX, reason='DOLFINx not available')
+class TestMeshedSpaceToDolfinx:
+    """
+    to_dolfinx has to reproduce a mesh that a solver can use, which is a stronger
+    claim than the individual arrays matching. The checks below are chosen so that
+    none of them can be satisfied by a plausible-but-wrong reconstruction.
+    """
+
+    def _tagged_square(self, n=4):
+        """A unit-square mesh tagged 1 left of x=0.5 and 2 right of it."""
+        import dolfinx
+        from mpi4py import MPI
+
+        mesh = dolfinx.mesh.create_unit_square(MPI.COMM_SELF, n, n)
+        tdim = mesh.topology.dim
+        cells = np.arange(mesh.topology.index_map(tdim).size_local, dtype=np.int32)
+        midpoints = dolfinx.mesh.compute_midpoints(mesh, tdim, cells)
+        tags = self._predicate(midpoints).astype(np.int32)
+
+        return mesh, dolfinx.mesh.meshtags(mesh, tdim, cells, tags)
+
+    @staticmethod
+    def _predicate(midpoints):
+        return np.where(midpoints[:, 0] < 0.5, 1, 2)
+
+    @staticmethod
+    def _total_volume(mesh):
+        """Sum of triangle areas, straight from the geometry."""
+        coordinates = mesh.geometry.x
+        dofmap = mesh.geometry.dofmap
+        num_cells = mesh.topology.index_map(mesh.topology.dim).size_local
+
+        total = 0.
+        for cell in range(num_cells):
+            points = coordinates[dofmap[cell]][:, :2]
+            first, second = points[1] - points[0], points[2] - points[0]
+            total += 0.5*abs(first[0]*second[1] - first[1]*second[0])
+
+        return total
+
+    def test_rebuilds_a_usable_mesh(self):
+        mesh, tags = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
+
+        rebuilt, _ = space.to_dolfinx()
+
+        assert rebuilt.topology.dim == 2
+        assert rebuilt.geometry.dim == 2
+        assert rebuilt.topology.index_map(2).size_local == space.num_cells
+
+    def test_node_coordinates_survive_as_a_set(self):
+        mesh, tags = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
+
+        rebuilt, _ = space.to_dolfinx()
+
+        # ordering need not survive, the set of positions must
+        before = set(map(tuple, np.round(space.nodes, 12)))
+        after = set(map(tuple, np.round(rebuilt.geometry.x[:, :2], 12)))
+
+        assert before == after
+        assert len(before) == space.num_nodes
+
+    def test_total_volume_is_preserved(self):
+        """Catches scrambled connectivity, which per-node coordinate checks do not."""
+        mesh, tags = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
+
+        rebuilt, _ = space.to_dolfinx()
+
+        np.testing.assert_allclose(self._total_volume(rebuilt), self._total_volume(mesh))
+        np.testing.assert_allclose(self._total_volume(rebuilt), 1.)
+
+    def test_tags_land_on_the_same_cells(self):
+        """
+        The load-bearing test. create_mesh may reorder cells, so the tags have to be
+        permuted. Rather than trusting the permutation, this re-derives what the tag
+        of every rebuilt cell ought to be from its own midpoint, so it holds
+        regardless of which way round the permutation was applied.
+        """
+        import dolfinx
+
+        mesh, tags = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
+
+        rebuilt, rebuilt_tags = space.to_dolfinx()
+
+        num_cells = rebuilt.topology.index_map(2).size_local
+        midpoints = dolfinx.mesh.compute_midpoints(
+            rebuilt, 2, np.arange(num_cells, dtype=np.int32))
+
+        expected = self._predicate(midpoints)
+        actual = np.full(num_cells, -1, dtype=np.int32)
+        actual[rebuilt_tags.indices] = rebuilt_tags.values
+
+        np.testing.assert_array_equal(actual, expected)
+
+    def test_untagged_cells_do_not_come_back_as_minus_one(self):
+        """
+        from_dolfinx densifies sparse tags with -1. Handing that back would turn
+        'untagged' into a material label of -1, which a lookup table would then
+        either fail on or silently honour.
+        """
+        import dolfinx
+        from mpi4py import MPI
+
+        mesh = dolfinx.mesh.create_unit_square(MPI.COMM_SELF, 4, 4)
+        tagged = np.array([0, 1, 2], dtype=np.int32)
+        tags = dolfinx.mesh.meshtags(mesh, 2, tagged, np.full(3, 7, dtype=np.int32))
+
+        space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
+        assert (space.cell_tags == -1).any(), 'fixture should leave most cells untagged'
+
+        _, rebuilt_tags = space.to_dolfinx()
+
+        assert len(rebuilt_tags.indices) == 3
+        assert -1 not in rebuilt_tags.values
+        np.testing.assert_array_equal(np.unique(rebuilt_tags.values), [7])
+
+    def test_no_tags_gives_no_tags(self):
+        mesh, _ = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh)
+
+        _, rebuilt_tags = space.to_dolfinx()
+
+        assert rebuilt_tags is None
+
+    def test_round_trips_twice(self):
+        mesh, tags = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
+
+        rebuilt, rebuilt_tags = space.to_dolfinx()
+        again = MeshedSpace.from_dolfinx(rebuilt, cell_tags=rebuilt_tags)
+
+        assert again.cell_type == space.cell_type
+        assert again.geometry_degree == space.geometry_degree
+        assert again.num_nodes == space.num_nodes
+        assert again.num_cells == space.num_cells
+        np.testing.assert_array_equal(np.sort(again.cell_tags), np.sort(space.cell_tags))
+
+    def test_a_surface_mesh_keeps_its_dimensions(self):
+        """tdim 2 with gdim 3 has to survive, which is why cell_type is stored."""
+        nodes = np.array([[0., 0., 0.], [1., 0., 0.], [0., 1., 1.], [1., 1., 1.]])
+        cells = np.array([[0, 1, 2], [1, 3, 2]], dtype=np.int32)
+        space = MeshedSpace(nodes=nodes, cells=cells, cell_type='triangle')
+
+        rebuilt, _ = space.to_dolfinx()
+
+        assert rebuilt.topology.dim == 2
+        assert rebuilt.geometry.dim == 3
+
+    def test_without_cells_it_refuses(self, tri_mesh):
+        nodes, _ = tri_mesh
+
+        with pytest.raises(ValueError, match='not a mesh'):
+            MeshedSpace(nodes=nodes).to_dolfinx()
+
+    def test_a_parallel_communicator_is_refused(self):
+        from mpi4py import MPI
+
+        mesh, _ = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh)
+
+        class _Parallel:
+            size = 4
+
+        with pytest.raises(ValueError, match='serial only'):
+            space.to_dolfinx(comm=_Parallel())
+
+    def test_an_explicit_communicator_is_honoured(self):
+        """comm=None means 'pick a default', not 'ignore what you were given'."""
+        from mpi4py import MPI
+
+        mesh, _ = self._tagged_square()
+        space = MeshedSpace.from_dolfinx(mesh)
+
+        rebuilt, _ = space.to_dolfinx(comm=MPI.COMM_SELF)
+
+        assert rebuilt.comm.size == 1

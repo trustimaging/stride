@@ -258,10 +258,23 @@ class GriddedSaved(Saved, Gridded):
                                   absorbing=space_description.absorbing)
 
                 elif 'nodes' in space_description:
+                    # the cell type is stored as a string, so HDF5 hands it back as bytes, and
+                    # the degree comes back as a numpy integer, which is not an int as far as
+                    # isinstance is concerned. Both have to be normalised before construction
+                    cell_type = self._materialise(space_description.get('cell_type', None))
+
+                    if isinstance(cell_type, bytes):
+                        cell_type = cell_type.decode()
+
+                    geometry_degree = self._materialise(
+                        space_description.get('geometry_degree', 1))
+
                     space = MeshedSpace(
                         nodes=self._materialise(space_description.nodes),
                         cells=self._materialise(space_description.get('cells', None)),
                         cell_tags=self._materialise(space_description.get('cell_tags', None)),
+                        cell_type=cell_type,
+                        geometry_degree=int(geometry_degree),
                     )
 
                 else:
@@ -349,6 +362,13 @@ class GriddedSaved(Saved, Gridded):
 
                 if space.cell_tags is not None:
                     space_description['cell_tags'] = space.cell_tags
+
+                # the discretisation, without which the mesh cannot be rebuilt: a node and cell
+                # table alone does not say what shape a cell is or to what degree it is mapped
+                if space.cell_type is not None:
+                    space_description['cell_type'] = space.cell_type
+
+                space_description['geometry_degree'] = space.geometry_degree
 
                 grid_description['space'] = space_description
 

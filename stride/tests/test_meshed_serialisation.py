@@ -16,6 +16,9 @@ Contract under test:
   from the top-level description
 - an unrecognised space payload raises a clear, typed error
 - a MeshedField round-trips its data and its mesh through HDF5
+- ``cell_type``/``geometry_degree`` survive the round trip, so that a space read
+  back from disk can still be handed to ``to_dolfinx``; a file written before
+  those fields existed still loads
 """
 
 import numpy as np
@@ -245,3 +248,80 @@ class TestMeshedRoundTrip:
         assert loaded.time.num == 5
         assert tuple(loaded.shape) == (5, 27)
         np.testing.assert_allclose(loaded.data, 2.)
+
+
+class TestDiscretisationSurvivesTheRoundTrip:
+    """
+    cell_type and geometry_degree are what make a stored space rebuildable. Without
+    them a node and cell table does not say what shape a cell is, so to_dolfinx has
+    nothing to hand basix.
+    """
+
+    def test_description_carries_the_discretisation(self, meshed_space):
+        field = MeshedField(name='alpha', space=meshed_space)
+        space_description = field.grid_description()['space']
+
+        assert space_description['cell_type'] == 'tetrahedron'
+        assert space_description['geometry_degree'] == 1
+
+    def test_round_trip_keeps_the_cell_type(self, meshed_space, project):
+        field = MeshedField(name='alpha', space=meshed_space, dtype=np.float64)
+        field.fill(1.)
+        field.dump(**project)
+
+        loaded = MeshedField(name='alpha')
+        loaded.load(**project)
+
+        assert isinstance(loaded.space, MeshedSpace)
+        assert loaded.space.cell_type == 'tetrahedron'
+        assert loaded.space.geometry_degree == 1
+
+    def test_cell_type_survives_as_str_not_bytes(self, meshed_space, project):
+        """HDF5 hands strings back as bytes, which would break the isinstance check."""
+        field = MeshedField(name='alpha', space=meshed_space, dtype=np.float64)
+        field.dump(**project)
+
+        loaded = MeshedField(name='alpha')
+        loaded.load(**project)
+
+        assert isinstance(loaded.space.cell_type, str)
+        assert isinstance(loaded.space.geometry_degree, int)
+
+    def test_a_loaded_space_can_still_be_rebuilt(self, meshed_space, project):
+        """The point of storing them at all."""
+        pytest.importorskip('dolfinx')
+
+        field = MeshedField(name='alpha', space=meshed_space, dtype=np.float64)
+        field.dump(**project)
+
+        loaded = MeshedField(name='alpha')
+        loaded.load(**project)
+
+        mesh, _ = loaded.space.to_dolfinx()
+
+        assert mesh.topology.dim == 3
+        assert mesh.topology.index_map(3).size_local == meshed_space.num_cells
+
+    def test_a_file_without_the_new_fields_still_loads(self, meshed_space, project):
+        """
+        Backward compatibility: the fields are read with defaults, so a space written
+        before they existed reconstructs, falling back on inference for the cell type.
+        """
+        field = MeshedField(name='alpha', space=meshed_space, dtype=np.float64)
+        description = field.grid_description()
+
+        del description['space']['cell_type']
+        del description['space']['geometry_degree']
+
+        assert 'cell_type' not in description['space']
+
+        # what the load branch does with what it finds, minus the HDF5 layer
+        space = MeshedSpace(
+            nodes=description['space']['nodes'],
+            cells=description['space']['cells'],
+            cell_type=description['space'].get('cell_type', None),
+            geometry_degree=int(description['space'].get('geometry_degree', 1)),
+        )
+
+        assert space.cell_type == 'tetrahedron'
+        assert space.geometry_degree == 1
