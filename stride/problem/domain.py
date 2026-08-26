@@ -6,17 +6,12 @@ from cached_property import cached_property
 
 __all__ = ['Space', 'MeshedSpace', 'Time', 'SlowTime', 'Grid']
 
-# Topological dimension of every supported cell type. Simplices only for now: adding
-# quadrilateral or hexahedron here is most of what supporting them takes.
+
 CELL_TOPOLOGICAL_DIM = {
     'triangle': 2,
     'tetrahedron': 3,
 }
 
-# Cell type implied by (nodes per cell, geometry degree). Within simplices this is unique, so a
-# cell type that is not given can be inferred rather than demanded. It stops being unique as soon
-# as non-simplices are supported -- six nodes at degree one is a prism, not a triangle -- which is
-# why anything not in here raises instead of guessing.
 CELL_TYPE_BY_NODES = {
     (3, 1): 'triangle',
     (6, 2): 'triangle',

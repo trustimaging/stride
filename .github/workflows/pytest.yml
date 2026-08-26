@@ -59,4 +59,5 @@ jobs:
     - name: Pytest
       shell: bash -l {0}
       run: |
+        cd ..
         python -m pytest tests/ -v
