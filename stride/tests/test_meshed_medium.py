@@ -9,6 +9,7 @@ from stride.problem.domain import Grid, MeshedSpace
 from stride.problem.data import MeshedField
 from stride.problem.medium import Medium
 
+
 def value_lut(material_properties, prop='alpha'):
     """
     One property of the material table, as an array indexed by label.

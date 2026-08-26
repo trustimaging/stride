@@ -35,10 +35,9 @@ from .conftest import box_tetra_mesh
 from stride.problem.domain import MeshedSpace
 from stride.problem.data import MeshedField, ScalarField
 
-
-
 try:
     import dolfinx  # noqa: F401
+    from mpi4py import MPI
     HAS_DOLFINX = True
 except ImportError:
     HAS_DOLFINX = False
@@ -206,7 +205,6 @@ class TestMeshedSpaceResample:
 class TestMeshedSpaceFromDolfinx:
 
     def _dolfinx_box(self):
-        from mpi4py import MPI
 
         return dolfinx.mesh.create_box(
             MPI.COMM_WORLD,
@@ -313,8 +311,6 @@ class TestMeshedSpaceToDolfinx:
 
     def _tagged_square(self, n=4):
         """A unit-square mesh tagged 1 left of x=0.5 and 2 right of it."""
-        import dolfinx
-        from mpi4py import MPI
 
         mesh = dolfinx.mesh.create_unit_square(MPI.COMM_SELF, n, n)
         tdim = mesh.topology.dim
@@ -383,7 +379,6 @@ class TestMeshedSpaceToDolfinx:
         of every rebuilt cell ought to be from its own midpoint, so it holds
         regardless of which way round the permutation was applied.
         """
-        import dolfinx
 
         mesh, tags = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
@@ -406,8 +401,6 @@ class TestMeshedSpaceToDolfinx:
         'untagged' into a material label of -1, which a lookup table would then
         either fail on or silently honour.
         """
-        import dolfinx
-        from mpi4py import MPI
 
         mesh = dolfinx.mesh.create_unit_square(MPI.COMM_SELF, 4, 4)
         tagged = np.array([0, 1, 2], dtype=np.int32)
@@ -461,7 +454,6 @@ class TestMeshedSpaceToDolfinx:
             MeshedSpace(nodes=nodes).to_dolfinx()
 
     def test_a_parallel_communicator_is_refused(self):
-        from mpi4py import MPI
 
         mesh, _ = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh)
@@ -474,7 +466,6 @@ class TestMeshedSpaceToDolfinx:
 
     def test_an_explicit_communicator_is_honoured(self):
         """comm=None means 'pick a default', not 'ignore what you were given'."""
-        from mpi4py import MPI
 
         mesh, _ = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh)

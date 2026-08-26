@@ -27,6 +27,7 @@ import pytest
 from stride.problem.domain import Grid, Time, Space, MeshedSpace
 from stride.problem.data import ScalarField, MeshedField
 
+
 @pytest.fixture
 def project(tmp_path):
     """Path/project_name pair for the HDF5 helpers."""
