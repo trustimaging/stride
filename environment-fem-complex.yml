@@ -1,0 +1,36 @@
+# Finite-element extras for stride, complex-scalar PETSc build.
+#
+# This file is ADDITIVE: it lists only what the FEM problem types need on top of the base
+# environment, and is applied over an existing environment rather than creating one:
+#
+#     conda env create -n stride-dolfinx-complex -f environment.yml
+#     conda env update -n stride-dolfinx-complex -f environment-fem-complex.yml
+#
+# Copying the base dependency list into this file instead is what lets the two drift apart, so
+# please keep it additive.
+#
+# DOLFINx cannot be installed with pip -- there are no wheels -- so these dependencies are
+# conda-only and deliberately not in requirements-optional.txt. Everything in stride works
+# without them; only the FEM problem types need them.
+#
+# PETSc is built for either real or complex scalars and the two cannot coexist. Use this file
+# for the complex build, environment-fem-real.yml for the real one. A capacitive medium
+# needs the complex build, because a real one discards the imaginary part of the admittivity
+# with only a warning.
+#
+# The MPI implementation is pinned here rather than in the base environment, which needs no MPI
+# at all. Mixing implementations between the base and this overlay causes hangs at exit inside
+# MPI finalisation, so if the base environment ever grows an MPI dependency, the two pins must
+# agree.
+name: stride-dolfinx-complex
+channels:
+  - conda-forge
+dependencies:
+  - fenics-dolfinx==0.9.0
+  - petsc=*=*complex*
+  - mpi=*=*openmpi*
+  - openmpi
+  - petsc4py
+  - mpi4py
+  - gmsh            # mesh generation, plus its Python bindings
+  - python-gmsh

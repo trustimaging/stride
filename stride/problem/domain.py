@@ -629,7 +629,7 @@ class MeshedSpace:
         element = ufl.Mesh(basix.ufl.element('Lagrange', self.cell_type, self.geometry_degree,
                                              shape=(self.dim,)))
 
-        mesh = dolfinx.mesh.create_mesh(comm, self.cells, element, self.nodes)
+        mesh = dolfinx.mesh.create_mesh(comm, cells=self.cells, x=self.nodes, e=element)
 
         num_cells = mesh.topology.index_map(topology_dim).size_local
         if num_cells != self.num_cells:
