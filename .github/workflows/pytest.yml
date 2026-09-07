@@ -61,3 +61,69 @@ jobs:
       run: |
         cd stride
         python -m pytest stride/tests/ -v
+
+  pytest-dolfinx:
+    name: Pytest DOLFINx
+    runs-on: ubuntu-latest
+
+    env:
+      DEVITO_COMPILER: gcc
+      DEVITO_LANGUAGE: openmp
+      PYTHON_VERSION: 3.11.12
+
+    strategy:
+      # Prevent all build to stop if a single one fails
+      fail-fast: false
+
+    steps:
+    - name: Checkout stride
+      uses: actions/checkout@v3
+      with:
+        path: stride
+
+    - name: Checkout devito
+      uses: actions/checkout@v3
+      with:
+        repository: devitocodes/devito
+        path: devito
+
+    - name: Setup conda
+      uses: mamba-org/setup-micromamba@v2
+      with:
+        environment-file: stride/environment.yml
+        init-shell: bash
+        cache-environment: true
+        post-cleanup: 'all'
+
+    # applied over the base environment rather than replacing it, the same way the file is meant
+    # to be used locally. The complex build is the one that covers both cases: it runs the
+    # resistive tests as well, whereas a real build has to skip the capacitive ones
+    - name: Install FEM dependencies
+      shell: bash -l {0}
+      run: |
+        micromamba install -y -n stride -f stride/environment-fem-complex.yml
+
+    # a missing or real-scalar build would turn the FEM tests into skips rather than failures,
+    # so the suite would go green having run none of them
+    - name: Check the build is complex
+      shell: bash -l {0}
+      run: |
+        python -c "import dolfinx, numpy; assert numpy.dtype(dolfinx.default_scalar_type).kind == 'c'"
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        cd stride
+        pip install -e .
+
+    - name: Install devito
+      shell: bash -l {0}
+      run: |
+        cd devito
+        pip install -e .
+
+    - name: Pytest
+      shell: bash -l {0}
+      run: |
+        cd stride
+        python -m pytest stride/tests/ -v

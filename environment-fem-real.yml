@@ -14,9 +14,7 @@
 # without them; only the FEM problem types need them.
 #
 # PETSc is built for either real or complex scalars and the two cannot coexist. Use this file
-# for the real build, environment-fem-complex.yml for the complex one. A capacitive medium
-# needs the complex build, because a real one discards the imaginary part of the admittivity
-# with only a warning.
+# for the real build, environment-fem-complex.yml for the complex one.
 #
 # The MPI implementation is pinned here rather than in the base environment, which needs no MPI
 # at all. Mixing implementations between the base and this overlay causes hangs at exit inside
