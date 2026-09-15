@@ -385,6 +385,19 @@ class MeshedSpace:
         self.cell_type = cell_type
         self.geometry_degree = geometry_degree
 
+        # local only
+        self._dolfinx_cache = None
+
+    # pickle hooks
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop('_dolfinx_cache', None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._dolfinx_cache = None
+
     @property
     def num_nodes(self):
         """
@@ -508,7 +521,7 @@ class MeshedSpace:
                                   'Generate a new mesh instead.')
 
     @classmethod
-    def from_dolfinx(cls, mesh, cell_tags=None, facet_tags=None):
+    def from_dolfinx(cls, mesh, cell_tags=None, facet_tags=None, keep_mesh=False):
         """
         Create a MeshedSpace from an in-memory DOLFINx mesh.
 
@@ -526,7 +539,7 @@ class MeshedSpace:
             Cell tags, which are sparse and get densified to one entry per cell. Cells that carry
             no tag are filled with -1.
         facet_tags : optional
-            Facet tags, stored as given.
+            Facet tags.
 
         Returns
         -------
@@ -534,6 +547,15 @@ class MeshedSpace:
             Newly created MeshedSpace.
 
         """
+        try:
+            from dolfinx import mesh as dmesh
+
+        except ImportError:
+            raise ImportError('from_dolfinx needs dolfinx.mesh, which is an '
+                                'optional dependencies of stride. Install them into the '
+                                'environment, for instance with the fenics-dolfinx conda '
+                                'package.') from None
+        
         if mesh.comm.size > 1:
             warnings.warn('MeshedSpace.from_dolfinx is building from rank-local arrays, so the '
                           'resulting space describes this rank\'s partition and not the whole '
@@ -560,7 +582,7 @@ class MeshedSpace:
             cells = np.asarray(dofmap).reshape(num_cells, -1)
 
         cells = cells[:num_cells]
-
+        
         tags = None
         if cell_tags is not None:
             # MeshTags are a sparse (indices, values) pair, so densify to one entry per cell
@@ -571,9 +593,41 @@ class MeshedSpace:
             owned = indices < num_cells
             tags[indices[owned]] = values[owned]
 
-        return cls(nodes=nodes, cells=cells, cell_tags=tags, facet_tags=facet_tags,
-                   cell_type=mesh.topology.cell_name(),
-                   geometry_degree=mesh.geometry.cmap.degree)
+        # Store facet tags using the geometry-node indices defining each facet,
+        # rather than DOLFINx facet indices. DOLFINx may renumber facets when the
+        # mesh is reconstructed.
+        serialised_facet_tags = None
+        if facet_tags is not None:
+
+            facet_dim = topology_dim - 1
+
+            mesh.topology.create_entities(facet_dim)
+            mesh.topology.create_connectivity(facet_dim, topology_dim)
+
+            indices = np.asarray(facet_tags.indices, dtype=np.int32)
+            values = np.asarray(facet_tags.values, dtype=np.int32)
+
+            facet_nodes = dmesh.entities_to_geometry(
+                mesh, facet_dim, indices, False
+            )
+
+            # Node ordering/orientation within a facet is irrelevant when identifying it.
+            facet_nodes = np.sort(np.asarray(facet_nodes, dtype=np.int32), axis=1)
+
+            serialised_facet_tags = {
+                'nodes': facet_nodes,
+                'values': values,
+            }
+
+        space_cls = cls(nodes=nodes, cells=cells, cell_tags=tags,
+                facet_tags=serialised_facet_tags,
+                cell_type=mesh.topology.cell_name(),
+                geometry_degree=mesh.geometry.cmap.degree)
+        
+        if keep_mesh:
+            space_cls._dolfinx_cache = (mesh, cell_tags, facet_tags)
+
+        return space_cls
 
     def to_dolfinx(self, comm=None):
         """
@@ -600,12 +654,14 @@ class MeshedSpace:
             Cell tags on the new cell ordering, or None if this space carries no tags. Cells
             marked -1, which is what ``from_dolfinx`` fills in for untagged cells, are left out
             rather than handed back as a label of -1.
+        dolfinx.mesh.MeshTags or None
+            Facet tags on the new facet ordering, or None if this space carries no facet tags.
 
         """
         try:
             import ufl
             import basix.ufl
-            import dolfinx
+            from dolfinx import mesh as dmesh
             from mpi4py import MPI
 
         except ImportError:
@@ -613,6 +669,28 @@ class MeshedSpace:
                               'optional dependencies of stride. Install them into the '
                               'environment, for instance with the fenics-dolfinx conda '
                               'package.') from None
+
+        # check for local run
+        cached = getattr(self, '_dolfinx_cache', None)
+        
+        if cached is not None:
+
+            mesh, cell_tags, facet_tags = cached
+
+            # Preserve the existing serial-only contract.
+            if mesh.comm.size > 1:
+                raise ValueError('to_dolfinx is serial only')
+
+            if comm is not None:
+                if comm.size > 1:
+                    raise ValueError('to_dolfinx is serial only')
+
+                # Reuse only when the explicitly requested communicator
+                # is the same communicator as the cached mesh's.
+                if MPI.Comm.Compare(mesh.comm, comm) == MPI.IDENT:
+                    return cached
+            else:
+                return cached
 
         if comm is None:
             comm = MPI.COMM_SELF
@@ -629,12 +707,22 @@ class MeshedSpace:
         element = ufl.Mesh(basix.ufl.element('Lagrange', self.cell_type, self.geometry_degree,
                                              shape=(self.dim,)))
 
-        mesh = dolfinx.mesh.create_mesh(comm, cells=self.cells, x=self.nodes, e=element)
+        # recreate mesh
+        mesh = dmesh.create_mesh(comm, cells=self.cells, x=self.nodes, e=element)
 
         num_cells = mesh.topology.index_map(topology_dim).size_local
         if num_cells != self.num_cells:
             raise RuntimeError('The rebuilt mesh has %d cells but this space has %d, so the '
                                'cell ordering cannot be recovered' % (num_cells, self.num_cells))
+
+        # check if the rebuilt of the mesh was consistent
+        rebuilt_nodes = np.asarray(mesh.geometry.x)[:, :self.dim]
+
+        if not np.allclose(rebuilt_nodes,self.nodes):
+            raise RuntimeError(
+                'The DOLFINx node mapping does not reproduce '
+                'the MeshedSpace node coordinates'
+            )
 
         cell_tags = None
         if self.cell_tags is not None:
@@ -643,12 +731,66 @@ class MeshedSpace:
 
             tagged = values != -1
 
-            cell_tags = dolfinx.mesh.meshtags(mesh, topology_dim,
-                                              np.arange(num_cells, dtype=np.int32)[tagged],
-                                              values[tagged])
+            cell_tags = dmesh.meshtags(mesh, topology_dim,
+                                       np.arange(num_cells, dtype=np.int32)[tagged],
+                                       values[tagged])
 
-        return mesh, cell_tags
+        facet_tags = None
+        if self.facet_tags is not None:
+            facet_dim = topology_dim - 1
 
+            # Facet entities are not necessarily created yet, needs cell connectivity
+            mesh.topology.create_entities(facet_dim)
+            mesh.topology.create_connectivity(facet_dim, topology_dim)
+
+            num_facets = mesh.topology.index_map(facet_dim).size_local
+            facets = np.arange(num_facets, dtype=np.int32)
+
+            # Find the geometry nodes belonging to every reconstructed facet.
+            rebuilt_facet_nodes = dmesh.entities_to_geometry(
+                mesh, facet_dim, facets, False
+            )
+
+            rebuilt_facet_nodes = np.asarray(rebuilt_facet_nodes, dtype=np.int32)
+
+            # Convert from reconstructed DOLFINx node numbering back to the
+            # MeshedSpace node numbering used when facet_tags were serialised.
+            rebuilt_facet_nodes = np.sort(rebuilt_facet_nodes, axis=1)
+
+            # Map a canonical node tuple to the new DOLFINx facet index.
+            facet_lookup = {
+                tuple(nodes): facet
+                for facet, nodes in zip(facets, rebuilt_facet_nodes)
+            }
+
+            stored_facet_nodes = np.asarray(self.facet_tags['nodes'], dtype=np.int32)
+            stored_facet_values = np.asarray(self.facet_tags['values'], dtype=np.int32)
+
+            rebuilt_indices = np.empty(len(stored_facet_nodes), dtype=np.int32)
+
+            for i, nodes in enumerate(stored_facet_nodes):
+                key = tuple(nodes)
+
+                if key not in facet_lookup:
+                    raise RuntimeError(
+                        'Could not recover facet with MeshedSpace nodes %s' % (key,)
+                    )
+
+                rebuilt_indices[i] = facet_lookup[key]
+
+            # meshtags expects sorted entity indices.
+            order = np.argsort(rebuilt_indices)
+            rebuilt_indices = rebuilt_indices[order]
+            rebuilt_values = stored_facet_values[order]
+
+            facet_tags = dmesh.meshtags(
+                mesh,
+                facet_dim,
+                rebuilt_indices,
+                rebuilt_values,
+            )
+
+        return mesh, cell_tags, facet_tags
 
 class Time:
     """
