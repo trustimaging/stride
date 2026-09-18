@@ -27,6 +27,11 @@ Contract under test:
 - ``from_dolfinx`` adapts an in-memory DOLFINx mesh (skipped without DOLFINx)
 """
 
+import sys
+import pickle
+import hashlib
+import subprocess
+
 import numpy as np
 import pytest
 
@@ -343,7 +348,7 @@ class TestMeshedSpaceToDolfinx:
         mesh, tags = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
 
-        rebuilt, _ = space.to_dolfinx()
+        rebuilt, _, _ = space.to_dolfinx()
 
         assert rebuilt.topology.dim == 2
         assert rebuilt.geometry.dim == 2
@@ -353,7 +358,7 @@ class TestMeshedSpaceToDolfinx:
         mesh, tags = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
 
-        rebuilt, _ = space.to_dolfinx()
+        rebuilt, _, _ = space.to_dolfinx()
 
         # ordering need not survive, the set of positions must
         before = set(map(tuple, np.round(space.nodes, 12)))
@@ -367,7 +372,7 @@ class TestMeshedSpaceToDolfinx:
         mesh, tags = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
 
-        rebuilt, _ = space.to_dolfinx()
+        rebuilt, _, _ = space.to_dolfinx()
 
         np.testing.assert_allclose(self._total_volume(rebuilt), self._total_volume(mesh))
         np.testing.assert_allclose(self._total_volume(rebuilt), 1.)
@@ -383,7 +388,7 @@ class TestMeshedSpaceToDolfinx:
         mesh, tags = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
 
-        rebuilt, rebuilt_tags = space.to_dolfinx()
+        rebuilt, rebuilt_tags, _ = space.to_dolfinx()
 
         num_cells = rebuilt.topology.index_map(2).size_local
         midpoints = dolfinx.mesh.compute_midpoints(
@@ -409,7 +414,7 @@ class TestMeshedSpaceToDolfinx:
         space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
         assert (space.cell_tags == -1).any(), 'fixture should leave most cells untagged'
 
-        _, rebuilt_tags = space.to_dolfinx()
+        _, rebuilt_tags, _ = space.to_dolfinx()
 
         assert len(rebuilt_tags.indices) == 3
         assert -1 not in rebuilt_tags.values
@@ -419,7 +424,7 @@ class TestMeshedSpaceToDolfinx:
         mesh, _ = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh)
 
-        _, rebuilt_tags = space.to_dolfinx()
+        _, rebuilt_tags, _ = space.to_dolfinx()
 
         assert rebuilt_tags is None
 
@@ -427,7 +432,7 @@ class TestMeshedSpaceToDolfinx:
         mesh, tags = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh, cell_tags=tags)
 
-        rebuilt, rebuilt_tags = space.to_dolfinx()
+        rebuilt, rebuilt_tags, _ = space.to_dolfinx()
         again = MeshedSpace.from_dolfinx(rebuilt, cell_tags=rebuilt_tags)
 
         assert again.cell_type == space.cell_type
@@ -442,7 +447,7 @@ class TestMeshedSpaceToDolfinx:
         cells = np.array([[0, 1, 2], [1, 3, 2]], dtype=np.int32)
         space = MeshedSpace(nodes=nodes, cells=cells, cell_type='triangle')
 
-        rebuilt, _ = space.to_dolfinx()
+        rebuilt, _, _ = space.to_dolfinx()
 
         assert rebuilt.topology.dim == 2
         assert rebuilt.geometry.dim == 3
@@ -470,6 +475,483 @@ class TestMeshedSpaceToDolfinx:
         mesh, _ = self._tagged_square()
         space = MeshedSpace.from_dolfinx(mesh)
 
-        rebuilt, _ = space.to_dolfinx(comm=MPI.COMM_SELF)
+        rebuilt, _, _ = space.to_dolfinx(comm=MPI.COMM_SELF)
 
         assert rebuilt.comm.size == 1
+
+
+@pytest.mark.skipif(not HAS_DOLFINX, reason='DOLFINx not available')
+class TestMeshedSpaceNodeOrder:
+    """
+    DOLFINx renumbers the nodes as it builds a mesh, so a space whose nodes are not already in
+    its order comes back permuted. That is every mesh from a file, and it is invisible in a
+    suite whose meshes all originate from DOLFINx itself.
+
+    The renumbering is not information loss: ``input_global_indices`` is the inverse. These
+    check that it is, and that everything hanging off the node numbering rides along with it.
+    """
+
+    @staticmethod
+    def _shuffled(n=5, seed=0):
+        """
+        A space holding the same mesh as DOLFINx would build, with its nodes in another order.
+
+        This stands in for a mesh read from a file, where the node order is whoever wrote it.
+        """
+        mesh = dolfinx.mesh.create_unit_square(MPI.COMM_SELF, n, n)
+        space = MeshedSpace.from_dolfinx(mesh)
+
+        permutation = np.random.default_rng(seed).permutation(space.num_nodes)
+
+        return MeshedSpace(nodes=space.nodes[permutation],
+                           cells=np.argsort(permutation)[space.cells],
+                           cell_type=space.cell_type)
+
+    def test_the_fixture_really_is_reordered(self):
+        """Otherwise every test below passes for the wrong reason."""
+
+        space = self._shuffled()
+        rebuilt, _, _ = space.to_dolfinx()
+
+        assert not np.allclose(rebuilt.geometry.x[:, :2], space.nodes)
+
+    def test_the_permutation_reproduces_the_rebuilt_nodes(self):
+        space = self._shuffled()
+        rebuilt, _, _ = space.to_dolfinx()
+
+        node_index = np.asarray(rebuilt.geometry.input_global_indices)
+
+        np.testing.assert_allclose(space.nodes[node_index], rebuilt.geometry.x[:, :2])
+
+    def test_the_permutation_is_a_permutation(self):
+        """A gather through anything less than a bijection would drop or duplicate values."""
+
+        space = self._shuffled()
+        rebuilt, _, _ = space.to_dolfinx()
+
+        node_index = np.asarray(rebuilt.geometry.input_global_indices)
+
+        np.testing.assert_array_equal(np.sort(node_index), np.arange(space.num_nodes))
+
+    def test_dof_index_puts_node_values_where_they_belong(self):
+        """
+        The end of the chain. A field sampled in the space's node order, gathered through
+        dof_index, has to agree with the same function interpolated by DOLFINx itself.
+        """
+        space = self._shuffled()
+        rebuilt, _, _ = space.to_dolfinx()
+
+        function_space = dolfinx.fem.functionspace(rebuilt, ('Lagrange', 1))
+        index = space.dof_index(rebuilt, function_space)
+
+        def field(x):
+            return 1. + 2.*x[0] - 3.*x[1]
+
+        interpolated = dolfinx.fem.Function(function_space)
+        interpolated.interpolate(field)
+
+        # atol because the field crosses zero, where a relative tolerance has nothing to
+        # measure against
+        np.testing.assert_allclose(interpolated.x.array.real[index.node],
+                                   field(space.nodes.T), atol=1e-12)
+
+    def test_dof_index_round_trips(self):
+        """Writing in the space's order and reading back has to be the identity."""
+
+        space = self._shuffled()
+        rebuilt, _, _ = space.to_dolfinx()
+
+        function_space = dolfinx.fem.functionspace(rebuilt, ('Lagrange', 1))
+        index = space.dof_index(rebuilt, function_space)
+
+        original = np.arange(space.num_nodes, dtype=np.float64)
+
+        written = dolfinx.fem.Function(function_space)
+        written.x.array[index.node] = original
+
+        np.testing.assert_array_equal(written.x.array.real[index.node], original)
+
+    def test_dof_index_refuses_a_space_with_no_vertex_dofs(self):
+        space = self._shuffled()
+        rebuilt, _, _ = space.to_dolfinx()
+
+        discontinuous = dolfinx.fem.functionspace(rebuilt, ('DG', 0))
+
+        with pytest.raises(ValueError, match='one dof per vertex'):
+            space.dof_index(rebuilt, discontinuous)
+
+    def test_facet_tags_survive_the_renumbering(self):
+        """
+        A facet is identified by its nodes, which are renumbered, so the stored node pairs have
+        to be read back through the permutation. Without that the lookup misses every facet on
+        any mesh DOLFINx reorders, which is every mesh worth tagging.
+        """
+        mesh = dolfinx.mesh.create_unit_square(MPI.COMM_SELF, 5, 5)
+        mesh.topology.create_entities(1)
+
+        left = dolfinx.mesh.locate_entities_boundary(mesh, 1, lambda x: np.isclose(x[0], 0.))
+        right = dolfinx.mesh.locate_entities_boundary(mesh, 1, lambda x: np.isclose(x[0], 1.))
+
+        facets = np.concatenate([left, right])
+        values = np.concatenate([np.full(left.size, 7), np.full(right.size, 9)])
+        order = np.argsort(facets)
+
+        tags = dolfinx.mesh.meshtags(mesh, 1, facets[order].astype(np.int32),
+                                     values[order].astype(np.int32))
+
+        space = MeshedSpace.from_dolfinx(mesh, facet_tags=tags)
+
+        # reorder the space the way a mesh read from a file would be
+        permutation = np.random.default_rng(1).permutation(space.num_nodes)
+        inverse = np.argsort(permutation)
+
+        shuffled = MeshedSpace(nodes=space.nodes[permutation],
+                               cells=inverse[space.cells],
+                               cell_type=space.cell_type)
+        shuffled.facet_tags = {'nodes': inverse[space.facet_tags['nodes']],
+                               'values': space.facet_tags['values']}
+
+        rebuilt, _, rebuilt_tags = shuffled.to_dolfinx()
+
+        assert rebuilt_tags is not None
+        assert rebuilt_tags.values.size == facets.size
+
+        # the tags have to land on facets that are still where they were, by coordinate
+        midpoints = dolfinx.mesh.compute_midpoints(rebuilt, 1, rebuilt_tags.indices)
+
+        np.testing.assert_allclose(midpoints[rebuilt_tags.values == 7][:, 0], 0.)
+        np.testing.assert_allclose(midpoints[rebuilt_tags.values == 9][:, 0], 1.)
+
+
+class TestMeshedSpaceEdges:
+    """
+    The edge table is what an edge-located field is indexed by, so it has to be a function of
+    the cell table and of nothing else: not of the order the cells arrive in, not of the process
+    deriving it, and not of anything DOLFINx does afterwards.
+    """
+
+    def test_a_single_triangle_has_three_edges(self, tri_mesh):
+        nodes, _ = tri_mesh
+        space = MeshedSpace(nodes=nodes, cells=np.array([[0, 1, 2]], dtype=np.int32))
+
+        assert space.num_edges == 3
+        np.testing.assert_array_equal(space.edges, [[0, 1], [0, 2], [1, 2]])
+
+    def test_a_single_tetrahedron_has_six_edges(self, tetra_mesh):
+        nodes, _ = tetra_mesh
+        space = MeshedSpace(nodes=nodes, cells=np.array([[0, 1, 2, 3]], dtype=np.int32))
+
+        assert space.num_edges == 6
+
+    def test_edges_are_sorted_pairs_and_unique(self, tetra_mesh):
+        nodes, cells = tetra_mesh
+        space = MeshedSpace(nodes=nodes, cells=cells)
+
+        edges = space.edges
+
+        assert (edges[:, 0] < edges[:, 1]).all(), 'each pair should be sorted'
+        assert len(np.unique(edges, axis=0)) == len(edges), 'each edge should appear once'
+        assert edges.min() >= 0 and edges.max() < space.num_nodes
+
+    def test_shared_edges_are_counted_once(self):
+        """Two triangles over a common edge have five, not six."""
+
+        nodes = np.array([[0., 0.], [1., 0.], [0., 1.], [1., 1.]])
+        cells = np.array([[0, 1, 2], [1, 3, 2]], dtype=np.int32)
+
+        assert MeshedSpace(nodes=nodes, cells=cells).num_edges == 5
+
+    def test_the_numbering_does_not_depend_on_the_cell_order(self):
+        """Shuffling the cells describes the same mesh, so it has to give the same edges."""
+
+        nodes = np.random.default_rng(0).random((12, 2))
+        cells = np.array([[0, 1, 2], [1, 3, 2], [2, 3, 4], [4, 5, 6]], dtype=np.int32)
+
+        first = MeshedSpace(nodes=nodes, cells=cells).edges
+        second = MeshedSpace(nodes=nodes, cells=cells[::-1]).edges
+
+        np.testing.assert_array_equal(first, second)
+
+    def test_a_curved_cell_pairs_only_its_vertices(self):
+        """
+        At geometry degree 2 the cell table carries the edge midpoints as well. Pairing those
+        would invent edges between midpoints, and report 15 edges for a single triangle.
+        """
+        nodes = np.array([[0., 0.], [1., 0.], [0., 1.],
+                          [.5, 0.], [.5, .5], [0., .5]])
+        cells = np.array([[0, 1, 2, 3, 4, 5]], dtype=np.int32)
+
+        space = MeshedSpace(nodes=nodes, cells=cells, geometry_degree=2)
+
+        assert space.cell_type == 'triangle'
+        assert space.num_edges == 3
+
+    def test_no_cells_means_no_edges(self, tri_mesh):
+        nodes, _ = tri_mesh
+        space = MeshedSpace(nodes=nodes)
+
+        assert space.num_edges == 0
+
+        with pytest.raises(ValueError, match='without cells'):
+            space.edges
+
+    def test_the_table_does_not_travel_with_the_space(self, tetra_mesh):
+        """
+        It is derived, and for a large mesh it is tens of megabytes. Sending it to every worker
+        would be paying to move something each of them can rebuild.
+        """
+        nodes, cells = tetra_mesh
+        space = MeshedSpace(nodes=nodes, cells=cells)
+
+        edges = space.edges
+        assert 'edges' in space.__dict__, 'should be cached once derived'
+
+        restored = pickle.loads(pickle.dumps(space))
+
+        assert 'edges' not in restored.__dict__, 'should not have been pickled'
+        np.testing.assert_array_equal(restored.edges, edges)
+
+
+@pytest.mark.skipif(not HAS_DOLFINX, reason='DOLFINx not available')
+class TestMeshedSpaceEdgesAgainstDolfinx:
+    """
+    The count is the check that matters: it is the one thing an independent implementation of
+    the same idea can be compared against, and a table that is too small or too large by even
+    one is an index error waiting on a P2 solve.
+    """
+
+    @pytest.mark.parametrize('builder, arguments', [
+        (dolfinx.mesh.create_unit_square, (6, 6)),
+        (dolfinx.mesh.create_unit_cube, (3, 3, 3)),
+    ])
+    def test_the_count_matches(self, builder, arguments):
+        mesh = builder(MPI.COMM_SELF, *arguments)
+        mesh.topology.create_entities(1)
+
+        space = MeshedSpace.from_dolfinx(mesh)
+
+        assert space.num_edges == mesh.topology.index_map(1).size_local
+
+    def test_the_count_matches_on_a_reordered_space(self):
+        """The edges belong to the mesh, not to the order its nodes happen to be listed in."""
+
+        mesh = dolfinx.mesh.create_unit_cube(MPI.COMM_SELF, 3, 3, 3)
+        mesh.topology.create_entities(1)
+
+        space = MeshedSpace.from_dolfinx(mesh)
+        permutation = np.random.default_rng(0).permutation(space.num_nodes)
+
+        shuffled = MeshedSpace(nodes=space.nodes[permutation],
+                               cells=np.argsort(permutation)[space.cells],
+                               cell_type=space.cell_type)
+
+        assert shuffled.num_edges == mesh.topology.index_map(1).size_local
+
+    def test_a_separate_process_derives_the_same_table(self, tmp_path):
+        """
+        The worker story rests on this: every process rebuilds the table from the cells rather
+        than receiving it, so all of them have to agree without comparing notes. A set or a dict
+        anywhere in the derivation would break this under hash randomisation and nowhere else.
+        """
+        mesh = dolfinx.mesh.create_unit_cube(MPI.COMM_SELF, 3, 3, 3)
+        space = MeshedSpace.from_dolfinx(mesh)
+
+        arrays = tmp_path / 'mesh.npz'
+        np.savez(arrays, nodes=space.nodes, cells=space.cells)
+
+        script = (
+            'import hashlib, numpy as np;'
+            'from stride.problem.domain import MeshedSpace;'
+            'loaded = np.load(%r);'
+            'space = MeshedSpace(nodes=loaded["nodes"], cells=loaded["cells"]);'
+            'print(hashlib.sha1(space.edges.astype("int64").tobytes()).hexdigest())'
+            % str(arrays)
+        )
+
+        result = subprocess.run([sys.executable, '-c', script],
+                                capture_output=True, text=True, check=True)
+
+        digest = hashlib.sha1(space.edges.astype('int64').tobytes()).hexdigest()
+
+        assert result.stdout.strip() == digest
+
+
+@pytest.mark.skipif(not HAS_DOLFINX, reason='DOLFINx not available')
+class TestMeshedSpaceDofIndexAtDegreeTwo:
+    """
+    A Lagrange dof is a point value, so the test of the mapping is whether the coefficients it
+    picks out are the function evaluated at the entities it claims they belong to. A quadratic
+    is represented exactly by a degree-2 element, so these are equalities, not approximations.
+    """
+
+    @staticmethod
+    def _shuffled(builder, arguments, seed=0):
+        mesh = builder(MPI.COMM_SELF, *arguments)
+        space = MeshedSpace.from_dolfinx(mesh)
+
+        permutation = np.random.default_rng(seed).permutation(space.num_nodes)
+
+        return MeshedSpace(nodes=space.nodes[permutation],
+                           cells=np.argsort(permutation)[space.cells],
+                           cell_type=space.cell_type)
+
+    @staticmethod
+    def _quadratic(x):
+        return 1. + 2.*x[0] - 3.*x[1] + 4.*x[0]**2 + 5.*x[0]*x[1] - 6.*x[1]**2
+
+    @pytest.mark.parametrize('builder, arguments', [
+        (dolfinx.mesh.create_unit_square, (5, 5)),
+        (dolfinx.mesh.create_unit_cube, (3, 3, 3)),
+    ])
+    def test_every_dof_is_accounted_for(self, builder, arguments):
+        """
+        nodes + edges has to be the whole dof vector. One short and a dof is being silently
+        dropped; one over and two entities are fighting for the same coefficient.
+        """
+        space = self._shuffled(builder, arguments)
+        mesh, _, _ = space.to_dolfinx()
+
+        function_space = dolfinx.fem.functionspace(mesh, ('Lagrange', 2))
+        index = space.dof_index(mesh, function_space)
+
+        assert index.edge is not None
+        assert index.node.size + index.edge.size == function_space.dofmap.index_map.size_local
+
+        together = np.concatenate([index.node, index.edge])
+        np.testing.assert_array_equal(np.sort(together), np.arange(together.size))
+
+    @pytest.mark.parametrize('builder, arguments', [
+        (dolfinx.mesh.create_unit_square, (5, 5)),
+        (dolfinx.mesh.create_unit_cube, (3, 3, 3)),
+    ])
+    def test_the_values_land_on_the_right_entities(self, builder, arguments):
+        space = self._shuffled(builder, arguments)
+        mesh, _, _ = space.to_dolfinx()
+
+        function_space = dolfinx.fem.functionspace(mesh, ('Lagrange', 2))
+        index = space.dof_index(mesh, function_space)
+
+        interpolated = dolfinx.fem.Function(function_space)
+        interpolated.interpolate(self._quadratic)
+
+        values = interpolated.x.array.real
+
+        np.testing.assert_allclose(values[index.node], self._quadratic(space.nodes.T),
+                                   atol=1e-12)
+
+        # an edge dof holds the value at the edge midpoint
+        midpoints = space.nodes[space.edges].mean(axis=1)
+        np.testing.assert_allclose(values[index.edge], self._quadratic(midpoints.T), atol=1e-12)
+
+    def test_a_field_written_in_the_space_order_reads_back(self):
+        space = self._shuffled(dolfinx.mesh.create_unit_cube, (3, 3, 3))
+        mesh, _, _ = space.to_dolfinx()
+
+        function_space = dolfinx.fem.functionspace(mesh, ('Lagrange', 2))
+        index = space.dof_index(mesh, function_space)
+
+        at_nodes = np.arange(space.num_nodes, dtype=np.float64)
+        at_edges = -np.arange(space.num_edges, dtype=np.float64)
+
+        written = dolfinx.fem.Function(function_space)
+        written.x.array[index.node] = at_nodes
+        written.x.array[index.edge] = at_edges
+
+        np.testing.assert_array_equal(written.x.array.real[index.node], at_nodes)
+        np.testing.assert_array_equal(written.x.array.real[index.edge], at_edges)
+
+    def test_degree_three_is_refused_rather_than_mangled(self):
+        """An edge carries two dofs at degree 3 and a MeshedField has no ordering for them."""
+
+        space = self._shuffled(dolfinx.mesh.create_unit_square, (4, 4))
+        mesh, _, _ = space.to_dolfinx()
+
+        function_space = dolfinx.fem.functionspace(mesh, ('Lagrange', 3))
+
+        with pytest.raises(NotImplementedError, match='one dof per edge'):
+            space.dof_index(mesh, function_space)
+
+
+@pytest.mark.skipif(not HAS_DOLFINX, reason='DOLFINx not available')
+class TestMeshedSpaceNodeIndexProvenance:
+    """
+    Which permutation relates a space to a mesh depends on which of the two was built from the
+    other, and the mesh cannot say. A mesh rebuilt from the space was renumbered from it, and
+    ``input_global_indices`` inverts that. A mesh the space was built from already holds the
+    nodes in the space's order, while its own ``input_global_indices`` points back at whatever
+    built it -- gmsh, say. Using one where the other belongs is silent and total.
+    """
+
+    @staticmethod
+    def _mesh_with_a_shuffled_history():
+        """A mesh whose input_global_indices is not the identity, as a mesh from a file is."""
+
+        base = MeshedSpace.from_dolfinx(dolfinx.mesh.create_unit_square(MPI.COMM_SELF, 5, 5))
+        permutation = np.random.default_rng(0).permutation(base.num_nodes)
+
+        shuffled = MeshedSpace(nodes=base.nodes[permutation],
+                               cells=np.argsort(permutation)[base.cells],
+                               cell_type=base.cell_type)
+
+        mesh, _, _ = shuffled.to_dolfinx()
+
+        return mesh, shuffled
+
+    @staticmethod
+    def _field(x):
+        return 1. + 2.*x[0] - 3.*x[1]
+
+    def test_the_fixture_has_a_non_trivial_history(self):
+        mesh, _ = self._mesh_with_a_shuffled_history()
+
+        reported = np.asarray(mesh.geometry.input_global_indices)
+
+        assert not np.array_equal(reported, np.arange(reported.size))
+
+    def test_a_rebuilt_mesh_uses_the_reported_mapping(self):
+        mesh, space = self._mesh_with_a_shuffled_history()
+
+        np.testing.assert_array_equal(space.node_index(mesh),
+                                      np.asarray(mesh.geometry.input_global_indices))
+
+    def test_a_mesh_the_space_was_built_from_uses_the_identity(self):
+        """
+        from_dolfinx reads the nodes straight off the mesh, so the two already agree. Reaching
+        for input_global_indices here would scramble every node-located field.
+        """
+        mesh, _ = self._mesh_with_a_shuffled_history()
+        kept = MeshedSpace.from_dolfinx(mesh, keep_mesh=True)
+
+        np.testing.assert_array_equal(kept.node_index(mesh), np.arange(kept.num_nodes))
+
+    @pytest.mark.parametrize('degree', [1, 2])
+    def test_values_land_correctly_whichever_the_provenance(self, degree):
+        mesh, rebuilt_from = self._mesh_with_a_shuffled_history()
+        built_from = MeshedSpace.from_dolfinx(mesh, keep_mesh=True)
+
+        function_space = dolfinx.fem.functionspace(mesh, ('Lagrange', degree))
+
+        interpolated = dolfinx.fem.Function(function_space)
+        interpolated.interpolate(self._field)
+        values = interpolated.x.array.real
+
+        for space in (rebuilt_from, built_from):
+            index = space.dof_index(mesh, function_space)
+
+            np.testing.assert_allclose(values[index.node], self._field(space.nodes.T),
+                                       atol=1e-12)
+
+            if degree == 2:
+                midpoints = space.nodes[space.edges].mean(axis=1)
+                np.testing.assert_allclose(values[index.edge], self._field(midpoints.T),
+                                           atol=1e-12)
+
+    def test_an_unrelated_mesh_is_refused(self):
+        """Neither candidate fits, which is a different mesh rather than a different ordering."""
+
+        space = MeshedSpace.from_dolfinx(dolfinx.mesh.create_unit_square(MPI.COMM_SELF, 5, 5))
+        other = dolfinx.mesh.create_unit_square(MPI.COMM_SELF, 5, 5)
+        other.geometry.x[:] += 1.
+
+        with pytest.raises(RuntimeError, match='do not describe the same mesh'):
+            space.node_index(other)

@@ -143,8 +143,8 @@ class TestMeshedFieldShape:
 
 class TestMeshedFieldLocation:
     """
-    A meshed field is either node or per-cell, and `shape` alone does not say which,
-    so `location` is what keeps the two apart.
+    A meshed field lives on nodes, edges or cells, and `shape` alone does not say which,
+    so `location` is what keeps them apart.
     """
 
     def test_defaults_to_node(self, meshed_space):
@@ -185,6 +185,49 @@ class TestMeshedFieldLocation:
 
         assert other.location == 'cell'
         assert tuple(other.shape) == (48,)
+
+
+class TestMeshedFieldEdgeLocation:
+    """
+    A Lagrange element of degree 2 keeps half its dofs on edges, and they have to live
+    somewhere to cross between a worker and the head. Edges are the third entity dimension a
+    simplex mesh has, so they sit alongside nodes and cells rather than replacing either.
+    """
+
+    def test_an_edge_field_sizes_from_the_edges(self, meshed_space):
+        field = MeshedField(name='alpha', location='edge', space=meshed_space)
+
+        assert field.location == 'edge'
+        assert field.num_entities == meshed_space.num_edges
+        assert tuple(field.shape) == (meshed_space.num_edges,)
+
+    def test_edges_outnumber_nodes_so_the_shape_is_not_the_node_one(self, meshed_space):
+        """A location that silently fell back to nodes would pass every test above."""
+
+        field = MeshedField(name='alpha', location='edge', space=meshed_space)
+
+        assert meshed_space.num_edges != meshed_space.num_nodes
+        assert field.num_entities != meshed_space.num_nodes
+
+    def test_a_vector_edge_field_keeps_its_components(self, meshed_space):
+        field = MeshedField(name='alpha', location='edge', dim=3, space=meshed_space)
+
+        assert tuple(field.shape) == (meshed_space.num_edges, 3)
+
+    def test_the_wrong_length_is_still_rejected(self, meshed_space):
+        with pytest.raises(ValueError, match='edge entities'):
+            MeshedField(name='alpha', location='edge', space=meshed_space,
+                        data=np.zeros(meshed_space.num_nodes))
+
+    def test_alike_preserves_the_edge_location(self, meshed_space):
+        field = MeshedField(name='alpha', location='edge', space=meshed_space)
+
+        assert field.alike(name='beta').location == 'edge'
+
+    def test_num_edges_is_exposed(self, meshed_space):
+        field = MeshedField(name='alpha', location='edge', space=meshed_space)
+
+        assert field.num_edges == meshed_space.num_edges
 
 
 class TestMeshedFieldCopying:

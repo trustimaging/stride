@@ -1,5 +1,6 @@
 
 import warnings
+import collections
 import numpy as np
 from cached_property import cached_property
 
@@ -11,6 +12,98 @@ CELL_TOPOLOGICAL_DIM = {
     'triangle': 2,
     'tetrahedron': 3,
 }
+
+DofIndex = collections.namedtuple('DofIndex', ('node', 'edge'))
+
+
+def _row_keys(table, rows):
+    """
+    Reduce both tables to one sortable value per row.
+
+    Packing the columns into a single integer lets numpy sort and search a flat array, which is
+    several times faster than comparing rows through a structured view. It only works while the
+    whole row fits in 63 bits, so the view is kept as the general case.
+
+    Parameters
+    ----------
+    table : ndarray
+        Rows to search, of shape ``(n, width)``, non-negative.
+    rows : ndarray
+        Rows to find, of shape ``(m, width)``, non-negative.
+
+    Returns
+    -------
+    ndarray
+        One key per row of ``table``.
+    ndarray
+        One key per row of ``rows``.
+
+    """
+    width = table.shape[1]
+    largest = max(int(table.max()) if table.size else 0, int(rows.max()) if rows.size else 0)
+    smallest = min(int(table.min()) if table.size else 0, int(rows.min()) if rows.size else 0)
+
+    bits = max(largest.bit_length(), 1)
+
+    if smallest >= 0 and width*bits <= 63:
+        shifts = np.int64(bits)*np.arange(width - 1, -1, -1, dtype=np.int64)
+
+        return (np.bitwise_or.reduce(table << shifts, axis=1),
+                np.bitwise_or.reduce(rows << shifts, axis=1))
+
+    as_rows = [('', np.int64)]*width
+
+    return table.view(as_rows).ravel(), rows.view(as_rows).ravel()
+
+
+def _match_rows(table, rows):
+    """
+    Find each of ``rows`` in ``table``, matching whole rows rather than single values.
+
+    A mesh entity is identified by the nodes it is made of, which survives the renumbering that
+    its own index does not. That makes matching entities a matter of looking up one integer row
+    in another table of integer rows.
+
+    A structured view lets numpy sort and search whole rows at once. The obvious alternative, a
+    dict keyed on tuples, costs about 165 bytes an entry against 8, which for the edges of a
+    mesh of a million nodes is the difference between a gigabyte and a few tens of megabytes.
+
+    Parameters
+    ----------
+    table : ndarray
+        Rows to search, of shape ``(n, width)``.
+    rows : ndarray
+        Rows to find, of shape ``(m, width)``.
+
+    Returns
+    -------
+    ndarray
+        Index into ``table`` for every row of ``rows``, of shape ``(m,)``.
+
+    """
+    table = np.ascontiguousarray(table, dtype=np.int64)
+    rows = np.ascontiguousarray(rows, dtype=np.int64)
+
+    if table.ndim != 2 or rows.ndim != 2 or table.shape[1] != rows.shape[1]:
+        raise ValueError('Both tables must be 2D and the same width, got %s and %s'
+                         % (table.shape, rows.shape))
+
+    key, needle = _row_keys(table, rows)
+
+    order = np.argsort(key)
+
+    # a row that sorts past the end of the table would index out of bounds, and is a miss
+    position = np.clip(np.searchsorted(key[order], needle), 0, max(key.size - 1, 0))
+    found = order[position]
+
+    missing = key[found] != needle
+
+    if missing.any():
+        raise KeyError('%d of %d rows are not in the table, the first being %s'
+                       % (int(missing.sum()), missing.size, rows[missing][0]))
+
+    return found
+
 
 CELL_TYPE_BY_NODES = {
     (3, 1): 'triangle',
@@ -302,9 +395,13 @@ class MeshedSpace:
         Material tag for every cell, of shape ``(num_cells,)``. Tags are opaque integers as far as
         the MeshedSpace is concerned, and are only meaningful against the label table of whoever
         generated the mesh.
-    facet_tags : optional
-        Boundary tags, stored as given and not interpreted. These are not serialised, because a
-        facet tag is meaningless without the facet connectivity, which is not stored either.
+    facet_tags : dict, optional
+        Boundary tags, as ``{'nodes': ndarray, 'values': ndarray}``. Every facet is named by the
+        nodes it is made of, of shape ``(num_tagged, nodes_per_facet)``, rather than by an index
+        DOLFINx assigns and does not preserve, and ``values`` carries one opaque integer per
+        tagged facet. Naming a facet this way is what lets the tags be stored and rebuilt:
+        ``from_dolfinx`` converts DOLFINx MeshTags into this form and ``to_dolfinx`` converts
+        them back.
     cell_type : str, optional
         Cell type of the mesh, either ``triangle`` or ``tetrahedron``. Only simplices are
         supported. The spelling is the one DOLFINx and basix use, so that it can be handed to
@@ -377,6 +474,32 @@ class MeshedSpace:
                 raise ValueError('A %s is %d-dimensional and cannot be embedded in %d dimensions'
                                  % (cell_type, CELL_TOPOLOGICAL_DIM[cell_type], dim))
 
+        if facet_tags is not None:
+            try:
+                facet_nodes = np.asarray(facet_tags['nodes'], dtype=np.int32)
+                facet_values = np.asarray(facet_tags['values'])
+
+            except (TypeError, KeyError, IndexError):
+                raise ValueError('Facet tags must be a mapping with "nodes" and "values", got '
+                                 '%s. DOLFINx MeshTags name a facet by an index that does not '
+                                 'survive a rebuild, so pass them through from_dolfinx rather '
+                                 'than directly' % type(facet_tags).__name__) from None
+
+            if facet_nodes.ndim != 2:
+                raise ValueError('Facet tag nodes must be a (num_tagged, nodes_per_facet) '
+                                 'array, got shape %s' % (facet_nodes.shape,))
+
+            if facet_values.shape != (facet_nodes.shape[0],):
+                raise ValueError('There are %d tagged facets but %s values'
+                                 % (facet_nodes.shape[0], facet_values.shape))
+
+            if facet_nodes.size and (facet_nodes.min() < 0
+                                     or facet_nodes.max() >= nodes.shape[0]):
+                raise ValueError('Facet tags reference node indices outside [0, %d)'
+                                 % nodes.shape[0])
+
+            facet_tags = {'nodes': facet_nodes, 'values': facet_values}
+
         self.dim = dim
         self.nodes = nodes
         self.cells = cells
@@ -392,6 +515,11 @@ class MeshedSpace:
     def __getstate__(self):
         state = self.__dict__.copy()
         state.pop('_dolfinx_cache', None)
+
+        # derived from the cells and large enough to matter -- for a mesh of a million nodes the
+        # edge table is some 56 MB, which is not worth sending when a worker can rebuild it
+        state.pop('edges', None)
+
         return state
 
     def __setstate__(self, state):
@@ -413,6 +541,58 @@ class MeshedSpace:
 
         """
         return 0 if self.cells is None else int(self.cells.shape[0])
+
+    @cached_property
+    def edges(self):
+        """
+        Node pairs making up every edge of the mesh, of shape ``(num_edges, 2)``.
+
+        A mesh generator does not write an edge table and DOLFINx does not preserve one, but
+        neither has to: an edge *is* its pair of endpoints. Sorting each pair and then the table
+        gives a numbering that this space, a worker rebuilding it and DOLFINx all derive
+        identically from ``cells`` alone, with nothing agreed in advance and nothing shipped.
+
+        This is the ordering a field on the edge dofs of a Lagrange element of degree 2 or more
+        is indexed by, which is what lets such a field live in a MeshedField at all.
+
+        Derived rather than stored, so it neither enters a file nor travels between workers.
+
+        """
+        if self.cells is None:
+            raise ValueError('Cannot derive edges without cells, a node table is not a mesh')
+
+        # on a curved cell the columns past the vertices hold the nodes added along the edges,
+        # and pairing those would invent edges that do not exist
+        vertices = self.cells[:, :CELL_TOPOLOGICAL_DIM[self.cell_type] + 1]
+
+        pairs = [(first, second)
+                 for first in range(vertices.shape[1])
+                 for second in range(first + 1, vertices.shape[1])]
+
+        edges = np.concatenate([vertices[:, [first, second]] for first, second in pairs])
+        edges = np.sort(edges, axis=1).astype(np.int64)
+
+        if self.num_nodes > 2**31:
+            raise ValueError('Meshes of more than 2^31 nodes are not supported, this one has %d'
+                             % self.num_nodes)
+
+        # packing each pair into one integer lets np.unique sort a flat array rather than rows,
+        # which is the same answer some nine times faster -- worth having, because every worker
+        # derives this table for itself rather than being sent it
+        keys = np.unique((edges[:, 0] << np.int64(32)) | edges[:, 1])
+
+        edges = np.stack([keys >> np.int64(32), keys & np.int64(0xffffffff)], axis=1)
+
+        # unique sorts, so the numbering is a function of the cell table and nothing else
+        return edges.astype(self.cells.dtype, copy=False)
+
+    @property
+    def num_edges(self):
+        """
+        Number of edges in the mesh, zero if no connectivity is defined.
+
+        """
+        return 0 if self.cells is None else int(self.edges.shape[0])
 
     @property
     def size(self):
@@ -555,7 +735,7 @@ class MeshedSpace:
                                 'optional dependencies of stride. Install them into the '
                                 'environment, for instance with the fenics-dolfinx conda '
                                 'package.') from None
-        
+
         if mesh.comm.size > 1:
             warnings.warn('MeshedSpace.from_dolfinx is building from rank-local arrays, so the '
                           'resulting space describes this rank\'s partition and not the whole '
@@ -582,7 +762,7 @@ class MeshedSpace:
             cells = np.asarray(dofmap).reshape(num_cells, -1)
 
         cells = cells[:num_cells]
-        
+
         tags = None
         if cell_tags is not None:
             # MeshTags are a sparse (indices, values) pair, so densify to one entry per cell
@@ -623,7 +803,7 @@ class MeshedSpace:
                 facet_tags=serialised_facet_tags,
                 cell_type=mesh.topology.cell_name(),
                 geometry_degree=mesh.geometry.cmap.degree)
-        
+
         if keep_mesh:
             space_cls._dolfinx_cache = (mesh, cell_tags, facet_tags)
 
@@ -672,7 +852,7 @@ class MeshedSpace:
 
         # check for local run
         cached = getattr(self, '_dolfinx_cache', None)
-        
+
         if cached is not None:
 
             mesh, cell_tags, facet_tags = cached
@@ -715,14 +895,9 @@ class MeshedSpace:
             raise RuntimeError('The rebuilt mesh has %d cells but this space has %d, so the '
                                'cell ordering cannot be recovered' % (num_cells, self.num_cells))
 
-        # check if the rebuilt of the mesh was consistent
-        rebuilt_nodes = np.asarray(mesh.geometry.x)[:, :self.dim]
-
-        if not np.allclose(rebuilt_nodes,self.nodes):
-            raise RuntimeError(
-                'The DOLFINx node mapping does not reproduce '
-                'the MeshedSpace node coordinates'
-            )
+        # DOLFINx renumbers the nodes as it builds, and publishes the inverse of that
+        # permutation. node_index checks it rather than taking it on trust
+        node_index = self.node_index(mesh)
 
         cell_tags = None
         if self.cell_tags is not None:
@@ -751,32 +926,20 @@ class MeshedSpace:
                 mesh, facet_dim, facets, False
             )
 
-            rebuilt_facet_nodes = np.asarray(rebuilt_facet_nodes, dtype=np.int32)
+            # these come back in the rebuilt node numbering, so they have to go through
+            # node_index before they mean anything to this space. Sorting each row drops the
+            # orientation, which identifies the same facet either way round
+            rebuilt_facet_nodes = np.sort(node_index[np.asarray(rebuilt_facet_nodes)], axis=1)
 
-            # Convert from reconstructed DOLFINx node numbering back to the
-            # MeshedSpace node numbering used when facet_tags were serialised.
-            rebuilt_facet_nodes = np.sort(rebuilt_facet_nodes, axis=1)
-
-            # Map a canonical node tuple to the new DOLFINx facet index.
-            facet_lookup = {
-                tuple(nodes): facet
-                for facet, nodes in zip(facets, rebuilt_facet_nodes)
-            }
-
-            stored_facet_nodes = np.asarray(self.facet_tags['nodes'], dtype=np.int32)
+            stored_facet_nodes = np.sort(np.asarray(self.facet_tags['nodes']), axis=1)
             stored_facet_values = np.asarray(self.facet_tags['values'], dtype=np.int32)
 
-            rebuilt_indices = np.empty(len(stored_facet_nodes), dtype=np.int32)
+            try:
+                rebuilt_indices = facets[_match_rows(rebuilt_facet_nodes, stored_facet_nodes)]
 
-            for i, nodes in enumerate(stored_facet_nodes):
-                key = tuple(nodes)
-
-                if key not in facet_lookup:
-                    raise RuntimeError(
-                        'Could not recover facet with MeshedSpace nodes %s' % (key,)
-                    )
-
-                rebuilt_indices[i] = facet_lookup[key]
+            except KeyError as error:
+                raise RuntimeError('A tagged facet is not in the rebuilt mesh, so the facet '
+                                   'tags cannot be recovered (%s)' % error) from None
 
             # meshtags expects sorted entity indices.
             order = np.argsort(rebuilt_indices)
@@ -791,6 +954,146 @@ class MeshedSpace:
             )
 
         return mesh, cell_tags, facet_tags
+
+    def node_index(self, mesh):
+        """
+        Permutation taking this space's node order into a DOLFINx mesh's.
+
+        ``node_index[i]`` is the index this space gives the mesh's node ``i``, so
+        ``self.nodes[node_index]`` is the mesh's node table and ``np.argsort(node_index)`` takes
+        a value in this space's order into the mesh's.
+
+        Which permutation that is depends on where the mesh came from, and the mesh cannot say.
+        A mesh rebuilt by ``to_dolfinx`` was renumbered from this space's nodes, and
+        ``input_global_indices`` is the inverse of that renumbering. A mesh this space was built
+        *from* already holds the nodes in this space's order, and its ``input_global_indices``
+        refers to whatever built it -- gmsh, say -- which is a different permutation entirely.
+        Guessing wrong there is silent and total, so the candidate is checked against the
+        coordinates rather than assumed.
+
+        Parameters
+        ----------
+        mesh : dolfinx.mesh.Mesh
+            Mesh to index against.
+
+        Returns
+        -------
+        ndarray
+            Permutation of shape ``(num_nodes,)``.
+
+        """
+        coordinates = np.asarray(mesh.geometry.x)[:, :self.dim]
+
+        if coordinates.shape[0] != self.num_nodes:
+            raise RuntimeError('The mesh has %d nodes and this space has %d, so no permutation '
+                               'relates them' % (coordinates.shape[0], self.num_nodes))
+
+        rebuilt = np.asarray(mesh.geometry.input_global_indices)
+        identity = np.arange(self.num_nodes)
+
+        for candidate in (rebuilt, identity):
+            if candidate.shape == (self.num_nodes,) \
+                    and np.allclose(self.nodes[candidate], coordinates):
+                return candidate
+
+        raise RuntimeError('Neither the node mapping DOLFINx reports nor the identity '
+                           'reproduces the mesh node coordinates from this space, so the two '
+                           'do not describe the same mesh')
+
+    def dof_index(self, mesh, function_space):
+        """
+        Map this space's entity ordering onto the dofs of a function space over ``mesh``.
+
+        A Lagrange dof is a point value, so no reconstruction is involved: the coefficient at a
+        vertex dof is the potential at that vertex, and the one at an edge dof is the potential
+        at that edge's midpoint. All that is missing is a name for each dof that both this space
+        and DOLFINx agree on, and every arrow in the chain that provides one is an exact integer
+        map -- the element reports which of its dofs sit on which entity, the topology reports
+        which entity is which, and ``input_global_indices`` undoes the renumbering.
+
+        This is what lets a field cross between a MeshedField and a Function without an
+        interpolator. An interpolator would be approximate where this is exact, could not be
+        shipped between workers any more easily, since it needs the mesh to exist first, and
+        would turn a mismatched mesh into a plausible field rather than an error.
+
+        Parameters
+        ----------
+        mesh : dolfinx.mesh.Mesh
+            Mesh the function space is defined over, as returned by ``to_dolfinx``.
+        function_space : dolfinx.fem.FunctionSpace
+            Space whose dofs are to be indexed.
+
+        Returns
+        -------
+        DofIndex
+            ``node``, of shape ``(num_nodes,)``, holding the dof that carries the value at each
+            of this space's nodes, and ``edge``, of shape ``(num_edges,)``, holding the dof at
+            each edge midpoint. ``edge`` is None for an element with no dofs on edges.
+
+        """
+        topology_dim = CELL_TOPOLOGICAL_DIM[self.cell_type]
+        num_cells = mesh.topology.index_map(topology_dim).size_local
+
+        entity_dofs = function_space.ufl_element().basix_element.entity_dofs
+
+        if any(len(dofs) != 1 for dofs in entity_dofs[0]):
+            raise ValueError('Needs an element with exactly one dof per vertex, which is what a '
+                             'Lagrange element of degree 1 or more has. A discontinuous element '
+                             'has none, and its values belong on cells rather than nodes')
+
+        if any(len(dofs) > 1 for dofs in entity_dofs[1]):
+            raise NotImplementedError('Needs at most one dof per edge, which holds up to degree '
+                                      '2. Above that an edge carries several and a MeshedField '
+                                      'has no ordering for them')
+
+        for dimension in range(2, topology_dim + 1):
+            if any(len(dofs) for dofs in entity_dofs[dimension]):
+                raise NotImplementedError('Elements with dofs on faces or cell interiors are '
+                                          'not supported, only nodes and edges have a place in '
+                                          'a MeshedField')
+
+        # local vertex i of a cell is local geometry node i for a simplex, and for a curved cell
+        # the nodes past the first topology_dim + 1 are the ones added along the edges
+        node_index = self.node_index(mesh)
+        geometry = np.asarray(mesh.geometry.dofmap).reshape(num_cells, -1)
+        vertices = np.asarray(mesh.topology.connectivity(topology_dim, 0).array)
+        vertices = vertices.reshape(num_cells, -1)
+
+        node_of_vertex = np.empty(mesh.topology.index_map(0).size_local, dtype=np.int64)
+        node_of_vertex[vertices.reshape(-1)] = \
+            node_index[geometry[:, :topology_dim + 1].reshape(-1)]
+
+        dofs = np.asarray(function_space.dofmap.list).reshape(num_cells, -1)
+
+        node = np.empty(self.num_nodes, dtype=np.int64)
+
+        for local_vertex, local_dofs in enumerate(entity_dofs[0]):
+            node[node_of_vertex[vertices[:, local_vertex]]] = dofs[:, local_dofs[0]]
+
+        if not any(len(local_dofs) for local_dofs in entity_dofs[1]):
+            return DofIndex(node=node, edge=None)
+
+        mesh.topology.create_entities(1)
+        mesh.topology.create_connectivity(topology_dim, 1)
+
+        # an edge is its pair of endpoints, which is the one name for it that this space and the
+        # mesh derive identically. Sorting each pair drops the direction, which the two number
+        # independently and neither needs
+        edge_vertices = np.asarray(mesh.topology.connectivity(1, 0).array).reshape(-1, 2)
+        edge_nodes = np.sort(node_of_vertex[edge_vertices], axis=1)
+
+        edge_of_mesh_edge = _match_rows(self.edges, edge_nodes)
+
+        cell_edges = np.asarray(mesh.topology.connectivity(topology_dim, 1).array)
+        cell_edges = cell_edges.reshape(num_cells, -1)
+
+        edge = np.empty(self.num_edges, dtype=np.int64)
+
+        for local_edge, local_dofs in enumerate(entity_dofs[1]):
+            edge[edge_of_mesh_edge[cell_edges[:, local_edge]]] = dofs[:, local_dofs[0]]
+
+        return DofIndex(node=node, edge=edge)
+
 
 class Time:
     """

@@ -269,10 +269,21 @@ class GriddedSaved(Saved, Gridded):
                     geometry_degree = self._materialise(
                         space_description.get('geometry_degree', 1))
 
+                    facet_tag_nodes = self._materialise(
+                        space_description.get('facet_tag_nodes', None))
+
+                    facet_tags = None
+                    if facet_tag_nodes is not None:
+                        facet_tags = {
+                            'nodes': facet_tag_nodes,
+                            'values': self._materialise(space_description.facet_tag_values),
+                        }
+
                     space = MeshedSpace(
                         nodes=self._materialise(space_description.nodes),
                         cells=self._materialise(space_description.get('cells', None)),
                         cell_tags=self._materialise(space_description.get('cell_tags', None)),
+                        facet_tags=facet_tags,
                         cell_type=cell_type,
                         geometry_degree=int(geometry_degree),
                     )
@@ -353,8 +364,7 @@ class GriddedSaved(Saved, Gridded):
 
             elif isinstance(space, MeshedSpace):
                 # the connectivity travels with the nodes: a node table on its own is not a mesh
-                # and cannot be handed back to a solver. Facet tags are deliberately left out,
-                # being meaningless without the facet connectivity, which is not stored either
+                # and cannot be handed back to a solver
                 space_description = {'nodes': space.nodes}
 
                 if space.cells is not None:
@@ -362,6 +372,14 @@ class GriddedSaved(Saved, Gridded):
 
                 if space.cell_tags is not None:
                     space_description['cell_tags'] = space.cell_tags
+
+                # a facet tag names its facet by the nodes it is made of, so unlike a DOLFINx
+                # facet index it means the same thing after the mesh is rebuilt and can be
+                # written out. Flat keys rather than a nested dict, to stay within what the
+                # HDF5 layer handles
+                if space.facet_tags is not None:
+                    space_description['facet_tag_nodes'] = space.facet_tags['nodes']
+                    space_description['facet_tag_values'] = space.facet_tags['values']
 
                 # the discretisation, without which the mesh cannot be rebuilt: a node and cell
                 # table alone does not say what shape a cell is or to what degree it is mapped

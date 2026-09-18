@@ -298,7 +298,7 @@ class TestDiscretisationSurvivesTheRoundTrip:
         loaded = MeshedField(name='alpha')
         loaded.load(**project)
 
-        mesh, _ = loaded.space.to_dolfinx()
+        mesh, _, _ = loaded.space.to_dolfinx()
 
         assert mesh.topology.dim == 3
         assert mesh.topology.index_map(3).size_local == meshed_space.num_cells
@@ -326,3 +326,96 @@ class TestDiscretisationSurvivesTheRoundTrip:
 
         assert space.cell_type == 'tetrahedron'
         assert space.geometry_degree == 1
+
+
+class TestFacetTagsSurviveTheRoundTrip:
+    """
+    A facet tag used to be dropped on the way to a file, because a DOLFINx facet index means
+    nothing once the mesh is rebuilt. Naming the facet by its nodes instead makes it storable:
+    the name is the connectivity, so nothing else has to travel with it.
+
+    Without this, electrodes named by facet tag work in process and vanish through
+    ``dump``/``load``, which is a surprise that only shows up once a Problem is reloaded.
+    """
+
+    @staticmethod
+    def _tagged(meshed_space):
+        """Tag the two faces at the extremes of x, by the nodes that make them up."""
+
+        nodes = meshed_space.nodes
+        faces = []
+
+        for cell in meshed_space.cells:
+            for drop in range(cell.shape[0]):
+                facet = np.delete(cell, drop)
+
+                if np.allclose(nodes[facet][:, 0], nodes[facet][0, 0]):
+                    faces.append((np.sort(facet), nodes[facet][0, 0]))
+
+        lower, upper = nodes[:, 0].min(), nodes[:, 0].max()
+        tagged = [(facet, 2 if np.isclose(x, lower) else 3)
+                  for facet, x in faces if np.isclose(x, lower) or np.isclose(x, upper)]
+
+        assert tagged, 'fixture should find some faces to tag'
+
+        return MeshedSpace(
+            nodes=nodes, cells=meshed_space.cells, cell_type=meshed_space.cell_type,
+            facet_tags={'nodes': np.array([facet for facet, _ in tagged]),
+                        'values': np.array([value for _, value in tagged], dtype=np.int32)})
+
+    def test_the_tags_come_back(self, meshed_space, project):
+        space = self._tagged(meshed_space)
+
+        field = MeshedField(name='alpha', space=space, dtype=np.float64)
+        field.dump(**project)
+
+        loaded = MeshedField(name='alpha')
+        loaded.load(**project)
+
+        assert loaded.space.facet_tags is not None
+
+        np.testing.assert_array_equal(loaded.space.facet_tags['nodes'],
+                                      space.facet_tags['nodes'])
+        np.testing.assert_array_equal(loaded.space.facet_tags['values'],
+                                      space.facet_tags['values'])
+
+    def test_a_space_without_them_still_round_trips(self, meshed_space, project):
+        field = MeshedField(name='alpha', space=meshed_space, dtype=np.float64)
+        field.dump(**project)
+
+        loaded = MeshedField(name='alpha')
+        loaded.load(**project)
+
+        assert loaded.space.facet_tags is None
+
+    def test_a_loaded_space_can_still_rebuild_its_tags(self, meshed_space, project):
+        """The point of storing them: the rebuilt mesh has to carry the same boundaries."""
+
+        pytest.importorskip('dolfinx')
+
+        space = self._tagged(meshed_space)
+
+        field = MeshedField(name='alpha', space=space, dtype=np.float64)
+        field.dump(**project)
+
+        loaded = MeshedField(name='alpha')
+        loaded.load(**project)
+
+        _, _, facet_tags = loaded.space.to_dolfinx()
+
+        assert facet_tags is not None
+        np.testing.assert_array_equal(np.sort(facet_tags.values),
+                                      np.sort(space.facet_tags['values']))
+
+    def test_meshtags_are_refused_with_an_explanation(self, meshed_space):
+        """
+        The obvious mistake is handing the DOLFINx object straight over. It has indices rather
+        than nodes, so it would store something that means nothing after a rebuild.
+        """
+        class _MeshTags:
+            indices = np.array([0, 1])
+            values = np.array([2, 3])
+
+        with pytest.raises(ValueError, match='mapping with "nodes" and "values"'):
+            MeshedSpace(nodes=meshed_space.nodes, cells=meshed_space.cells,
+                        facet_tags=_MeshTags())

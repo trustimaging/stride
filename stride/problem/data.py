@@ -797,8 +797,10 @@ class MeshedData(StructuredData):
     name : str
         Name of the data.
     location : str, optional
-        Mesh entity the data lives on, ``node`` (one value per node) or ``cell`` (one value per
-        cell, the discontinuous piecewise-constant case), defaults to ``node``.
+        Mesh entity the data lives on, ``node`` (one value per node), ``edge`` (one value per
+        edge, which is where a Lagrange element of degree 2 or more puts the rest of its dofs)
+        or ``cell`` (one value per cell, the discontinuous piecewise-constant case), defaults to
+        ``node``.
     shape : tuple, optional
         Shape of the data, derived from the grid if not given.
     dtype : data-type, optional
@@ -818,8 +820,8 @@ class MeshedData(StructuredData):
             raise ValueError('Compression is not supported for meshed data')
 
         location = kwargs.pop('location', 'node')
-        if location not in ('node', 'cell'):
-            raise ValueError('Location must be "node" or "cell", got %s' % location)
+        if location not in ('node', 'edge', 'cell'):
+            raise ValueError('Location must be "node", "edge" or "cell", got %s' % location)
 
         self._location = location
 
@@ -859,7 +861,7 @@ class MeshedData(StructuredData):
     @property
     def location(self):
         """
-        Mesh entity the data lives on, ``node`` or ``cell``.
+        Mesh entity the data lives on, ``node``, ``edge`` or ``cell``.
 
         """
         return self._location
@@ -870,7 +872,9 @@ class MeshedData(StructuredData):
         Number of mesh entities the data is defined over.
 
         """
-        return self.num_cells if self._location == 'cell' else self.num_nodes
+        return {'node': self.num_nodes,
+                'edge': self.num_edges,
+                'cell': self.num_cells}[self._location]
 
     @property
     def num_nodes(self):
@@ -879,6 +883,14 @@ class MeshedData(StructuredData):
 
         """
         return self.space.num_nodes
+
+    @property
+    def num_edges(self):
+        """
+        Number of edges in the mesh.
+
+        """
+        return self.space.num_edges
 
     @property
     def num_cells(self):
@@ -990,7 +1002,7 @@ class MeshedField(MeshedData):
     slow_time_dependent : bool, optional
         Whether or not the field is slow-time dependent, defaults to False.
     location : str, optional
-        Mesh entity the field lives on, ``node`` or ``cell``, defaults to ``node``.
+        Mesh entity the field lives on, ``node``, ``edge`` or ``cell``, defaults to ``node``.
     dtype : data-type, optional
         Data type of the data, defaults to float32.
     grid : Grid or any of MeshedSpace or Time
