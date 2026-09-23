@@ -162,12 +162,15 @@ if [ -d "$STRIDE_PRIVATE" ]; then
     conda run --no-capture-output -n "$ENV_NAME" pip install -e "$STRIDE_PRIVATE" --no-deps
 fi
 
+# run each suite from inside its own checkout. From a directory that merely contains one named
+# stride, "import stride" finds that directory as a namespace package instead of the installed
+# one, and the failure reads "cannot import name Geometry from stride (unknown location)"
 echo "==> running the meshed tests"
-conda run --no-capture-output -n "$ENV_NAME" python -m pytest "$STRIDE/stride/tests" -q
+( cd "$STRIDE" && conda run --no-capture-output -n "$ENV_NAME" python -m pytest stride/tests -q )
 
 if [ -d "$STRIDE_PRIVATE/stride_private/tests" ]; then
-    conda run --no-capture-output -n "$ENV_NAME" \
-        python -m pytest "$STRIDE_PRIVATE/stride_private/tests" -q
+    ( cd "$STRIDE_PRIVATE" \
+        && conda run --no-capture-output -n "$ENV_NAME" python -m pytest stride_private/tests -q )
 fi
 
 echo
