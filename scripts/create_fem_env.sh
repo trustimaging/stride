@@ -34,6 +34,14 @@ SCALAR="${1:-complex}"
 ENV_NAME="${2:-stride-dolfinx-$SCALAR}"
 
 STRIDE="${STRIDE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
+# sbatch copies the script into /var/spool before running it, so BASH_SOURCE points at the copy
+# rather than at the checkout. Fall back to the submit directory, and say so rather than failing
+# later with a confusing missing-file error
+if [ ! -f "$STRIDE/environment.yml" ] && [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
+    STRIDE="$SLURM_SUBMIT_DIR"
+fi
+
 STRIDE_PRIVATE="${STRIDE_PRIVATE:-$(dirname "$STRIDE")/stride-private}"
 
 case "$SCALAR" in
@@ -46,7 +54,8 @@ OVERLAY="$STRIDE/environment-fem-$SCALAR.yml"
 BASE="$STRIDE/environment.yml"
 
 for file in "$BASE" "$OVERLAY"; do
-    [ -f "$file" ] || { echo "Error: $file not found" >&2; exit 1; }
+    [ -f "$file" ] || { echo "Error: $file not found. Run the script from the stride checkout, "\
+                             "or set STRIDE to it" >&2; exit 1; }
 done
 
 [ -d "$STRIDE_PRIVATE" ] || echo "Note: no stride-private at $STRIDE_PRIVATE, skipping it"
