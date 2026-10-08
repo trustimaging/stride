@@ -1,5 +1,6 @@
 
 import os
+import time
 import warnings
 import zmq
 import zmq.asyncio
@@ -1575,6 +1576,10 @@ class Runtime(BaseRPC):
         -------
 
         """
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING worker recv task_array %s from %s n_tasks %d t_recv %.6f'
+                             % (uid, sender_id, len(tasks), time.time()))
+
         processed_tasks = {}
         for t_uid, task in tasks.items():
             obj_uid = task['tessera_id']

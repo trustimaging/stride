@@ -1,5 +1,7 @@
 
+import os
 import sys
+import time
 import uuid
 import tblib
 import inspect
@@ -10,6 +12,8 @@ from cached_property import cached_property
 
 import mosaic
 from .. import types
+
+_TIMING = os.environ.get('MOSAIC_TIMING') == '1'
 from .base import Base, RemoteBase, ProxyBase, RuntimeDisconnectedError
 from ..types import WarehouseObject
 from ..utils import Future, MultiError, sizeof, remote_sizeof, memory_used
@@ -1148,7 +1152,9 @@ class TaskArrayProxy(TaskProxy):
         for proxy in list(proxies) + [self]:
             tessera_inits.append(proxy._tessera_proxy.init_future)
 
+        t_start = time.time()
         await asyncio.gather(*tessera_inits)
+        t_inits = time.time()
 
         self._dependencies = {self.runtime_id: {}}
         _sort_dependencies(proxies, self._dependencies)
@@ -1175,7 +1181,13 @@ class TaskArrayProxy(TaskProxy):
 
                 tasks[proxy.uid] = task
 
+            t_send = time.time()
             await proxies[0].remote_runtime.init_task_array(uid=self.uid, tasks=tasks, reply=True)
+            if _TIMING:
+                mosaic.logger().perf('TIMING head task_array %s to %s n_tasks %d tessera_init_wait %.4f '
+                                     'send_until_reply %.4f t_send %.6f'
+                                     % (self.uid, runtime_id, len(tasks), t_inits - t_start,
+                                        time.time() - t_send, t_send))
 
             for proxy in proxies:
                 if proxy.state == 'pending':

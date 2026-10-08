@@ -1,5 +1,7 @@
 
+import os
 import sys
+import time
 import uuid
 import copy
 import tblib
@@ -323,6 +325,7 @@ class Tessera(RemoteBase):
             await self.logger.send()
 
             # track the in-flight execution so drain_pending_tasks can await it
+            t_start = time.time()
             self._running_exec = asyncio.ensure_future(
                 self.call_safe(sender_id, method, task))
             try:
@@ -331,6 +334,10 @@ class Tessera(RemoteBase):
                 task.state_changed('failed')
             finally:
                 self._running_exec = None
+            if os.environ.get('MOSAIC_TIMING') == '1':
+                self.logger.perf('TIMING worker exec %s.%s task %s t_start %.6f dur %.4f'
+                                 % (self.obj.__class__.__name__, task.method, task.uid,
+                                    t_start, time.time() - t_start))
 
             del task
             del method

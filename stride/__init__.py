@@ -1,6 +1,7 @@
 
 
 import os
+import time
 import signal
 import pickle
 import asyncio
@@ -373,6 +374,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         def make_loop():
             @runtime.async_for(shot_ids, safe=safe)
             async def loop(worker, shot_id):
+                t_shot = time.time()
                 _kwargs = kwargs.copy()
 
                 if artifact_warehouse is not None:
@@ -441,7 +443,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                         runtime=worker, **_kwargs)
 
                 # run adjoint
-                fun_value = await fun.remote.adjoint(**_kwargs).result()
+                adjoint_task = fun.remote.adjoint(**_kwargs)
+                t_graph = time.time()
+                fun_value = await adjoint_task.result()
+                if os.environ.get('MOSAIC_TIMING') == '1':
+                    logger.perf('TIMING head shot %d %s graph_build %.4f total %.3f t_start %.6f'
+                                % (shot_id, worker.uid, t_graph - t_shot, time.time() - t_shot, t_shot))
 
                 iteration.add_loss(fun_value)
                 logger.perf('Functional value for shot %d: %s' % (shot_id, fun_value))
