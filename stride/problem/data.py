@@ -1005,18 +1005,61 @@ class MeshedField(MeshedData):
         Mesh entity the field lives on, ``node``, ``edge`` or ``cell``, defaults to ``node``.
     dtype : data-type, optional
         Data type of the data, defaults to float32.
+    evaluator : callable, optional
+        Local callable ``evaluator(points)`` used by :meth:`evaluate`.
+        May also be attached after construction. Not saved, transferred,
+        or copied to derived fields.
     grid : Grid or any of MeshedSpace or Time
         Grid on which the Problem is defined.
 
     """
 
     def __init__(self, **kwargs):
+        self.evaluator = kwargs.pop('evaluator', None)
         # these have to be in place before MeshedData.__init__ calls _init_shape
         self._dim = kwargs.pop('dim', 1)
         self._time_dependent = kwargs.pop('time_dependent', False)
         self._slow_time_dependent = kwargs.pop('slow_time_dependent', False)
 
         super().__init__(**kwargs)
+
+    def evaluate(self, points):
+        """Evaluate this field using its attached backend callable.
+
+        Parameters
+        ----------
+        points : array_like, shape (n, geometric_dimension)
+            Physical coordinates in the mesh's coordinate system and units.
+            A backend may also accept zero-padded coordinates of shape (n, 3).
+
+        Returns
+        -------
+        ndarray
+            One value per point, with trailing axes for components. The
+            evaluator must preserve point order and return NaN outside
+            the mesh, including for non-finite coordinates.
+
+        Notes
+        -----
+        The backend owns validation, point location, and interpolation.
+        This method neither imports a backend nor chooses a fallback.
+        An evaluator bound to a solution snapshot does not track edits to
+        ``data``. Evaluators must be reattached after copying or loading.
+        """
+        if self.evaluator is None:
+            raise NotImplementedError('No evaluator is attached to this field')
+        if not callable(self.evaluator):
+            raise TypeError('evaluator must be callable')
+        return self.evaluator(points)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop('evaluator', None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.evaluator = None
 
     def _init_shape(self, fill_shape=True):
         shape = ()
@@ -1236,6 +1279,7 @@ class MeshedField(MeshedData):
 
     def __set_desc__(self, description, **kwargs):
         super().__set_desc__(description, **kwargs)
+        self.evaluator = None
 
         self._dim = description.get('dim', 1)
         self._time_dependent = description.get('time_dependent', False)
