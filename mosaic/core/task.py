@@ -489,6 +489,8 @@ class Task(RemoteBase):
     async def _check_ready(self):
         if len(self._args_pending) or len(self._kwargs_pending):
             return
+        t_ready = time.time()
+        pulls = []
 
         # make sure there's enough memory to pull the arguments
         wait = 1
@@ -516,6 +518,7 @@ class Task(RemoteBase):
             await asyncio.sleep(wait)
             wait *= 1.2
 
+        t_mem = time.time()
         self.runtime.inc_committed_mem(self._arg_size)  # reserve memory to pull args
         self.runtime.dec_pending_tasks()
         self.runtime.inc_running_tasks()
@@ -530,7 +533,9 @@ class Task(RemoteBase):
                 self._args_state[index] = 'ready'
 
                 async def _await_arg(_index, _arg):
+                    _t = time.time()
                     _result = await _arg.result()
+                    pulls.append('arg%d:%s:%.4f' % (_index, type(_arg).__name__, time.time() - _t))
                     _attr = self._args_value if not isinstance(_arg, TaskDone) else None
                     return _attr, _index, _result
 
@@ -543,7 +548,9 @@ class Task(RemoteBase):
                 self._kwargs_state[key] = 'ready'
 
                 async def _await_kwarg(_key, _arg):
+                    _t = time.time()
                     _result = await _arg.result()
+                    pulls.append('%s:%s:%.4f' % (_key, type(_arg).__name__, time.time() - _t))
                     _attr = self._kwargs_value if not isinstance(_arg, TaskDone) else None
                     return _attr, _key, _result
 
@@ -557,6 +564,10 @@ class Task(RemoteBase):
                 attr[key] = result
 
         self.runtime.dec_committed_mem(self._arg_size)  # return reserved memory
+        if _TIMING:
+            mosaic.logger().perf('TIMING worker args task %s t_ready %.6f mem_wait %.4f pull %.4f t_pulled %.6f pulls %s'
+                                 % (self.uid, t_ready, t_mem - t_ready, time.time() - t_mem, time.time(),
+                                    ','.join(pulls) or '-'))
 
         # set task ready
         if not self._ready_future.done():

@@ -298,6 +298,7 @@ class Tessera(RemoteBase):
 
         while True:
             sender_id, task, future = await self._run_queue.get()
+            t_dequeued = time.time()
             # Make sure that the loop does not keep implicit references to the task until the
             # next task arrives in the queue
             self._run_queue.task_done()
@@ -321,6 +322,7 @@ class Tessera(RemoteBase):
                     raise ValueError('Method %s of class %s is not callable' % (task.method,
                                                                                 self.obj.__class__.__name__))
 
+            t_args = time.time()
             await asyncio.sleep(0)
             await self.logger.send()
 
@@ -337,10 +339,10 @@ class Tessera(RemoteBase):
             if os.environ.get('MOSAIC_TIMING') == '1':
                 t_method_end = self._t_method_end
                 self.logger.perf('TIMING worker exec %s.%s task %s t_start %.6f dur %.4f '
-                                 'method %.4f set_result %.4f'
+                                 'method %.4f set_result %.4f t_dequeued %.6f t_args %.6f'
                                  % (self.obj.__class__.__name__, task.method, task.uid,
                                     t_start, time.time() - t_start, t_method_end - t_start,
-                                    time.time() - t_method_end))
+                                    time.time() - t_method_end, t_dequeued, t_args))
 
             del task
             del method
