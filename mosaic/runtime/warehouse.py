@@ -1,5 +1,6 @@
 
 import os
+import time
 import copy
 import shutil
 import asyncio
@@ -208,11 +209,17 @@ class Warehouse(Runtime):
 
         func_args = func_args or ()
         func_kwargs = func_kwargs or {}
+        t0 = time.time()
         obj = await func(obj, *func_args, **func_kwargs)
+        t1 = time.time()
 
         self._local_warehouse[obj_id] = obj
+        t2 = time.time()
 
         warehouse_obj = WarehouseObject(obj, uid=obj_id)
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING warehouse exec %s from %s t_start %.6f func %.4f store %.4f wrap %.4f'
+                             % (obj_id, sender_id, t0, t1 - t0, t2 - t1, time.time() - t2))
         return warehouse_obj
 
     async def drop_remote(self, sender_id, uid, propagate=False, **kwargs):

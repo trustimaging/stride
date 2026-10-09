@@ -337,7 +337,10 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if optimiser.reset_iteration:
             optimiser.reset()
 
+        t_bc = time.time()
         published_args = await watchdog.broadcast(args, label='broadcast')
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            logger.perf('TIMING head broadcast dur %.4f t_start %.6f' % (time.time() - t_bc, t_bc))
 
         logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
@@ -586,16 +589,21 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
             else:
                 await make_step_loop()
 
+        t_step = time.time()
         await optimiser.step(iteration=iteration, problem=problem,
                              f_min=f_min, f_max=f_max,
                              filter_relaxation=min(filter_wavelets_relaxation, filter_traces_relaxation),
                              step_loop=step_loop,
                              **kwargs)
 
+        t_dump = time.time()
         if dump:
             optimiser.dump(path=problem.output_folder,
                            project_name=problem.name,
                            version=iteration.abs_id+1)
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            logger.perf('TIMING head optimiser_step %.4f dump %.4f t_start %.6f'
+                        % (t_dump - t_step, time.time() - t_dump, t_step))
 
         if iteration.prev_run is not None:
             prev_loss = iteration.prev_run.total_loss

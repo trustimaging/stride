@@ -1,4 +1,6 @@
 
+import os
+import time
 import uuid
 import pickle
 import asyncio
@@ -369,6 +371,7 @@ class Variable:
 
             if node.method == '__noop__':
                 continue
+            t_node = time.time()
 
             # prepare output grads
             output_names = [each for each in prev.keys() if each.startswith(node.name)]
@@ -392,11 +395,16 @@ class Variable:
                 if _task_id is not None:
                     _func_kwargs['mosaic_task_id'] = _task_id
 
+                t_exec = time.time()
                 redux_grad = await runtime.exec(
                     'redux-%s' % node.op.uid, redux, output_grads,
                     func_kwargs=_func_kwargs or None,
                     serialise=_serialise_grad,
                 )
+                if os.environ.get('MOSAIC_TIMING') == '1':
+                    mosaic.logger().perf('TIMING adjoint redux_exec %s t_start %.6f dur %.4f grad_bytes %d'
+                                         % (node.op.uid, t_exec, time.time() - t_exec,
+                                            sum(mosaic.utils.sizeof(g) for g in output_grads)))
                 ret = method((redux_grad,), **{**kwargs_, **{'eager': True, 'redux': True}})
 
             else:
@@ -428,6 +436,11 @@ class Variable:
 
                 input_grads = (ret,) if not isinstance(ret, tuple) else ret
 
+            if os.environ.get('MOSAIC_TIMING') == '1':
+                mosaic.logger().perf('TIMING adjoint node %s.%s t_start %.6f dur %.4f'
+                                     % (getattr(node.op, 'uname', node.op.__class__.__name__), node.method,
+                                        t_node, time.time() - t_node))
+
             try:
                 if len(input_grads) < len(node.next):
                     raise RuntimeError('Provided %d outputs for the adjoint of operator %s, '
@@ -454,6 +467,7 @@ class Variable:
 
                 prev[nxt.name_idx] = input_grad
 
+        t_returns = time.time()
         parallel_inits = [task.init_future for task in parallel_returns]
 
         eager = not len(returns) or returns[-1]._eager
@@ -470,6 +484,9 @@ class Variable:
 
             await asyncio.gather(*(summ_returns + parallel_inits))
 
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            mosaic.logger().perf('TIMING adjoint wait_returns t_start %.6f dur %.4f n %d'
+                                 % (t_returns, time.time() - t_returns, len(returns) + len(parallel_inits)))
         self.clear_graph()
 
         return self
@@ -610,6 +627,9 @@ class Variable:
             if mosaic.get_artifact_warehouse() is not None:
                 return
 
+            if os.environ.get('MOSAIC_TIMING') == '1':
+                mosaic.logger().perf('TIMING redux register %s on %s key %s t %.6f'
+                                     % (self.name, mosaic.runtime().uid, grad[0].warehouse_id, time.time()))
             self._redux_grads[grad[0].warehouse_id] = grad[0]
 
             if not self._redux_task:
@@ -625,7 +645,11 @@ class Variable:
         if isinstance(grad, (list, tuple)):
             grad = grad[0]
 
+        t_add = time.time()
         self.grad += grad
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            mosaic.logger().perf('TIMING grad accumulate %s on %s dur %.4f'
+                                 % (self.name, mosaic.runtime().uid, time.time() - t_add))
 
     async def __redux_adjoint__(self):
         """
@@ -654,13 +678,20 @@ class Variable:
             inits.append(redux_proxy._init_task(redux_task, g))
             tasks.append(redux_task)
 
+        t0 = time.time()
         await asyncio.gather(*inits)
+        t1 = time.time()
         await asyncio.gather(*tasks)
+        t2 = time.time()
 
         drops = []
         for g in self._redux_grads.values():
             drops.append(g.drop(propagate=True))
         await asyncio.gather(*drops)
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            mosaic.logger().perf('TIMING redux to_head %s on %s n_grads %d init %.4f tasks %.4f drops %.4f t_start %.6f'
+                                 % (self.name, mosaic.runtime().uid, len(tasks), t1 - t0, t2 - t1,
+                                    time.time() - t2, t0))
 
         self._redux_grads = dict()
         self._redux_task = False

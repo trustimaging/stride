@@ -270,6 +270,10 @@ class Runtime(BaseRPC):
             maintenance_interval = max(0.5, min(len(self._workers)*0.5, 60))
         else:
             maintenance_interval = 0.5
+        maintenance_interval = float(os.environ.get('MOSAIC_MAINTENANCE_INTERVAL', maintenance_interval))
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING maintenance_interval %s %.2f num_workers_known %d'
+                             % (self.uid, maintenance_interval, len(self._workers)))
         self._loop.interval(self.maintenance, interval=maintenance_interval)
 
         # Initialise anon tessera
@@ -409,9 +413,14 @@ class Runtime(BaseRPC):
         -------
 
         """
+        t0 = time.time()
         await self.maintenance()
+        t1 = time.time()
         monitor = self.get_monitor()
         await monitor.barrier(timeout=timeout, reply=True)
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING head barrier maintenance %.4f monitor %.4f t_start %.6f'
+                             % (t1 - t0, time.time() - t1, t0))
 
     def async_for(self, *iterables, **kwargs):
         assert not self._inside_async_for, 'async_for cannot be nested'

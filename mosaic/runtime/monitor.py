@@ -683,7 +683,11 @@ class Monitor(Runtime):
             if timeout is not None and (time.time() - tic) > timeout:
                 break
 
+        t_tasks = time.time()
         await self._local_warehouse.run_barrier_tasks(reply=True)
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING monitor barrier wait %.4f n_tasks %d barrier_tasks %.4f t_start %.6f'
+                             % (t_tasks - tic, num_tasks, time.time() - t_tasks, tic))
 
         self._monitored_tasks = dict()
         self._runtime_tasks = defaultdict(list)
