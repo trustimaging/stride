@@ -335,9 +335,12 @@ class Tessera(RemoteBase):
             finally:
                 self._running_exec = None
             if os.environ.get('MOSAIC_TIMING') == '1':
-                self.logger.perf('TIMING worker exec %s.%s task %s t_start %.6f dur %.4f'
+                t_method_end = self._t_method_end
+                self.logger.perf('TIMING worker exec %s.%s task %s t_start %.6f dur %.4f '
+                                 'method %.4f set_result %.4f'
                                  % (self.obj.__class__.__name__, task.method, task.uid,
-                                    t_start, time.time() - t_start))
+                                    t_start, time.time() - t_start, t_method_end - t_start,
+                                    time.time() - t_method_end))
 
             del task
             del method
@@ -376,6 +379,7 @@ class Tessera(RemoteBase):
                                                        **task.kwargs_value())
 
                 result = await future
+                self._t_method_end = time.time()  # one task at a time per tessera (task lock)
 
                 await task.set_result(result)
 

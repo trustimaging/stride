@@ -1,6 +1,7 @@
 
 import os
 import gc
+import time as timer  # `time` is used as a variable name below
 import sympy
 import logging
 import functools
@@ -1067,7 +1068,11 @@ class OperatorDevito:
                 except KeyError:
                     pass
 
+            t_start = timer.time()
             self.devito_operator.apply(**runtime_kwargs)
+            if os.environ.get('MOSAIC_TIMING') == '1':
+                mosaic.logger().perf('TIMING worker kernel %s t_start %.6f dur %.4f'
+                                     % (self.name, t_start, timer.time() - t_start))
 
 
 def config_devito(**kwargs):

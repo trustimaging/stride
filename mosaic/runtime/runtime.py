@@ -492,7 +492,11 @@ class Runtime(BaseRPC):
     @contextlib.asynccontextmanager
     async def _exclusive_proxy(self, queue, safe=False):
         proxy = await queue.get()
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING head acquire %s t_get %.6f' % (proxy.uid, time.time()))
         yield proxy
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING head release %s t_put %.6f' % (proxy.uid, time.time()))
         await queue.put(proxy)
 
     @property

@@ -621,8 +621,12 @@ class TaskArray(Task):
                 for t_uid, task in self_ref()._tasks.items():
                     stored_result[t_uid] = task._result
 
+                t_send = time.time()
                 await self_ref().cmd_async(method='set_result', result=stored_result,
                                            restrict=[self._sender_id])
+                if _TIMING:
+                    mosaic.logger().perf('TIMING worker send result task_array %s t_send %.6f dur %.4f'
+                                         % (self_ref().uid, t_send, time.time() - t_send))
                 self._tasks = {}
 
             self_ref().loop.run(_task_done)
@@ -1237,6 +1241,8 @@ class TaskArrayProxy(TaskProxy):
         -------
 
         """
+        if _TIMING:
+            mosaic.logger().perf('TIMING head recv result task_array %s t_recv %.6f' % (self.uid, time.time()))
         for runtime_id, proxies in self._dependencies.items():
             proxies = list(proxies.values())
 

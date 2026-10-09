@@ -446,9 +446,7 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 adjoint_task = fun.remote.adjoint(**_kwargs)
                 t_graph = time.time()
                 fun_value = await adjoint_task.result()
-                if os.environ.get('MOSAIC_TIMING') == '1':
-                    logger.perf('TIMING head shot %d %s graph_build %.4f total %.3f t_start %.6f'
-                                % (shot_id, worker.uid, t_graph - t_shot, time.time() - t_shot, t_shot))
+                t_result = time.time()
 
                 iteration.add_loss(fun_value)
                 logger.perf('Functional value for shot %d: %s' % (shot_id, fun_value))
@@ -457,6 +455,12 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
                 logger.perf('Retrieved gradient for shot %d (%d out of %d)'
                             % (sub_problem.shot_id,
                             iteration.num_completed, num_shots))
+
+                if os.environ.get('MOSAIC_TIMING') == '1':
+                    logger.perf('TIMING head shot %d %s graph_build %.4f total %.3f t_start %.6f '
+                                't_result %.6f t_end %.6f'
+                                % (shot_id, worker.uid, t_graph - t_shot, t_result - t_shot, t_shot,
+                                   t_result, time.time()))
             
             return loop
 
