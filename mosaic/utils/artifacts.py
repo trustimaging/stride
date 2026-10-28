@@ -63,13 +63,17 @@ class ArtifactConfig:
         ArtifactConfig
 
         """
+        backend = os.environ.get(f'{prefix}_BACKEND', 'minio')
+        # MinIO's development default. For S3, no keys means boto3 uses the
+        # environment's credentials, e.g. the pod's IAM role on EKS.
+        default_key = None if backend == 's3' else 'minioadmin'
         return cls(
             endpoint=os.environ[f'{prefix}_ENDPOINT'],
-            access_key=os.environ.get(f'{prefix}_ACCESS_KEY', 'minioadmin'),
-            secret_key=os.environ.get(f'{prefix}_SECRET_KEY', 'minioadmin'),
+            access_key=os.environ.get(f'{prefix}_ACCESS_KEY', default_key),
+            secret_key=os.environ.get(f'{prefix}_SECRET_KEY', default_key),
             bucket=os.environ.get(f'{prefix}_BUCKET', 'stride-data'),
             secure=os.environ.get(f'{prefix}_SECURE', 'false').lower() == 'true',
-            backend=os.environ.get(f'{prefix}_BACKEND', 'minio'),
+            backend=backend,
         )
 
 

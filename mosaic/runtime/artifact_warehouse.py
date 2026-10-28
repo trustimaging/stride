@@ -123,10 +123,14 @@ class ArtifactWarehouse:
         endpoint = os.environ[f'{prefix}_ENDPOINT']
         secure = os.environ.get(f'{prefix}_SECURE', 'false').lower() == 'true'
         scheme = 'https' if secure else 'http'
+        # as ArtifactConfig.from_env: for S3, no keys means the environment's
+        # credentials (e.g. the pod's IAM role)
+        default_key = (None if os.environ.get(f'{prefix}_BACKEND', 'minio') == 's3'
+                       else 'minioadmin')
         return s3fs.S3FileSystem(
             endpoint_url=f'{scheme}://{endpoint}',
-            key=os.environ.get(f'{prefix}_ACCESS_KEY', 'minioadmin'),
-            secret=os.environ.get(f'{prefix}_SECRET_KEY', 'minioadmin'),
+            key=os.environ.get(f'{prefix}_ACCESS_KEY', default_key),
+            secret=os.environ.get(f'{prefix}_SECRET_KEY', default_key),
             config_kwargs={'signature_version': 's3v4'},
             skip_instance_cache=True,
         )
