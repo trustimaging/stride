@@ -1,6 +1,7 @@
 
 import os
 import glob
+import time as timer
 import shutil
 import tempfile
 import numpy as np
@@ -965,7 +966,9 @@ class IsoAcousticDevito(ProblemTypeBase):
             p_dump.dump(path=problem.output_folder, project_name=problem.name,
                         version=version)
 
+        t_dealloc = timer.time()
         self.deallocate_wavefield(platform=platform, deallocate=deallocate)
+        t_dealloc = timer.time() - t_dealloc
 
         if deallocate:
             self.boundary.deallocate()
@@ -979,7 +982,13 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.dev_grid.deallocate('buoy')
             self.dev_grid.deallocate('alpha', collect=True)
 
-        return self.get_grad(wavelets, vp, rho, alpha, **kwargs)
+        t_grad = timer.time()
+        grads = self.get_grad(wavelets, vp, rho, alpha, **kwargs)
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING worker after_adjoint deallocate_wavefield %.4f get_grad %.4f'
+                             % (t_dealloc, timer.time() - t_grad))
+
+        return grads
 
     # gradients
 
@@ -1060,11 +1069,14 @@ class IsoAcousticDevito(ProblemTypeBase):
             Gradient wrt Vp.
 
         """
+        t_copy = timer.time()
         variable_grad = self.dev_grid.vars.grad_vp
         variable_grad = np.asarray(variable_grad.data[self.space.inner], dtype=np.float32)
 
         variable_prec = self.dev_grid.vars.prec_vp
         variable_prec = np.asarray(variable_prec.data[self.space.inner], dtype=np.float32)
+        t_copy = timer.time() - t_copy
+        t_scale = timer.time()
 
         is_slowness = False
         if vp.transform is not None:
@@ -1080,6 +1092,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         else:
             variable_grad *= -2 / vp.data**3
             variable_prec *= (2 / vp.data)**3**2
+        t_scale = timer.time() - t_scale
 
         deallocate = kwargs.pop('deallocate', False)
         if deallocate:
@@ -1094,6 +1107,9 @@ class IsoAcousticDevito(ProblemTypeBase):
                              shape=variable_prec.shape,
                              extended_shape=variable_prec.shape,
                              inner=None)
+
+        if os.environ.get('MOSAIC_TIMING') == '1':
+            self.logger.perf('TIMING worker get_grad_vp device_copy %.4f scale %.4f' % (t_copy, t_scale))
 
         problem = kwargs.pop('problem', None)
         iteration = kwargs.pop('iteration', None)
