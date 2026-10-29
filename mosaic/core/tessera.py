@@ -328,6 +328,7 @@ class Tessera(RemoteBase):
 
             # track the in-flight execution so drain_pending_tasks can await it
             t_start = time.time()
+            self._t_method_end = float('nan')  # stays nan if the task fails before returning
             self._running_exec = asyncio.ensure_future(
                 self.call_safe(sender_id, method, task))
             try:
