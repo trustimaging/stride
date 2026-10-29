@@ -3,6 +3,8 @@ __version__ = '1.2'
 
 import os
 import asyncio
+import importlib
+import threading
 
 from .core import tessera
 from .runtime import Head, Monitor, Node, Worker, Warehouse
@@ -155,6 +157,9 @@ def init(runtime_type='head', runtime_indices=(),
     loop = _runtime.get_event_loop(asyncio_loop=asyncio_loop)
     result = loop.run(_runtime.init, **runtime_config)
 
+    if runtime_type in ('worker', 'warehouse'):
+        _preload_modules()
+
     if profile:
         profiler.start()
 
@@ -166,6 +171,27 @@ def init(runtime_type='head', runtime_indices=(),
             loop.stop()
 
     return result
+
+
+def _preload_modules():
+    """
+    Import the comma-separated modules in MOSAIC_PRELOAD in a background thread, so that
+    their (often slow) first import overlaps with start-up instead of happening when
+    the first task or object that needs them arrives.
+
+    """
+    modules = [each.strip() for each in os.environ.get('MOSAIC_PRELOAD', '').split(',') if each.strip()]
+    if not modules:
+        return
+
+    def preload():
+        for module in modules:
+            try:
+                importlib.import_module(module)
+            except Exception as exc:
+                default_logger.warning('Could not preload %s: %s' % (module, exc))
+
+    threading.Thread(target=preload, name='mosaic-preload', daemon=True).start()
 
 
 def __getattr__(key):
