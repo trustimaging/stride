@@ -1,3 +1,5 @@
+import os
+import cProfile
 from abc import ABC
 import numpy as np
 
@@ -7,6 +9,21 @@ from ..core import Operator
 from ..problem.base import Gridded
 
 __all__ = ['ProblemTypeBase']
+
+
+def _profiled(kind, fun, *args, **kwargs):
+    # STRIDE_PROFILE_DIR=<dir> dumps a cProfile of each forward/adjoint run, for debugging only
+    profile_dir = os.environ.get('STRIDE_PROFILE_DIR')
+    if not profile_dir:
+        return fun(*args, **kwargs)
+
+    _profiled.count = getattr(_profiled, 'count', 0) + 1
+    profiler = cProfile.Profile()
+    try:
+        return profiler.runcall(fun, *args, **kwargs)
+    finally:
+        os.makedirs(profile_dir, exist_ok=True)
+        profiler.dump_stats(os.path.join(profile_dir, '%s-%d-%04d.prof' % (kind, os.getpid(), _profiled.count)))
 
 
 @mosaic.tessera
@@ -56,6 +73,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         Operator.__init__(self, **kwargs)
 
     def forward(self, *args, **kwargs):
+        return _profiled('forward', self._forward, *args, **kwargs)
+
+    def _forward(self, *args, **kwargs):
         """
         Run the state or forward problem.
 
@@ -84,6 +104,9 @@ class ProblemTypeBase(ABC, Gridded, Operator):
         return output if output is not None else fw_output
 
     def adjoint(self, *args, **kwargs):
+        return _profiled('adjoint', self._adjoint, *args, **kwargs)
+
+    def _adjoint(self, *args, **kwargs):
         """
         Run the adjoint problem.
 
