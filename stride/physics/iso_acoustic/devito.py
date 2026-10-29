@@ -333,9 +333,9 @@ class IsoAcousticDevito(ProblemTypeBase):
                                       'bitcomp' if self.space.dim > 2 else None)
         save_compression = save_compression if (is_nvidia or is_nvc) and devito.pro_available else None
 
-        # if no previous operator (or the save variant is needed but not yet compiled), generate one
-        if self.state_operator.devito_operator is None \
-                or (save_wavefield and self.state_operator_save.devito_operator is None):
+        # if the variant needed for this run has not been compiled yet, generate it
+        op_needed = self.state_operator_save if save_wavefield else self.state_operator
+        if op_needed.devito_operator is None:
             # Define variables
             src = self.dev_grid.sparse_time_function('src', num=num_sources,
                                                      coordinates=source_coordinates,
@@ -445,13 +445,15 @@ class IsoAcousticDevito(ProblemTypeBase):
             if self.attenuation_power == 2:
                 kwargs['devito_config']['opt'] = 'noop'
 
-            self.state_operator.set_operator(stencil + src_term + rec_term,
-                                             **kwargs)
-            self.state_operator.compile()
+            # only compile the variant that will be run, inversions never use the plain one
             if save_wavefield is True:
                 self.state_operator_save.set_operator(stencil + src_term + rec_term + update_saved,
                                                       **kwargs)
                 self.state_operator_save.compile()
+            else:
+                self.state_operator.set_operator(stencil + src_term + rec_term,
+                                                 **kwargs)
+                self.state_operator.compile()
 
         else:
             # If the source/receiver size has changed, then create new functions for them
@@ -1359,6 +1361,7 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Recompile every time if there are sub ops
         if len(self._sub_ops) or recompile:
             self.state_operator.devito_operator = None
+            self.state_operator_save.devito_operator = None
             self.adjoint_operator.devito_operator = None
 
         self.logger.perf('(ShotID %d) Selected time stepping scheme %s' %
