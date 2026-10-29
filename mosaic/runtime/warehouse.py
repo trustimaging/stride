@@ -36,6 +36,7 @@ class Warehouse(Runtime):
 
         self._warehouses = dict()
         self._spill_directory = None
+        self._exec_locks = dict()
 
     async def init(self, **kwargs):
         await super().init(**kwargs)
@@ -202,19 +203,23 @@ class Warehouse(Runtime):
         else:
             obj_id = uid
 
-        try:
-            obj = self._local_warehouse[obj_id]
-        except KeyError:
-            obj = None
+        # func can await (e.g. pulling its arguments from another runtime), so concurrent
+        # execs on the same object must not interleave, or one would overwrite the other's result
+        lock = self._exec_locks.setdefault(obj_id, asyncio.Lock())
+        async with lock:
+            try:
+                obj = self._local_warehouse[obj_id]
+            except KeyError:
+                obj = None
 
-        func_args = func_args or ()
-        func_kwargs = func_kwargs or {}
-        t0 = time.time()
-        obj = await func(obj, *func_args, **func_kwargs)
-        t1 = time.time()
+            func_args = func_args or ()
+            func_kwargs = func_kwargs or {}
+            t0 = time.time()
+            obj = await func(obj, *func_args, **func_kwargs)
+            t1 = time.time()
 
-        self._local_warehouse[obj_id] = obj
-        t2 = time.time()
+            self._local_warehouse[obj_id] = obj
+            t2 = time.time()
 
         warehouse_obj = WarehouseObject(obj, uid=obj_id)
         if os.environ.get('MOSAIC_TIMING') == '1':
