@@ -1,6 +1,7 @@
 
 import os
 import gc
+import ctypes
 import time as timer  # `time` is used as a variable name below
 import sympy
 import logging
@@ -1140,3 +1141,56 @@ def config_devito(**kwargs):
     runtime = mosaic.runtime()
     if runtime is not None and runtime.mode == 'local':
         devito_logger.propagate = False
+
+    _use_nvml_memory_queries()
+
+
+def _use_nvml_memory_queries():
+    """
+    Devito asks for the free device memory on every Operator.apply by running
+    nvidia-smi, which takes about 0.25 s each time. Answer the same queries
+    through NVML instead, keeping nvidia-smi's MiB resolution.
+
+    """
+    try:
+        nvml = ctypes.CDLL('libnvidia-ml.so.1')
+        if nvml.nvmlInit_v2() != 0:
+            return
+    except (OSError, AttributeError):
+        return
+
+    from devito.arch.archinfo import get_gpu_info
+
+    # v2 reports driver-reserved memory separately, so `used` matches nvidia-smi
+    class MemoryInfo(ctypes.Structure):
+        _fields_ = [('version', ctypes.c_uint),
+                    ('total', ctypes.c_ulonglong),
+                    ('reserved', ctypes.c_ulonglong),
+                    ('free', ctypes.c_ulonglong),
+                    ('used', ctypes.c_ulonglong)]
+
+    try:
+        get_memory_info = nvml.nvmlDeviceGetMemoryInfo_v2
+    except AttributeError:
+        return
+
+    def make_cbk(kind, fallback):
+        def cbk(deviceid=0):
+            handle = ctypes.c_void_p()
+            memory = MemoryInfo(version=ctypes.sizeof(MemoryInfo) | (2 << 24))
+            if nvml.nvmlDeviceGetHandleByIndex_v2(ctypes.c_uint(deviceid), ctypes.byref(handle)) != 0 \
+                    or get_memory_info(handle, ctypes.byref(memory)) != 0:
+                return fallback(deviceid)
+            return (getattr(memory, kind) // 2**20) * 10**6
+
+        return cbk
+
+    gpu_info = get_gpu_info()
+    if not isinstance(gpu_info, dict):
+        return
+
+    for kind in ['total', 'free', 'used']:
+        key = 'mem.%s' % kind
+        if callable(gpu_info.get(key)) and not getattr(gpu_info[key], '_nvml', False):
+            gpu_info[key] = make_cbk(kind, gpu_info[key])
+            gpu_info[key]._nvml = True
