@@ -1,5 +1,6 @@
 
 import os
+import gc
 import glob
 import time as timer
 import shutil
@@ -182,12 +183,20 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self._cached_subdomains = None
         self._last_dumped_shot_id = None
+        self._gc_frozen = False
 
     def clear_operators(self):
         self.state_operator.devito_operator = None
         self.state_operator_save.devito_operator = None
         self.adjoint_operator.devito_operator = None
         self.dev_grid.clear_cache()
+        self._gc_unfreeze()
+
+    def _gc_unfreeze(self):
+        # let the collector reach the dropped operators again
+        if self._gc_frozen:
+            gc.unfreeze()
+            self._gc_frozen = False
 
     def deallocate_wavefield(self, platform='cpu', deallocate=False, **kwargs):
         if (platform and 'nvidia' in platform) \
@@ -195,6 +204,12 @@ class IsoAcousticDevito(ProblemTypeBase):
                 or deallocate:
             self._wavefield = None
             devito.clear_cache(force=True)
+
+            # after the first collection, what survives (compiled operators, grids) lives as long
+            # as the operators do, so take it out of later collections, which are otherwise slow
+            if not self._gc_frozen:
+                gc.freeze()
+                self._gc_frozen = True
 
     def add_sub_op(self, sub_op):
         sub_op = sub_op(grid=self.grid, parent_grid=self.dev_grid.devito_grid, dtype=self.dev_grid.dtype)
@@ -1363,6 +1378,7 @@ class IsoAcousticDevito(ProblemTypeBase):
             self.state_operator.devito_operator = None
             self.state_operator_save.devito_operator = None
             self.adjoint_operator.devito_operator = None
+            self._gc_unfreeze()
 
         self.logger.perf('(ShotID %d) Selected time stepping scheme %s' %
                          (problem.shot_id, self.kernel,))
