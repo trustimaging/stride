@@ -436,12 +436,17 @@ class StructuredData(Data):
             if prec_factor > 1e-31:
                 num_points = np.prod(prec.shape)
                 prec_factor = prec_scale * num_points / prec_factor
-                prec.data[:] = prec.data * prec_factor + 1
+                scaled = prec.data * prec_factor
+                scaled += 1
+                prec.data[:] = scaled
+                del scaled
                 if prec_op is not None:
                     prec.data[:] = prec_op(prec.data)
 
+                # same arithmetic as indexing with the mask, without gathering and scattering
                 non_zero = np.abs(prec.data) > 0.
-                self.data[non_zero] *= 1/prec.data[non_zero]
+                inv_prec = np.divide(1, prec.data, where=non_zero)
+                np.multiply(self.data, inv_prec, out=self.data, where=non_zero)
 
         return self
 
