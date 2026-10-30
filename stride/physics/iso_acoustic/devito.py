@@ -1544,7 +1544,7 @@ class IsoAcousticDevito(ProblemTypeBase):
                                            rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
                                            rho_constant=rho_constant,
                                            **kwargs)
-        elif os.environ.get('STRIDE_FUSED_OT4') == '1' and self.drp and buoy_fun is None \
+        elif os.environ.get('STRIDE_FUSED_OT4') in ('1', '2') and self.drp and buoy_fun is None \
                 and 'PML' not in self.boundary_type:
             # Experimental: no stored laplacian, so that the compiler is free to keep the
             # intermediate on chip; both laplacians are written out with the DRP weights
@@ -1714,6 +1714,11 @@ class IsoAcousticDevito(ProblemTypeBase):
         # as a weighted sum of shifted copies of the expression
         _, weights_2, _ = self._weights()
         radius = len(weights_2) // 2
+
+        if os.environ.get('STRIDE_FUSED_OT4') == '2':
+            # as Derivatives, so that the compiler can recognise the nested laplacians
+            return sum(devito.Derivative(expr, (d, 2), fd_order=2*radius, weights=weights_2 / d.spacing**2)
+                       for d in self.dev_grid.devito_grid.dimensions)
 
         lap = 0
         for d in self.dev_grid.devito_grid.dimensions:
