@@ -1544,6 +1544,15 @@ class IsoAcousticDevito(ProblemTypeBase):
                                            rho=rho_fun, buoy=buoy_fun, alpha=alpha_fun,
                                            rho_constant=rho_constant,
                                            **kwargs)
+        elif os.environ.get('STRIDE_FUSED_OT4') == '1' and self.drp and buoy_fun is None \
+                and 'PML' not in self.boundary_type:
+            # Experimental: no stored laplacian, so that the compiler is free to keep the
+            # intermediate on chip; both laplacians are written out with the DRP weights
+            subs = None
+            laplacian_2 = vp2_fun * self._drp_laplace(field)
+            laplacian_term_4 = vp2_fun * self._drp_laplace(laplacian_2)
+            laplacian_term = self._laplacian(laplacian_2, laplacian_term_4)
+
         else:
             laplacian_2 = self.dev_grid.function('laplacian',
                                                  coefficients='symbolic' if self.drp else 'standard')
@@ -1699,6 +1708,19 @@ class IsoAcousticDevito(ProblemTypeBase):
                 return vp2 * self._div_op(self._grad_op(field, shift=+1), shift=-1)
             else:
                 return vp2 * rho * self._div_op(self._mul_buoy(buoy, self._grad_op(field, shift=+1)), shift=-1)
+
+    def _drp_laplace(self, expr):
+        # Laplacian of an arbitrary expression with the DRP second-derivative weights,
+        # as a weighted sum of shifted copies of the expression
+        _, weights_2, _ = self._weights()
+        radius = len(weights_2) // 2
+
+        lap = 0
+        for d in self.dev_grid.devito_grid.dimensions:
+            for o, w in zip(range(-radius, radius + 1), weights_2):
+                lap += w / d.spacing**2 * expr.xreplace({d: d + o*d.spacing})
+
+        return lap
 
     def _grad_op(self, f, shift=+1):
         return devito.grad(f, shift=shift * 0.5)
