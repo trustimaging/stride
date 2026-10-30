@@ -923,7 +923,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         devito_args = kwargs.get('devito_args', {})
 
-        if wavelets.needs_grad:
+        # adaptive boxes are computed from the source positions, and src is re-created for every
+        # shot, so without it the adjoint box would follow the first shot run by this worker
+        if wavelets.needs_grad or self.adaptive_boxes:
             functions['src'] = self.dev_grid.vars.src
 
         if np.linalg.norm(adjoint_source.data) < 1e-31:
