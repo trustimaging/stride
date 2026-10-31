@@ -1079,9 +1079,14 @@ class Acquisitions(ProblemBase):
             try:
                 iter_shots = [int(shot_id) for shot_id in iter._runs[0].losses.keys()]
                 for shot_id in iter_shots:
-                    shot_ids.remove(shot_id)
+                    if shot_id in shot_ids:
+                        shot_ids.remove(shot_id)
             except KeyError:
                 pass
+
+            # Every shot in the selection has been used, the selection starts again
+            if not shot_ids:
+                shot_ids = next_slice + selection
 
         self._shot_selection = shot_ids
 
