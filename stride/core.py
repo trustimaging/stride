@@ -671,9 +671,19 @@ class Variable:
         redux_proxy.init_future.set_result(True)
         redux_proxy.state_changed('listening')
 
+        grads = list(self._redux_grads.values())
+        t_tree = time.time()
+        if os.environ.get('STRIDE_REDUX_TREE') == '1':
+            # Sum the per-warehouse partials pairwise across warehouses (log2(n) rounds)
+            # so that only one gradient has to be pulled by the variable's runtime
+            while len(grads) > 1:
+                merged = await asyncio.gather(*[_redux_into(grads[i], grads[i+1])
+                                                for i in range(0, len(grads) - 1, 2)])
+                grads = list(merged) + grads[len(merged)*2:]
+
         inits = []
         tasks = []
-        for g in self._redux_grads.values():
+        for g in grads:
             redux_task = TaskProxy(redux_proxy, '__call_adjoint__', g)
             inits.append(redux_proxy._init_task(redux_task, g))
             tasks.append(redux_task)
@@ -689,15 +699,27 @@ class Variable:
             drops.append(g.drop(propagate=True))
         await asyncio.gather(*drops)
         if os.environ.get('MOSAIC_TIMING') == '1':
-            mosaic.logger().perf('TIMING redux to_head %s on %s n_grads %d init %.4f tasks %.4f drops %.4f t_start %.6f'
-                                 % (self.name, mosaic.runtime().uid, len(tasks), t1 - t0, t2 - t1,
-                                    time.time() - t2, t0))
+            mosaic.logger().perf('TIMING redux to_head %s on %s n_grads %d tree %.4f init %.4f tasks %.4f drops %.4f t_start %.6f'
+                                 % (self.name, mosaic.runtime().uid, len(self._redux_grads), t0 - t_tree, t1 - t0,
+                                    t2 - t1, time.time() - t2, t0))
 
         self._redux_grads = dict()
         self._redux_task = False
 
     def __repr__(self):
         return self.name
+
+
+async def _redux_pair(rec_grads, other):
+    """Accumulate the partial gradients held by another warehouse into this one."""
+    other_grads = await other.value()
+    sums = [_maybe_sum(r, g) for r, g in zip(rec_grads, other_grads)]
+    return await asyncio.gather(*sums)
+
+
+async def _redux_into(target, other):
+    warehouse = mosaic.runtime().proxy(uid=target.warehouse_id)
+    return await warehouse.exec_remote(uid=target, func=_redux_pair, func_args=(other,), reply=True)
 
 
 class Operator:
