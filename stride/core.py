@@ -677,9 +677,11 @@ class Variable:
             # Sum the per-warehouse partials pairwise across warehouses (log2(n) rounds)
             # so that only one gradient has to be pulled by the variable's runtime
             while len(grads) > 1:
-                merged = await asyncio.gather(*[_redux_into(grads[i], grads[i+1])
-                                                for i in range(0, len(grads) - 1, 2)])
-                grads = list(merged) + grads[len(merged)*2:]
+                # The sums happen in place on each pair's first warehouse, so keep the original
+                # references (the ones returned by exec_remote don't carry the right warehouse)
+                await asyncio.gather(*[_redux_into(grads[i], grads[i+1])
+                                       for i in range(0, len(grads) - 1, 2)])
+                grads = grads[0::2]
 
         inits = []
         tasks = []
