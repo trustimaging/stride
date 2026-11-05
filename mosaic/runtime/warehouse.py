@@ -250,6 +250,8 @@ class Warehouse(Runtime):
         if obj_id in self._local_warehouse:
             del self._local_warehouse[obj_id]
 
+        self._exec_locks.pop(obj_id, None)
+
     async def push_remote(self, sender_id, __dict__,
                           uid=None, warehouse_id=None, node_id=None,
                           publish=False):
