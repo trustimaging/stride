@@ -472,6 +472,10 @@ class IsoAcousticDevito(ProblemTypeBase):
         self.dev_grid.deallocate('rec')
         self.dev_grid.vars.rec.data_with_halo.fill(0.)
         self.dev_grid.vars.p.data_with_halo.fill(0.)
+        # with adaptive boxes, OT4 only updates the laplacian inside the box but reads it just
+        # outside, so clear what the previous run left there
+        if 'laplacian' in self.dev_grid.vars:
+            self.dev_grid.vars.laplacian.data_with_halo.fill(0.)
         self.boundary.clear()
 
         # Set medium parameters
@@ -815,6 +819,8 @@ class IsoAcousticDevito(ProblemTypeBase):
         # Clear all buffers
         self.dev_grid.vars.src.data_with_halo.fill(0.)
         self.dev_grid.vars.p_a.data_with_halo.fill(0.)
+        if 'laplacian' in self.dev_grid.vars:
+            self.dev_grid.vars.laplacian.data_with_halo.fill(0.)
         self.boundary.clear()
         self.init_grad(wavelets, vp, rho, alpha, **kwargs)
 
@@ -905,7 +911,9 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         devito_args = kwargs.get('devito_args', {})
 
-        if wavelets.needs_grad:
+        # adaptive boxes are computed from the source positions, and src is re-created for every
+        # shot, so without it the adjoint box would follow the first shot run by this worker
+        if wavelets.needs_grad or self.adaptive_boxes:
             functions['src'] = self.dev_grid.vars.src
 
         if np.linalg.norm(adjoint_source.data) < 1e-31:
