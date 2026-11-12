@@ -264,11 +264,9 @@ class Runtime(BaseRPC):
         if profile:
             self.set_profiler()
 
-        # Start maintenance loop
-        if self.uid == 'head' or 'worker' in self.uid:
-            maintenance_interval = max(0.5, min(len(self._workers)*0.5, 60))
-        else:
-            maintenance_interval = 0.5
+        # Start maintenance loop. Task state changes reach the monitor only on these ticks,
+        # so the interval also bounds how long the end-of-iteration barrier waits
+        maintenance_interval = float(os.environ.get('MOSAIC_MAINTENANCE_INTERVAL', 0.5))
         self._loop.interval(self.maintenance, interval=maintenance_interval)
 
         # Initialise anon tessera
