@@ -1,5 +1,6 @@
 
 import os
+import tempfile
 import functools
 import numpy as np
 from cached_property import cached_property
@@ -1397,20 +1398,70 @@ class Acquisitions(ProblemBase):
             f'{project_name}-Acquisitions.h5',
         )
 
-        mosaic.logger().perf(
-            f'Artifact store: byte-range reading geometry from {h5_key}'
-        )
-
-        # Byte-range reads via s3fs
         filter = kwargs.pop('filter',
                             {'shots': shot_ids} if shot_ids is not None else None)
         try:
+            if self._load_from_artifact_sidecar(h5_key, filter=filter, **kwargs):
+                return
+
+            mosaic.logger().perf(
+                f'Artifact store: byte-range reading geometry from {h5_key}'
+            )
+
+            # Byte-range reads via s3fs
             super().load(h5_key=h5_key, filter=filter, **kwargs)
         except Exception as exc:
             raise RuntimeError(
                 f'Failed to load acquisitions from artifact store '
                 f'(h5_key={h5_key}): {exc}'
             ) from exc
+
+    def _load_from_artifact_sidecar(self, h5_key, filter=None, **kwargs):
+        """
+        Parse geometry from ``<name>.meta.h5`` beside the Acquisitions HDF5
+        in the artifact store: the same file without its traces, made where
+        the data was local. It is read whole, in one request, instead of
+        several byte-range requests for every shot in the big file.
+
+        Returns False, to read the big file instead, when there is no
+        sidecar or it was not made from this version of the big file
+        (its ``source_size`` attribute differs, or it is older).
+
+        """
+        warehouse = mosaic.get_artifact_warehouse()
+        fs = warehouse.get_fs()
+        source = f'{warehouse.bucket}/{h5_key}'
+        sidecar = f'{os.path.splitext(source)[0]}.meta.h5'
+
+        try:
+            sidecar_info = fs.info(sidecar)
+        except FileNotFoundError:
+            return False
+        source_info = fs.info(source)
+
+        if sidecar_info['LastModified'] < source_info['LastModified']:
+            mosaic.logger().warn(f'Artifact store: {sidecar} is older than {source}, not used')
+            return False
+
+        with tempfile.TemporaryDirectory() as tmp:
+            filename = os.path.join(tmp, os.path.basename(sidecar))
+            fs.get(sidecar, filename)
+
+            with h5.HDF5(filename=filename, mode='r') as file:
+                source_size = file.file.attrs.get('source_size')
+                if source_size != source_info['size']:
+                    mosaic.logger().warn(f'Artifact store: {sidecar} was made for a file of '
+                                         f'{source_size} bytes, not {source_info["size"]}, not used')
+                    return False
+
+                mosaic.logger().perf(f'Artifact store: reading geometry from {sidecar}')
+
+                # as Saved.load, with the traces wired to the big file
+                description = file.load(filter=filter)
+                kwargs['parameter'] = self.name
+                self.__set_desc__(description, h5_key=h5_key, filename=source, **kwargs)
+
+        return True
 
     def __get_desc__(self, **kwargs):
         legacy = kwargs.pop('legacy', False)
