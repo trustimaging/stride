@@ -265,7 +265,7 @@ class Runtime(BaseRPC):
             self.set_profiler()
 
         # Start maintenance loop
-        if self.uid == 'head' or 'worker' in self.uid:
+        if self.uid == 'head':
             maintenance_interval = max(0.5, min(len(self._workers)*0.5, 60))
         else:
             maintenance_interval = 0.5
