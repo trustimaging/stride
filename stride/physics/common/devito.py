@@ -147,6 +147,17 @@ class PMLPartial(devito.SubDomain):
         return domain
 
 
+def _same_arg(arg, _arg):
+    # arrays (e.g. sparse function coordinates) must be compared element-wise,
+    # bool(array == array) raises and used to be treated as a match
+    if isinstance(arg, np.ndarray) or isinstance(_arg, np.ndarray):
+        return np.array_equal(np.asarray(arg), np.asarray(_arg))
+    try:
+        return bool(arg == _arg)
+    except ValueError:
+        return False
+
+
 def _cached(func):
 
     @functools.wraps(func)
@@ -160,18 +171,8 @@ def _cached(func):
             if fun is not None:
                 _args, _kwargs = self.cached_args[name]
 
-                same_args = True
-                for arg, _arg in zip(args, _args):
-                    try:
-                        same_args = same_args and bool(arg == _arg)
-                    except ValueError:
-                        pass
-
-                for arg, _arg in zip(kwargs.values(), _kwargs.values()):
-                    try:
-                        same_args = same_args and bool(arg == _arg)
-                    except ValueError:
-                        pass
+                same_args = all(_same_arg(arg, _arg) for arg, _arg in zip(args, _args)) and \
+                    all(_same_arg(arg, _arg) for arg, _arg in zip(kwargs.values(), _kwargs.values()))
 
                 if same_args:
                     return fun
