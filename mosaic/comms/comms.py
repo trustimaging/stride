@@ -8,6 +8,7 @@ import tblib
 import psutil
 import socket
 import warnings
+import traceback
 import contextlib
 import weakref
 from concurrent.futures import CancelledError
@@ -1849,7 +1850,17 @@ class CommsManager:
         self._state = 'listening'
 
         while self._state != 'disconnected':
-            sender_id, msg = await recv_async()
+            # a message that fails to deserialise would otherwise end the loop
+            # silently, and the runtime would never receive again
+            try:
+                sender_id, msg = await recv_async()
+            except Exception:
+                error = 'Failed to receive a message at %s:\n%s' % (self._runtime.uid, traceback.format_exc())
+                # also to stderr, in case the logger's own messages can't get out
+                print(error, file=sys.stderr, flush=True)
+                self.logger.error(error)
+                continue
+
             await self.process_msg(sender_id, msg)
 
             if msg.method == 'stop':
