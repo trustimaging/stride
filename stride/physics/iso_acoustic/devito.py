@@ -875,6 +875,13 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.dev_grid.vars.rec.data[:] = adjoint_source.T * window
 
+        # The forward records p.forward, one step after the field the adjoint operator is the exact
+        # transpose for, so delay the adjoint source by one step to make the gradient exact.
+        # shift_adjoint_source=False keeps Fullwave3D's pairing, which has the same one-step mismatch
+        if kwargs.get('shift_adjoint_source', True):
+            self.dev_grid.vars.rec.data[1:] = self.dev_grid.vars.rec.data[:-1].copy()
+            self.dev_grid.vars.rec.data[0] = 0.
+
         if self.interpolation_type == 'linear':
             self.dev_grid.vars.src.coordinates.data[:] = source_coordinates
             self.dev_grid.vars.rec.coordinates.data[:] = receiver_coordinates
