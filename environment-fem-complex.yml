@@ -1,0 +1,63 @@
+# Finite-element extras for stride, complex-scalar PETSc build.
+#
+# This file is ADDITIVE: it lists only what the FEM problem types need on top of the base
+# environment, and is applied over an existing environment rather than creating one. Pin the
+# three constraints that a later solve must not undo BEFORE installing anything:
+#
+#     name=stride-dolfinx-complex
+#     conda create -n "$name"
+#     printf '%s\n' 'mpi=*=*openmpi*' 'petsc=*=*complex*' 'hdf5=1.14.*' \
+#         > "$(conda info --base)/envs/$name/conda-meta/pinned"
+#     conda env update -n "$name" -f environment.yml
+#     conda env update -n "$name" -f environment-fem-complex.yml
+#
+# Then check, because every one of these has failed silently at least once:
+#
+#     conda run -n "$name" python -c "
+#     import numpy, dolfinx, petsc4py.PETSc as PETSc
+#     print(numpy.dtype(PETSc.ScalarType).name, numpy.dtype(dolfinx.default_scalar_type).name)"
+#
+# The pinned file is not belt and braces. A build-string constraint that lives only in a yml is
+# forgotten the moment anything re-solves the environment: an ordinary "conda install python=3.11"
+# is enough to swap the complex PETSc for the real one, since conda-forge builds real by default
+# and nothing in the environment asks for otherwise. conda-meta/pinned is honoured by every
+# later solve, which is the only place these three survive.
+#
+# On Linux the MPI pin has to be in place before the base environment is installed at all: it
+# pulls mpich in through hdf5, and the overlay's openmpi pin then cannot be satisfied. On macOS
+# the base pulls no MPI and the plain two-step works, which is why this is easy to miss.
+#
+# Copying the base dependency list into this file instead is what lets the two drift apart, so
+# please keep it additive.
+#
+# DOLFINx cannot be installed with pip -- there are no wheels -- so these dependencies are
+# conda-only and deliberately not in requirements-optional.txt. Everything in stride works
+# without them; only the FEM problem types need them.
+#
+# PETSc is built for either real or complex scalars and the two cannot coexist. Use this file
+# for the complex build, environment-fem-real.yml for the real one.
+#
+# The MPI implementation is pinned here rather than in the base environment, which needs no MPI
+# at all. Mixing implementations between the base and this overlay causes hangs at exit inside
+# MPI finalisation, so if the base environment ever grows an MPI dependency, the two pins must
+# agree.
+#
+# h5py is named here even though the base environment already has it. Pinning fenics-dolfinx to
+# 0.9.0 holds hdf5 back to the 1.14 series, and an h5py built against a newer hdf5 will not load
+# against it -- it fails on import with "Not a datatype", under a warning that says which two
+# versions disagree. A package the overlay does not name is one the solver leaves alone, so
+# without this line the two-step install above leaves the environment broken.
+name: stride-dolfinx-complex
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.8, <3.12   # must match environment.yml, or the overlay solve is free to upgrade Python
+  - fenics-dolfinx==0.9.0
+  - petsc=*=*complex*
+  - mpi=*=*openmpi*
+  - openmpi
+  - petsc4py
+  - mpi4py
+  - h5py            # must be re-solved against the hdf5 dolfinx pins, see above
+  - gmsh            # mesh generation, plus its Python bindings
+  - python-gmsh
