@@ -3,6 +3,7 @@ import uuid
 import pickle
 import asyncio
 import inspect
+import weakref
 from abc import abstractmethod
 from collections import OrderedDict
 
@@ -36,6 +37,77 @@ async def _maybe_sum(a, b):
         elif isinstance(a, tuple) and isinstance(b, tuple):
             return a[0] + b[0], a[1] + b[1]
         return a + b
+
+
+# running totals owned by the gradient reduction (Variable.adjoint's redux), by id
+_redux_owned = weakref.WeakValueDictionary()
+
+
+def _redux_own(g):
+    """
+    Return ``g`` if the reduction already owns it, else a copy of it that it owns.
+    Immutable values (None, numbers) are returned as they are.
+    """
+    if isinstance(g, tuple):
+        return tuple(_redux_own(x) for x in g)
+
+    if g is None or isinstance(g, (int, float, complex)):
+        return g
+
+    if _redux_owned.get(id(g)) is g:
+        return g
+
+    g = g.copy()
+    _redux_owned[id(g)] = g
+    return g
+
+
+def _redux_iadd(a, b):
+    """
+    Add ``b`` into ``a`` (owned by the reduction) in place. If ``a`` had no ``grad`` or
+    ``prec`` and takes ``b``'s object, that object is copied, so later in-place adds never
+    write into ``b``'s.
+    """
+    a += b
+
+    for attr in ('grad', 'prec'):
+        b_attr = getattr(b, attr, None)
+        if b_attr is not None and getattr(a, attr, None) is b_attr:
+            setattr(a, attr, b_attr.copy())
+
+    return a
+
+
+async def _maybe_iadd(a, b):
+    """
+    ``_maybe_sum`` for the warehouse's running total ``a`` in ``Variable.adjoint``'s redux.
+
+    The first gradient is returned as it is, as in ``_maybe_sum``. From the second on, ``a``
+    is copied once (it may also be held elsewhere, e.g. stored in the warehouse under its own
+    key) and every gradient is added into that copy in place, instead of copying the whole
+    total for every shot. ``b`` is never modified.
+    """
+    if isinstance(a, types.awaitable_types):
+        a = await a.result()
+
+    if isinstance(b, types.awaitable_types):
+        b = await b.result()
+
+    if b is None:
+        return a
+
+    elif a is None:
+        return b
+
+    a = _redux_own(a)
+
+    if isinstance(a, tuple) and not isinstance(b, tuple):
+        return _redux_iadd(a[0], b), a[1]
+    elif not isinstance(a, tuple) and isinstance(b, tuple):
+        return _redux_iadd(a, b[0]), b[1]
+    elif isinstance(a, tuple) and isinstance(b, tuple):
+        return _redux_iadd(a[0], b[0]), _redux_iadd(a[1], b[1])
+    return _redux_iadd(a, b)
 
 
 def _serialise_grad(result):
@@ -344,7 +416,7 @@ class Variable:
         async def redux(rec_grads, *grads):
             rec_grads = (None,)*len(grads) if rec_grads is None else rec_grads
             sums = [
-                _maybe_sum(r, g) for r, g in zip(rec_grads, grads)
+                _maybe_iadd(r, g) for r, g in zip(rec_grads, grads)
             ]
             return await asyncio.gather(*sums)
 
