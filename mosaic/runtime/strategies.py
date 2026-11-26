@@ -104,7 +104,7 @@ class RoundRobin(MonitorStrategy):
         # Stale worker eviction (replacement may join before heartbeat timeout)
         node_idx = int(updated.uid.split(':')[1])
         incoming = set(updated.sub_resources.get('workers', {}).keys())
-        prefix = f'worker:{node_idx}'
+        prefix = f'worker:{node_idx}:'
         stale = {w for w in self._worker_list if w.startswith(prefix) and w not in incoming}
 
         if stale:
