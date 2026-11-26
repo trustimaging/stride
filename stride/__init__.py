@@ -336,8 +336,6 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
         if optimiser.reset_iteration:
             optimiser.reset()
 
-        published_args = await watchdog.broadcast(args, label='broadcast')
-
         logger.perf('Starting iteration %d (out of %d), '
                     'block %d (out of %d)' %
                     (iteration.id+1, block.num_iterations, block.id+1,
@@ -360,6 +358,9 @@ async def adjoint(problem, pde, loss, optimisation_loop, optimiser, *args, **kwa
 
                 # ensure previously used shots are not repeated
                 problem.acquisitions.filter_shot_ids(optimisation_loop, **select_shots)
+
+        # publish the variable after any restart load, so the workers use the loaded model
+        published_args = await watchdog.broadcast(args, label='broadcast')
 
         shot_ids = problem.acquisitions.select_shot_ids(**select_shots)
         num_shots = len(shot_ids)
