@@ -727,7 +727,6 @@ class IsoAcousticDevito(ProblemTypeBase):
         time_bounds = kwargs.get('time_bounds', (0, self.time.extended_num))
 
         fw3d_mode = kwargs.pop('fw3d_mode', False)
-        fw3d_mode = True  # TODO Force fw3d_mode pending Devito-side fix
         platform = kwargs.get('platform', 'cpu')
         is_nvidia = platform is not None and 'nvidia' in platform
 
@@ -749,11 +748,12 @@ class IsoAcousticDevito(ProblemTypeBase):
             # Create stencil
             stencil = self._stencil(p_a, wavelets, vp, rho=rho, alpha=alpha, direction='backward', **kwargs)
 
-            # Define the source injection function to generate the corresponding code
-            t = rec.time_dim
+            # Define the receiver injection. The forward records p.forward, so the adjoint source at
+            # step t pairs with p_a(t): the non-fw3d form injects it into p_a before the stencil, the
+            # fw3d form into p_a.backward after the stencil, with the adjoint source delayed by one step
             vp2 = self.dev_grid.vars.vp**2
             if not fw3d_mode:
-                rec_term = rec.inject(field=p_a, expr=-rec.subs({t: t-1}) * self.time.step**2 * vp2)
+                rec_term = rec.inject(field=p_a, expr=-rec * self.time.step**2 * vp2)
             else:
                 rec_term = rec.inject(field=p_a.backward, expr=-rec * self.time.step**2 * vp2)
 
@@ -799,6 +799,8 @@ class IsoAcousticDevito(ProblemTypeBase):
                 self.adjoint_operator.set_operator(rec_term + stencil + src_term + gradient_update + update_saved,
                                                    **kwargs)
             self.adjoint_operator.compile()
+            # kept with the operator, which other instances can reuse (cached_operator)
+            self.adjoint_operator.fw3d_mode = fw3d_mode
 
         else:
             # If the source or receiver size has changed, then create new functions for them
@@ -875,10 +877,11 @@ class IsoAcousticDevito(ProblemTypeBase):
 
         self.dev_grid.vars.rec.data[:] = adjoint_source.T * window
 
-        # The forward records p.forward, one step after the field the adjoint operator is the exact
-        # transpose for, so delay the adjoint source by one step to make the gradient exact.
-        # shift_adjoint_source=False keeps Fullwave3D's pairing, which has the same one-step mismatch
-        if kwargs.get('shift_adjoint_source', True):
+        # The forward records p.forward, one step after the field the fw3d_mode adjoint operator is the
+        # exact transpose for, so delay the adjoint source by one step to make the gradient exact.
+        # shift_adjoint_source=False keeps Fullwave3D's pairing, which has the same one-step mismatch.
+        # The non-fw3d form injects into p_a at the same step and needs no delay
+        if self.adjoint_operator.fw3d_mode and kwargs.get('shift_adjoint_source', True):
             self.dev_grid.vars.rec.data[1:] = self.dev_grid.vars.rec.data[:-1].copy()
             self.dev_grid.vars.rec.data[0] = 0.
 
