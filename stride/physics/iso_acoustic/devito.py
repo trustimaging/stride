@@ -1713,7 +1713,7 @@ class IsoAcousticDevito(ProblemTypeBase):
 
     def _forward_save_undersampled(self, field, **kwargs):
         return self.dev_grid.undersampled_time_derivative(field, self.undersampling_factor,
-                                                          bounds=kwargs.get('time_bounds', None),
+                                                          time_bounds=kwargs.get('time_bounds', None),
                                                           deriv_order=2, fd_order=2)
 
     def _adjoint_save(self, field):
